@@ -1,0 +1,15 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+sh_test(
+    name = "backlog_test",
+    size = "small",
+    srcs = ["validate_backlog.sh"],
+    args = [
+        "$(rootpath validate_backlog.rb)",
+        "$(rootpath backlog.yaml)",
+    ],
+    data = [
+        "backlog.yaml",
+        "validate_backlog.rb",
+    ],
+)

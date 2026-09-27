@@ -1,0 +1,53 @@
+From: NeoDarwin
+Subject: [PATCH] config: build ARM64 machine code and pmap from source
+
+Apple's public ARM64 configurations never enable nos_arm_asm and
+nos_arm_pmap, so osfmk/arm64/{start,locore,cswitch,caches_asm,
+machine_routines_asm}.s, pcb.c and the pmap are left out and the public
+build expects them from a closed per-SoC archive in the Kernel Debug Kit
+(libVMAPPLE.os.RELEASE.a). The source is in the tree; enabling the options
+builds it. Measured effect: closes 230 of the 395 VMAPPLE link gaps.
+
+Status: staged for P1-01. With this patch the newly compiled files need
+board-config guards for Apple-SoC registers (CPU_OVRD), per-SoC tunables
+and the Apple IOMMU headers (arm64/ppl/{sart,uat}.h); that is the SBSA
+board config's job.
+
+Rebase-risk: low (two option lists per MASTER file).
+---
+--- a/config/MASTER.arm64.MacOSX
++++ b/config/MASTER.arm64.MacOSX
+@@ -15,9 +15,9 @@
+ #  -------- ----- -- ---------------
+ #
+ #if MASTER_CONFIG_ENABLE_SPTM
+-#  ARM_EXTRAS_BASE = [ config_sptm config_sptm_iommu ]
++#  ARM_EXTRAS_BASE = [ config_sptm config_sptm_iommu nos_arm_asm nos_arm_pmap ]
+ #else
+-#  ARM_EXTRAS_BASE = [ config_pmap_ppl ]
++#  ARM_EXTRAS_BASE = [ config_pmap_ppl nos_arm_asm nos_arm_pmap ]
+ #endif
+ #  KERNEL_BASE =    [ arm64 medium msgb_large config_requires_u32_munging config_delay_idle_sleep config_proc_udata_storage config_uexc config_darkboot ARM_EXTRAS_BASE ]
+ #  KERNEL_RELEASE = [ KERNEL_BASE release ]
+--- a/config/MASTER.arm64.WatchOS
++++ b/config/MASTER.arm64.WatchOS
+@@ -16,7 +16,7 @@
+ #  Standard Apple OS Configurations:
+ #  -------- ----- -- ---------------
+ #
+-#  ARM_EXTRAS_BASE = [ config_pmap_ppl ]
++#  ARM_EXTRAS_BASE = [ config_pmap_ppl nos_arm_asm nos_arm_pmap ]
+ #  KERNEL_BASE =    [ arm64 xsmall msgb_small config_embedded config_enforce_signed_code config_code_signature_reconstitution config_requires_u32_munging config_darkboot ARM_EXTRAS_BASE ]
+ #  KERNEL_RELEASE = [ KERNEL_BASE release ]
+ #  KERNEL_DEV =     [ KERNEL_BASE development mach_assert config_xnupost proc_ref_debug config_proc_resource_limits config_ext_paniclog ]
+--- a/config/MASTER.arm64.iPhoneOS
++++ b/config/MASTER.arm64.iPhoneOS
+@@ -16,7 +16,7 @@
+ #  Standard Apple OS Configurations:
+ #  -------- ----- -- ---------------
+ #
+-#  ARM_EXTRAS_BASE = [ config_pmap_ppl ]
++#  ARM_EXTRAS_BASE = [ config_pmap_ppl nos_arm_asm nos_arm_pmap ]
+ #  KERNEL_BASE =    [ arm64 xsmall msgb_small config_embedded config_enforce_signed_code config_code_signature_reconstitution config_requires_u32_munging config_darkboot ARM_EXTRAS_BASE ]
+ #  KERNEL_RELEASE = [ KERNEL_BASE release ]
+ #  KERNEL_DEV =     [ KERNEL_BASE development mach_assert config_xnupost proc_ref_debug config_proc_resource_limits config_ext_paniclog ]

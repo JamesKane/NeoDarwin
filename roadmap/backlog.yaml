@@ -6,83 +6,594 @@
 schema: 1
 epics:
   # ---- Phase 0: Foundation ----
-  - {id: P0-01, title: Monorepo skeleton, mirrors, CODEOWNERS, DCO, licence map, phase: 0, owner: build, status: doing, depends: [], exit: "clone + bazel version succeeds; mirrors resolve by pinned commit", doc: docs/repository.md}
-  - {id: P0-02, title: Hermetic LLVM+Swift toolchain tarball and Bazel toolchain config, phase: 0, owner: build, status: doing, depends: [P0-01], exit: "hello-world cc_binary and swift_binary cross-build for aarch64-apple-darwin on macOS and Linux hosts", doc: docs/architecture/build-system.md}
-  - {id: P0-03, title: xnu_kernel phase-1 wrapper rule (sandboxed make with injected toolchain, EXTRA_TARGET_CONFIGS), phase: 0, owner: build, status: todo, depends: [P0-02], exit: "bazel build //kernel:sbsa emits kernel.release.sbsa", doc: docs/architecture/build-system.md}
-  - {id: P0-04, title: QEMU harness rule qemu_test with serial capture and expect strings, phase: 0, owner: verification, status: todo, depends: [P0-02], exit: "smoke test boots an EFI stub on qemu virt and passes", doc: docs/architecture/build-system.md}
-  - {id: P0-05, title: Self-hosted CI runners (macOS, Linux/QEMU) with GitHub-Actions-compatible workflows, phase: 0, owner: verification, status: todo, depends: [P0-04], exit: "PR pipeline runs build + smoke on both runners", doc: docs/repository.md}
-  - {id: P0-06, title: Link XNU with ld64.lld (fixup chains, segprot, kext flags); fallback vendored ld64, phase: 0, owner: build, status: todo, depends: [P0-03], exit: "kernel linked by lld boots identically to ld64-linked kernel", doc: docs/architecture/build-system.md}
-  - {id: P0-07, title: kcgen skeleton (MH_FILESET writer, fixup chains) and kcheck, phase: 0, owner: build, status: todo, depends: [P0-02], exit: "kcgen round-trips a kernel-only fileset that the loader boots", doc: docs/architecture/build-system.md}
-  - {id: P0-08, title: Verify OpenZFS macOS layer upstream status; create mirror-openzfs, phase: 0, owner: storage, status: todo, depends: [P0-01], exit: "upstream.lock for openzfs points at a tagged commit with module/os/macos present", doc: docs/architecture/filesystems.md}
-  - {id: P0-09, title: Embedded Swift UEFI target — swift_embedded_binary rule, PE/COFF via lld-link, C shim for the firmware ABI, hello-world EFI app on QEMU; C loader target kept as fallback, phase: 0, owner: build, status: todo, depends: [P0-02], exit: "an Embedded Swift EFI app prints on the PL011 under QEMU virt from BOOTAA64.EFI", doc: docs/architecture/language-policy.md}
-  - {id: P0-10, title: Language-policy CI gates — strict concurrency, no-allocation diagnostics for T2 modules, -no-allocations for T3, lang-audit for C/C++ justifications; kext_swift feasibility trial on a non-critical kext, phase: 0, owner: build, status: doing, depends: [P0-02, P0-03], exit: "a T2 module with a stray allocation fails CI; a C file without a justification fails CI; kext_swift verdict recorded", doc: docs/architecture/language-policy.md}
+  - id: P0-01
+    title: "Monorepo skeleton, mirrors, CODEOWNERS, DCO, licence map"
+    phase: 0
+    owner: build
+    status: doing
+    depends: []
+    exit: "clone + bazel version succeeds; mirrors resolve by pinned commit"
+    doc: docs/repository.md
+  - id: P0-02
+    title: "Hermetic LLVM+Swift toolchain tarball and Bazel toolchain config"
+    phase: 0
+    owner: build
+    status: doing
+    depends: [P0-01]
+    exit: "hello-world cc_binary and swift_binary cross-build for aarch64-apple-darwin on macOS and Linux hosts"
+    doc: docs/architecture/build-system.md
+  - id: P0-03
+    title: "xnu_kernel phase-1 wrapper — pinned Apple archives, NeoDarwin build SDK and shims, xnu_headers, libfirehose_kernel from source, xnu_kernel with link-gap report and ratchet"
+    phase: 0
+    owner: build
+    status: done
+    depends: [P0-02]
+    exit: "//kernel:vmapple_release_gaps compiles all of xnu-12377.1.9 from public sources without the KDK and reports the link gap (395); the ratchet test holds it"
+    doc: kernel/README.md
+  - id: P0-04
+    title: "QEMU harness rule qemu_test with serial capture and expect strings"
+    phase: 0
+    owner: verification
+    status: todo
+    depends: [P0-02]
+    exit: "smoke test boots an EFI stub on qemu virt and passes"
+    doc: docs/architecture/build-system.md
+  - id: P0-05
+    title: "Self-hosted CI runners (macOS, Linux/QEMU) with GitHub-Actions-compatible workflows"
+    phase: 0
+    owner: verification
+    status: todo
+    depends: [P0-04]
+    exit: "PR pipeline runs build + smoke on both runners"
+    doc: docs/repository.md
+  - id: P0-06
+    title: "Link XNU with ld64.lld (fixup chains, segprot, kext flags); fallback vendored ld64"
+    phase: 0
+    owner: build
+    status: todo
+    depends: [P0-03]
+    exit: "kernel linked by lld boots identically to ld64-linked kernel"
+    doc: docs/architecture/build-system.md
+  - id: P0-07
+    title: "kcgen skeleton (MH_FILESET writer, fixup chains) and kcheck"
+    phase: 0
+    owner: build
+    status: todo
+    depends: [P0-02]
+    exit: "kcgen round-trips a kernel-only fileset that the loader boots"
+    doc: docs/architecture/build-system.md
+  - id: P0-08
+    title: "Verify OpenZFS macOS layer upstream status; create mirror-openzfs"
+    phase: 0
+    owner: storage
+    status: todo
+    depends: [P0-01]
+    exit: "upstream.lock for openzfs points at a tagged commit with module/os/macos present"
+    doc: docs/architecture/filesystems.md
+  - id: P0-09
+    title: "Embedded Swift UEFI target — swift_embedded_binary rule, PE/COFF via lld-link, C shim for the firmware ABI, hello-world EFI app on QEMU; C loader target kept as fallback"
+    phase: 0
+    owner: build
+    status: todo
+    depends: [P0-02]
+    exit: "an Embedded Swift EFI app prints on the PL011 under QEMU virt from BOOTAA64.EFI"
+    doc: docs/architecture/language-policy.md
+  - id: P0-10
+    title: "Language-policy CI gates — strict concurrency, no-allocation diagnostics for T2 modules, -no-allocations for T3, lang-audit for C/C++ justifications; kext_swift feasibility trial on a non-critical kext"
+    phase: 0
+    owner: build
+    status: doing
+    depends: [P0-02, P0-03]
+    exit: "a T2 module with a stray allocation fails CI; a C file without a justification fails CI; kext_swift verdict recorded"
+    doc: docs/architecture/language-policy.md
   # ---- Phase 1: Kernel bring-up (kernel blueprint M0–M6) ----
-  - {id: P1-01, title: SBSA board config (SBSA.h, board_config.h, MakeInc.def, proc_reg.h branch, generic_arm64_common.h), phase: 1, owner: kernel-bridge, status: todo, depends: [P0-03], exit: "kernel.release.sbsa links with -arch arm64, BTI_BUILD=0", doc: docs/kernel/arm64-sbsa-bringup.md}
-  - {id: P1-02, title: APPLEVIRTUALPLATFORM and Apple-sysreg audit → GENERIC_ARM64_PLATFORM, phase: 1, owner: kernel-bridge, status: todo, depends: [P1-01], exit: "no hvc/HID/S3_x_C15 access outside APPLE_ARM64_ARCH_FAMILY guards; kernel boots on QEMU cpu without EL2", doc: docs/kernel/arm64-sbsa-bringup.md}
-  - {id: P1-03, title: neoboot v0 (Embedded Swift + C shim) — fileset load, chained fixups, boot_args, EL2→EL1, cache clean, jump, phase: 1, owner: loader, status: todo, depends: [P0-07, P0-09], exit: "kernel prints 'iBoot version:' on PL011 under QEMU virt", doc: docs/kernel/arm64-sbsa-bringup.md}
-  - {id: P1-04, title: DT-ABI v1 + Apple-format DT synthesis from MADT/GTDT/SPCR + dtdump, phase: 1, owner: loader, status: todo, depends: [P1-03], exit: "dtdump validates synthesized DT; kernel reaches arm_vm_init without a hand-made blob", doc: docs/kernel/arm64-sbsa-bringup.md}
-  - {id: P1-05, title: GICv3 timer on Group 1 (timer-group/timer-ppi DT props) and IRQ dispatch to rtclock_intr, phase: 1, owner: kernel-bridge, status: todo, depends: [P1-02, P1-04], exit: "timer ticks on QEMU with TrustZone firmware (DS=0) and without", doc: docs/kernel/arm64-sbsa-bringup.md}
-  - {id: P1-06, title: In-kernel platform expert, GICv3InterruptController, PSCIPowerManager (IOPMGR), phase: 1, owner: iokit-platform, status: todo, depends: [P1-05], exit: "all CPUs online; hw.ncpu == MADT count; IPIs measured", doc: docs/kernel/arm64-sbsa-bringup.md}
-  - {id: P1-07, title: mockfs PID 1 and syscall/Mach IPC test binary, phase: 1, owner: userland, status: todo, depends: [P1-06], exit: "static test binary prints from userland", doc: docs/kernel/arm64-sbsa-bringup.md}
-  - {id: P1-08, title: Cross SDK + HFS+ ramdisk root + launchd-842 + getty + shell, phase: 1, owner: userland, status: todo, depends: [P1-07], exit: "interactive shell over serial", doc: docs/kernel/arm64-sbsa-bringup.md}
-  - {id: P1-09, title: ndacpi kext — ACPICA runtime, IOACPIPlatformDevice nubs, MCFG ECAM, IOPCIFamily, phase: 1, owner: acpi, status: todo, depends: [P1-06, P0-07], exit: "ioreg shows PCI nubs on QEMU virt and sbsa-ref", doc: docs/kernel/arm64-sbsa-bringup.md}
-  - {id: P1-10, title: virtio-blk and NVMe kexts; root by boot-uuid from disk, phase: 1, owner: storage, status: todo, depends: [P1-09], exit: "boot from NVMe on sbsa-ref", doc: docs/architecture/drivers.md}
-  - {id: P1-11, title: OrangePi 6 Plus (CD8180) hardware-in-the-loop bring-up, phase: 1, owner: verification, status: todo, depends: [P1-10], exit: "nightly HIL boots to shell", doc: docs/kernel/arm64-sbsa-bringup.md}
-  - {id: P1-12, title: 16550 pexpert serial driver for non-PL011 boards, phase: 1, owner: kernel-bridge, status: todo, depends: [P1-04], exit: "console on a 16550 SPCR board under QEMU", doc: docs/kernel/arm64-sbsa-bringup.md}
+  - id: P1-01
+    title: "SBSA board config (SBSA.h, board_config.h, MakeInc.def, proc_reg.h branch, generic_arm64_common.h)"
+    phase: 1
+    owner: kernel-bridge
+    status: todo
+    depends: [P0-03]
+    exit: "kernel.release.sbsa links with -arch arm64, BTI_BUILD=0: the link gap in kernel/link_gaps reaches zero with patches/0001 applied and no KDK archive"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-02
+    title: "APPLEVIRTUALPLATFORM and Apple-sysreg audit → GENERIC_ARM64_PLATFORM; drop exclaves/Tightbeam and Apple-IOMMU export lists; exclude DART/SART/UAT, rorgn, NVMe PPL; libTrustCache stub"
+    phase: 1
+    owner: kernel-bridge
+    status: todo
+    depends: [P1-01]
+    exit: "no hvc/HID/S3_x_C15 access outside APPLE_ARM64_ARCH_FAMILY guards; kernel boots on QEMU cpu without EL2"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-03
+    title: "neoboot v0 (Embedded Swift + C shim) — fileset load, chained fixups, boot_args, EL2→EL1, cache clean, jump"
+    phase: 1
+    owner: loader
+    status: todo
+    depends: [P0-07, P0-09]
+    exit: "kernel prints 'iBoot version:' on PL011 under QEMU virt"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-04
+    title: "DT-ABI v1 + Apple-format DT synthesis from MADT/GTDT/SPCR + dtdump"
+    phase: 1
+    owner: loader
+    status: todo
+    depends: [P1-03]
+    exit: "dtdump validates synthesized DT; kernel reaches arm_vm_init without a hand-made blob"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-05
+    title: "GICv3 timer on Group 1 (timer-group/timer-ppi DT props) and IRQ dispatch to rtclock_intr"
+    phase: 1
+    owner: kernel-bridge
+    status: todo
+    depends: [P1-02, P1-04]
+    exit: "timer ticks on QEMU with TrustZone firmware (DS=0) and without"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-06
+    title: "In-kernel platform expert, GICv3InterruptController, PSCIPowerManager (IOPMGR)"
+    phase: 1
+    owner: iokit-platform
+    status: todo
+    depends: [P1-05]
+    exit: "all CPUs online; hw.ncpu == MADT count; IPIs measured"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-07
+    title: "mockfs PID 1 and syscall/Mach IPC test binary"
+    phase: 1
+    owner: userland
+    status: todo
+    depends: [P1-06]
+    exit: "static test binary prints from userland"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-08
+    title: "Cross SDK + HFS+ ramdisk root + launchd-842 + getty + shell"
+    phase: 1
+    owner: userland
+    status: todo
+    depends: [P1-07]
+    exit: "interactive shell over serial"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-09
+    title: "ndacpi kext — ACPICA runtime, IOACPIPlatformDevice nubs, MCFG ECAM, IOPCIFamily"
+    phase: 1
+    owner: acpi
+    status: todo
+    depends: [P1-06, P0-07]
+    exit: "ioreg shows PCI nubs on QEMU virt and sbsa-ref"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-10
+    title: "virtio-blk and NVMe kexts; root by boot-uuid from disk"
+    phase: 1
+    owner: storage
+    status: todo
+    depends: [P1-09]
+    exit: "boot from NVMe on sbsa-ref"
+    doc: docs/architecture/drivers.md
+  - id: P1-11
+    title: "OrangePi 6 Plus (CD8180) hardware-in-the-loop bring-up"
+    phase: 1
+    owner: verification
+    status: todo
+    depends: [P1-10]
+    exit: "nightly HIL boots to shell"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-12
+    title: "16550 pexpert serial driver for non-PL011 boards"
+    phase: 1
+    owner: kernel-bridge
+    status: todo
+    depends: [P1-04]
+    exit: "console on a 16550 SPCR board under QEMU"
+    doc: docs/kernel/arm64-sbsa-bringup.md
   # ---- Phase 2: Base system, packaging, updates ----
-  - {id: P2-01, title: ndpkg format, manifest schema, nd_package rule, ndsign, phase: 2, owner: packaging, status: todo, depends: [P0-02], exit: "a package builds, signs, verifies offline", doc: docs/architecture/packaging.md}
-  - {id: P2-02, title: Content-addressed store + bind-mount activation + libsolv solver + JSON plans, phase: 2, owner: packaging, status: todo, depends: [P2-01, P1-08], exit: "install/remove/upgrade of userland packages on a booted system", doc: docs/architecture/packaging.md}
-  - {id: P2-03, title: System sets as ZFS boot environments; ndpkg system upgrade/rollback; neoboot boot.cfg tries, phase: 2, owner: packaging, status: todo, depends: [P2-02, P3-03], exit: "kernel collection upgrade boots new BE; induced failure rolls back", doc: docs/architecture/packaging.md}
-  - {id: P2-04, title: Signed repository index, channels, ndpkg client fetch, phase: 2, owner: packaging, status: todo, depends: [P2-01], exit: "client installs from an HTTP repo with signature verification", doc: docs/architecture/packaging.md}
-  - {id: P2-05, title: pkgsrc bootstrap on NeoDarwin SDK + pkgsrc2nd bridge, phase: 2, owner: packaging, status: todo, depends: [P2-04, P1-08], exit: "100 ports build and install as .ndpkg", doc: docs/architecture/packaging.md}
-  - {id: P2-06, title: xnu_kernel phase-2 native Bazel graph via xnu2bazel, phase: 2, owner: build, status: todo, depends: [P0-06], exit: "native build byte-identical to wrapper build", doc: docs/architecture/build-system.md}
-  - {id: P2-07, title: Base libraries on Bazel (dyld, Libc, libdispatch, libpthread, libmalloc, Foundation), phase: 2, owner: build, status: todo, depends: [P0-02], exit: "libSystem built by Bazel boots the shell", doc: docs/architecture/build-system.md}
-  - {id: P2-08, title: Reproducible builds check (two hosts, diff) and remote cache, phase: 2, owner: build, status: todo, depends: [P2-06], exit: "nightly diff is empty", doc: docs/architecture/build-system.md}
-  - {id: P2-09, title: Transparency log for repository indexes (optional), phase: 2, owner: security, status: todo, depends: [P2-04], exit: "client verifies inclusion proof", doc: docs/architecture/packaging.md}
+  - id: P2-01
+    title: "ndpkg format, manifest schema, nd_package rule, ndsign"
+    phase: 2
+    owner: packaging
+    status: todo
+    depends: [P0-02]
+    exit: "a package builds, signs, verifies offline"
+    doc: docs/architecture/packaging.md
+  - id: P2-02
+    title: "Content-addressed store + bind-mount activation + libsolv solver + JSON plans"
+    phase: 2
+    owner: packaging
+    status: todo
+    depends: [P2-01, P1-08]
+    exit: "install/remove/upgrade of userland packages on a booted system"
+    doc: docs/architecture/packaging.md
+  - id: P2-03
+    title: "System sets as ZFS boot environments; ndpkg system upgrade/rollback; neoboot boot.cfg tries"
+    phase: 2
+    owner: packaging
+    status: todo
+    depends: [P2-02, P3-03]
+    exit: "kernel collection upgrade boots new BE; induced failure rolls back"
+    doc: docs/architecture/packaging.md
+  - id: P2-04
+    title: "Signed repository index, channels, ndpkg client fetch"
+    phase: 2
+    owner: packaging
+    status: todo
+    depends: [P2-01]
+    exit: "client installs from an HTTP repo with signature verification"
+    doc: docs/architecture/packaging.md
+  - id: P2-05
+    title: "pkgsrc bootstrap on NeoDarwin SDK + pkgsrc2nd bridge"
+    phase: 2
+    owner: packaging
+    status: todo
+    depends: [P2-04, P1-08]
+    exit: "100 ports build and install as .ndpkg"
+    doc: docs/architecture/packaging.md
+  - id: P2-06
+    title: "xnu_kernel phase-2 native Bazel graph via xnu2bazel"
+    phase: 2
+    owner: build
+    status: todo
+    depends: [P0-06]
+    exit: "native build byte-identical to wrapper build"
+    doc: docs/architecture/build-system.md
+  - id: P2-07
+    title: "Base libraries on Bazel (dyld, Libc, libdispatch, libpthread, libmalloc, Foundation)"
+    phase: 2
+    owner: build
+    status: todo
+    depends: [P0-02]
+    exit: "libSystem built by Bazel boots the shell"
+    doc: docs/architecture/build-system.md
+  - id: P2-08
+    title: "Reproducible builds check (two hosts, diff) and remote cache"
+    phase: 2
+    owner: build
+    status: todo
+    depends: [P2-06]
+    exit: "nightly diff is empty"
+    doc: docs/architecture/build-system.md
+  - id: P2-09
+    title: "Transparency log for repository indexes (optional)"
+    phase: 2
+    owner: security
+    status: todo
+    depends: [P2-04]
+    exit: "client verifies inclusion proof"
+    doc: docs/architecture/packaging.md
   # ---- Phase 3: Storage, OpenZFS, drivers breadth ----
-  - {id: P3-01, title: zfs.kext on NeoDarwin (module/os/neodarwin from macOS layer; KPI exports as kernel patches), phase: 3, owner: storage, status: todo, depends: [P0-08, P1-10], exit: "zpool create/import on a data disk; zfs test suite subset passes", doc: docs/architecture/filesystems.md}
-  - {id: P3-02, title: ZFS userland (libzfs, zpool, zfs, zed) as packages, phase: 3, owner: storage, status: todo, depends: [P3-01, P2-02], exit: "zed runs under launchd; events under /n/sys/fs", doc: docs/architecture/filesystems.md}
-  - {id: P3-03, title: Root on ZFS (rd=zfs:pool/ROOT/be) and boot environment switching, phase: 3, owner: storage, status: todo, depends: [P3-01], exit: "boot from ndpool/ROOT/be; ndpkg system rollback works", doc: docs/architecture/filesystems.md}
-  - {id: P3-04, title: msdosfs (ESP from userland), ndfuse (FreeBSD fuse port), nd9p (FreeBSD p9fs port), phase: 3, owner: storage, status: todo, depends: [P1-08], exit: "mount an ESP, a libfuse FS and a virtio-9p share", doc: docs/architecture/filesystems.md}
-  - {id: P3-05, title: NDDriverKit userland runtime (IOUserServer client) and dext rule, phase: 3, owner: drivers, status: todo, depends: [P1-09], exit: "sample dext loads, crashes, restarts without panic", doc: docs/architecture/drivers.md}
-  - {id: P3-06, title: neoboot read-only ZFS reader (FreeBSD stand/libsa/zfs reference), phase: 3, owner: loader, status: todo, depends: [P3-03], exit: "kernel collection loads from inside a BE", doc: docs/architecture/filesystems.md}
-  - {id: P3-07, title: XHCI + USB core (NDUSBFamily) + HID and mass-storage dexts, phase: 3, owner: drivers, status: todo, depends: [P3-05], exit: "USB keyboard and stick work on CD8180 and QEMU", doc: docs/architecture/drivers.md}
-  - {id: P3-08, title: Ethernet dexts (virtio-net, e1000/igb, Realtek re) + netd, phase: 3, owner: drivers, status: todo, depends: [P3-05], exit: "DHCP + ssh into the board", doc: docs/architecture/drivers.md}
-  - {id: P3-09, title: AHCI, SD/MMC (sdhci), IOSerialFamily tty, phase: 3, owner: drivers, status: todo, depends: [P1-09], exit: "boot from SD on CD8180; tty over serial", doc: docs/architecture/drivers.md}
-  - {id: P3-10, title: ZFS native encryption for home/var with keyd unlock, phase: 3, owner: security, status: todo, depends: [P3-03, P5-03], exit: "encrypted home unlocks at login", doc: docs/architecture/filesystems.md}
+  - id: P3-01
+    title: "zfs.kext on NeoDarwin (module/os/neodarwin from macOS layer; KPI exports as kernel patches)"
+    phase: 3
+    owner: storage
+    status: todo
+    depends: [P0-08, P1-10]
+    exit: "zpool create/import on a data disk; zfs test suite subset passes"
+    doc: docs/architecture/filesystems.md
+  - id: P3-02
+    title: "ZFS userland (libzfs, zpool, zfs, zed) as packages"
+    phase: 3
+    owner: storage
+    status: todo
+    depends: [P3-01, P2-02]
+    exit: "zed runs under launchd; events under /n/sys/fs"
+    doc: docs/architecture/filesystems.md
+  - id: P3-03
+    title: "Root on ZFS (rd=zfs:pool/ROOT/be) and boot environment switching"
+    phase: 3
+    owner: storage
+    status: todo
+    depends: [P3-01]
+    exit: "boot from ndpool/ROOT/be; ndpkg system rollback works"
+    doc: docs/architecture/filesystems.md
+  - id: P3-04
+    title: "msdosfs (ESP from userland), ndfuse (FreeBSD fuse port), nd9p (FreeBSD p9fs port)"
+    phase: 3
+    owner: storage
+    status: todo
+    depends: [P1-08]
+    exit: "mount an ESP, a libfuse FS and a virtio-9p share"
+    doc: docs/architecture/filesystems.md
+  - id: P3-05
+    title: "NDDriverKit userland runtime (IOUserServer client) and dext rule"
+    phase: 3
+    owner: drivers
+    status: todo
+    depends: [P1-09]
+    exit: "sample dext loads, crashes, restarts without panic"
+    doc: docs/architecture/drivers.md
+  - id: P3-06
+    title: "neoboot read-only ZFS reader (FreeBSD stand/libsa/zfs reference)"
+    phase: 3
+    owner: loader
+    status: todo
+    depends: [P3-03]
+    exit: "kernel collection loads from inside a BE"
+    doc: docs/architecture/filesystems.md
+  - id: P3-07
+    title: "XHCI + USB core (NDUSBFamily) + HID and mass-storage dexts"
+    phase: 3
+    owner: drivers
+    status: todo
+    depends: [P3-05]
+    exit: "USB keyboard and stick work on CD8180 and QEMU"
+    doc: docs/architecture/drivers.md
+  - id: P3-08
+    title: "Ethernet dexts (virtio-net, e1000/igb, Realtek re) + netd"
+    phase: 3
+    owner: drivers
+    status: todo
+    depends: [P3-05]
+    exit: "DHCP + ssh into the board"
+    doc: docs/architecture/drivers.md
+  - id: P3-09
+    title: "AHCI, SD/MMC (sdhci), IOSerialFamily tty"
+    phase: 3
+    owner: drivers
+    status: todo
+    depends: [P1-09]
+    exit: "boot from SD on CD8180; tty over serial"
+    doc: docs/architecture/drivers.md
+  - id: P3-10
+    title: "ZFS native encryption for home/var with keyd unlock"
+    phase: 3
+    owner: security
+    status: todo
+    depends: [P3-03, P5-03]
+    exit: "encrypted home unlocks at login"
+    doc: docs/architecture/filesystems.md
   # ---- Phase 4: Graphic console and desktop ----
-  - {id: P4-00, title: Desktop specifications baselined in docs/desktop (window protocol, theme engine, UI configuration, agent protocol, headers); mirror-plan-neo and mirror-nuaqua created, phase: 4, owner: graphics, status: done, depends: [P0-01], exit: "the four specs and three headers exist with provenance lines; mirrors resolve by pinned commit", doc: docs/desktop/README.md}
-  - {id: P4-14, title: Bring libstyle, libagent, lib9p (from the plan-neo pilot) and Vesper/Typeface (from the NuAqua pilot) into the NeoDarwin build with refactored module namespaces; run render.sums and the agent demo in CI, phase: 4, owner: graphics, status: todo, depends: [P0-02, P4-00], exit: "bazel test passes render-cyberpunk, render-amber, agent-demo and the Vesper render demo on macOS and Linux hosts", doc: docs/desktop/README.md}
-  - {id: P4-01, title: ndfb IOFramebuffer over GOP/simple-framebuffer on Apple IOGraphics, phase: 4, owner: graphics, status: todo, depends: [P1-09], exit: "userland draws to the framebuffer; kernel console handoff", doc: docs/architecture/graphics-desktop.md}
-  - {id: P4-02, title: inputd (HID/virtio-input → batched events; key-chord table as data), phase: 4, owner: graphics, status: todo, depends: [P3-07], exit: "keyboard and mouse events published under /n/sys/input", doc: docs/architecture/graphics-desktop.md}
-  - {id: P4-03, title: wsys — the window system implementing the NeoDarwin window protocol (9P tree at /n/desktop, ctl vocabulary, Deskwin/Deskevent, image+present, surface fast path, outputs/, menus, drag/drop, workspaces) over nsd, with the Vesper compositor and inputd, phase: 4, owner: graphics, status: todo, depends: [P4-01, P4-02, P4-14, P5-02], exit: "deskconform's 53 checks pass against wsys; stats shows p99 under 4 ms and zero composites when idle; Super+1..9 switches workspaces", doc: docs/desktop/window-protocol.md}
-  - {id: P4-04, title: Wayland core front door (libwayland, wl_shm, xdg_shell), phase: 4, owner: graphics, status: todo, depends: [P4-03], exit: "foot or weston-terminal runs on wsys", doc: docs/architecture/graphics-desktop.md}
-  - {id: P4-05, title: Toolkit API landscape and demographic study (hackers, indie game devs, tool builders) → Toolkit API charter, phase: 4, owner: graphics, status: todo, depends: [], exit: "charter approved: surface area, C ABI + bindings, ownership/threading model, compatibility layers (e.g. SDL3 backend)", doc: docs/architecture/graphics-desktop.md}
-  - {id: P4-06, title: Vesper renderer (NuAqua core, refactored namespaces) upgrades for the chrome materials — inner/outer shadows, glow/bloom, backdrop blur, procedural noise, conic/repeating gradients, masks, HVIF-style vector icons, phase: 4, owner: graphics, status: todo, depends: [P0-02], exit: "the chrome study's materials page renders pixel-close from Vesper on macOS host", doc: docs/architecture/graphics-desktop.md}
-  - {id: P4-07, title: Theme v2 (ui-configuration D12, D13) — selectors, specificity, class table, inheritance, three-file cascade, style_explain, named frames/backgrounds, client API; plus the study's materials (anodized, brushed, glass, lcd, glow, bloom) and neon/neon-hc/daylight themes; Vesper as the vector backend; WCAG AA contrast test, phase: 4, owner: graphics, status: todo, depends: [P4-06, P4-14], exit: "a v1 theme loads unchanged; term/button.pad applies only there; the study's materials render from a .theme file; a failing-contrast theme fails the build", doc: docs/desktop/window-protocol.md}
-  - {id: P4-15, title: Binds, modes and window rules (ui-configuration D14, D15, D16) — /n/desktop/binds, variables, five bind variants, live reload, conflict detection, modes with timeout, rules, Super as DK_META, mouse binds over grab, phase: 4, owner: graphics, status: todo, depends: [P4-03], exit: "every ctl message is reachable from a key; a duplicate bind is refused with both line numbers; a resize mode and a leader key work", doc: docs/desktop/ui-configuration.md}
-  - {id: P4-08, title: Desktop chrome — window frames (Amiga gadgets), NeXT docked/pop-up/torn-off menus, screen bar, dock with live tiles, phase: 4, owner: graphics, status: todo, depends: [P4-03, P4-06, P4-07], exit: "the study's markers A, B, C, D, H, I are live on the board", doc: docs/architecture/graphics-desktop.md}
-  - {id: P4-09, title: Column file viewer over /n and the generated prefs panel (ui-configuration D17), phase: 4, owner: graphics, status: todo, depends: [P4-08, P4-07], exit: "browse /n/desktop and a union dir in Miller columns; prefs shows every class and key with its cascade source; Save/Use/Cancel rewrite ~/lib/style", doc: docs/architecture/graphics-desktop.md}
-  - {id: P4-10, title: Graphic terminal and login flow, phase: 4, owner: graphics, status: todo, depends: [P4-08], exit: "log in on the framebuffer, open terminal, run shell", doc: docs/architecture/graphics-desktop.md}
-  - {id: P4-11, title: Desktop modernisation study — tiling/scrollable layouts, overview, layer-shell, portals, colour management, VRR, launchers, phase: 4, owner: graphics, status: todo, depends: [P4-08, P4-05], exit: "written evaluation with adopt/defer decisions per feature", doc: docs/architecture/graphics-desktop.md}
-  - {id: P4-12, title: Native toolkit v1 per the API charter (table-based UI model, /n/app auto-export, accessibility as a view), phase: 4, owner: graphics, status: todo, depends: [P4-05, P4-07], exit: "the three study prototypes (game loop, editor, synth UI) build against the shipped API", doc: docs/architecture/graphics-desktop.md}
-  - {id: P4-13, title: Accessibility tree over the UI table; screen-reader hooks, phase: 4, owner: graphics, status: todo, depends: [P4-12], exit: "a11y dump of a window matches the visible widgets", doc: docs/architecture/graphics-desktop.md}
+  - id: P4-00
+    title: "Desktop specifications baselined in docs/desktop (window protocol, theme engine, UI configuration, agent protocol, headers); mirror-plan-neo and mirror-nuaqua created"
+    phase: 4
+    owner: graphics
+    status: done
+    depends: [P0-01]
+    exit: "the four specs and three headers exist with provenance lines; mirrors resolve by pinned commit"
+    doc: docs/desktop/README.md
+  - id: P4-14
+    title: "Bring libstyle, libagent, lib9p (from the plan-neo pilot) and Vesper/Typeface (from the NuAqua pilot) into the NeoDarwin build with refactored module namespaces; run render.sums and the agent demo in CI"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P0-02, P4-00]
+    exit: "bazel test passes render-cyberpunk, render-amber, agent-demo and the Vesper render demo on macOS and Linux hosts"
+    doc: docs/desktop/README.md
+  - id: P4-01
+    title: "ndfb IOFramebuffer over GOP/simple-framebuffer on Apple IOGraphics"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P1-09]
+    exit: "userland draws to the framebuffer; kernel console handoff"
+    doc: docs/architecture/graphics-desktop.md
+  - id: P4-02
+    title: "inputd (HID/virtio-input → batched events; key-chord table as data)"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P3-07]
+    exit: "keyboard and mouse events published under /n/sys/input"
+    doc: docs/architecture/graphics-desktop.md
+  - id: P4-03
+    title: "wsys — the window system implementing the NeoDarwin window protocol (9P tree at /n/desktop, ctl vocabulary, Deskwin/Deskevent, image+present, surface fast path, outputs/, menus, drag/drop, workspaces) over nsd, with the Vesper compositor and inputd"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P4-01, P4-02, P4-14, P5-02]
+    exit: "deskconform's 53 checks pass against wsys; stats shows p99 under 4 ms and zero composites when idle; Super+1..9 switches workspaces"
+    doc: docs/desktop/window-protocol.md
+  - id: P4-04
+    title: "Wayland core front door (libwayland, wl_shm, xdg_shell)"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P4-03]
+    exit: "foot or weston-terminal runs on wsys"
+    doc: docs/architecture/graphics-desktop.md
+  - id: P4-05
+    title: "Toolkit API landscape and demographic study (hackers, indie game devs, tool builders) → Toolkit API charter"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: []
+    exit: "charter approved: surface area, C ABI + bindings, ownership/threading model, compatibility layers (e.g. SDL3 backend)"
+    doc: docs/architecture/graphics-desktop.md
+  - id: P4-06
+    title: "Vesper renderer (NuAqua core, refactored namespaces) upgrades for the chrome materials — inner/outer shadows, glow/bloom, backdrop blur, procedural noise, conic/repeating gradients, masks, HVIF-style vector icons"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P0-02]
+    exit: "the chrome study's materials page renders pixel-close from Vesper on macOS host"
+    doc: docs/architecture/graphics-desktop.md
+  - id: P4-07
+    title: "Theme v2 (ui-configuration D12, D13) — selectors, specificity, class table, inheritance, three-file cascade, style_explain, named frames/backgrounds, client API; plus the study's materials (anodized, brushed, glass, lcd, glow, bloom) and neon/neon-hc/daylight themes; Vesper as the vector backend; WCAG AA contrast test"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P4-06, P4-14]
+    exit: "a v1 theme loads unchanged; term/button.pad applies only there; the study's materials render from a .theme file; a failing-contrast theme fails the build"
+    doc: docs/desktop/window-protocol.md
+  - id: P4-15
+    title: "Binds, modes and window rules (ui-configuration D14, D15, D16) — /n/desktop/binds, variables, five bind variants, live reload, conflict detection, modes with timeout, rules, Super as DK_META, mouse binds over grab"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P4-03]
+    exit: "every ctl message is reachable from a key; a duplicate bind is refused with both line numbers; a resize mode and a leader key work"
+    doc: docs/desktop/ui-configuration.md
+  - id: P4-08
+    title: "Desktop chrome — window frames (Amiga gadgets), NeXT docked/pop-up/torn-off menus, screen bar, dock with live tiles"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P4-03, P4-06, P4-07]
+    exit: "the study's markers A, B, C, D, H, I are live on the board"
+    doc: docs/architecture/graphics-desktop.md
+  - id: P4-09
+    title: "Column file viewer over /n and the generated prefs panel (ui-configuration D17)"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P4-08, P4-07]
+    exit: "browse /n/desktop and a union dir in Miller columns; prefs shows every class and key with its cascade source; Save/Use/Cancel rewrite ~/lib/style"
+    doc: docs/architecture/graphics-desktop.md
+  - id: P4-10
+    title: "Graphic terminal and login flow"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P4-08]
+    exit: "log in on the framebuffer, open terminal, run shell"
+    doc: docs/architecture/graphics-desktop.md
+  - id: P4-11
+    title: "Desktop modernisation study — tiling/scrollable layouts, overview, layer-shell, portals, colour management, VRR, launchers"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P4-08, P4-05]
+    exit: "written evaluation with adopt/defer decisions per feature"
+    doc: docs/architecture/graphics-desktop.md
+  - id: P4-12
+    title: "Native toolkit v1 per the API charter (table-based UI model, /n/app auto-export, accessibility as a view)"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P4-05, P4-07]
+    exit: "the three study prototypes (game loop, editor, synth UI) build against the shipped API"
+    doc: docs/architecture/graphics-desktop.md
+  - id: P4-13
+    title: "Accessibility tree over the UI table; screen-reader hooks"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P4-12]
+    exit: "a11y dump of a window matches the visible widgets"
+    doc: docs/architecture/graphics-desktop.md
   # ---- Phase 5: Namespaces, state as files, agent-era security ----
-  - {id: P5-01, title: libns (Swift over libagent/lib9p) and nsd multiplexer with per-process mount tables and the agentd registry, phase: 5, owner: namespaces, status: todo, depends: [P0-02, P4-14], exit: "agentctl.py demo passes against a Swift app on macOS host; /n/agent/index lists it; bind/union work", doc: docs/architecture/namespaces-agents.md}
-  - {id: P5-02, title: nd9p.kext mounts /n at boot; nsd as launchd service, phase: 5, owner: namespaces, status: todo, depends: [P3-04, P5-01], exit: "/n/sys/proc readable on the board", doc: docs/architecture/namespaces-agents.md}
-  - {id: P5-03, title: keyd — key storage, capability tokens, attenuation, revocation, phase: 5, owner: security, status: todo, depends: [P5-01], exit: "token-gated attach; revoked token rejected within one request", doc: docs/architecture/namespaces-agents.md}
-  - {id: P5-04, title: ndsandbox.kext MAC policy — namespace confinement, manifest entitlements, audit, phase: 5, owner: security, status: todo, depends: [P5-02], exit: "process cannot open /n paths outside its table; audit record emitted", doc: docs/architecture/namespaces-agents.md}
-  - {id: P5-05, title: System daemons publish /n/sys/{pkg,display,input,net,power,fs,dev,audit}, phase: 5, owner: namespaces, status: todo, depends: [P5-02], exit: "ndpkg upgrade via /n/sys/pkg/ctl; display surfaces listed", doc: docs/architecture/namespaces-agents.md}
-  - {id: P5-06, title: wsys and toolkit as agent endpoints — schema on /n/desktop, per-app agent trees generated by the toolkit, capability-gated snapshots, phase: 5, owner: graphics, status: todo, depends: [P4-12, P5-03], exit: "an agent lists and moves a window through /n/desktop/actions and drives a toolkit app through /n/agent/APPID/actions", doc: docs/architecture/namespaces-agents.md}
-  - {id: P5-07, title: Agent session flow — grants, curated union namespace, ZFS snapshot around session, audit reconstruction, phase: 5, owner: security, status: todo, depends: [P5-04, P5-05, P3-03], exit: "phase-5 exit scenario passes end to end", doc: docs/architecture/namespaces-agents.md}
+  - id: P5-01
+    title: "libns (Swift over libagent/lib9p) and nsd multiplexer with per-process mount tables and the agentd registry"
+    phase: 5
+    owner: namespaces
+    status: todo
+    depends: [P0-02, P4-14]
+    exit: "agentctl.py demo passes against a Swift app on macOS host; /n/agent/index lists it; bind/union work"
+    doc: docs/architecture/namespaces-agents.md
+  - id: P5-02
+    title: "nd9p.kext mounts /n at boot; nsd as launchd service"
+    phase: 5
+    owner: namespaces
+    status: todo
+    depends: [P3-04, P5-01]
+    exit: "/n/sys/proc readable on the board"
+    doc: docs/architecture/namespaces-agents.md
+  - id: P5-03
+    title: "keyd — key storage, capability tokens, attenuation, revocation"
+    phase: 5
+    owner: security
+    status: todo
+    depends: [P5-01]
+    exit: "token-gated attach; revoked token rejected within one request"
+    doc: docs/architecture/namespaces-agents.md
+  - id: P5-04
+    title: "ndsandbox.kext MAC policy — namespace confinement, manifest entitlements, audit"
+    phase: 5
+    owner: security
+    status: todo
+    depends: [P5-02]
+    exit: "process cannot open /n paths outside its table; audit record emitted"
+    doc: docs/architecture/namespaces-agents.md
+  - id: P5-05
+    title: "System daemons publish /n/sys/{pkg,display,input,net,power,fs,dev,audit}"
+    phase: 5
+    owner: namespaces
+    status: todo
+    depends: [P5-02]
+    exit: "ndpkg upgrade via /n/sys/pkg/ctl; display surfaces listed"
+    doc: docs/architecture/namespaces-agents.md
+  - id: P5-06
+    title: "wsys and toolkit as agent endpoints — schema on /n/desktop, per-app agent trees generated by the toolkit, capability-gated snapshots"
+    phase: 5
+    owner: graphics
+    status: todo
+    depends: [P4-12, P5-03]
+    exit: "an agent lists and moves a window through /n/desktop/actions and drives a toolkit app through /n/agent/APPID/actions"
+    doc: docs/architecture/namespaces-agents.md
+  - id: P5-07
+    title: "Agent session flow — grants, curated union namespace, ZFS snapshot around session, audit reconstruction"
+    phase: 5
+    owner: security
+    status: todo
+    depends: [P5-04, P5-05, P3-03]
+    exit: "phase-5 exit scenario passes end to end"
+    doc: docs/architecture/namespaces-agents.md
   # ---- Phase 6: Multi-arch ----
-  - {id: P6-01, title: neoboot x86_64 mode (x86 boot_args, EFI memory map, ACPI pointer), phase: 6, owner: arch-amd64, status: todo, depends: [P1-04], exit: "x86_64 kernel prints on serial under QEMU q35", doc: docs/architecture/multi-arch.md}
-  - {id: P6-02, title: IOAPIC/MSI IOInterruptController + PC platform expert + ACPICA reuse, phase: 6, owner: arch-amd64, status: todo, depends: [P6-01, P1-09], exit: "shell on a UEFI PC", doc: docs/architecture/multi-arch.md}
-  - {id: P6-03, title: Mach-O CPU_TYPE_RISCV64 in LLVM/lld/dyld/kcgen, phase: 6, owner: arch-riscv64, status: todo, depends: [P0-02], exit: "riscv64 Mach-O hello links and dyld loads it on a host shim", doc: docs/architecture/multi-arch.md}
-  - {id: P6-04, title: osfmk/riscv64 + pexpert/riscv64 + Sv48 pmap; PLIC/AIA; SBI timer and HSM, phase: 6, owner: arch-riscv64, status: todo, depends: [P6-03, P1-06], exit: "kernel_bootstrap completes on QEMU riscv64 virt", doc: docs/architecture/multi-arch.md}
+  - id: P6-01
+    title: "neoboot x86_64 mode (x86 boot_args, EFI memory map, ACPI pointer)"
+    phase: 6
+    owner: arch-amd64
+    status: todo
+    depends: [P1-04]
+    exit: "x86_64 kernel prints on serial under QEMU q35"
+    doc: docs/architecture/multi-arch.md
+  - id: P6-02
+    title: "IOAPIC/MSI IOInterruptController + PC platform expert + ACPICA reuse"
+    phase: 6
+    owner: arch-amd64
+    status: todo
+    depends: [P6-01, P1-09]
+    exit: "shell on a UEFI PC"
+    doc: docs/architecture/multi-arch.md
+  - id: P6-03
+    title: "Mach-O CPU_TYPE_RISCV64 in LLVM/lld/dyld/kcgen"
+    phase: 6
+    owner: arch-riscv64
+    status: todo
+    depends: [P0-02]
+    exit: "riscv64 Mach-O hello links and dyld loads it on a host shim"
+    doc: docs/architecture/multi-arch.md
+  - id: P6-04
+    title: "osfmk/riscv64 + pexpert/riscv64 + Sv48 pmap; PLIC/AIA; SBI timer and HSM"
+    phase: 6
+    owner: arch-riscv64
+    status: todo
+    depends: [P6-03, P1-06]
+    exit: "kernel_bootstrap completes on QEMU riscv64 virt"
+    doc: docs/architecture/multi-arch.md
   # ---- Phase 7: Acceleration and polish ----
-  - {id: P7-01, title: GPU kernel driver + Mesa userland (first target chosen by licence and docs), phase: 7, owner: graphics, status: todo, depends: [P4-03, P3-05], exit: "wsys composites on the GPU; vkcube runs", doc: docs/architecture/graphics-desktop.md}
-  - {id: P7-02, title: Power management — CPU idle states via PSCI CPU_SUSPEND, suspend/resume, phase: 7, owner: iokit-platform, status: todo, depends: [P1-06], exit: "idle power drops; S2R on CD8180", doc: docs/kernel/arm64-sbsa-bringup.md}
-  - {id: P7-04, title: edit — native editor (rope with summaries, renderer seam, glyph atlas, tree-sitter, agent endpoint; design from the plan-neo pilot), phase: 7, owner: graphics, status: todo, depends: [P4-12, P5-01], exit: "opens a 100 MB file and keeps p99 frame time under budget; drivable through /n/agent/edit", doc: docs/desktop/README.md}
-  - {id: P7-05, title: dbg — native debugger over Mach exception ports with a .ndi symbol index emitted by the toolchain (design from the plan-neo pilot), phase: 7, owner: build, status: todo, depends: [P4-12, P2-06], exit: "breakpoint, step, locals and backtrace on a NeoDarwin binary; drivable through /n/agent/dbg", doc: docs/desktop/README.md}
-  - {id: P7-03, title: Installer, release images, documentation site, first public release, phase: 7, owner: packaging, status: todo, depends: [P2-03, P4-10, P5-07], exit: "a stranger installs NeoDarwin from the release page", doc: roadmap/ROADMAP.md}
+  - id: P7-01
+    title: "GPU kernel driver + Mesa userland (first target chosen by licence and docs)"
+    phase: 7
+    owner: graphics
+    status: todo
+    depends: [P4-03, P3-05]
+    exit: "wsys composites on the GPU; vkcube runs"
+    doc: docs/architecture/graphics-desktop.md
+  - id: P7-02
+    title: "Power management — CPU idle states via PSCI CPU_SUSPEND, suspend/resume"
+    phase: 7
+    owner: iokit-platform
+    status: todo
+    depends: [P1-06]
+    exit: "idle power drops; S2R on CD8180"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P7-04
+    title: "edit — native editor (rope with summaries, renderer seam, glyph atlas, tree-sitter, agent endpoint; design from the plan-neo pilot)"
+    phase: 7
+    owner: graphics
+    status: todo
+    depends: [P4-12, P5-01]
+    exit: "opens a 100 MB file and keeps p99 frame time under budget; drivable through /n/agent/edit"
+    doc: docs/desktop/README.md
+  - id: P7-05
+    title: "dbg — native debugger over Mach exception ports with a .ndi symbol index emitted by the toolchain (design from the plan-neo pilot)"
+    phase: 7
+    owner: build
+    status: todo
+    depends: [P4-12, P2-06]
+    exit: "breakpoint, step, locals and backtrace on a NeoDarwin binary; drivable through /n/agent/dbg"
+    doc: docs/desktop/README.md
+  - id: P7-03
+    title: "Installer, release images, documentation site, first public release"
+    phase: 7
+    owner: packaging
+    status: todo
+    depends: [P2-03, P4-10, P5-07]
+    exit: "a stranger installs NeoDarwin from the release page"
+    doc: roadmap/ROADMAP.md

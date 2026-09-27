@@ -1,0 +1,67 @@
+# XNU kernel builds (docs/kernel/arm64-sbsa-bringup.md, docs/repository.md §3).
+load("//rules:xnu.bzl", "libfirehose_kernel", "nd_build_sdk", "xnu_headers", "xnu_kernel")
+
+package(default_visibility = ["//visibility:public"])
+
+DARWIN_VERSION = "25.0.0"  # macOS 26.0 release set; see upstream.lock
+
+filegroup(
+    name = "sdk_shims",
+    srcs = glob(["sdk/**"]),
+)
+
+# NeoDarwin additions to the host SDK: availability.pl, the kernel firehose
+# header, and the shims under kernel/sdk.
+nd_build_sdk(
+    name = "build_sdk",
+    availability_versions = "@apple_availability_versions//:all",
+    libdispatch = "@apple_libdispatch//:all",
+    shim_root = "sdk",
+    shims = ":sdk_shims",
+)
+
+xnu_headers(
+    name = "headers",
+    darwin_version = DARWIN_VERSION,
+    sdk = ":build_sdk",
+    srcs = "@apple_xnu//:all",
+)
+
+libfirehose_kernel(
+    name = "firehose_kernel",
+    headers = ":headers",
+    libdispatch = "@apple_libdispatch//:all",
+    sdk = ":build_sdk",
+)
+
+# Apple's public VMAPPLE configuration with no NeoDarwin patches. Every source
+# compiles; the link fails on symbols Apple ships only in closed archives.
+# The report lists them: this is the gap Phase 1 drives to zero.
+xnu_kernel(
+    name = "vmapple_release_gaps",
+    darwin_version = DARWIN_VERSION,
+    firehose = ":firehose_kernel",
+    link_gap_report = True,
+    machine_config = "VMAPPLE",
+    sdk = ":build_sdk",
+    srcs = "@apple_xnu//:all",
+)
+
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+# The gap may only shrink. Heavy (a full kernel build), so it runs in the
+# kernel CI job (ci/kernel.sh), not in the default `bazel test //...`.
+sh_test(
+    name = "vmapple_link_gap_ratchet",
+    size = "small",
+    srcs = ["//tools/xnu:gap_ratchet.sh"],
+    args = [
+        "$(rootpath :vmapple_release_gaps)",
+        "$(rootpath link_gaps/vmapple_release.txt)",
+    ],
+    data = [
+        "link_gaps/vmapple_release.txt",
+        ":vmapple_release_gaps",
+    ],
+    tags = ["manual", "kernel"],
+)

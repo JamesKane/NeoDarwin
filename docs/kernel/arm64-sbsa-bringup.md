@@ -231,6 +231,19 @@ Agent messaging discipline: the DT-ABI table is the interface between A1 and A2/
 - `PMR = 0xFF`, `BPR`, `EOImode = 0` as VMAPPLE does; A7 adds a TF-A-backed QEMU config (`secure=on` with `ARM_TRUSTZONE` firmware) to CI so the DS=0 case is tested in software before hardware.
 - Redistributor discovery already loops `GICR_TYPER` for the CPU's affinity (`pe_fiq.c:44-68`); loader passes the full GICR stride region from MADT GICR structures, not a per-CPU list.
 
+### 5.3a Measured: the published XNU source does not link on its own
+
+Building `xnu-12377.1.9` VMAPPLE RELEASE from public sources (`//kernel:vmapple_release_gaps`, 2026-09-27) compiles every file but leaves **395 undefined symbols** at link. Apple's public build fills them from a closed per-SoC archive in the login-gated Kernel Debug Kit (`libVMAPPLE.os.RELEASE.a`). NeoDarwin does not use the KDK; the gaps close from source instead:
+
+| Gap | Symbols | Plan |
+|---|---|---|
+| ARM64 machine code and pmap present in the tree but excluded by the public config options `nos_arm_asm`/`nos_arm_pmap` | about 237 | `kernel/patches/0001` enables them; the SBSA board config supplies the guards the newly built files need (Apple `CPU_OVRD` registers, per-SoC tunables, Apple IOMMU headers) |
+| Required only by export lists (Tightbeam 111, `IOUnifiedAddressTranslator` 19, others) | 157 | NeoDarwin drops the exclaves and Apple-IOMMU export lists |
+| Apple SoC IOMMUs, kernel-integrity regions, NVMe PPL | 26 | not built for SBSA |
+| libTrustCache runtime | 2 | NeoDarwin stub |
+
+The categories overlap (some pmap symbols are also exported). The authoritative list is `kernel/link_gaps/vmapple_release.txt`, and a ratchet test keeps it from growing.
+
 ### 5.3 Risk 3 — Closed kexts and kernelcache tooling
 *Failure mode:* the project stalls on binaries it cannot build: `AppleARMPlatform`, `AppleInterruptController`, `AppleVirtualPlatform`, `AppleMobileFileIntegrity`, `apfs`, `IONVMeFamily`, and the `kmutil`/EmbeddedDeviceMap build tooling.
 *Mitigation:*

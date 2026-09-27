@@ -1,0 +1,6 @@
+# Upstream pins for kernel builds. Must match the http_archive entries in
+# MODULE.bazel. Release set: macOS 26.0 (distribution-macOS macos-260).
+xnu                  xnu-12377.1.9                 sha256:de41f52730e41c844c95e8172de02c1fcf2eb35e95343a4a12aaf7518fb4bf17
+AvailabilityVersions AvailabilityVersions-155      sha256:4116d620072474fdf58046393c55e534bb15e6c66719c430c387652fde4db6c5
+libdispatch          libdispatch-1542.0.4          sha256:e33dc6ebc77d543afb989dd6f0f318f9bf2bbc17f58704cba9b7a147a5c50bc2
+darwin_version       25.0.0

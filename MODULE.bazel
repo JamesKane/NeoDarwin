@@ -13,3 +13,35 @@ bazel_dep(name = "rules_cc", version = "0.2.25")
 bazel_dep(name = "rules_shell", version = "0.8.0")
 bazel_dep(name = "apple_support", version = "2.9.1")
 bazel_dep(name = "rules_swift", version = "4.1.2")
+
+# ---------------------------------------------------------------------------
+# Upstream Apple open source (docs/repository.md §3). The macOS 26.0 release
+# set: distribution-macOS macos-260/release.json. Mirrors replace these URLs
+# when mirror-* repositories exist (P0-01); hashes stay.
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+_ALL_FILES = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])"""
+
+http_archive(
+    name = "apple_xnu",
+    build_file_content = _ALL_FILES,
+    sha256 = "de41f52730e41c844c95e8172de02c1fcf2eb35e95343a4a12aaf7518fb4bf17",
+    strip_prefix = "xnu-xnu-12377.1.9",
+    urls = ["https://github.com/apple-oss-distributions/xnu/archive/refs/tags/xnu-12377.1.9.tar.gz"],
+)
+
+http_archive(
+    name = "apple_availability_versions",
+    build_file_content = _ALL_FILES,
+    sha256 = "4116d620072474fdf58046393c55e534bb15e6c66719c430c387652fde4db6c5",
+    strip_prefix = "AvailabilityVersions-AvailabilityVersions-155",
+    urls = ["https://github.com/apple-oss-distributions/AvailabilityVersions/archive/refs/tags/AvailabilityVersions-155.tar.gz"],
+)
+
+http_archive(
+    name = "apple_libdispatch",
+    build_file_content = _ALL_FILES,
+    sha256 = "e33dc6ebc77d543afb989dd6f0f318f9bf2bbc17f58704cba9b7a147a5c50bc2",
+    strip_prefix = "libdispatch-libdispatch-1542.0.4",
+    urls = ["https://github.com/apple-oss-distributions/libdispatch/archive/refs/tags/libdispatch-1542.0.4.tar.gz"],
+)

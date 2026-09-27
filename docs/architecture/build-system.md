@@ -65,6 +65,8 @@ images/BUILD                      # system_image, esp_image, ramdisk targets
 | `swift_embedded_binary`, `swift_embedded_library` | freestanding Embedded Swift (no runtime, `-no-allocations`), PE/COFF for UEFI or Mach-O/ELF | none |
 | `kext_swift` (experimental) | Embedded Swift objects linked into a `kext` behind C entry points | none |
 
+Phase 1 is implemented (`rules/xnu.bzl`, `tools/xnu/`): `nd_build_sdk` produces NeoDarwin's additions to the host SDK as real files, each action assembles its own overlay SDK, `xnu_headers` and `libfirehose_kernel` build from pinned Apple archives, and `xnu_kernel` runs the upstream makefiles, optionally in link-gap-report mode. See `kernel/README.md` for the targets and the settings that differ from Apple's.
+
 The `xnu_kernel` rule is delivered in two phases so the kernel port is never blocked on build-system work: **phase 1** (P0) wraps the upstream makefiles in a sandboxed `genrule` with the hermetic toolchain injected via `CC=`, `LD=`, `HOST_*`, and `EXTRA_TARGET_CONFIGS`; **phase 2** (P2) replaces the makefiles with a native graph generated from XNU's `conf/files*` lists by a converter kept under `tools/xnu2bazel` so future Apple drops re-convert mechanically.
 
 ## 5. Host tools

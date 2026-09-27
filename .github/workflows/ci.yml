@@ -5,6 +5,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "0 6 * * *"
 
 jobs:
   macos-host:
@@ -12,3 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ci/test.sh
+
+  kernel:
+    # Full XNU build: nightly, and on pushes to main.
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+      - run: ci/kernel.sh
