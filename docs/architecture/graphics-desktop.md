@@ -106,7 +106,7 @@ The study is research on APIs and source code, not a survey of developers. It re
   - large pages and pinned memory;
   - the effort of keeping a separate backend for each GPU API;
   - build and packaging friction.
-- **Output.**
+- **Output.** The charter draft is `docs/desktop/toolkit-charter.md`, and the friction register is `docs/architecture/friction-register.md`.
   - *Toolkit API charter:* the surface area; the language bindings that matter (Swift native, C ABI for everyone else, Zig and Rust bindings generated from the C ABI); the ownership and threading model; and the compatibility layers worth shipping (an SDL3 backend is likely). The toolkit itself is Swift (language policy T1, with T2 on the draw and event paths).
   - *Friction register:* each observed high-friction point, the evidence behind it (projects, code sites, issues), and a proposed NeoDarwin answer, tagged with the layer that should own it (toolkit, `wsys` fast path, GPU and compute stack in P7, or kernel scheduler and VM).
 - **Already fixed, below the toolkit.** The window protocol (§2), the theme classes a widget must draw through, and the agent protocol every app serves are not reopened by the study. If a friction finding needs something from them (a present-timing event, a zero-copy surface kind), it is filed against that protocol as an extension proposal.

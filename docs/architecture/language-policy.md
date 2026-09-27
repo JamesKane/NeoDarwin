@@ -3,7 +3,9 @@
 
 ## 1. Decision (user, 2026-09-27)
 
-**Swift 6 or newer is the implementation language for every new NeoDarwin component.** Where performance is critical the code is written in **Embedded (bare-metal) Swift** or in **allocation-free Swift**, with the compiler enforcing the absence of heap allocation. **C or C++ is the fallback**, used only where a Swift expression would harm portability, harm performance, or cannot be written. Apple is beginning to ship Swift inside its own OS components and the language's ownership model is maturing release by release; NeoDarwin tracks the newest stable toolchain and adopts ownership features as they stabilise rather than freezing on today's subset. No fourth language is introduced: there is no Rust, Zig or Go in the tree, so the build has one toolchain and one debugger story.
+**Swift 6 or newer is the implementation language for every new NeoDarwin component.** Where performance is critical the code is written in **Embedded (bare-metal) Swift** or in **allocation-free Swift**, with the compiler enforcing the absence of heap allocation. **C or C++ is the fallback**, used only where a Swift expression would harm portability, harm performance, or cannot be written. Apple is beginning to ship Swift inside its own OS components and the language's ownership model is maturing release by release; NeoDarwin tracks the newest stable toolchain and adopts ownership features as they stabilise rather than freezing on today's subset. No fourth language is introduced into first-party code: NeoDarwin's own components contain no Rust, Zig or Go, so first-party work has one toolchain and one debugger story.
+
+**Scope (clarified 2026-09-27):** this policy governs software the project writes. It does not apply to vendored upstream code (XNU, OpenZFS, ACPICA, Mesa and the other `mirror-*` components), which is built in whatever language upstream uses. If an upstream component needs another compiler (for example, rustc for Mesa's NVK and Panfrost compilers and Rusticl), that compiler is pinned in the build as a vendored-component dependency; it is not a language NeoDarwin writes in.
 
 ## 2. Tiers
 

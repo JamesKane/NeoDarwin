@@ -9,6 +9,7 @@ These are the normative texts for the window system, the theme engine, interface
 | [`theme-engine.md`](theme-engine.md) | [`style.h`](style.h) | `libstyle` version 1: the theme file, raster primitives, chrome drawing, live reload at `/n/theme`; appendix A maps the chrome study's tokens onto the file |
 | [`ui-configuration.md`](ui-configuration.md) | — | theme version 2 (classes, selectors, the user-wins cascade, named frames and backgrounds), binds, modes, window rules, the generated preferences window |
 | [`agent-protocol.md`](agent-protocol.md) | [`agent.h`](agent.h) | `/n/agent/APPID/{schema,state,actions,log}`, `seq` and `if_seq`, the `agentd` registry, the rules for verbs and state |
+| [`toolkit-charter.md`](toolkit-charter.md) (draft) | — | the toolkit API charter from the P4-05 study: principles, surface area, threading and ownership, GPU decision, bindings, compatibility layers, what it needs from the protocol, S7 validation |
 
 The visual reference for the chrome is the study at https://claude.ai/artifact/M4LEDkHLwxppcSSk6gsR7E (NeXT, Amiga, BeOS, OPEN LOOK and IRIX lineage; procedural materials; `neon`, `neon-hc` and `daylight` themes).
 
