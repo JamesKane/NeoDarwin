@@ -1,0 +1,22 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:swift.bzl", "nd_swift_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+nd_swift_binary(
+    name = "lang_audit",
+    srcs = ["main.swift"],
+)
+
+exports_files(["run.sh"])
+
+sh_test(
+    name = "selftest",
+    size = "small",
+    srcs = ["selftest.sh"],
+    args = [
+        "$(rootpath :lang_audit)",
+        "tools/lang_audit/testdata",
+    ],
+    data = [":lang_audit"] + glob(["testdata/*.c"]),
+)

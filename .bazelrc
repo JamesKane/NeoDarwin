@@ -1,0 +1,20 @@
+# NeoDarwin Bazel configuration. See docs/architecture/build-system.md.
+
+# Hermeticity: do not leak the caller's PATH or env into actions.
+common --incompatible_strict_action_env
+common --enable_platform_specific_config
+
+build --verbose_failures
+test --test_output=errors
+
+# Apple host: build with the selected Xcode's toolchain until the pinned
+# NeoDarwin toolchain lands (toolchains/README.md).
+build:macos --apple_platform_type=macos
+
+# CI: no local-only caches, show everything that failed.
+build:ci --noshow_progress
+build:ci --keep_going
+test:ci --test_output=errors
+
+# Per-user overrides (remote cache credentials, jobs) stay out of git.
+try-import %workspace%/user.bazelrc

@@ -1,0 +1,14 @@
+# Runs unchanged under Forgejo Actions via .forgejo/workflows -> ../.github/workflows.
+# Self-hosted runners only (docs/repository.md §5).
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  macos-host:
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+      - run: ci/test.sh

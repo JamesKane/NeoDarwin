@@ -1,0 +1,18 @@
+# Boards: the board-config seam (docs/kernel/arm64-sbsa-bringup.md §2.3).
+package(default_visibility = ["//visibility:public"])
+
+constraint_setting(
+    name = "board",
+    default_constraint_value = ":none",
+)
+
+constraint_value(name = "none", constraint_setting = ":board")
+
+# Generic SBSA/SBBR machine: the SBSA board config.
+constraint_value(name = "sbsa", constraint_setting = ":board")
+
+# QEMU virt (GICv3, ACPI, PL011): first software target.
+constraint_value(name = "qemu_virt", constraint_setting = ":board")
+
+# OrangePi 6 Plus (CIX CD8180): first hardware target.
+constraint_value(name = "cd8180", constraint_setting = ":board")

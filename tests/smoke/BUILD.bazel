@@ -1,0 +1,30 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("@rules_swift//swift:swift_interop_hint.bzl", "swift_interop_hint")
+load("//rules:cc.bzl", "nd_cc_library")
+load("//rules:swift.bzl", "nd_swift_binary")
+
+swift_interop_hint(
+    name = "ndshim_swift",
+    module_name = "NDShim",
+)
+
+nd_cc_library(
+    name = "ndshim",
+    srcs = ["ndshim.c"],
+    hdrs = ["ndshim.h"],
+    aspect_hints = [":ndshim_swift"],
+)
+
+nd_swift_binary(
+    name = "smoke",
+    srcs = ["Smoke.swift"],
+    deps = [":ndshim"],
+)
+
+sh_test(
+    name = "smoke_test",
+    size = "small",
+    srcs = ["smoke_test.sh"],
+    args = ["$(rootpath :smoke)"],
+    data = [":smoke"],
+)

@@ -1,0 +1,2 @@
+# NeoDarwin repository root.
+exports_files(["LICENSE"])

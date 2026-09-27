@@ -1,0 +1,43 @@
+# Target platforms. Toolchains for NeoDarwin targets arrive with the pinned
+# toolchain (P0-02) and the Embedded Swift UEFI target (P0-09); until then only
+# host builds resolve.
+package(default_visibility = ["//visibility:public"])
+
+platform(
+    name = "neodarwin_aarch64",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+        "//platforms/os:neodarwin",
+    ],
+)
+
+platform(
+    name = "neodarwin_aarch64_qemu_virt",
+    parents = [":neodarwin_aarch64"],
+    constraint_values = ["//platforms/board:qemu_virt"],
+)
+
+platform(
+    name = "neodarwin_aarch64_cd8180",
+    parents = [":neodarwin_aarch64"],
+    constraint_values = ["//platforms/board:cd8180"],
+)
+
+# UEFI applications (neoboot) are PE/COFF images run by firmware, not NeoDarwin
+# processes; they get their own OS constraint in P0-09.
+
+platform(
+    name = "neodarwin_x86_64",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "//platforms/os:neodarwin",
+    ],
+)
+
+platform(
+    name = "neodarwin_riscv64",
+    constraint_values = [
+        "@platforms//cpu:riscv64",
+        "//platforms/os:neodarwin",
+    ],
+)

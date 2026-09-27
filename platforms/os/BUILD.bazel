@@ -1,0 +1,9 @@
+# The operating systems NeoDarwin builds for or on.
+package(default_visibility = ["//visibility:public"])
+
+# NeoDarwin itself as a build target. Hosts use @platforms//os:macos and
+# @platforms//os:linux.
+constraint_value(
+    name = "neodarwin",
+    constraint_setting = "@platforms//os:os",
+)
