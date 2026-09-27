@@ -65,3 +65,68 @@ sh_test(
     ],
     tags = ["manual", "kernel"],
 )
+
+# ---------------------------------------------------------------------------
+# SBSA: NeoDarwin's generic Arm board config (docs/kernel/arm64-sbsa-bringup.md
+# §2.3). Plain arm64 (no Apple PAC ABI) and no BTI, per the bring-up design.
+
+SBSA_PATCHES = [
+    "patches/0001-config-build-arm64-machine-code-and-pmap-from-source.patch",
+    "patches/0002-sbsa-board-config.patch",
+    "patches/0003-osfmk-generic-arm64-guards.patch",
+    "patches/0004-config-sbsa-exports.patch",
+    "patches/0005-bsd-neodarwin-trustcache-runtime.patch",
+]
+
+libfirehose_kernel(
+    name = "firehose_kernel_arm64",
+    arch = "arm64",
+    headers = ":headers",
+    libdispatch = "@apple_libdispatch//:all",
+    sdk = ":build_sdk",
+)
+
+xnu_kernel(
+    name = "sbsa_release",
+    darwin_version = DARWIN_VERSION,
+    firehose = ":firehose_kernel_arm64",
+    machine_config = "SBSA",
+    make_vars = [
+        "ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64",
+        "BTI_BUILD=0",
+    ],
+    patches = SBSA_PATCHES,
+    sdk = ":build_sdk",
+    srcs = "@apple_xnu//:all",
+)
+
+# The kernel is a fully linked arm64 Mach-O with no undefined symbols.
+sh_test(
+    name = "sbsa_kernel_test",
+    size = "small",
+    srcs = ["//tools/xnu:check_kernel.sh"],
+    args = [
+        "$(rootpaths :sbsa_release)",
+        "arm64",
+    ],
+    data = [":sbsa_release"],
+    tags = ["manual", "kernel"],
+)
+
+# Implementation-defined system registers the SBSA kernel still touches
+# (Apple PMCs in the monotonic driver, AWL). Each would fault on a generic
+# core; P1-02 drives the list to zero. The set may only shrink.
+sh_test(
+    name = "sbsa_sysreg_audit",
+    size = "small",
+    srcs = ["//tools/xnu:sysreg_audit.sh"],
+    args = [
+        "$(rootpaths :sbsa_release)",
+        "$(rootpath sysreg_audit/sbsa_release.txt)",
+    ],
+    data = [
+        "sysreg_audit/sbsa_release.txt",
+        ":sbsa_release",
+    ],
+    tags = ["manual", "kernel"],
+)

@@ -1,0 +1,240 @@
+From: NeoDarwin
+Subject: [PATCH] osfmk: build the ARM64 machine layer for GENERIC_ARM64_PLATFORM
+
+With nos_arm_asm/nos_arm_pmap enabled (0001), a few sites assume Apple
+silicon or code Apple does not publish. For GENERIC_ARM64_PLATFORM:
+
+- pmap.c: skip SART bootstrap and the Apple IOMMU headers; declare
+  pmap_phys_write_disable before use; the no-monitor lockdown calls are
+  no-ops (flag 0 means no lockdown); use the architectural
+  CleanPoC_DcacheRegion_Force instead of the unpublished HID-controlled
+  variant; report the tagged PTE pointer instead of ptep_get_iommu().
+- arm_vm_init.c: no Apple page-protection monitor to enable.
+- cpu_common.c: no Apple CPU power-status register to poll; the PSCI
+  power manager will poll AFFINITY_INFO (P1-06).
+- machine_routines_common.c, sleh.c, pcb.c: include apple_arm64_cpu.h
+  only on Apple silicon.
+- arm64/tunables/tunables.s: empty APPLY_TUNABLES; Apple's per-SoC
+  tunables are not published and firmware owns tuning on SBSA.
+- files.arm64 and MASTER: the unpublished amcc_rorgn sources build only
+  with the new apple_amcc_rorgn option, which NeoDarwin never enables.
+
+Rebase-risk: medium (pmap.c is large and changes between drops).
+---
+diff --git a/config/MASTER b/config/MASTER
+index 2ffae3a..9644389 100644
+--- a/config/MASTER
++++ b/config/MASTER
+@@ -330,6 +330,8 @@ options   CONFIG_PMAP_PPL			# <config_pmap_ppl>
+ 
+ options   NOS_ARM_ASM			# <nos_arm_asm>
+ options   NOS_ARM_PMAP			# <nos_arm_pmap>
++# Apple memory-controller read-only-region lockdown; sources are not published.
++options   APPLE_AMCC_RORGN		# <apple_amcc_rorgn>
+ 
+ # support dynamic signing of code
+ #
+diff --git a/osfmk/arm/cpu_common.c b/osfmk/arm/cpu_common.c
+index 73fa143..58f1377 100644
+--- a/osfmk/arm/cpu_common.c
++++ b/osfmk/arm/cpu_common.c
+@@ -647,7 +647,8 @@ void
+ cpu_exit_wait(int cpu_id)
+ {
+ #if !APPLEVIRTUALPLATFORM /* AVP doesn't provide an equivalent poll-for-powerdown operation */
+-#if USE_APPLEARMSMP
++/* Generic Arm: the PSCI power manager polls AFFINITY_INFO instead (P1-06). */
++#if USE_APPLEARMSMP && !GENERIC_ARM64_PLATFORM
+ 	if (!ml_is_quiescing()) {
+ 		// For runtime disable (non S2R) the CPU will shut down immediately.
+ 		ml_topology_cpu_t *cpu = &ml_get_topology_info()->cpus[cpu_id];
+@@ -678,7 +679,7 @@ cpu_exit_wait(int cpu_id)
+ 			}
+ 		}
+ 	}
+-#endif /* USE_APPLEARMSMP */
++#endif /* USE_APPLEARMSMP && !GENERIC_ARM64_PLATFORM */
+ #endif /* !APPLEVIRTUALPLATFORM */
+ 
+ 	if (cpu_id != master_cpu || (support_bootcpu_shutdown && !ml_is_quiescing())) {
+diff --git a/osfmk/arm/machine_routines_common.c b/osfmk/arm/machine_routines_common.c
+index 84fb4da..0d6bbd5 100644
+--- a/osfmk/arm/machine_routines_common.c
++++ b/osfmk/arm/machine_routines_common.c
+@@ -49,7 +49,9 @@
+ #include <machine/monotonic.h>
+ #include <pexpert/pexpert.h>
+ #include <pexpert/device_tree.h>
++#if defined(APPLE_ARM64_ARCH_FAMILY)
+ #include <pexpert/arm64/apple_arm64_cpu.h>
++#endif
+ 
+ #include <mach/machine.h>
+ #include <mach/machine/sdt.h>
+diff --git a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
+index f337dc9..c118dfa 100644
+--- a/osfmk/arm/pmap/pmap.c
++++ b/osfmk/arm/pmap/pmap.c
+@@ -85,8 +85,10 @@
+ 
+ #include <arm64/proc_reg.h>
+ #include <pexpert/arm64/boot.h>
++#if !GENERIC_ARM64_PLATFORM
+ #include <arm64/ppl/sart.h>
+ #include <arm64/ppl/uat.h>
++#endif /* !GENERIC_ARM64_PLATFORM */
+ 
+ #if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR) || defined(KERNEL_INTEGRITY_PV_CTRR)
+ #include <arm64/amcc_rorgn.h>
+@@ -94,6 +96,9 @@
+ 
+ #include <pexpert/device_tree.h>
+ 
++/* Defined below; used before its definition. */
++MARK_AS_PMAP_TEXT static void pmap_phys_write_disable(vm_address_t va);
++
+ #include <san/kasan.h>
+ #include <sys/cdefs.h>
+ 
+@@ -2344,10 +2349,12 @@ pmap_bootstrap(
+ 	 */
+ 	pmap_data_bootstrap();
+ 
++#if !GENERIC_ARM64_PLATFORM
+ 	/**
+ 	 * Bootstrap any necessary SART data structures and values needed from the device tree.
+ 	 */
+ 	sart_bootstrap();
++#endif /* !GENERIC_ARM64_PLATFORM */
+ 
+ 	/**
+ 	 * Don't make any assumptions about the alignment of avail_start before this
+@@ -4965,8 +4972,14 @@ pmap_page_protect_options_with_flush_range(
+ 			}
+ #endif
+ 			if (remove && (options & PMAP_OPTIONS_COMPRESSOR)) {
++#if GENERIC_ARM64_PLATFORM
++				/* ptep_get_iommu() is not published; report the tagged PTE pointer. */
++				panic("pmap_page_protect: attempt to compress ppnum 0x%x owned by iommu, ptep %p, pve_p=%p",
++				    ppnum, pte_p, pve_p);
++#else
+ 				panic("pmap_page_protect: attempt to compress ppnum 0x%x owned by iommu %p, pve_p=%p",
+ 				    ppnum, ptep_get_iommu(pte_p), pve_p);
++#endif
+ 			}
+ 			goto protect_skip_pve_pass1;
+ 		}
+@@ -11052,7 +11065,12 @@ pmap_batch_set_cache_attributes_internal(
+ 				panic("%s: page is not managed; addr: 0x%016llx", __func__, paddr);
+ 			}
+ 
++#if GENERIC_ARM64_PLATFORM
++			/* No Apple HID cache controls: the architectural clean-to-PoC is sufficient. */
++			CleanPoC_DcacheRegion_Force(phystokv(paddr), PAGE_SIZE);
++#else
+ 			CleanPoC_DcacheRegion_Force_nopreempt_nohid(phystokv(paddr), PAGE_SIZE);
++#endif
+ 
+ 			page_index++;
+ 
+@@ -12223,6 +12241,9 @@ pmap_cs_lockdown_pages(vm_address_t kva, vm_size_t size, bool ppl_writable)
+ {
+ #if XNU_MONITOR
+ 	pmap_ppl_lockdown_pages(kva, size, PVH_FLAG_LOCKDOWN_CS, ppl_writable);
++#elif GENERIC_ARM64_PLATFORM
++	/* No PPL: flag 0 means no lockdown, so there is nothing to do. */
++	(void)kva; (void)size; (void)ppl_writable;
+ #else
+ 	pmap_ppl_lockdown_pages(kva, size, 0, ppl_writable);
+ #endif
+@@ -12233,6 +12254,9 @@ pmap_cs_unlockdown_pages(vm_address_t kva, vm_size_t size, bool ppl_writable)
+ {
+ #if XNU_MONITOR
+ 	pmap_ppl_unlockdown_pages(kva, size, PVH_FLAG_LOCKDOWN_CS, ppl_writable);
++#elif GENERIC_ARM64_PLATFORM
++	/* No PPL: flag 0 means no lockdown, so there is nothing to do. */
++	(void)kva; (void)size; (void)ppl_writable;
+ #else
+ 	pmap_ppl_unlockdown_pages(kva, size, 0, ppl_writable);
+ #endif
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+index eb20109..08623be 100644
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -2133,7 +2133,10 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 	arm_vm_physmap_init(args);
+ 	set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);
+ 
++#if !GENERIC_ARM64_PLATFORM
++	/* Generic Arm machines have no Apple page-protection monitor to enable. */
+ 	ml_enable_monitor();
++#endif
+ 
+ 	set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
+ 
+diff --git a/osfmk/arm64/pcb.c b/osfmk/arm64/pcb.c
+index a11dff5..42f2017 100644
+--- a/osfmk/arm64/pcb.c
++++ b/osfmk/arm64/pcb.c
+@@ -63,7 +63,9 @@
+ 
+ #include <IOKit/IOBSD.h>
+ 
++#if defined(APPLE_ARM64_ARCH_FAMILY)
+ #include <pexpert/arm64/apple_arm64_cpu.h>
++#endif
+ #include <pexpert/pexpert.h>
+ 
+ // fixme: rdar://114299113 tracks resolving the supportlib issue with hwtrace features
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+index 55e2acf..9219561 100644
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -54,7 +54,9 @@
+ #include <machine/limits.h>
+ 
+ #include <pexpert/arm/protos.h>
++#if defined(APPLE_ARM64_ARCH_FAMILY)
+ #include <pexpert/arm64/apple_arm64_cpu.h>
++#endif
+ #include <pexpert/arm64/apple_arm64_regs.h>
+ #include <pexpert/arm64/board_config.h>
+ 
+diff --git a/osfmk/arm64/tunables/tunables.s b/osfmk/arm64/tunables/tunables.s
+new file mode 100644
+index 0000000..94e1a87
+--- /dev/null
++++ b/osfmk/arm64/tunables/tunables.s
+@@ -0,0 +1,13 @@
++/*
++ * SPDX-License-Identifier: BSD-2-Clause
++ * NeoDarwin-Language: expressibility: assembler macro included by osfmk/arm64/start.s.
++ *
++ * Apple's per-SoC CPU tunables are not published. Generic Arm machines apply
++ * none: implementation-defined tuning belongs to firmware (TF-A) on SBSA systems.
++ */
++#if GENERIC_ARM64_PLATFORM
++.macro APPLY_TUNABLES scratch0, scratch1, scratch2
++.endmacro
++#else
++#error "Apple per-SoC tunables are not published; only GENERIC_ARM64_PLATFORM boards build this file"
++#endif
+diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
+index a28935d..edc4eaa 100644
+--- a/osfmk/conf/files.arm64
++++ b/osfmk/conf/files.arm64
+@@ -33,10 +33,10 @@ osfmk/arm64/WKdmCompress_4k.s	standard
+ osfmk/arm64/WKdmData.s		standard
+ osfmk/arm64/lz4_decode_arm64.s  standard
+ osfmk/arm64/lz4_encode_arm64.s  standard
+-osfmk/arm64/amcc_rorgn_ppl.c optional nos_arm_asm config_pmap_ppl
+-osfmk/arm64/amcc_rorgn_ppl_amcc.c optional nos_arm_asm config_pmap_ppl
+-osfmk/arm64/amcc_rorgn_common.c optional nos_arm_asm
+-osfmk/arm64/amcc_rorgn_pv_ctrr.c optional nos_arm_asm
++osfmk/arm64/amcc_rorgn_ppl.c optional nos_arm_asm apple_amcc_rorgn config_pmap_ppl
++osfmk/arm64/amcc_rorgn_ppl_amcc.c optional nos_arm_asm apple_amcc_rorgn config_pmap_ppl
++osfmk/arm64/amcc_rorgn_common.c optional nos_arm_asm apple_amcc_rorgn
++osfmk/arm64/amcc_rorgn_pv_ctrr.c optional nos_arm_asm apple_amcc_rorgn
+ osfmk/arm64/bcopy.s standard
+ osfmk/arm64/bzero.s standard
+ osfmk/arm/caches.c		standard

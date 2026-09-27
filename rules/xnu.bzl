@@ -127,7 +127,8 @@ def _xnu_kernel_impl(ctx):
     kernel_arg = "-"
     if not ctx.attr.link_gap_report:
         kernel = ctx.actions.declare_file("kernel.%s.%s" % (ctx.attr.kernel_config.lower(), ctx.attr.machine_config.lower()))
-        outputs.append(kernel)
+        unstripped = ctx.actions.declare_file(kernel.basename + ".unstripped", sibling = kernel)
+        outputs += [kernel, unstripped]
         kernel_arg = kernel.path
     args = [
         report.path,
@@ -139,7 +140,7 @@ def _xnu_kernel_impl(ctx):
         ctx.attr.arch_config,
         ctx.attr.machine_config,
         ctx.attr.kernel_config,
-    ] + [p.path for p in ctx.files.patches]
+    ] + [p.path for p in ctx.files.patches] + ["--"] + ctx.attr.make_vars
     ctx.actions.run(
         executable = ctx.file._script,
         arguments = args,
@@ -171,6 +172,7 @@ xnu_kernel = rule(
         "machine_config": attr.string(mandatory = True),
         "kernel_config": attr.string(default = "RELEASE"),
         "link_gap_report": attr.bool(default = False),
+        "make_vars": attr.string_list(doc = "Extra VAR=value arguments for make, e.g. ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64."),
         "_script": attr.label(default = "//tools/xnu:kernel.sh", allow_single_file = True),
         "_scripts": attr.label(default = "//tools/xnu:scripts"),
     },

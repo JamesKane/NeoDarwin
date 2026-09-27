@@ -91,17 +91,17 @@ epics:
     title: "SBSA board config (SBSA.h, board_config.h, MakeInc.def, proc_reg.h branch, generic_arm64_common.h)"
     phase: 1
     owner: kernel-bridge
-    status: todo
+    status: done
     depends: [P0-03]
-    exit: "kernel.release.sbsa links with -arch arm64, BTI_BUILD=0: the link gap in kernel/link_gaps reaches zero with patches/0001 applied and no KDK archive"
-    doc: docs/kernel/arm64-sbsa-bringup.md
+    exit: "kernel.release.sbsa links (Mach-O arm64, no undefined symbols) from the public xnu archive plus kernel/patches/0001-0005, no KDK archive; //kernel:sbsa_kernel_test"
+    doc: kernel/README.md
   - id: P1-02
-    title: "APPLEVIRTUALPLATFORM and Apple-sysreg audit → GENERIC_ARM64_PLATFORM; drop exclaves/Tightbeam and Apple-IOMMU export lists; exclude DART/SART/UAT, rorgn, NVMe PPL; libTrustCache stub"
+    title: "Apple-specific code audit for GENERIC_ARM64_PLATFORM — done: hypercalls compiled out, exclaves/Tightbeam and Apple-IOMMU exports dropped, amcc_rorgn excluded, libTrustCache runtime; remaining: implementation-defined sysreg accesses (Apple PMCs in the monotonic driver, AWL)"
     phase: 1
     owner: kernel-bridge
-    status: todo
+    status: doing
     depends: [P1-01]
-    exit: "no hvc/HID/S3_x_C15 access outside APPLE_ARM64_ARCH_FAMILY guards; kernel boots on QEMU cpu without EL2"
+    exit: "kernel/sysreg_audit/sbsa_release.txt is empty and //kernel:sbsa_sysreg_audit passes; no hvc in the kernel"
     doc: docs/kernel/arm64-sbsa-bringup.md
   - id: P1-03
     title: "neoboot v0 (Embedded Swift + C shim) — fileset load, chained fixups, boot_args, EL2→EL1, cache clean, jump"

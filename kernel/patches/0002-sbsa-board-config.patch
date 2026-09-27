@@ -1,0 +1,198 @@
+From: NeoDarwin
+Subject: [PATCH] pexpert: add the SBSA board config for generic Arm machines
+
+Adds ARM64_BOARD_CONFIG_SBSA: pexpert/pexpert/arm64/SBSA.h (derived from
+VMAPPLE.h without the Apple hypervisor, Apple PAC or SME features, with
+NO_CPU_OVRD and __ARM_RANGE_TLBI__) and generic_arm64_common.h (the
+architectural subset of apple_arm64_common.h; no APPLE_ARM64_ARCH_FAMILY,
+Apple kernel-integrity hardware, AIC or Apple implementation registers).
+Registers SBSA in MakeInc.def (-march=armv8.4-a), exports the headers, and
+gives it the VMAPPLE cache-line sizes in proc_reg.h. MAX_CPUS is 32, the
+CPU copy-window limit in cpu_data_internal.h.
+
+Rebase-risk: low (new files; one line each in board_config.h, MakeInc.def,
+proc_reg.h and the pexpert Makefile).
+---
+diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
+index cccb411..6d3063c 100644
+--- a/makedefs/MakeInc.def
++++ b/makedefs/MakeInc.def
+@@ -29,7 +29,7 @@ SUPPORTED_ARM64_MACHINE_CONFIGS = NONE
+ else ifneq ($(findstring _host,$(RC_ProjectName)),)
+ SUPPORTED_ARM64_MACHINE_CONFIGS = NONE
+ else
+-SUPPORTED_ARM64_MACHINE_CONFIGS = T6000 T6020 T6030 T6031 T6041 T8101 T8103 T8112 T8122 T8132 VMAPPLE
++SUPPORTED_ARM64_MACHINE_CONFIGS = T6000 T6020 T6030 T6031 T6041 T8101 T8103 T8112 T8122 T8132 VMAPPLE SBSA
+ 
+ SPTM_ENABLED_SOCS_MacOSX = t8112 t6020 t8122 t6030 t6031 t8132 t6041
+ 
+@@ -85,6 +85,7 @@ MACHINE_FLAGS_ARM64_T8122 = -DARM64_BOARD_CONFIG_T8122_T8130		-mcpu=apple-m3
+ MACHINE_FLAGS_ARM64_T8132 = -DARM64_BOARD_CONFIG_T8132			-mcpu=apple-m4
+ 
+ MACHINE_FLAGS_ARM64_VMAPPLE = -DARM64_BOARD_CONFIG_VMAPPLE              -march=armv8.5a+sme2
++MACHINE_FLAGS_ARM64_SBSA = -DARM64_BOARD_CONFIG_SBSA                    -march=armv8.4-a
+ 
+ 
+ #
+diff --git a/osfmk/arm64/proc_reg.h b/osfmk/arm64/proc_reg.h
+index 2b6d723..83111dd 100644
+--- a/osfmk/arm64/proc_reg.h
++++ b/osfmk/arm64/proc_reg.h
+@@ -235,7 +235,7 @@
+ /* D-Cache, 128KB for AppleH16 PCore, 8-way. 64KB for ECore, 8-way. */
+ #define MMU_CLINE   6                      /* cache line size is 1<<MMU_CLINE (64) */
+ 
+-#elif defined (VMAPPLE)
++#elif defined (VMAPPLE) || defined (SBSA)
+ 
+ /* I-Cache. */
+ #define MMU_I_CLINE 6
+diff --git a/pexpert/pexpert/arm64/Makefile b/pexpert/pexpert/arm64/Makefile
+index 5afac02..54a839a 100644
+--- a/pexpert/pexpert/arm64/Makefile
++++ b/pexpert/pexpert/arm64/Makefile
+@@ -32,7 +32,7 @@ PRIVATE_KERNELFILES = \
+ 	H14.h \
+ 	H15.h \
+ 	H16.h \
+-	VMAPPLE.h
++	VMAPPLE.h SBSA.h generic_arm64_common.h
+ 
+ 
+ # Headers installed into System.framework/PrivateHeaders (userspace internal SDK only).
+diff --git a/pexpert/pexpert/arm64/SBSA.h b/pexpert/pexpert/arm64/SBSA.h
+new file mode 100644
+index 0000000..dbd3014
+--- /dev/null
++++ b/pexpert/pexpert/arm64/SBSA.h
+@@ -0,0 +1,61 @@
++/*
++ * SPDX-License-Identifier: BSD-2-Clause
++ * NeoDarwin-Language: expressibility: XNU board-config header; XNU selects hardware features with preprocessor definitions.
++ *
++ * NeoDarwin board config for generic Arm SBSA/SBBR machines booted by UEFI and
++ * described by ACPI (docs/kernel/arm64-sbsa-bringup.md §2.3). Derived from
++ * VMAPPLE.h with the Apple hypervisor, Apple PAC and SME features removed.
++ */
++#ifndef _PEXPERT_ARM64_SBSA_H
++#define _PEXPERT_ARM64_SBSA_H
++
++#define NO_MONITOR                1
++#define NO_ECORE                  1
++#define NO_CPU_OVRD               1  /* no Apple CPU_OVRD implementation register */
++
++#define SBSA                      1
++#define GENERIC_ARM64_PLATFORM    1
++
++#define HAS_GIC_V3                1
++
++#define __ARM_PAN_AVAILABLE__     1
++#define __ARM_16K_PG__            1
++#define __ARM_RANGE_TLBI__        1  /* FEAT_TLBIRANGE, part of the ARMv8.4 baseline */
++
++#define ARM_PARAMETERIZED_PMAP    1
++#define __ARM_MIXED_PAGE_SIZE__   1
++
++#include <pexpert/arm64/generic_arm64_common.h>
++#undef  __ARM64_PMAP_SUBPAGE_L1__
++#undef  __ARM64_PMAP_KERN_SUBPAGE_L1__
++
++#ifndef ASSEMBLER
++#define PL011_UART
++#define PLATFORM_PANIC_LOG_DISABLED
++#endif /* ! ASSEMBLER */
++
++#define GIC_SPURIOUS_IRQ          1023    // IRQ no. for GIC spurious interrupt
++
++#define GICR_PE_SIZE              0x20000 // Size of each redistributor region
++
++/* GICv3 register definitions; see GICv3 spec (Arm IHI 0069G) */
++#define GICD_CTLR                 0x0
++
++#define GICD_CTLR_ENABLEGRP0      0x1
++
++#define GICR_TYPER                              0x08
++#define GICR_WAKER                              0x14
++#define GICR_IGROUPR0                           0x10080
++#define GICR_ISENABLER0                         0x10100
++
++#define GICR_TYPER_AFFINITY_VALUE_SHIFT         32
++#define GICR_TYPER_LAST                         0x10
++
++#define GICR_WAKER_PROCESSORSLEEP               0x2
++#define GICR_WAKER_CHILDRENASLEEP               0x4
++
++#define ICC_CTLR_EOIMODE                        0x1
++
++#define ICC_SRE_SRE                             0x1
++
++#endif /* ! _PEXPERT_ARM64_SBSA_H */
+diff --git a/pexpert/pexpert/arm64/board_config.h b/pexpert/pexpert/arm64/board_config.h
+index 159356d..39c58c0 100644
+--- a/pexpert/pexpert/arm64/board_config.h
++++ b/pexpert/pexpert/arm64/board_config.h
+@@ -294,6 +294,21 @@
+ 
+ #endif  /* ARM64_BOARD_CONFIG_VMAPPLE */
+ 
++#ifdef ARM64_BOARD_CONFIG_SBSA
++#include <pexpert/arm64/SBSA.h>
++
++#define MAX_L2_CLINE                   7
++#define MAX_CPUS                       32 /* limited by CPU copy window size (cpu_data_internal.h) */
++#define MAX_CPU_CLUSTERS               8
++
++#define CORE_NCTRS                     2
++
++#define USE_APPLEARMSMP                1
++
++#define NO_XNU_PLATFORM_ERROR_HANDLER  1
++
++#endif  /* ARM64_BOARD_CONFIG_SBSA */
++
+ 
+ 
+ #ifndef HAS_UNCORE_CTRS
+diff --git a/pexpert/pexpert/arm64/generic_arm64_common.h b/pexpert/pexpert/arm64/generic_arm64_common.h
+new file mode 100644
+index 0000000..e460d47
+--- /dev/null
++++ b/pexpert/pexpert/arm64/generic_arm64_common.h
+@@ -0,0 +1,37 @@
++/*
++ * SPDX-License-Identifier: BSD-2-Clause
++ * NeoDarwin-Language: expressibility: XNU board-config header; XNU selects hardware features with preprocessor definitions.
++ *
++ * Architectural Arm features common to generic (non-Apple) ARM64 machines.
++ * The counterpart of apple_arm64_common.h without APPLE_ARM64_ARCH_FAMILY,
++ * Apple PAC, Apple kernel-integrity hardware, AIC, or Apple implementation
++ * registers (docs/kernel/arm64-sbsa-bringup.md §2.3).
++ */
++#ifndef _PEXPERT_ARM64_GENERIC_ARM64_COMMON_H
++#define _PEXPERT_ARM64_GENERIC_ARM64_COMMON_H
++
++#define __ARM_ARCH__                         8
++#define __ARM_VMSA__                         8
++#define __ARM_VFP__                          4
++#define __ARM_COHERENT_CACHE__               1
++#define __ARM_COHERENT_IO__                  1
++#define __ARM_IC_NOALIAS_ICACHE__            1
++#define __ARM_DEBUG__                        7
++#define __ARM_ENABLE_SWAP__                  1
++#define __ARM_V8_CRYPTO_EXTENSIONS__         1
++
++#if !ARM_LARGE_MEMORY
++#define __ARM64_PMAP_SUBPAGE_L1__            1
++#define __ARM64_PMAP_KERN_SUBPAGE_L1__       1
++#endif /* ARM_LARGE_MEMORY */
++
++#define ARM_ARCH_TIMER
++
++#define CPU_VERSION_A0                       0x00
++#define CPU_VERSION_A1                       0x01
++#define CPU_VERSION_B0                       0x10
++#define CPU_VERSION_B1                       0x11
++#define CPU_VERSION_C0                       0x20
++#define CPU_VERSION_UNKNOWN                  0xff
++
++#endif /* !_PEXPERT_ARM64_GENERIC_ARM64_COMMON_H */

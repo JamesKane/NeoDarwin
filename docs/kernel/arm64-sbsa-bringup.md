@@ -244,6 +244,8 @@ Building `xnu-12377.1.9` VMAPPLE RELEASE from public sources (`//kernel:vmapple_
 
 The categories overlap (some pmap symbols are also exported). The authoritative list is `kernel/link_gaps/vmapple_release.txt`, and a ratchet test keeps it from growing.
 
+**Status, 2026-09-27:** closed. `//kernel:sbsa_release` links `kernel.release.sbsa` (Mach-O `arm64`, no undefined symbols) from the public archive plus `kernel/patches/0001`–`0005`; `kernel/README.md` records how each gap closed. The remaining pre-boot hazard is measured separately: implementation-defined system-register accesses (`kernel/sysreg_audit/sbsa_release.txt`), owned by P1-02.
+
 ### 5.3 Risk 3 — Closed kexts and kernelcache tooling
 *Failure mode:* the project stalls on binaries it cannot build: `AppleARMPlatform`, `AppleInterruptController`, `AppleVirtualPlatform`, `AppleMobileFileIntegrity`, `apfs`, `IONVMeFamily`, and the `kmutil`/EmbeddedDeviceMap build tooling.
 *Mitigation:*

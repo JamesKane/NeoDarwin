@@ -1,0 +1,147 @@
+From: NeoDarwin
+Subject: [PATCH] config: SBSA exports no Tightbeam or Apple-SoC-only symbols
+
+Generic Arm boards have no exclaves, so no Tightbeam runtime, and no
+Apple IOMMUs (DART, SART, UAT, NVMe PPL), Unified Address Translator or PPL
+code-signing monitor. For SBSA every export-file consumer (linker export
+and alias lists, symbol sets, check_all_exports, supported-KPI lists) reads
+from EXPORTS_DIR, a build-directory copy of the export files with the names
+in config/Unexported.SBSA.list removed. Other machine configs read the
+source files as before.
+
+Rebase-risk: medium (config/Makefile export plumbing).
+---
+diff --git a/config/Makefile b/config/Makefile
+index 6d48aa2..5d85024 100644
+--- a/config/Makefile
++++ b/config/Makefile
+@@ -49,7 +49,21 @@ EXPORTS_FILES := $(foreach symbolset,$(SYMBOL_COMPONENT_LIST),$(symbolset).expor
+ 	$(symbolset).$(EXPORT_SOURCE_ARCH_CONFIG_LC).exports \
+ 	$(notdir $(wildcard $(SOURCE)/$(symbolset).$(EXPORT_SOURCE_ARCH_CONFIG_LC).$(PLATFORM).exports))) \
+ 	Unused.exports
+-EXPORTS_FILES += $(TIGHTBEAM_EXPORTS)
++# NeoDarwin: generic Arm boards have no exclaves, so no Tightbeam runtime to
++# export, and do not export Apple-SoC-only interfaces. Every consumer reads
++# export files from EXPORTS_DIR; for such boards that is a build-directory copy
++# with the names in Unexported.<machine>.list removed.
++EXPORTS_DIR := $(SOURCE)
++ifeq ($(CURRENT_MACHINE_CONFIG),SBSA)
++TIGHTBEAM_EXPORTS :=
++UNEXPORTED_LIST := $(SOURCE)/Unexported.$(CURRENT_MACHINE_CONFIG).list
++EXPORTS_DIR := $(OBJPATH)/exports
++$(EXPORTS_DIR)/%.exports: $(SOURCE)/%.exports $(UNEXPORTED_LIST)
++	$(_v)$(MKDIR) $(@D)
++	$(_v)awk 'NR == FNR { if ($$0 !~ /^#/ && NF) drop[$$1] = 1; next } { split($$1, n, ":") } !(n[1] in drop)' $(UNEXPORTED_LIST) $< > $@
++endif
++
++EXPORTS_PATHS := $(addprefix $(EXPORTS_DIR)/,$(EXPORTS_FILES)) $(TIGHTBEAM_EXPORTS)
+ Private_OTHER_EXPORTS += $(TIGHTBEAM_EXPORTS)
+ 
+ 
+@@ -70,7 +84,7 @@ Kasan_EXPORTS := $(SRCROOT)/config/Kasan_enabled.$(KASAN_ARCH_SUFFIX).exports
+ endif
+ 
+ define symbol_set_template
+-$(1)_EXPORTS := $$(addprefix $$(SOURCE)/,$$(filter $(1)%,$$(EXPORTS_FILES)))
++$(1)_EXPORTS := $$(addprefix $$(EXPORTS_DIR)/,$$(filter $(1)%,$$(EXPORTS_FILES)))
+ ifneq "$$($(1)_OTHER_EXPORTS)" ""
+ $(1)_EXPORTS += $$($(1)_OTHER_EXPORTS)
+ endif
+@@ -123,27 +137,27 @@ build_symbol_set_plists: $(KEXT_PLIST_BUILD) $(OBJPATH)/symbolsets.plist
+ $(TARGET)/allsymbols: $(OBJPATH)/$(KERNEL_FILE_NAME)
+ 	$(_v)$(NM) -gj $< | sort -u > $@
+ 
+-check_all_exports: $(TARGET)/allsymbols $(KEXT_CREATE_SYMBOL_SET)
++check_all_exports: $(TARGET)/allsymbols $(KEXT_CREATE_SYMBOL_SET) $(EXPORTS_PATHS)
+ 	$(_v)$(KEXT_CREATE_SYMBOL_SET)					\
+ 		$(ARCH_FLAGS_$(CURRENT_ARCH_CONFIG))			\
+ 		-import $(TARGET)/allsymbols				\
+ 		$(foreach symbolset,$(filter-out Private,$(SYMBOL_COMPONENT_LIST)),	\
+-			-export $(SOURCE)/$(symbolset).exports		\
+-			-export $(SOURCE)/$(symbolset).$(EXPORT_SOURCE_ARCH_CONFIG_LC).exports)	\
++			-export $(EXPORTS_DIR)/$(symbolset).exports		\
++			-export $(EXPORTS_DIR)/$(symbolset).$(EXPORT_SOURCE_ARCH_CONFIG_LC).exports)	\
+ 		-output /dev/null $(_vstdout)
+ 	$(_v)$(KEXT_CREATE_SYMBOL_SET)					\
+ 		$(ARCH_FLAGS_$(CURRENT_ARCH_CONFIG))			\
+ 		-import $(TARGET)/allsymbols				\
+ 		$(foreach symbolset,$(filter-out Unsupported,$(SYMBOL_COMPONENT_LIST)),	\
+-			-export $(SOURCE)/$(symbolset).exports		\
+-			-export $(SOURCE)/$(symbolset).$(EXPORT_SOURCE_ARCH_CONFIG_LC).exports)	\
++			-export $(EXPORTS_DIR)/$(symbolset).exports		\
++			-export $(EXPORTS_DIR)/$(symbolset).$(EXPORT_SOURCE_ARCH_CONFIG_LC).exports)	\
+ 		-output /dev/null $(_vstdout)
+ 
+-$(OBJPATH)/$(MD_SUPPORTED_KPI_FILENAME): $(EXPORTS_FILES)
++$(OBJPATH)/$(MD_SUPPORTED_KPI_FILENAME): $(EXPORTS_PATHS)
+ 	@$(LOG_SUPPORTED_KPI) "$(CURRENT_ARCH_CONFIG_LC)"
+ 	$(_v)$(SRCROOT)/config/list_supported.sh $(SOURCE) $(EXPORT_SOURCE_ARCH_CONFIG_LC) $@
+ 
+-$(OBJPATH)/$(MI_SUPPORTED_KPI_FILENAME): $(EXPORTS_FILES)
++$(OBJPATH)/$(MI_SUPPORTED_KPI_FILENAME): $(EXPORTS_PATHS)
+ 	@$(LOG_SUPPORTED_KPI) "all"
+ 	$(_v)$(SRCROOT)/config/list_supported.sh $(SOURCE) all $@
+ 
+@@ -210,10 +224,10 @@ else
+ # We are building XNU as a static library - avoid creating symbol sets
+ endif
+ 
+-$(OBJPATH)/all-kpi.exp: $(EXPORTS_FILES)
++$(OBJPATH)/all-kpi.exp: $(EXPORTS_PATHS)
+ 	$(_v)$(SOURCE)/generate_linker_exports.sh $@ $+ $(Kasan_EXPORTS) $(Kcov_EXPORTS)
+ 
+-$(OBJPATH)/all-alias.exp: $(EXPORTS_FILES)
++$(OBJPATH)/all-alias.exp: $(EXPORTS_PATHS)
+ 	$(_v)$(SOURCE)/generate_linker_aliases.sh $@ $+ $(Kasan_EXPORTS) $(Kcov_EXPORTS)
+ 
+ do_build_all:: $(OBJPATH)/all-kpi.exp $(OBJPATH)/all-alias.exp
+diff --git a/config/Unexported.SBSA.list b/config/Unexported.SBSA.list
+new file mode 100644
+index 0000000..0015925
+--- /dev/null
++++ b/config/Unexported.SBSA.list
+@@ -0,0 +1,44 @@
++# NeoDarwin: symbols the SBSA (generic Arm) kernel does not export.
++# Apple-SoC-only interfaces whose implementations are not published and have
++# no meaning on generic hardware: Apple IOMMUs (DART, SART, UAT, NVMe PPL),
++# the Unified Address Translator, and PPL code-signing monitor queries.
++# One exported (mangled) name per line, exactly as in config/*.exports.
++_pmap_iommu_init
++_pmap_iommu_iovmalloc
++_pmap_iommu_map
++_pmap_iommu_unmap
++_pmap_iommu_iovmfree
++_pmap_iommu_ioctl
++_pmap_iommu_alloc_contiguous_pages
++_nvme_ppl_get_desc
++_sart_get_desc
++_t8020dart_get_desc
++_t8020dart_vo_tte
++_t6000dart_get_desc
++_t6000dart_vo_tte
++_t8110dart_get_desc
++_t8110dart_max_translation_levels
++_t8110dart_vo_tte
++_t8110dart_vo_tt_index
++_uat_get_desc
++_pmap_has_iofilter_protected_write
++_pmap_cs_configuration
++__ZN26IOUnifiedAddressTranslator10gMetaClassE
++__ZN26IOUnifiedAddressTranslator10superClassE
++__ZN26IOUnifiedAddressTranslator17getPageTableEntryEy
++__ZN26IOUnifiedAddressTranslator18setClientContextIDEjb
++__ZN26IOUnifiedAddressTranslator21removeClientContextIDEv
++__ZN26IOUnifiedAddressTranslator19isPageFaultExpectedEyj
++__ZN26IOUnifiedAddressTranslator7getModeEv
++__ZN26IOUnifiedAddressTranslator29getFirmwareAddressSpaceHandleEv
++__ZN26IOUnifiedAddressTranslator22registerTaskForServiceEP4taskP9IOService
++__ZN26IOUnifiedAddressTranslator23createMappingInApertureEjP18IOMemoryDescriptorjym
++__ZN26IOUnifiedAddressTranslator23getTotalPageTableMemoryEv
++__ZN26IOUnifiedAddressTranslator3mapEP11IOMemoryMapj
++__ZN26IOUnifiedAddressTranslator5doMapEP18IOMemoryDescriptoryyj
++__ZN26IOUnifiedAddressTranslator5unmapEP11IOMemoryMap
++__ZN26IOUnifiedAddressTranslator7doUnmapEP18IOMemoryDescriptoryy
++__ZN26IOUnifiedAddressTranslator8taskDiedEv
++__ZN26IOUnifiedAddressTranslator12commitUnmapsEv
++__ZN26IOUnifiedAddressTranslator14prepareFWUnmapEyy
++__ZTV26IOUnifiedAddressTranslator

@@ -1,0 +1,82 @@
+From: NeoDarwin
+Subject: [PATCH] bsd: NeoDarwin libTrustCache runtime for generic Arm
+
+Apple's libTrustCache is not published. XNU calls
+trustCacheInitializeRuntime() directly and reads TCTypeConfig; everything
+else goes through the AMFI function table. bsd/kern/nd_trustcache.c
+provides both for GENERIC_ARM64_PLATFORM, default deny: every trust-cache
+type requires the neodarwin.trust-cache.load entitlement. Types and
+layouts come from NeoDarwin's TrustCache/API.h shim (kernel/sdk).
+
+Rebase-risk: low (new file, one line in bsd/conf/files).
+---
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 202f164..0e44d56 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -434,6 +434,7 @@ bsd/kern/kpi_mbuf.c			optional sockets bound-checks
+ bsd/kern/kern_sfi.c			standard
+ bsd/kern/kern_time.c			standard
+ bsd/kern/kern_trustcache.c  standard
++bsd/kern/nd_trustcache.c  standard
+ bsd/kern/kern_codesigning.c standard
+ bsd/kern/code_signing/txm.c standard
+ bsd/kern/code_signing/ppl.c standard
+diff --git a/bsd/kern/nd_trustcache.c b/bsd/kern/nd_trustcache.c
+new file mode 100644
+index 0000000..fcd3c20
+--- /dev/null
++++ b/bsd/kern/nd_trustcache.c
+@@ -0,0 +1,52 @@
++/*
++ * SPDX-License-Identifier: BSD-2-Clause
++ * NeoDarwin-Language: expressibility: C implementation of the libTrustCache entry points XNU links against.
++ *
++ * NeoDarwin's libTrustCache runtime for generic Arm machines. Apple's library
++ * is not published; XNU calls trustCacheInitializeRuntime() directly and reads
++ * TCTypeConfig, and reaches everything else through the AMFI function table,
++ * which NeoDarwin's code-signing policy module provides.
++ *
++ * Default deny: every trust-cache type requires an entitlement no Apple binary
++ * carries, so nothing loads a trust cache until NeoDarwin's policy grants it.
++ */
++#include <pexpert/arm64/board_config.h>
++
++#if GENERIC_ARM64_PLATFORM
++
++#include <string.h>
++#include <TrustCache/API.h>
++
++#define ND_TRUST_CACHE_LOAD "neodarwin.trust-cache.load"
++
++const TCTypeConfig_t TCTypeConfig[kTCTypeTotal] = {
++	[kTCTypeInvalid]         = { .entitlementValue = ND_TRUST_CACHE_LOAD },
++	[kTCTypeStatic]          = { .entitlementValue = ND_TRUST_CACHE_LOAD },
++	[kTCTypeEngineering]     = { .entitlementValue = ND_TRUST_CACHE_LOAD },
++	[kTCTypeLegacy]          = { .entitlementValue = ND_TRUST_CACHE_LOAD },
++	[kTCTypeLTRS]            = { .entitlementValue = ND_TRUST_CACHE_LOAD },
++	[kTCTypeDTRS]            = { .entitlementValue = ND_TRUST_CACHE_LOAD },
++	[kTCTypeCryptex1BootOS]  = { .entitlementValue = ND_TRUST_CACHE_LOAD },
++	[kTCTypeCryptex1BootApp] = { .entitlementValue = ND_TRUST_CACHE_LOAD },
++};
++
++TCReturn_t
++trustCacheInitializeRuntime(
++	TrustCacheRuntime_t        *runtime,
++	TrustCacheMutableRuntime_t *mutableRuntime,
++	bool                        allowSecondStaticTC,
++	bool                        allowEngineeringTC,
++	bool                        allowLegacyTC,
++	const img4_runtime_t       *image4RT)
++{
++	memset(mutableRuntime, 0, sizeof(*mutableRuntime));
++	memset(runtime, 0, sizeof(*runtime));
++	runtime->mutableRuntime      = mutableRuntime;
++	runtime->image4RT            = image4RT;
++	runtime->allowSecondStaticTC = allowSecondStaticTC;
++	runtime->allowEngineeringTC  = allowEngineeringTC;
++	runtime->allowLegacyTC       = allowLegacyTC;
++	return (TCReturn_t){ .error = kTCReturnSuccess };
++}
++
++#endif /* GENERIC_ARM64_PLATFORM */
