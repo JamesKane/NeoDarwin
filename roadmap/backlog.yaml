@@ -387,7 +387,7 @@ epics:
     exit: "foot or weston-terminal runs on wsys"
     doc: docs/architecture/graphics-desktop.md
   - id: P4-05
-    title: "Toolkit API landscape and demographic study (hackers, indie game devs, tool builders) → Toolkit API charter"
+    title: "Platform API and source-corpus study (Windows, macOS, Linux, Haiku, Plan 9; engines, translation layers, HPC) → friction register + Toolkit API charter; research in ../NeoDarwin-api-study"
     phase: 4
     owner: graphics
     status: todo

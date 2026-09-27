@@ -7,7 +7,7 @@
 - **The protocols are NeoDarwin's own and are specified in `docs/desktop/`:** the window protocol over 9P, the `libstyle` theme engine and its configuration model (classes, cascade, binds, modes, rules), and the application–agent protocol. They were designed and first implemented in the plan-neo pilot and are carried forward with NeoDarwin's mount points and fast path.
 - **The renderer core comes from the NuAqua pilot:** the framework-free Vesper renderer, the Typeface TrueType rasteriser and the scanline path filler move into NeoDarwin modules with refactored namespaces. NuAqua's Aqua theme and widget scene do not.
 - **Later modernisation** takes what is becoming standard in alternative Linux desktops (tiling and scrollable layouts, keyboard-first workspaces, overview modes, layer-shell panels, portals, fractional scaling, colour management). Binds, modes and rules are already in the configuration model; the rest is a scheduled study (§7).
-- **The application API is not settled.** Before the toolkit's public surface is designed, a landscape and demographic study of hackers, indie game developers and tool builders decides what the API should look like (§6). Until then the principles in §6.2 are inputs, not decisions.
+- **The application API is not settled.** Before the toolkit's public surface is designed, a study of the existing platform APIs (Windows, macOS, Linux, Haiku, Plan 9) and of open-source applications built on them decides what the API should look like: where the platforms agree and developers are productive, and where getting performance out of them is high-friction (§6). Until then the principles in §6.2 are inputs, not decisions.
 
 ## 1. Staged path to pixels
 
@@ -74,18 +74,49 @@ The graphic terminal (serves `cons` to its child; scrollback exported through th
 
 ### 6.1 The study (epic P4-05, before any public toolkit API is frozen)
 
-- **Who.** Hackers, indie game developers, tool and demo builders, people who write their own editors and shells. Not enterprise line-of-business developers.
-- **What they use today.** Survey the actual call surface of representative projects: SDL3, GLFW, raylib, sokol, Dear ImGui, egui, wgpu, LÖVE, Godot and Bevy, Zig/Odin/Jai game frameworks, Plan 9 `draw`/`libcontrol`, BeOS `BApplication`/`BView`, GNUstep/AppKit, Qt, GTK, Wayland with `libdecor`. Measure which primitives and events are used, how windows, input, audio, timing, files and threads are reached, and where these communities complain (build friction, hidden allocation, callback soup, main-thread rules, packaging).
-- **How.** Corpus analysis of open projects, a questionnaire and a dozen interviews across those communities, and three throwaway prototypes (a game loop, a text editor, a synth UI) built against candidate API shapes.
-- **Output.** A *Toolkit API charter*: the surface area, the language bindings that matter (Swift native, C ABI for everyone else, Zig/Rust bindings generated from the C ABI), the ownership and threading model, and the compatibility layers worth shipping (an SDL3 backend is likely). The toolkit itself is Swift (language policy T1 with T2 on the draw and event paths).
-- **Already fixed, below the toolkit.** The window protocol (§2), the theme classes a widget must draw through, and the agent protocol every app serves are not in the study's scope. The study decides what sits on top of them.
+The study is research on APIs and source code, not a survey of developers. It reads what the major platforms offer and what real applications actually call, and it looks for two things: the common ground where the platforms have converged and developers are productive, and the places where applications fight the platform to get performance.
+
+- **Platform APIs.** For each platform, the surface an application reaches for windows, input, drawing and GPU, audio, timing, files and I/O, threads and memory:
+  - *Windows:* Win32 and the message loop, DXGI and Direct3D 12, WinUI/WinRT, GameInput and Raw Input, WASAPI, IOCP, DirectStorage, multimedia timers and MMCSS.
+  - *macOS:* AppKit, Core Animation and `CAMetalLayer`, Metal and Metal compute, GCD and QoS classes, Core Audio, IOSurface, the `GameController` framework, `kqueue`.
+  - *Linux:* Wayland core and `xdg_shell` plus X11, DRM/KMS and GBM, Vulkan and `VK_KHR_present_wait`, EGL, libinput and evdev, PipeWire and ALSA, `io_uring` and `epoll`, `memfd` and dma-buf.
+  - *Haiku and BeOS:* `BApplication`/`BWindow`/`BView`, `BLooper` messaging, `app_server`, the Media Kit.
+  - *Plan 9:* `draw`, `libcontrol`, `/dev/mouse` and `/dev/cons` as files.
+- **Cross-platform layers.** SDL3, GLFW, sokol, raylib, bgfx, wgpu and Dawn, Dear ImGui and egui, Qt and GTK. Each is evidence of the lowest common denominator its authors settled on and of the per-platform backend code it takes to reach it.
+- **Applications with source.** Chosen because they push performance and carry per-platform backends that can be read and measured:
+  - *Game engines and games:* Godot, Bevy, O3DE, the open id Tech releases (Quake III, Doom 3 BFG), Ogre, LÖVE.
+  - *Translation and emulation layers:* Wine and Proton, DXVK and VKD3D-Proton, MoltenVK, Dolphin, RPCS3. These are a direct record of where one platform's model does not map onto another's.
+  - *High-performance compute:* llama.cpp and ggml, PyTorch's device backends, Blender and Cycles (CUDA, HIP, Metal, oneAPI), OpenMM, and the CUDA, ROCm/HIP, SYCL, OpenCL, Metal compute and Vulkan compute models they target.
+  - *Interactive tools:* Blender's UI, Krita, Chromium's and Firefox's compositors, terminals such as Alacritty and Ghostty, editors such as Zed and Lapce, audio tools that use JUCE.
+- **Method.**
+  - *Call-surface analysis:* which platform calls each project actually makes, and how often. The intersection across platforms is the candidate core API. Calls every project wraps the same way are candidates for promotion into the platform.
+  - *Backend weight:* the size and churn of each project's per-platform directory (Godot `platform/`, SDL `src/video/*`, Blender `intern/ghost`, ggml's backends). A large or often-patched backend points to friction.
+  - *Workaround mining:* platform `#ifdef`s, comments marking hacks and workarounds, driver-bug tables, and issue-tracker and commit history on performance regressions.
+  - *Prototypes:* four throwaway prototypes built against candidate API shapes on NeoDarwin's protocols: a game loop, a text editor, a synth UI, and a GPU compute job whose result is displayed without a copy.
+- **Friction to look for.** The study asks whether each of these is a real problem for the corpus and, if so, what NeoDarwin should provide instead:
+  - frame pacing and present timing, and variable refresh;
+  - shader and pipeline-state compilation stutter, and pipeline caching;
+  - main-thread-only window and event rules;
+  - input latency and high-rate or raw input;
+  - audio latency and real-time thread scheduling;
+  - timer resolution and sleep accuracy;
+  - thread placement on heterogeneous cores (QoS, affinity);
+  - GPU memory residency, and zero-copy sharing among CPU, GPU compute and the compositor, including on unified-memory machines;
+  - asset streaming and asynchronous file I/O;
+  - large pages and pinned memory;
+  - the effort of keeping a separate backend for each GPU API;
+  - build and packaging friction.
+- **Output.**
+  - *Toolkit API charter:* the surface area; the language bindings that matter (Swift native, C ABI for everyone else, Zig and Rust bindings generated from the C ABI); the ownership and threading model; and the compatibility layers worth shipping (an SDL3 backend is likely). The toolkit itself is Swift (language policy T1, with T2 on the draw and event paths).
+  - *Friction register:* each observed high-friction point, the evidence behind it (projects, code sites, issues), and a proposed NeoDarwin answer, tagged with the layer that should own it (toolkit, `wsys` fast path, GPU and compute stack in P7, or kernel scheduler and VM).
+- **Already fixed, below the toolkit.** The window protocol (§2), the theme classes a widget must draw through, and the agent protocol every app serves are not reopened by the study. If a friction finding needs something from them (a present-timing event, a zero-copy surface kind), it is filed against that protocol as an extension proposal.
 
 ### 6.2 Candidate principles (inputs to the study, not decisions)
 
-**Primary candidate:** the `libintuition` widget model from the plan-neo pilot (see `docs/desktop/README.md`): widgets hold no colour, no font and no self-chosen size; a declarative tree in one expression; arena-only allocation; two-pass measure/arrange; 32-byte typed events; reactive and frame-synchronised loops; theme reload without a tree rebuild; only dirty widgets draw, one present per frame, nothing presented if nothing changed. The study tests it against what the demographic actually writes.
+**Primary candidate:** the `libintuition` widget model from the plan-neo pilot (see `docs/desktop/README.md`): widgets hold no colour, no font and no self-chosen size; a declarative tree in one expression; arena-only allocation; two-pass measure/arrange; 32-byte typed events; reactive and frame-synchronised loops; theme reload without a tree rebuild; only dirty widgets draw, one present per frame, nothing presented if nothing changed. The study tests it against what the application corpus actually calls.
 
 Other candidate principles: Retained tables rather than object graphs; diffs as the update protocol; generation-checked handles across boundaries; protocols for behaviour and structs for data; batch everything that crosses a boundary; explicit ownership and lifetimes; every window and state tree exported under `/n/app`; accessibility as a view over the same node table; versioned data ABIs; sympathy for the hardware (tile-based rendering, frame callbacks that stop when nothing is damaged).
 
 ## 7. Modernisation study (epic P4-11, after the first chrome ships)
 
-Binds, modes and window rules (`docs/desktop/ui-configuration.md` §3) are the first modernisation and are already in the configuration model. Further candidates to evaluate against the Plan Neo direction, taken from where alternative Linux desktops are converging: scrollable and tiling layouts (niri, Hyprland, sway, COSMIC's tiling toggle) as an optional workspace mode; dynamic workspaces and overview (GNOME, COSMIC); `wlr-layer-shell` for panels and docks; `foreign-toplevel`, `screencopy`, `idle-inhibit`, `tearing-control`; XDG desktop portals for sandboxed apps (which map naturally onto `/n` capabilities); fractional scaling and `wp_color_management`; VRR; notification daemons and launchers of the rofi/wofi kind. Each is adopted only if it survives the study's demographic lens and can be drawn in the chrome vocabulary.
+Binds, modes and window rules (`docs/desktop/ui-configuration.md` §3) are the first modernisation and are already in the configuration model. Further candidates to evaluate against the Plan Neo direction, taken from where alternative Linux desktops are converging: scrollable and tiling layouts (niri, Hyprland, sway, COSMIC's tiling toggle) as an optional workspace mode; dynamic workspaces and overview (GNOME, COSMIC); `wlr-layer-shell` for panels and docks; `foreign-toplevel`, `screencopy`, `idle-inhibit`, `tearing-control`; XDG desktop portals for sandboxed apps (which map naturally onto `/n` capabilities); fractional scaling and `wp_color_management`; VRR; notification daemons and launchers of the rofi/wofi kind. Each is adopted only if it holds up against the §6.1 study's findings and can be drawn in the chrome vocabulary.
