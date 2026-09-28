@@ -20,8 +20,8 @@ The kernel is XNU, not Plan 9, so the realisation is layered on top of POSIX rat
 | `nd9p.kext` | 9P2000.L VFS client (ported from FreeBSD `p9fs`), mounts `/n` once at boot |
 | `nsd` | the namespace multiplexer: holds one mount table per process (keyed by audit token), unions and binds, forwards 9P to the owning servers over Mach ports or Unix sockets, enforces attach capabilities |
 | `libns` (Swift) over `libagent` (C) | lets a program export its agent tree in a few lines: implement `schema`, `state`, `action` and call `agent_log`; `libns` adds Swift ergonomics and the `wsys` window export |
-| `keyd` | key storage, token minting (`cap:pkg:write`, `cap:wsys:capture:<win>`, `cap:app:<id>:ctl`), expiry, revocation, audit |
-| `ndsandbox.kext` | TrustedBSD MAC policy (`security/mac_policy.h`, in tree) that binds a process to its namespace table and manifest entitlements; denies `/n` paths outside the table and enforces file/Mach/IOKit rules from the manifest |
+| `keyd` | key storage, token minting (`cap:pkg:write`, `cap:wsys:capture:<win>`, `cap:wsys:input:background`, `cap:app:<id>:ctl`, `cap:audio:*` (docs/audio/audio-service.md §6), `cap:sched:admin` (docs/kernel/scheduling-contract.md §6)), expiry, revocation, audit |
+| `ndsandbox.kext` | TrustedBSD MAC policy (`security/mac_policy.h`, in tree) that binds a process to its namespace table and manifest entitlements; denies `/n` paths outside the table and enforces file/Mach/IOKit rules from the manifest; manifest entitlements include `sched.rt.system` (system real-time share, audiod only; docs/kernel/scheduling-contract.md §6) |
 | `auditd` | receives MAC and `nsd` audit records; publishes `/n/sys/audit/` (read requires `cap:audit:read`) |
 
 ## 3. Application protocol: `/n/agent`
@@ -37,7 +37,7 @@ Specified in `docs/desktop/agent-protocol.md` (reference implementation `libagen
         state            r    JSON snapshot; opening takes the snapshot; carries seq
         actions          rw   write `verb key=value …`; read the JSON reply on the same fd
         log              r    append-only JSON events; blocks until there is one; 256-event ring
-/n/sys/<service>/…       same four files for system daemons: pkg, input, net, power, proc, dev, srv, audit
+/n/sys/<service>/…       same four files for system daemons: pkg, input, net, power, proc, dev, srv, audit, audio (audiod), sched (scheduling contract)
 /n/desktop, /n/theme     the window system and theme trees (graphics-desktop design §2), each with a schema
 ```
 
@@ -69,4 +69,4 @@ Rules: verbs are what a user could do, named as the user would say it; state is 
 
 ## 7. Roadmap hooks
 
-P5-01 `libagent`/`lib9p` port + `libns` + `nsd` (userland only, testable on macOS host with `agentctl.py`) → P5-02 `nd9p.kext` → P5-03 `keyd` tokens → P5-04 `ndsandbox` policy → P5-05 system daemons publish `/n/sys/*` → P5-06 toolkit auto-export of `windows/` (mirrored from `/n/wsys/wins`) → P5-07 agent session flow and audit.
+P5-01 `libagent`/`lib9p` port + `libns` + `nsd` (userland only, testable on macOS host with `agentctl.py`) → P5-02 `nd9p.kext` → P5-03 `keyd` tokens → P5-04 `ndsandbox` policy → P5-05 system daemons publish `/n/sys/*` → P5-06 toolkit auto-export of `windows/` (mirrored from `/n/desktop/windows`) → P5-07 agent session flow and audit.

@@ -1,0 +1,82 @@
+# Compile checks for the audio service specification (spec-conventions.md §1, §5):
+# the header builds as freestanding C23 and as C++20, its layouts hold, it imports
+# into Swift, and every MUST in audio-service.md is covered by a conformance test.
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("@rules_swift//swift:swift_interop_hint.bzl", "swift_interop_hint")
+load("//rules:cc.bzl", "ND_C_COPTS", "lang_audit_test", "nd_cc_library")
+load("//rules:swift.bzl", "nd_swift_library")
+
+exports_files([
+    "audio-service.md",
+    "nd_audio.h",
+])
+
+swift_interop_hint(
+    name = "nd_audio_swift",
+    module_name = "NDAudio",
+)
+
+# The header, compiled freestanding and pedantic through a translation unit that uses every record.
+nd_cc_library(
+    name = "nd_audio",
+    srcs = ["nd_audio_check.c"],
+    hdrs = ["nd_audio.h"],
+    aspect_hints = [":nd_audio_swift"],
+    copts = [
+        "-ffreestanding",
+        "-Wpedantic",
+    ],
+)
+
+# Layout static_asserts (in the header) plus runtime checks of handles and time helpers.
+cc_test(
+    name = "nd_audio_layout_test",
+    size = "small",
+    srcs = ["nd_audio_layout_test.c"],
+    copts = ND_C_COPTS + ["-Wpedantic"],
+    deps = [":nd_audio"],
+)
+
+lang_audit_test(
+    name = "nd_audio_layout_test_lang_audit",
+    srcs = ["nd_audio_layout_test.c"],
+)
+
+# nd_audio.h must also compile as C++20 (spec-conventions.md §5; AU-T-087).
+# nd_cc_library fixes -std=c23, so this is a plain cc_library with the same
+# warning policy, and its source is audited by the lang_audit test below.
+cc_library(
+    name = "nd_audio_cxx",
+    srcs = ["nd_audio_cxx.cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pedantic",
+    ],
+    deps = [":nd_audio"],
+)
+
+lang_audit_test(
+    name = "nd_audio_cxx_lang_audit",
+    srcs = ["nd_audio_cxx.cpp"],
+)
+
+# The Swift layer (toolkit Audio, P4-12) builds on this import.
+nd_swift_library(
+    name = "nd_audio_swift_import",
+    srcs = ["NDAudioImport.swift"],
+    module_name = "NDAudioImportCheck",
+    deps = [":nd_audio"],
+)
+
+sh_test(
+    name = "conformance_test",
+    size = "small",
+    srcs = ["conformance_test.sh"],
+    args = ["$(rootpath audio-service.md)"],
+    data = ["audio-service.md"],
+)
