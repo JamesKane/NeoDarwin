@@ -21,7 +21,7 @@ The pilots remain where they are; NeoDarwin's documents are the go-forward text 
 
 | # | Goal | Where it is designed |
 |---|---|---|
-| 1 | Use Apple's *current* open source wherever it exists; patch, don't fork-and-forget | [docs/repository.md](docs/repository.md) §3 upstream policy |
+| 1 | Reuse Apple's open stack wherever possible: *current* open source first, then earlier Apple open-source drops, then FreeBSD, then new code; patch, don't fork-and-forget | [docs/repository.md](docs/repository.md) §3 upstream policy and §3.1 reuse order |
 | 2 | One modern, cohesive build system on the Clang/LLVM ecosystem | [docs/architecture/build-system.md](docs/architecture/build-system.md) |
 | 3 | A package system so components install and upgrade after first release, kernel included | [docs/architecture/packaging.md](docs/architecture/packaging.md) |
 | 4 | IOKit drivers written with FreeBSD (derive) and Linux (reference only) as sources of truth | [docs/architecture/drivers.md](docs/architecture/drivers.md) |

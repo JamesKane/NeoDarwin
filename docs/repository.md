@@ -47,6 +47,17 @@ neodarwin/
 4. On each upstream drop: `tools/upstream-bump <component> <tag>` re-applies the series, reports conflicts, and opens a PR with the diff of generated BUILD files. Budget: one engineer-day per component per drop; patches that exceed it are candidates to upstream or to refactor into NeoDarwin-owned files.
 5. Provenance: `PROVENANCE.md` per derived driver and per referenced Linux file (drivers design §4); CDDL notice for `zfs.kext` in `LICENSE.md`.
 
+### 3.1 Reuse order
+
+Apple's open stack comes first wherever it can do the job. For any component, take the first of these that exists:
+
+1. **Apple open source, current drop** (APSL 2.0 or the licence in the file), adopted from `apple-oss-distributions` with a patch series. Examples: xnu, dyld, Libc, libdispatch, IOKit families, hfs, CommonCrypto, and the corecrypto subset xnu builds itself (SHA-256, HMAC, NIST DRBG, HKDF, CBC, GCM).
+2. **Apple open source, an earlier drop**, when a current release moved the implementation into a closed component. Example: xnu-1699 still shipped its own AES, DES, MD5, SHA-1 and SHA-2, before the closed corecrypto kext took them over. Pin the tag in `upstream.lock` and record it in `PROVENANCE.md`.
+3. **FreeBSD** (BSD-2/3), ported with headers and provenance intact.
+4. **New NeoDarwin code** (BSD-2-Clause), written against Apple's published interfaces (the APSL headers) so that an Apple implementation can replace it later.
+
+**Source-available is not open.** Apple code published under non-open terms is never vendored, copied or used as a model for NeoDarwin code. That covers the corecrypto repository (`github.com/apple/corecrypto`, an evaluation-only internal-use licence) and the Kernel Debug Kit's archives. The APSL interface headers for the same functionality (for example `EXTERNAL_HEADERS/corecrypto` in xnu) are open and are the contract NeoDarwin implements.
+
 ## 4. Governance files
 
 `CODEOWNERS` maps directories to workstreams (`kernel/ @kernel-bridge`, `boot/ @loader`, `kexts/zfs @storage`, …). `CONTRIBUTING.md` requires DCO sign-off and SSH-signed commits, states the licence per directory, and describes the patch-series workflow. `SECURITY.md` names the disclosure address and the signing-key rotation policy.

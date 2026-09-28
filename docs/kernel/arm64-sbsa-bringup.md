@@ -135,7 +135,7 @@ What the first boot established:
 | The kernel executes `TLBI RVALE1IS` (FEAT_TLBIRANGE, part of Armv8.4). QEMU's `cortex-a76` (v8.2) and `neoverse-v1` models don't advertise it, so the instruction is undefined there | test on `neoverse-n2` (Armv9.0); real targets such as the CD8180 (Armv9.2) have it |
 | kalloc_type's zone policy gave the 48-byte class 15 + 17 zones; with the shared zone that overran a 32-entry stack array, which upstream only asserts on | patch 0007 enforces the limit |
 | With no framebuffer, `PE_init_iokit`'s progress-bar centring loop never ends | `-noprogress` in neoboot's default command line until GOP video is passed |
-| Next stop: data abort in `kmem_crypto_init`, because nothing has called `register_crypto_functions()` (Apple's corecrypto kext does this) | P1-13 |
+| Next stop: data abort in `kmem_crypto_init`, because nothing has called `register_crypto_functions()` (Apple's corecrypto kext does this). Apple's full corecrypto source is evaluation-only, so it can't be used | P1-13: an in-kernel provider assembled per the reuse order (`repository.md` §3.1), mostly from Apple open source (current xnu plus xnu-1699) |
 
 Debugging: QEMU's gdbstub (`-s`) with `lldb`, loading `kernel.release.sbsa.unstripped` with `--slide 0x8000` (the kernel's offset inside the collection at slide 0) and hardware breakpoints (`breakpoint set -H`). Panic `caller` and `pc` values minus 0x8000 symbolise with `atos` against the unstripped kernel.
 

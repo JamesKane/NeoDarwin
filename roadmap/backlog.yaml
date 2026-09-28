@@ -184,12 +184,12 @@ epics:
     exit: "console on a 16550 SPCR board under QEMU"
     doc: docs/kernel/arm64-sbsa-bringup.md
   - id: P1-13
-    title: "Kernel crypto provider — something must call register_crypto_functions() before kmem_crypto_init (Apple's corecrypto kext is closed); decide between an open provider kext and Apple's published corecrypto source under its license"
+    title: "Kernel crypto provider (ndcrypto, compiled into the kernel) — fill crypto_functions and call register_crypto_functions() before kmem_crypto_init, per the reuse order (repository.md §3.1): xnu's own APSL corecrypto subset (SHA-256, HMAC, NIST DRBG for the random_* entries, HKDF, CBC, GCM); xnu-1699's open AES (Gladman), DES (Eric Young), SHA-2 (Gifford), MD5 and SHA-1 behind the APSL corecrypto headers; ChaCha20-Poly1305 from FreeBSD; RSA PKCS#1 v1.5 verify as new BSD-2 code. Apple's evaluation-only corecrypto is not used"
     phase: 1
     owner: kernel-bridge
     status: todo
     depends: [P1-03]
-    exit: "the SBSA kernel boots past kmem_crypto_init on QEMU virt (today: data abort at crypto_random_kmem_ctx_size, NULL crypto_functions)"
+    exit: "the SBSA kernel boots past kmem_crypto_init on QEMU virt (today: data abort at crypto_random_kmem_ctx_size, NULL crypto_functions); each algorithm passes its NIST/RFC known-answer vectors in a host test"
     doc: docs/kernel/arm64-sbsa-bringup.md
   # ---- Phase 2: Base system, packaging, updates ----
   - id: P2-01
