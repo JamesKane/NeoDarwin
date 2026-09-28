@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
 # XNU patch series
 
-Ordered patches applied to the pristine `xnu-12377.1.9` archive inside the build sandbox (`docs/repository.md` §3). A target lists the patches it applies in its `patches` attribute; nothing here edits a checkout. Applying 0001 to 0007 in order to the pristine archive must reproduce the tree the SBSA kernel is built from; each patch carries a rationale and a `Rebase-risk:` line.
+Ordered patches applied to the pristine `xnu-12377.1.9` archive inside the build sandbox (`docs/repository.md` §3). A target lists the patches it applies in its `patches` attribute; nothing here edits a checkout. Applying 0001 to 0008 in order to the pristine archive must reproduce the tree the SBSA kernel is built from; each patch carries a rationale and a `Rebase-risk:` line.
 
 | Patch | What it does | Used by |
 |---|---|---|
@@ -12,3 +12,4 @@ Ordered patches applied to the pristine `xnu-12377.1.9` archive inside the build
 | `0005-bsd-neodarwin-trustcache-runtime.patch` | NeoDarwin's `trustCacheInitializeRuntime` and `TCTypeConfig`, default deny | `sbsa_release` |
 | `0006-sbsa-no-apple-implementation-registers.patch` | SBSA builds no Apple performance-counter driver (`SOC_IS_GENERIC_ARM` in `doconf`, empty `CPU_COUNTERS_BASE`) and no AWL register writes | `sbsa_release` |
 | `0007-kalloc-enforce-per-size-class-zone-limit.patch` | caps each kalloc_type size class at the 31 zones its stack array holds; upstream only asserts it, so a RELEASE kernel overran the array and panicked in `zone_set_sig_eq` (found at first boot, P1-03) | `sbsa_release` |
+| `0008-libkern-build-ndcrypto.patch` | adds ndcrypto (`kernel/neodarwin/crypto`, overlaid at `libkern/ndcrypto` with the pinned FreeBSD sources) to libkern's file list, with its include roots and FreeBSD prelude | `sbsa_release` |

@@ -7,6 +7,7 @@ fails `bazel test`.
 
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 ND_C_COPTS = ["-std=c23", "-Wall", "-Wextra", "-Werror"]
@@ -33,4 +34,8 @@ def nd_cc_library(name, srcs = [], hdrs = [], copts = [], **kwargs):
 
 def nd_cc_binary(name, srcs = [], copts = [], **kwargs):
     cc_binary(name = name, srcs = srcs, copts = ND_C_COPTS + copts, **kwargs)
+    _audited(name, srcs, [])
+
+def nd_cc_test(name, srcs = [], copts = [], **kwargs):
+    cc_test(name = name, srcs = srcs, copts = ND_C_COPTS + copts, **kwargs)
     _audited(name, srcs, [])

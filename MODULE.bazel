@@ -46,6 +46,27 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/libdispatch/archive/refs/tags/libdispatch-1542.0.4.tar.gz"],
 )
 
+# xnu's corecrypto subset and headers, for ndcrypto's host tests: the same
+# archive as apple_xnu (the repository cache serves it once), with its own
+# BUILD file so the kernel's inputs are untouched.
+http_archive(
+    name = "apple_xnu_corecrypto",
+    build_file = "//kernel/neodarwin/crypto:xnu_corecrypto.BUILD",
+    sha256 = "de41f52730e41c844c95e8172de02c1fcf2eb35e95343a4a12aaf7518fb4bf17",
+    strip_prefix = "xnu-xnu-12377.1.9",
+    urls = ["https://github.com/apple-oss-distributions/xnu/archive/refs/tags/xnu-12377.1.9.tar.gz"],
+)
+
+# FreeBSD kernel crypto for ndcrypto, file by file (kernel/neodarwin/crypto/freebsd.lock).
+pinned_files = use_repo_rule("//rules:pinned_files.bzl", "pinned_files")
+
+pinned_files(
+    name = "freebsd_crypto",
+    build_file = "//kernel/neodarwin/crypto:freebsd.BUILD",
+    lockfile = "//kernel/neodarwin/crypto:freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
 # Embedded Swift toolchain (language policy T3) located on the host until the
 # pinned NeoDarwin toolchain lands (P0-02). See toolchains/embedded/repo.bzl.
 nd_embedded_swift = use_repo_rule("//toolchains/embedded:repo.bzl", "nd_embedded_swift")

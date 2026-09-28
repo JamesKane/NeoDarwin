@@ -187,10 +187,18 @@ epics:
     title: "ndcrypto, the kernel crypto provider, compiled in and registered at EARLY_BOOT before kmem_crypto_init: xnu's own corecrypto subset (digest framework, SHA-256, HMAC, HMAC-DRBG, GCM multiply) plus FreeBSD primitives (MD5, SHA-1, SHA-384/512, AES, DES/3DES, ChaCha20, libsodium Poly1305, BearSSL RSA verify) behind Apple's APSL corecrypto headers, with new generic CBC/CTR/XTS/GCM/CTS3 factories. Mapping: docs/kernel/crypto-provider.md"
     phase: 1
     owner: kernel-bridge
-    status: todo
+    status: done
     depends: [P1-03]
-    exit: "the SBSA kernel boots past kmem_crypto_init on QEMU virt (today: data abort at crypto_random_kmem_ctx_size, NULL crypto_functions); each algorithm passes its NIST/RFC known-answer vectors in a host test"
+    exit: "//kernel/neodarwin/crypto:ndcrypto_kat_test passes 110 known-answer and negative checks through the table; //kernel:sbsa_boot_test boots past kmem_crypto_init and the kernel PRNG setup to lockdown_mode"
     doc: docs/kernel/crypto-provider.md
+  - id: P1-14
+    title: "Image4 and AMFI interfaces for kern_trustcache — XNU panics 'image4 interface not available' (bsd/kern/kern_trustcache.c) because AppleImage4 and AMFI, both closed kexts, normally register img4if and the AMFI interface; decide NeoDarwin's providers (trust caches from ndsign/keyd, an open Image4 subset, or a trust-cache path without Image4) per the reuse order"
+    phase: 1
+    owner: kernel-bridge
+    status: todo
+    depends: [P1-13]
+    exit: "the SBSA kernel boots past trust-cache initialisation on QEMU virt"
+    doc: docs/kernel/arm64-sbsa-bringup.md
   # ---- Phase 2: Base system, packaging, updates ----
   - id: P2-01
     title: "ndpkg format, manifest schema, nd_package rule, ndsign"

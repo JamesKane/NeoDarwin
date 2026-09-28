@@ -1,0 +1,89 @@
+From: NeoDarwin
+Subject: [PATCH] libkern: build ndcrypto, NeoDarwin's kernel crypto provider
+
+XNU calls all of its cryptography through the crypto_functions table and
+read_random() through a kernel PRNG, both installed on Apple systems by the
+closed corecrypto kext; the SBSA kernel stopped at a NULL dereference in
+kmem_crypto_init. ndcrypto (kernel/neodarwin/crypto) fills both from xnu's
+own corecrypto subset and FreeBSD's kernel crypto, and registers at
+STARTUP(EARLY_BOOT, RANK_FIRST).
+
+The build overlay places ndcrypto's sources and the pinned FreeBSD/BearSSL
+files under libkern/ndcrypto; this patch adds them to libkern's file list
+(optional crypto, like libkern/crypto) and gives them their include roots.
+Design and per-entry mapping: docs/kernel/crypto-provider.md.
+
+Rebase-risk: low (two appended blocks).
+---
+--- a/libkern/conf/files	2026-09-28 08:26:54
++++ b/libkern/conf/files	2026-09-28 08:26:54
+@@ -102,6 +102,44 @@
+ libkern/crypto/corecrypto_rsa.c		    optional crypto
+ libkern/crypto/corecrypto_chacha20poly1305.c	optional	crypto
+ 
++# NeoDarwin ndcrypto, the kernel crypto provider (kernel/neodarwin/crypto in
++# the NeoDarwin tree; the build adds libkern/ndcrypto before patching).
++libkern/ndcrypto/nd_aes.c	optional crypto
++libkern/ndcrypto/nd_chachapoly.c	optional crypto
++libkern/ndcrypto/nd_des.c	optional crypto
++libkern/ndcrypto/nd_digest.c	optional crypto
++libkern/ndcrypto/nd_kernel.c	optional crypto
++libkern/ndcrypto/nd_modes.c	optional crypto
++libkern/ndcrypto/nd_mux.c	optional crypto
++libkern/ndcrypto/nd_random.c	optional crypto
++libkern/ndcrypto/nd_register.c	optional crypto
++libkern/ndcrypto/nd_rsa.c	optional crypto
++libkern/ndcrypto/freebsd/sys/crypto/chacha20/chacha.c	optional crypto
++libkern/ndcrypto/freebsd/sys/crypto/des/des_ecb.c	optional crypto
++libkern/ndcrypto/freebsd/sys/crypto/des/des_enc.c	optional crypto
++libkern/ndcrypto/freebsd/sys/crypto/des/des_setkey.c	optional crypto
++libkern/ndcrypto/freebsd/sys/crypto/md5c.c	optional crypto
++libkern/ndcrypto/freebsd/sys/crypto/rijndael/rijndael-alg-fst.c	optional crypto
++libkern/ndcrypto/freebsd/sys/crypto/sha1.c	optional crypto
++libkern/ndcrypto/freebsd/sys/crypto/sha2/sha512c.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/codec/ccopy.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/int/i31_add.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/int/i31_bitlen.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/int/i31_decmod.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/int/i31_decode.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/int/i31_encode.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/int/i31_fmont.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/int/i31_modpow2.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/int/i31_montmul.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/int/i31_muladd.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/int/i31_ninv31.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/int/i31_sub.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/int/i31_tmont.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/int/i32_div32.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/rsa/rsa_i31_pkcs1_vrfy.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/rsa/rsa_i31_pub.c	optional crypto
++libkern/ndcrypto/freebsd/contrib/bearssl/src/rsa/rsa_pkcs1_sig_unpad.c	optional crypto
++
+ libkern/coretrust/coretrust.c   standard
+ 
+ libkern/apple_encrypted_archive/apple_encrypted_archive.c	standard
+--- a/libkern/conf/Makefile.template	2026-09-28 08:26:54
++++ b/libkern/conf/Makefile.template	2026-09-28 08:26:54
+@@ -22,6 +22,22 @@
+ # Runtime support functions don't interact well with LTO (9294679)
+ stack_protector.o_CFLAGS_ADD += $(CFLAGS_NOLTO_FLAG)
+ 
++# NeoDarwin ndcrypto (kernel/neodarwin/crypto). FreeBSD and BearSSL sources
++# compile unmodified in their userland branches: NeoDarwin's compat headers
++# come first and nd_freebsd.h supplies the FreeBSD environment they assume.
++ND_CRYPTO = $(SRCROOT)/libkern/ndcrypto
++ND_CRYPTO_OBJS = nd_aes.o nd_chachapoly.o nd_des.o nd_digest.o nd_kernel.o nd_modes.o nd_mux.o nd_random.o nd_register.o nd_rsa.o
++ND_CRYPTO_FREEBSD_OBJS = chacha.o des_ecb.o des_enc.o des_setkey.o md5c.o rijndael-alg-fst.o sha1.o sha512c.o
++ND_CRYPTO_BEARSSL_OBJS = ccopy.o i31_add.o i31_bitlen.o i31_decmod.o i31_decode.o i31_encode.o i31_fmont.o i31_modpow2.o i31_montmul.o i31_muladd.o i31_ninv31.o i31_sub.o i31_tmont.o i32_div32.o rsa_i31_pkcs1_vrfy.o rsa_i31_pub.o rsa_pkcs1_sig_unpad.o
++ND_CRYPTO_INC = -I$(ND_CRYPTO)/compat/kernel -I$(ND_CRYPTO)/compat -I$(ND_CRYPTO)/freebsd/sys \
++	-I$(ND_CRYPTO)/freebsd/sys/contrib/libsodium/src/libsodium \
++	-I$(ND_CRYPTO)/freebsd/sys/contrib/libsodium/src/libsodium/include/sodium \
++	-I$(ND_CRYPTO)/freebsd/contrib/bearssl/inc -I$(SRCROOT)/osfmk/corecrypto -include nd_freebsd.h
++$(foreach o,$(ND_CRYPTO_OBJS),$(eval $(o)_CFLAGS_ADD += $(ND_CRYPTO_INC)))
++$(foreach o,$(ND_CRYPTO_FREEBSD_OBJS),$(eval $(o)_CFLAGS_ADD += $(ND_CRYPTO_INC) -w))
++$(foreach o,$(ND_CRYPTO_BEARSSL_OBJS),$(eval $(o)_CFLAGS_ADD += -I$(ND_CRYPTO)/compat/kernel \
++	-I$(ND_CRYPTO)/freebsd/contrib/bearssl/inc -I$(ND_CRYPTO)/freebsd/contrib/bearssl/src -w))
++
+ #
+ # Directories for mig generated files
+ #

@@ -130,6 +130,20 @@ def _xnu_kernel_impl(ctx):
         unstripped = ctx.actions.declare_file(kernel.basename + ".unstripped", sibling = kernel)
         outputs += [kernel, unstripped]
         kernel_arg = kernel.path
+    # Overlay manifest: "destination<TAB>source" per file, the destination
+    # being the overlay directory plus the file's path in its own package.
+    overlay_files = []
+    lines = []
+    for target, dest in ctx.attr.overlays.items():
+        for f in target.files.to_list():
+            overlay_files.append(f)
+            lines.append("%s/%s\t%s" % (dest, f.owner.name, f.path))
+    overlay_arg = "-"
+    if lines:
+        manifest = ctx.actions.declare_file(ctx.label.name + ".overlay")
+        ctx.actions.write(manifest, "\n".join(sorted(lines)) + "\n")
+        overlay_files.append(manifest)
+        overlay_arg = manifest.path
     args = [
         report.path,
         kernel_arg,
@@ -140,11 +154,12 @@ def _xnu_kernel_impl(ctx):
         ctx.attr.arch_config,
         ctx.attr.machine_config,
         ctx.attr.kernel_config,
+        overlay_arg,
     ] + [p.path for p in ctx.files.patches] + ["--"] + ctx.attr.make_vars
     ctx.actions.run(
         executable = ctx.file._script,
         arguments = args,
-        inputs = ctx.files.srcs + ctx.files.patches + [ctx.file.sdk, ctx.file.firehose] + _scripts(ctx),
+        inputs = ctx.files.srcs + ctx.files.patches + overlay_files + [ctx.file.sdk, ctx.file.firehose] + _scripts(ctx),
         outputs = outputs,
         mnemonic = "XnuKernel",
         progress_message = "Building XNU %s %s %s %%{label}" % (ctx.attr.arch_config, ctx.attr.machine_config, ctx.attr.kernel_config),
@@ -167,6 +182,10 @@ xnu_kernel = rule(
         "sdk": attr.label(mandatory = True, allow_single_file = True),
         "firehose": attr.label(mandatory = True, allow_single_file = True),
         "patches": attr.label_list(allow_files = [".patch"]),
+        "overlays": attr.label_keyed_string_dict(
+            allow_files = True,
+            doc = "Files to add to the source tree before patching: {files: directory in the xnu tree}. Each file keeps its path within its own package. NeoDarwin-owned sources enter the kernel this way; patches then add them to the build lists.",
+        ),
         "darwin_version": attr.string(mandatory = True),
         "arch_config": attr.string(default = "ARM64"),
         "machine_config": attr.string(mandatory = True),

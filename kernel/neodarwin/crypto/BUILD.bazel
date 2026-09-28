@@ -1,0 +1,66 @@
+# ndcrypto: NeoDarwin's kernel crypto provider (docs/kernel/crypto-provider.md).
+# The same sources build into the kernel (P1-13 kernel wiring) and, here,
+# into a host library that the known-answer test drives through the table.
+load("//rules:cc.bzl", "nd_cc_library", "nd_cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "freebsd.BUILD",
+    "freebsd.lock",
+    "xnu_corecrypto.BUILD",
+])
+
+# The FreeBSD environment FreeBSD's crypto sources assume.
+nd_cc_library(
+    name = "freebsd_compat",
+    hdrs = glob(["compat/**/*.h"]),
+    includes = ["compat"],
+)
+
+ND_SRCS = [
+    "nd_aes.c",
+    "nd_chachapoly.c",
+    "nd_des.c",
+    "nd_digest.c",
+    "nd_modes.c",
+    "nd_mux.c",
+    "nd_random.c",
+    "nd_register.c",
+    "nd_rsa.c",
+]
+
+nd_cc_library(
+    name = "ndcrypto_host",
+    srcs = ND_SRCS + ["nd_modes.h"],
+    hdrs = ["ndcrypto.h"],
+    copts = [
+        "-include",
+        "nd_freebsd.h",
+    ],
+    deps = [
+        ":freebsd_compat",
+        "@apple_xnu_corecrypto//:corecrypto",
+        "@freebsd_crypto//:bearssl_rsa_verify",
+        "@freebsd_crypto//:crypto",
+    ],
+)
+
+# Every crypto_functions entry against published vectors (see the file header).
+nd_cc_test(
+    name = "ndcrypto_kat_test",
+    size = "small",
+    srcs = ["test/kat_test.c"],
+    deps = [":ndcrypto_host"],
+)
+
+# What the kernel build overlays at libkern/ndcrypto (kernel/BUILD.bazel,
+# patch 0008): ndcrypto's sources, headers and compat headers.
+filegroup(
+    name = "kernel_srcs",
+    srcs = ND_SRCS + glob(["compat/**/*.h"]) + [
+        "nd_kernel.c",
+        "nd_modes.h",
+        "ndcrypto.h",
+    ],
+)

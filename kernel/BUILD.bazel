@@ -79,7 +79,14 @@ SBSA_PATCHES = [
     "patches/0005-bsd-neodarwin-trustcache-runtime.patch",
     "patches/0006-sbsa-no-apple-implementation-registers.patch",
     "patches/0007-kalloc-enforce-per-size-class-zone-limit.patch",
+    "patches/0008-libkern-build-ndcrypto.patch",
 ]
+
+# NeoDarwin-owned kernel sources added to the xnu tree before patching.
+SBSA_OVERLAYS = {
+    "//kernel/neodarwin/crypto:kernel_srcs": "libkern/ndcrypto",
+    "@freebsd_crypto//:all": "libkern/ndcrypto/freebsd",
+}
 
 libfirehose_kernel(
     name = "firehose_kernel_arm64",
@@ -94,6 +101,7 @@ xnu_kernel(
     darwin_version = DARWIN_VERSION,
     firehose = ":firehose_kernel_arm64",
     machine_config = "SBSA",
+    overlays = SBSA_OVERLAYS,
     make_vars = [
         "ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64",
         "BTI_BUILD=0",
@@ -177,6 +185,8 @@ sh_test(
         "120",
         "'Darwin Kernel Version 25.0.0'",
         "'iBoot version: neoboot-0.1'",
+        # Printed after ndcrypto has installed the crypto table and the kernel PRNG (P1-13).
+        "'lockdown_mode: lockdown mode in nvram is off'",
     ],
     data = [
         ":sbsa_kc",
