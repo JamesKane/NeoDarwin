@@ -36,6 +36,8 @@ enum Platform {
         var timebase: UInt64
         var mpidr: UInt64
         var seed: UInt64
+        var ramdiskBase: UInt64 = 0  // physical; 0 when there is none
+        var ramdiskSize: UInt64 = 0
     }
 
     /// Writes the tree; returns its length, or nil if it did not fit.
@@ -63,8 +65,11 @@ enum Platform {
             }
         }
         w.property("AAPL,phandle", u32: 2)
-        w.begin()  // /chosen/memory-map: RAMDisk, ACPITables later
+        w.begin()  // /chosen/memory-map: RAMDisk; ACPITables later
         w.property("name", string: "memory-map")
+        if f.ramdiskSize != 0 {
+            w.property("RAMDisk", f.ramdiskBase, f.ramdiskSize)  // IOKitBSDInit.cpp: becomes md0
+        }
         w.end()
         w.end()
 

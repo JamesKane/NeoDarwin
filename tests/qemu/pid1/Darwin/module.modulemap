@@ -1,0 +1,4 @@
+module Darwin_Traps {
+  header "traps.h"
+  export *
+}

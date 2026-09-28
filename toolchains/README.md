@@ -19,6 +19,10 @@ UEFI images are PE32+, but the Embedded stdlib ships only for ELF-style triples.
 
 This is sound on AArch64 because UEFI uses the standard AAPCS64 calling convention there, the same as the ELF target, so Swift calls firmware function pointers directly. It would not be on x86-64, where UEFI uses the Microsoft x64 convention. The Swift stack protector is disabled because the Windows backend implements it with MSVC `/GS` cookies (`__security_cookie`), which do not exist in firmware; compiler-emitted `memset`/`memcpy`/`memmove` come from a small `-fno-builtin` C file.
 
+## Static Darwin executables
+
+`rules/static_macho.bzl` builds programs that run before NeoDarwin has dyld or libSystem, such as the first PID 1 (`tests/qemu/pid1`). The Embedded stdlib also ships for `arm64-apple-macos`, so Swift and C compile directly for `arm64-apple-macos26.0` to Mach-O objects. There is no bitcode step: ELF-triple bitcode can't be lowered to Mach-O, because its sections are named ELF-style. Xcode's `ld` then links with `-static -dead_strip -adhoc_codesign`. The result is an `MH_EXECUTE` with an `LC_UNIXTHREAD` entry and a linker-signed ad hoc signature. The swift.org toolchain's `ld64.lld` can't do this: it doesn't implement `-static` (it warns and ignores it) and emits no `LC_UNIXTHREAD`. A small `-fno-builtin` C file supplies `memset`, `memcpy`, `memmove` and `bzero`.
+
 ## XNU builds
 
 The XNU actions (`rules/xnu.bzl`) also use the host Xcode: its macOS SDK is the base of the build SDK and its clang compiles the kernel. They carry `requires-darwin` and `no-remote`. XNU's own warning list is tuned to Apple's internal compiler, so upstream code builds with `BUILD_WERROR=0`; NeoDarwin's own code keeps warnings as errors.

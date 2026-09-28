@@ -139,9 +139,9 @@ epics:
     title: "mockfs PID 1 and syscall/Mach IPC test binary"
     phase: 1
     owner: userland
-    status: todo
+    status: done
     depends: [P1-06]
-    exit: "static test binary prints from userland"
+    exit: "static test binary prints from userland; //kernel:sbsa_boot_test reaches 'pid1: all checks passed'"
     doc: docs/kernel/arm64-sbsa-bringup.md
   - id: P1-08
     title: "Cross SDK + HFS+ ramdisk root + launchd-842 + getty + shell"

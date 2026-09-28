@@ -90,6 +90,9 @@ SBSA_PATCHES = [
     "patches/0008-libkern-build-ndcrypto.patch",
     "patches/0009-iokit-build-neodarwin-platform.patch",
     "patches/0010-libkern-build-libpthread-kern.patch",
+    "patches/0011-mockfs-sbsa-root.patch",
+    "patches/0012-iokit-publish-hidden-media-without-iomedia.patch",
+    "patches/0013-mach-loader-static-pid1-on-sbsa.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -194,6 +197,7 @@ sh_test(
         "--cpu neoverse-n2",
         "--mem 2G",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //tests/qemu/pid1)",
         "--until-lines",
         "$(rootpath //boot/neoboot)",
         "120",
@@ -207,12 +211,17 @@ sh_test(
         "'MAC Framework successfully initialized'",
         # Past bsd_init's pthread check, with libpthread's kern/ built in (P1-16).
         "'ifnet_attach: All kernel threads created for interface lo0'",
-        # Where boot stops today: no root device until P1-07.
-        "'Waiting on <dict ID='",
+        # Rooted on mockfs over the ramdisk, with PID 1 checking syscalls, VM
+        # and Mach IPC from userland (P1-07).
+        "'BSD root: md0'",
+        "'pid1: hello from userland: PID 1 on /dev/console'",
+        "'pid1: mach: message round trip through mach_msg2'",
+        "'pid1: all checks passed'",
     ],
     data = [
         ":sbsa_kc",
         "//boot/neoboot",
+        "//tests/qemu/pid1",
     ],
     tags = ["manual", "kernel", "qemu"],
 )

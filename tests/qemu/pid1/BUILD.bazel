@@ -1,0 +1,28 @@
+load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:static_macho.bzl", "swift_embedded_static_executable")
+
+package(default_visibility = ["//visibility:public"])
+
+# The first PID 1 (P1-07): mockfs runs it as /sbin/launchd. neoboot loads it
+# as the ramdisk, \NeoDarwin\ramdisk. Booted by //kernel:sbsa_pid1_test.
+swift_embedded_static_executable(
+    name = "pid1",
+    srcs = ["Sources/Main.swift"],
+    c_srcs = [
+        "runtime/mem.c",
+        "runtime/traps.c",
+    ],
+    hdrs = [
+        "Darwin/module.modulemap",
+        "Darwin/traps.h",
+    ],
+)
+
+lang_audit_test(
+    name = "pid1_lang_audit",
+    srcs = [
+        "Darwin/traps.h",
+        "runtime/mem.c",
+        "runtime/traps.c",
+    ],
+)

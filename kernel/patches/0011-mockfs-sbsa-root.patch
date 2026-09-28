@@ -1,0 +1,125 @@
+From: NeoDarwin
+Subject: [PATCH] mockfs: build it into the SBSA kernel, and make it work on arm64
+
+The SBSA kernel boots through BSD initialisation to the root-device wait
+and has no filesystem to mount there: xnu carries no disk filesystem, and
+the HFS+ kext is P1-08. mockfs (bsd/miscfs/mockfs), which Apple keeps for
+exactly this stage, mounts a memory device holding one static executable as
+the root and resolves /sbin/launchd to it, so the first PID 1 needs no
+filesystem code. neoboot places that executable as the RAMDisk in
+/chosen/memory-map, IOFindBSDRoot turns it into md0 (rd=md0), and
+vfs_mountroot reaches mockfs last, after every real filesystem.
+
+MASTER.arm64.MacOSX gives SOC_IS_GENERIC_ARM (patch 0006) a FILESYS_ROOT
+set holding mockfs; every other machine config gets an empty one.
+
+No shipping Apple config builds mockfs, and it has rotted in two places
+(both found bringing up P1-07):
+- It allocates and frees its nodes with kalloc_type(mockfs_fsnode_t), the
+  pointer typedef, which would size each node as one pointer. The typed
+  allocator's compile-time check rejects the free; both now name struct
+  mockfs_fsnode.
+- It maps the memory device into the executable's pager from
+  DKIOCGETMEMDEVINFO's mi_base, a 32-bit count of 4 KiB pages, shifted by
+  PAGE_SHIFT. A 64-bit kernel address does not fit in the count, and arm64
+  pages are 16 KiB, so pmap_find_phys() found nothing and mockfs panicked
+  ("failed to create fictitious pages") at the first exec. mockfs now takes
+  the device's full address from mdevgetrange(), as IOKitBSDInit does, and
+  pages the file from the block device if that fails.
+
+Rebase-risk: low (one configuration line; small, local mockfs changes).
+---
+diff --git a/config/MASTER.arm64.MacOSX b/config/MASTER.arm64.MacOSX
+--- a/config/MASTER.arm64.MacOSX
++++ b/config/MASTER.arm64.MacOSX
+@@ -27,7 +27,12 @@
+ #  BSD_RELEASE =    [ BSD_BASE ]
+ #  BSD_DEV =        [ BSD_BASE config_vnguard ]
+ #  BSD_DEBUG =      [ BSD_BASE config_vnguard ]
+-#  FILESYS_BASE =   [ devfs fdesc fifo fs_compression config_protect config_mnt_rootsnap config_rosv_startup config_mount_vm config_mount_prebootrecovery config_basesystemroot config_fse quota namedstreams config_imgsrc_access config_triggers config_ext_resolver config_searchfs config_volfs config_appledouble nullfs config_mnt_suid config_firmlinks config_dataless_files config_union_mounts config_file_leases ]
++#if SOC_IS_GENERIC_ARM
++#  FILESYS_ROOT =   [ mockfs ]
++#else
++#  FILESYS_ROOT =   [ ]
++#endif
++#  FILESYS_BASE =   [ FILESYS_ROOT devfs fdesc fifo fs_compression config_protect config_mnt_rootsnap config_rosv_startup config_mount_vm config_mount_prebootrecovery config_basesystemroot config_fse quota namedstreams config_imgsrc_access config_triggers config_ext_resolver config_searchfs config_volfs config_appledouble nullfs config_mnt_suid config_firmlinks config_dataless_files config_union_mounts config_file_leases ]
+ #  FILESYS_RELEASE= [ FILESYS_BASE ]
+ #  FILESYS_DEV =    [ FILESYS_BASE config_iocount_trace ]
+ #  FILESYS_DEBUG =  [ FILESYS_BASE config_iocount_trace ]
+diff --git a/bsd/miscfs/mockfs/mockfs.h b/bsd/miscfs/mockfs/mockfs.h
+--- a/bsd/miscfs/mockfs/mockfs.h
++++ b/bsd/miscfs/mockfs/mockfs.h
+@@ -59,7 +59,7 @@
+ 	mockfs_fsnode_t mockfs_root;            /* Root of the node tree */
+ 	boolean_t       mockfs_memory_backed;   /* Does the backing store reside in memory */
+ 	boolean_t       mockfs_physical_memory; /* (valid if memory backed) */
+-	uint32_t        mockfs_memdev_base;     /* Base page of the backing store (valid if memory backed) */
++	uint64_t        mockfs_memdev_base;     /* Kernel address of the backing store (valid if memory backed) */
+ 	uint64_t        mockfs_memdev_size;     /* Size of the backing store (valid if memory backed) */
+ };
+ 
+diff --git a/bsd/miscfs/mockfs/mockfs_fsnode.c b/bsd/miscfs/mockfs/mockfs_fsnode.c
+--- a/bsd/miscfs/mockfs/mockfs_fsnode.c
++++ b/bsd/miscfs/mockfs/mockfs_fsnode.c
+@@ -85,7 +85,7 @@
+ 		goto done;
+ 	}
+ 
+-	*fsnpp = kalloc_type(mockfs_fsnode_t, Z_WAITOK | Z_ZERO | Z_NOFAIL);
++	*fsnpp = kalloc_type(struct mockfs_fsnode, Z_WAITOK | Z_ZERO | Z_NOFAIL);
+ 	(*fsnpp)->size = new_size;
+ 	(*fsnpp)->type = type;
+ 	(*fsnpp)->mnt = mp;
+@@ -154,7 +154,7 @@
+ 		}
+ 	}
+ 
+-	kfree_type(mockfs_fsnode_t, fsnp);
++	kfree_type(struct mockfs_fsnode, fsnp);
+ done:
+ 	return rvalue;
+ }
+@@ -345,7 +345,7 @@
+ 				panic("mockfs_fsvnode failed to get ubc_mem_object for a new vnode");
+ 			}
+ 
+-			rvalue = pager_map_to_phys_contiguous(ubc_mem_object, 0, (mockfs_mnt->mockfs_memdev_base << PAGE_SHIFT), fsnp->size);
++			rvalue = pager_map_to_phys_contiguous(ubc_mem_object, 0, mockfs_mnt->mockfs_memdev_base, fsnp->size);
+ 
+ 			if (rvalue) {
+ 				panic("mockfs_fsnode_vnode failed to create fictitious pages for a memory-backed device; rvalue = %d", rvalue);
+diff --git a/bsd/miscfs/mockfs/mockfs_vfsops.c b/bsd/miscfs/mockfs/mockfs_vfsops.c
+--- a/bsd/miscfs/mockfs/mockfs_vfsops.c
++++ b/bsd/miscfs/mockfs/mockfs_vfsops.c
+@@ -41,6 +41,8 @@
+ 
+ static LCK_GRP_DECLARE(mockfs_mtx_grp, "mockfs-mutex");
+ 
++extern int mdevgetrange(int devid, uint64_t *base, uint64_t *size);
++
+ int mockfs_mountroot(mount_t mp, vnode_t rvp, __unused vfs_context_t ctx);
+ 
+ /*
+@@ -101,11 +103,18 @@
+ 		/*
+ 		 * For the moment, we won't try to optimize when mi_phys is true.
+ 		 */
+-		if (!mockfs_mount_data->mockfs_physical_memory) {
++		/*
++		 * mi_base is a 32-bit count of 4 KiB pages, too narrow for a 64-bit kernel address; take the
++		 *   device's range from memdev itself, and page from the device if that fails.
++		 */
++		uint64_t memdev_base, memdev_size;
++
++		if (!memdev_info.mi_phys &&
++		    !mdevgetrange(minor(vnode_specrdev(rvp)), &memdev_base, &memdev_size)) {
+ 			mockfs_mount_data->mockfs_memory_backed = memdev_info.mi_mdev;
+-			mockfs_mount_data->mockfs_physical_memory = memdev_info.mi_phys;
+-			mockfs_mount_data->mockfs_memdev_base = memdev_info.mi_base;
+-			mockfs_mount_data->mockfs_memdev_size = memdev_info.mi_size;
++			mockfs_mount_data->mockfs_physical_memory = FALSE;
++			mockfs_mount_data->mockfs_memdev_base = memdev_base;
++			mockfs_mount_data->mockfs_memdev_size = memdev_size;
+ 		}
+ 	}
+ 

@@ -1,0 +1,36 @@
+From: NeoDarwin
+Subject: [PATCH] iokit: publish hidden media only when the IOMedia class exists
+
+IOService::publishHiddenMedia() looks up the IOMedia metaclass and only
+asserts that it exists: on Apple systems IOStorageFamily is always in the
+kernelcache. NeoDarwin's SBSA kernel roots on a memory device (md0, a BSD
+device from bsd/dev/memdev.c) before any storage family is loaded, so the
+lookup returns NULL, and the RELEASE kernel, with the assert compiled out,
+faulted in OSMetaClass::applyToInstances() as soon as IOFindBSDRoot had
+chosen md0 (found at the first mockfs boot, P1-07). Without the class there
+are no IOMedia objects to publish; the function now skips the walk.
+
+Rebase-risk: low (one condition).
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -5368,8 +5368,8 @@
+ 	const OSMetaClass * iomediaClass;
+ 	bool                wasHiding;
+ 
++	/* NULL until IOStorageFamily is loaded; then there is no IOMedia to publish. */
+ 	iomediaClass = OSMetaClass::getMetaClassWithName(gIOMediaKey);
+-	assert(iomediaClass);
+ 
+ 	LOCKWRITENOTIFY();
+ 	wasHiding = gIOServiceHideIOMedia;
+@@ -5380,7 +5380,7 @@
+ 
+ 	FindRootMediaContext ctx = { .services = NULL, .parent = parent };
+ 
+-	if (wasHiding) {
++	if (wasHiding && iomediaClass) {
+ 		iomediaClass->applyToInstances(publishHiddenMediaApplier, &ctx);
+ 	}
+ 	if (ctx.services) {

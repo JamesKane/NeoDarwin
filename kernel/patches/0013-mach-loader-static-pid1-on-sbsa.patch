@@ -1,0 +1,47 @@
+From: NeoDarwin
+Subject: [PATCH] mach_loader: let process 1 be a static executable on SBSA
+
+A RELEASE kernel refuses every static arm64 executable (MH_EXECUTE without
+MH_DYLDLINK) with LOAD_FAILURE; only DEVELOPMENT and DEBUG kernels load
+them. NeoDarwin's first userland runs before the system has dyld: mockfs
+roots on one static executable and runs it as /sbin/launchd (P1-07), and
+the bring-up design allows a static init shim until launchd arrives
+(docs/kernel/arm64-sbsa-bringup.md §2.4). Found as EXEC_EXIT_REASON_BAD_MACHO
+at the first mockfs exec.
+
+For GENERIC_ARM64_PLATFORM only, the executable itself (depth 1) may be
+static when its task is process 1. Whoever supplies /sbin/launchd on the
+root already controls the system, so this grants nothing new; every other
+process keeps Apple's rule, and other board configs are unchanged.
+
+Rebase-risk: low (one branch in parse_machfile).
+---
+diff --git a/bsd/kern/mach_loader.c b/bsd/kern/mach_loader.c
+--- a/bsd/kern/mach_loader.c
++++ b/bsd/kern/mach_loader.c
+@@ -74,6 +74,9 @@
+ #include <kern/mach_fat.h>
+ #include <kern/kalloc.h>
+ #include <kern/task.h>
++#if defined(__arm64__)
++#include <pexpert/arm64/board_config.h>
++#endif
+ #include <kern/thread.h>
+ #include <kern/page_decrypt.h>
+ 
+@@ -1149,6 +1152,15 @@
+ 		} else if (imgp->ip_flags & IMGPF_ROSETTA) {
+ 			/* Rosetta runtime allowed */
+ #endif /* CONFIG_X86_64_COMPAT */
++#if GENERIC_ARM64_PLATFORM
++		} else if (depth == 1 && thread != THREAD_NULL &&
++		    task_pid(get_threadtask(thread)) == 1) {
++			/*
++			 * NeoDarwin: process 1 may be static. It runs before a system has dyld
++			 * (mockfs's executable, the init shim), and whoever supplies /sbin/launchd
++			 * already controls the system; every other static executable is refused.
++			 */
++#endif
+ 		} else {
+ 			/* Check properties of static executables (disallowed except for development) */
+ #if !(DEVELOPMENT || DEBUG)

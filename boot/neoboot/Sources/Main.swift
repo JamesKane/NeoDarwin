@@ -7,15 +7,20 @@
 //
 // Physical layout, from the collection's (32 MiB-congruent) base:
 //
-//     kernelcache (flat, kcgen) | device tree (64 KiB) | boot_args page | ← topOfKernelData
+//     kernelcache (flat, kcgen) | device tree (64 KiB) | ramdisk | boot_args page | ← topOfKernelData
 //
-// and boot_args describes the DRAM window from that base to the end of the
+// The ramdisk is optional. It lies below topOfKernelData because the kernel
+// maps it with ml_static_ptovirt() (IOKitBSDInit.cpp), and boot_args
+// describes the DRAM window from that base to the end of the
 // largest hole-free run of memory the kernel may own.
 
 import UEFI
 
 let kernelcachePath: StaticString = "\\NeoDarwin\\kernelcache"
 let bootConfigPath: StaticString = "\\NeoDarwin\\boot.cfg"
+let ramdiskPath: StaticString = "\\NeoDarwin\\ramdisk"
+/// Appended when a ramdisk is loaded and the command line names no root.
+let ramdiskRoot: StaticString = " rd=md0"
 /// -noprogress until the loader passes a GOP framebuffer: with no display,
 /// PE_init_iokit()'s progress-bar centring loop never terminates.
 let defaultCommandLine: StaticString = "debug=0x14e serial=3 -v -noprogress"
@@ -45,6 +50,21 @@ func fail(_ why: StaticString) -> EFI_STATUS {
 
 func roundUp(_ v: UInt64, _ a: UInt64) -> UInt64 { (v + a - 1) / a * a }
 
+/// Whether a space-separated argument in the line starts with `prefix`.
+func mentions(_ line: UnsafeMutableRawPointer, _ length: Int, _ prefix: StaticString) -> Bool {
+    let p = prefix.utf8Start, n = prefix.utf8CodeUnitCount
+    var i = 0
+    while i + n <= length {
+        if i == 0 || line.load(fromByteOffset: i - 1, as: UInt8.self) == 32 {
+            var j = 0
+            while j < n && line.load(fromByteOffset: i + j, as: UInt8.self) == p[j] { j += 1 }
+            if j == n { return true }
+        }
+        i += 1
+    }
+    return false
+}
+
 func boot(_ fw: Firmware) -> EFI_STATUS {
     guard let root = fw.openBootVolume() else { return fail("cannot open the boot volume") }
     guard let file = EFIFile(root: root, path: kernelcachePath) else { return fail("no \\NeoDarwin\\kernelcache on the boot volume") }
@@ -64,8 +84,13 @@ func boot(_ fw: Firmware) -> EFI_STATUS {
 
     guard var map = MemoryMap(fw) else { return fail("cannot read the memory map") }
     let window = map.largestWindow()
+    // The ramdisk (mockfs's executable until P1-08's HFS+ image): memdev
+    // counts it in 4 KiB pages, so its length is rounded up and zero-filled.
+    let ramdisk = EFIFile(root: root, path: ramdiskPath)
+    let ramdiskSize = ramdisk.map { roundUp($0.size, kernelPage) } ?? 0
     let dtOffset = roundUp(kc.vmSize, kernelPage)
-    let argsOffset = dtOffset + treeCapacity
+    let ramdiskOffset = dtOffset + treeCapacity
+    let argsOffset = ramdiskOffset + ramdiskSize
     let span = argsOffset + kernelPage
 
     // Slide 0 for first light: the lowest free address congruent to the link
@@ -88,12 +113,20 @@ func boot(_ fw: Firmware) -> EFI_STATUS {
         return fail("the kernel has no entry point")
     }
 
+    if let ramdisk {
+        let at = image + Int(ramdiskOffset)
+        at.initializeMemory(as: UInt8.self, repeating: 0, count: Int(ramdiskSize))
+        guard ramdisk.read(at: 0, count: ramdisk.size, into: at) else { return fail("cannot read the ramdisk") }
+        ramdisk.close()
+    }
+
     let virtBase = kc.linkAddress + slide
     let memSize = (window.end - base) & ~(kernelPage - 1)
     let entry = base + (entryVA - kc.linkAddress)
 
     var tree = DeviceTreeWriter(base: image + Int(dtOffset), capacity: Int(treeCapacity))
-    let facts = Platform.Facts(dramBase: base, dramSize: memSize, timebase: nd_cntfrq(), mpidr: nd_mpidr(), seed: nd_cntpct())
+    let facts = Platform.Facts(dramBase: base, dramSize: memSize, timebase: nd_cntfrq(), mpidr: nd_mpidr(), seed: nd_cntpct(),
+                                ramdiskBase: ramdiskSize == 0 ? 0 : base + ramdiskOffset, ramdiskSize: ramdiskSize)
     guard let treeLength = Platform.deviceTree(into: &tree, facts) else { return fail("the device tree does not fit") }
 
     // Command line: \NeoDarwin\boot.cfg if present, read into the spare half
@@ -120,6 +153,10 @@ func boot(_ fw: Firmware) -> EFI_STATUS {
         defaultCommandLine.withUTF8Buffer { lineBuffer.copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
         lineLength = defaultCommandLine.utf8CodeUnitCount
     }
+    if ramdiskSize != 0 && !mentions(lineBuffer, lineLength, "rd=") {
+        ramdiskRoot.withUTF8Buffer { (lineBuffer + lineLength).copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
+        lineLength += ramdiskRoot.utf8CodeUnitCount
+    }
     let commandLine = UnsafeRawBufferPointer(start: lineBuffer, count: lineLength)
 
     var bootArgs = BootArgs()
@@ -138,6 +175,10 @@ func boot(_ fw: Firmware) -> EFI_STATUS {
     log("  link address       ", kc.linkAddress)
     log("  kernel entry       ", entry)
     log("  device tree bytes  ", UInt64(treeLength))
+    if ramdiskSize != 0 {
+        log("  ramdisk at         ", base + ramdiskOffset)
+        log("  ramdisk bytes      ", ramdiskSize)
+    }
     log("  boot_args at       ", base + argsOffset)
     log("  memSize            ", memSize)
     log("  timebase (Hz)      ", facts.timebase)

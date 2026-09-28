@@ -126,7 +126,7 @@ The kernel is linked as position-independent (`MH_PIE`) with 65,407 local `ARM64
 
 ### 2.1.2 First boot on QEMU (P1-03)
 
-`//kernel:sbsa_boot_test` boots neoboot and `kernelcache.release.sbsa` on QEMU `virt` (`gic-version=3`, 2 GiB, one CPU). In under six seconds the kernel goes through the loader handoff, its own fixups, MMU and VM bootstrap, zalloc, the scheduler, IPC and logging, and prints `iBoot version: neoboot-0.1` from `PE_init_iokit`. With ndcrypto (P1-13), ndamfi (P1-14), the platform expert (P1-06) and libpthread's `kern/` (P1-16) it continues through crypto, PRNG, trust caches, IOKit and BSD initialisation, including networking, to the root-device wait. The device tree is still hand-written for `virt` in `boot/neoboot/Sources/Platform.swift`; P1-04 derives it from ACPI.
+`//kernel:sbsa_boot_test` boots neoboot, `kernelcache.release.sbsa` and the PID 1 test program as the ramdisk on QEMU `virt` (`gic-version=3`, 2 GiB, one CPU). In under six seconds the kernel goes through the loader handoff, its own fixups, MMU and VM bootstrap, zalloc, the scheduler, IPC and logging, and prints `iBoot version: neoboot-0.1` from `PE_init_iokit`. With ndcrypto (P1-13), ndamfi (P1-14), the platform expert (P1-06) and libpthread's `kern/` (P1-16) it continues through crypto, PRNG, trust caches, IOKit and BSD initialisation, including networking. It then roots on mockfs over the ramdisk and runs the first userland program as PID 1 (P1-07, §2.1.3); the whole boot takes about 36 seconds, 30 of them in an idle wait that is still open (below). The device tree is still hand-written for `virt` in `boot/neoboot/Sources/Platform.swift`; P1-04 derives it from ACPI.
 
 What the first boot established:
 
@@ -140,12 +140,31 @@ What the first boot established:
 | `Unable to find driver for this platform: "NeoDarwin,sbsa"` (`IOPlatformExpert.cpp`) | P1-06, boot CPU done: `NeoDarwinPlatformExpert`, `NeoDarwinGICv3`, `NeoDarwinPSCI` (patch 0009), matched by a built-in personality |
 | A 16 MB `kmem_alloc` failed while mapping the GIC redistributors: the device tree gave QEMU's whole 123-CPU region | the tree now describes one frame per CPU present (P1-04 takes them from the MADT), and the GIC driver caps its mapping at `MAX_CPUS` frames |
 | `pthread kernel extension not loaded` (`pthread_shims.c`), after BSD init has brought up the MAC framework, buffer cache and mbufs: pthread.kext registers the pthread function table | P1-16, done: Apple's libpthread-539 `kern/` (APSL) built into libkern by patch 0010 and started at `EARLY_BOOT` by `kernel/neodarwin/pthread`. It compiles as the kext does, against the exported headers without `XNU_KERNEL_PRIVATE`, with a compat `TargetConditionals.h`; its `current_uthread` and `pthread_kern` are renamed to avoid clashing with the kernel's |
-| Next stop: `Waiting on <dict …IOProviderClass… IOMedia … Apple_HFS…>`, after `dlil` and `lo0`: no root device | P1-07 (mockfs PID 1) gives the first root; P1-08 an HFS+ ramdisk, P1-10 virtio-blk |
+| `Waiting on <dict …IOProviderClass… IOMedia … Apple_HFS…>`, after `dlil` and `lo0`: no root device | P1-07, done: mockfs roots on the ramdisk as md0 (§2.1.3); P1-08 brings an HFS+ ramdisk, P1-10 virtio-blk |
+| Data abort in `OSMetaClass::applyToInstances` as soon as IOFindBSDRoot chose md0: `publishHiddenMedia()` asserts that the IOMedia class exists, and IOStorageFamily isn't loaded | patch 0012 skips the walk when there is no IOMedia class |
+| `mockfs_fsnode_vnode failed to create fictitious pages for a memory-backed device` at the first exec | patch 0011: mockfs took the memory device's address from a 32-bit count of 4 KiB pages and shifted it by the 16 KiB `PAGE_SHIFT`; it now asks `mdevgetrange()`. The same patch fixes its node allocation, which named the pointer typedef |
+| `unexpected SIGKILL of init … namespace 9 code 0x1`: `OS_REASON_EXEC`/`EXEC_EXIT_REASON_BAD_MACHO`, because RELEASE kernels refuse static arm64 executables | patch 0013: on `GENERIC_ARM64_PLATFORM`, process 1 may be static |
 
-Debugging: QEMU's gdbstub (`-s`) with `lldb`, loading `kernel.release.sbsa.unstripped` with `--slide 0x8000` (the kernel's offset inside the collection at slide 0) and hardware breakpoints (`breakpoint set -H`). Panic `caller` and `pc` values minus 0x8000 symbolise with `atos` against the unstripped kernel.
+### 2.1.3 First userland: mockfs and PID 1 (P1-07)
+
+The first root needs no filesystem code. neoboot loads `\NeoDarwin\ramdisk` (optional) between the device tree and `boot_args`, below `topOfKernelData` because the kernel maps it with `ml_static_ptovirt()`. It publishes the ramdisk as `/chosen/memory-map/RAMDisk`, zero-padded to 16 KiB, and appends `rd=md0` when the command line names no root. `IOFindBSDRoot` turns it into md0 (`IOKitBSDInit.cpp`). `vfs_mountroot` tries mockfs last (patch 0011 builds it for SBSA). mockfs presents the device as one file that answers to `/sbin/launchd` and a directory that devfs mounts over at `/dev`.
+
+The ramdisk is `//tests/qemu/pid1`. It's a static arm64 Mach-O in Embedded Swift with no libSystem and no dyld, built by `rules/static_macho.bzl`. It enters the kernel through the Darwin trap ABI (`svc #0x80`, the call in `x16`) and checks, in order:
+- that it is process 1;
+- that `/dev/console` opens and takes writes;
+- that anonymous memory maps, holds a pattern across four pages, and unmaps;
+- that `task_self_trap` and `mach_reply_port` return port names;
+- that a message sent to its own receive right comes back through `mach_msg2_trap`, the path libsystem_kernel's `mach_msg()` takes (`MACH64_SEND_MQ_CALL`).
+
+A failed check exits with its number, which the kernel's "initproc exited" panic carries. On success PID 1 blocks in a Mach receive. `sbsa_boot_test` asserts `BSD root: md0` and the program's lines through `pid1: all checks passed`.
+
+Xcode's `ld` links it: `-static`, an `LC_UNIXTHREAD` entry and an ad hoc linker signature, which the arm64 kernel requires of every executable page. The toolchain's `ld64.lld` implements neither `-static` nor `LC_UNIXTHREAD`.
+
+Debugging: QEMU's gdbstub (`-s`) with `lldb`, loading `kernel.release.sbsa.unstripped` with `--slide 0x8000` (the kernel's offset inside the collection at slide 0) and hardware breakpoints (`breakpoint set -H`). Panic `caller` and `pc` values minus 0x8000 symbolise with `atos` against the unstripped kernel. The kernel has no line tables, so a hardware breakpoint on `os_reason_create` or on a return site, plus `bt` and a register read, is the quickest way to place an exec failure. Exit-reason namespaces are in `bsd/sys/reason.h`: 9 is `OS_REASON_EXEC`, not codesigning (3).
 
 **Open threads (parked 2026-09-28).** In order of the boot path:
-- **P1-07, the next boot blocker.** Boot stops in the root-device wait above. The first root is mockfs with a PID 1 test binary. `sbsa_boot_test`'s last expected line (`Waiting on <dict ID=`) moves on when it lands.
+- **A 30-second idle stall** in BSD initialisation. The boot shows it with or without a ramdisk. Whether it predates patches 0011–0013 isn't confirmed: the earlier boot test stopped in the root wait, and its time wasn't recorded. The console stops after `using 2511 buffer headers`, and the rest of the boot arrives at once when the stall ends, so the stall itself may lie anywhere after that line. A backtrace during the stall shows the CPU in `cpu_idle`. So a thread is waiting on a timeout, either a genuine 30-second wait or short sleeps whose timer deadlines aren't delivered on time (P1-06's timer path). It makes `sbsa_boot_test` take about 36 s.
+- **P1-08, the next userland step.** Cross SDK, an HFS+ ramdisk root, launchd-842, getty and a shell. It replaces mockfs's single executable. Patch 0013's static-PID-1 allowance stays for init shims.
 - **P1-06, SMP half (status `doing`).** The boot CPU is done. Still to do: bringing up secondaries through `NeoDarwinPSCI` (`CPU_ON`), per-CPU GIC redistributor init and IPI measurement. The exit is `hw.ncpu` equal to the MADT count.
   - **PSCI conduit:** QEMU `virt` without EL3 firmware uses `hvc`, but `sbsa_isa_audit` forbids `hvc` in the kernel, so the conduit choice (take it from the FADT/DT, and how the audit treats it) comes first.
   - **Testing:** `tools/efi/qemu_efi_test.sh --smp N` runs SMP boots.
