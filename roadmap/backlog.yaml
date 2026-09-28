@@ -71,13 +71,13 @@ epics:
     exit: "upstream.lock for openzfs points at a tagged commit with module/os/macos present"
     doc: docs/architecture/filesystems.md
   - id: P0-09
-    title: "Embedded Swift UEFI target — swift_embedded_binary rule, PE/COFF via lld-link, C shim for the firmware ABI, hello-world EFI app on QEMU; C loader target kept as fallback"
+    title: "Embedded Swift UEFI target — swift_embedded_uefi_binary (Embedded Swift → bitcode → aarch64 COFF → lld-link PE32+), UEFI header module, host toolchain detection, QEMU boot test"
     phase: 0
     owner: build
-    status: todo
+    status: done
     depends: [P0-02]
-    exit: "an Embedded Swift EFI app prints on the PL011 under QEMU virt from BOOTAA64.EFI"
-    doc: docs/architecture/language-policy.md
+    exit: "//boot/neoboot:neoboot_qemu_test: BOOTAA64.EFI prints through ConOut and directly to the PL011 on QEMU virt + EDK2, then powers off"
+    doc: toolchains/README.md
   - id: P0-10
     title: "Language-policy CI gates — strict concurrency, no-allocation diagnostics for T2 modules, -no-allocations for T3, lang-audit for C/C++ justifications; kext_swift feasibility trial on a non-critical kext"
     phase: 0

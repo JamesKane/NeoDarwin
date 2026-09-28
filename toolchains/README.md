@@ -5,6 +5,20 @@
 
 **Target state (P0-02):** one pinned tarball per host OS, `neodarwin-toolchain-<ver>`, built from `swiftlang/llvm-project`: clang, lld (`ld64.lld`, `lld-link`), llvm binutils, `swiftc` with Embedded Swift, `compiler-rt`. Registered here as `cc_toolchain` and Swift toolchains and selected by `--platforms`. Until it lands, NeoDarwin target platforms in `//platforms` have no toolchain and do not resolve.
 
+## Embedded Swift (language policy T3)
+
+Xcode's toolchain ships no Embedded Swift standard library, so Embedded builds use a swift.org toolchain installed with swiftly (`swiftly install 6.3.2`). `//toolchains/embedded:repo.bzl` locates it at fetch time (newest `swift-6.3*` toolchain with the `aarch64-none-none-elf` Embedded stdlib and `lld-link`; override with `ND_EMBEDDED_TOOLCHAIN`). Verified with swift-6.3.2-RELEASE.
+
+UEFI images are PE32+, but the Embedded stdlib ships only for ELF-style triples. `rules/efi.bzl` therefore builds in three steps:
+
+| Step | Tool | Output |
+|---|---|---|
+| Swift for `aarch64-none-none-elf`, `-enable-experimental-feature Embedded -no-allocations`, stack protector disabled in the frontend | `swiftc` | LLVM bitcode |
+| retarget to `aarch64-unknown-windows-msvc` | `clang` | COFF object |
+| `/subsystem:efi_application /nodefaultlib` | `lld-link` | PE32+ EFI application |
+
+This is sound on AArch64 because UEFI uses the standard AAPCS64 calling convention there, the same as the ELF target, so Swift calls firmware function pointers directly. It would not be on x86-64, where UEFI uses the Microsoft x64 convention. The Swift stack protector is disabled because the Windows backend implements it with MSVC `/GS` cookies (`__security_cookie`), which do not exist in firmware; compiler-emitted `memset`/`memcpy`/`memmove` come from a small `-fno-builtin` C file.
+
 ## XNU builds
 
 The XNU actions (`rules/xnu.bzl`) also use the host Xcode: its macOS SDK is the base of the build SDK and its clang compiles the kernel. They carry `requires-darwin` and `no-remote`. XNU's own warning list is tuned to Apple's internal compiler, so upstream code builds with `BUILD_WERROR=0`; NeoDarwin's own code keeps warnings as errors.
@@ -17,5 +31,6 @@ The XNU actions (`rules/xnu.bzl`) also use the host Xcode: its macOS SDK is the 
 |---|---|
 | Swift 6 language mode (strict concurrency on) | `-swift-version 6` |
 | warnings are errors | `-warnings-as-errors` |
-| Embedded Swift (T3) | `-enable-experimental-feature Embedded -wmo` |
-| no heap allocation (T3) | `-no-allocations` |
+| Embedded Swift (T3) | `-enable-experimental-feature Embedded -wmo` (swift.org toolchain; Xcode has no Embedded stdlib) |
+| no heap allocation (T3) | `-no-allocations` (rejects, among others, closures that capture mutable locals) |
+| no stack protector (UEFI) | `-Xfrontend -disable-stack-protector` |

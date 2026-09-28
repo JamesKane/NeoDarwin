@@ -87,7 +87,7 @@ The kernel creates a linear "physmap" of exactly `[physBase, physBase+memSize)` 
 
 ### 2.1 UEFI loader → kernel handoff ("neoboot")
 
-**Format:** A UEFI application (`BOOTAA64.EFI`) written in **Embedded Swift** with a C shim for the UEFI calling convention (language policy T3); a C build of the same loader is kept as the fallback until the Swift build boots the kernel on QEMU and hardware. It needs no runtime services after `ExitBootServices` and never returns.
+**Format:** A UEFI application (`BOOTAA64.EFI`) written in **Embedded Swift** (language policy T3), built by `rules/efi.bzl` (see `toolchains/README.md`). AArch64 UEFI uses the standard AAPCS64 calling convention, so Swift calls firmware services directly; the only C is the UEFI structure header and the compiler's memory routines. The toolchain was proven on QEMU in P0-09, so no C fallback loader is kept. It needs no runtime services after `ExitBootServices` and never returns.
 
 **What it loads:** an `MH_FILESET` kernelcache. Rationale: on arm64 `OSKext` disables kext requests to userland (`libkern/c++/OSKext.cpp:354-356`) and safe-boot handling assumes the booter loaded a kext collection (`OSKext.cpp:1015-1023`). For milestones M0–M4 the fileset contains only the kernel because the platform expert is compiled in (§2.3); real kexts appear at M5.
 

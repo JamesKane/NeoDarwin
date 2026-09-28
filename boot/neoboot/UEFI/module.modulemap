@@ -1,0 +1,4 @@
+module UEFI {
+  header "uefi.h"
+  export *
+}

@@ -48,7 +48,7 @@ Portability, performance, expressibility: those are the only three grounds for T
 
 | Risk | Mitigation |
 |---|---|
-| Embedded Swift on UEFI (PE/COFF, Microsoft ABI for firmware callbacks) is young | C shim for the firmware ABI; `neoboot` keeps a C build target as the fallback until the Swift build boots the kernel on QEMU and hardware (P0-09 exit test) |
+| Embedded Swift on UEFI is young; the Embedded stdlib ships no PE/COFF target | resolved for AArch64 (P0-09): Swift targets `aarch64-none-none-elf`, clang retargets the bitcode to aarch64 COFF, `lld-link` produces the PE32+ image; AArch64 UEFI uses AAPCS64, so no calling-convention shim. x86-64 UEFI uses the Microsoft x64 convention and will need `@convention(c)` thunks or a C shim (Phase 6a) |
 | Swift in kexts: no runtime, kernel calling conventions, `-mkernel` semantics | prove on one non-critical kext first (P0-10); kexts remain C++ if it fails |
 | Performance annotations and `Span`/`InlineArray` availability differ across toolchain versions | tier rules name the intent; the pinned toolchain's spelling is recorded in `toolchains/README.md` and updated on each bump |
 | Foundation and Dispatch dependencies creeping into base libraries | base-set libraries are built with no Foundation import; a Bazel aspect fails the build on `import Foundation` outside packages |

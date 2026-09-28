@@ -45,3 +45,9 @@ http_archive(
     strip_prefix = "libdispatch-libdispatch-1542.0.4",
     urls = ["https://github.com/apple-oss-distributions/libdispatch/archive/refs/tags/libdispatch-1542.0.4.tar.gz"],
 )
+
+# Embedded Swift toolchain (language policy T3) located on the host until the
+# pinned NeoDarwin toolchain lands (P0-02). See toolchains/embedded/repo.bzl.
+nd_embedded_swift = use_repo_rule("//toolchains/embedded:repo.bzl", "nd_embedded_swift")
+
+nd_embedded_swift(name = "nd_embedded_swift")
