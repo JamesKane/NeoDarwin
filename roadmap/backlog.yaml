@@ -184,13 +184,13 @@ epics:
     exit: "console on a 16550 SPCR board under QEMU"
     doc: docs/kernel/arm64-sbsa-bringup.md
   - id: P1-13
-    title: "Kernel crypto provider (ndcrypto, compiled into the kernel) — fill crypto_functions and call register_crypto_functions() before kmem_crypto_init, per the reuse order (repository.md §3.1): xnu's own APSL corecrypto subset (SHA-256, HMAC, NIST DRBG for the random_* entries, HKDF, CBC, GCM); xnu-1699's open AES (Gladman), DES (Eric Young), SHA-2 (Gifford), MD5 and SHA-1 behind the APSL corecrypto headers; ChaCha20-Poly1305 from FreeBSD; RSA PKCS#1 v1.5 verify as new BSD-2 code. Apple's evaluation-only corecrypto is not used"
+    title: "ndcrypto, the kernel crypto provider, compiled in and registered at EARLY_BOOT before kmem_crypto_init: xnu's own corecrypto subset (digest framework, SHA-256, HMAC, HMAC-DRBG, GCM multiply) plus FreeBSD primitives (MD5, SHA-1, SHA-384/512, AES, DES/3DES, ChaCha20, libsodium Poly1305, BearSSL RSA verify) behind Apple's APSL corecrypto headers, with new generic CBC/CTR/XTS/GCM/CTS3 factories. Mapping: docs/kernel/crypto-provider.md"
     phase: 1
     owner: kernel-bridge
     status: todo
     depends: [P1-03]
     exit: "the SBSA kernel boots past kmem_crypto_init on QEMU virt (today: data abort at crypto_random_kmem_ctx_size, NULL crypto_functions); each algorithm passes its NIST/RFC known-answer vectors in a host test"
-    doc: docs/kernel/arm64-sbsa-bringup.md
+    doc: docs/kernel/crypto-provider.md
   # ---- Phase 2: Base system, packaging, updates ----
   - id: P2-01
     title: "ndpkg format, manifest schema, nd_package rule, ndsign"
