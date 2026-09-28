@@ -13,12 +13,13 @@ XNU, built from Apple's published `xnu-12377.1.9` (macOS 26.0 release set) by th
 | `//kernel:sbsa_isa_audit` | Apple-ISA audit: fails if the kernel contains implementation-defined system-register accesses, `hvc`, or Apple AMX/GXF encodings (baseline empty; manual; kernel CI job) | seconds after the build |
 | `//kernel:sbsa_kc` | **`kernelcache.release.sbsa`**: the SBSA kernel alone in an `MH_FILESET` boot collection, built by `//tools/kcgen` (layout: `docs/kernel/arm64-sbsa-bringup.md` §2.1.1) | ~1 s after the build |
 | `//kernel:sbsa_kc_check` | `kcheck` on the collection, including the byte-for-byte round-trip against `kernel.release.sbsa` (manual; kernel CI job) | seconds after the build |
+| `//kernel:sbsa_boot_test` | neoboot boots the collection on QEMU `virt` (`neoverse-n2`) to `iBoot version: neoboot-0.1` (manual; kernel CI job; needs QEMU) | ~6 s after the build |
 | `//kernel:vmapple_release_gaps` | Apple's public VMAPPLE config with no patches; the report of symbols its link lacks | ~9 min |
 | `//kernel:vmapple_link_gap_ratchet` | fails if that gap grows (manual; kernel CI job) | seconds after the build |
 
 ## What the build established
 
-**The SBSA kernel builds and links from public sources alone** (2026-09-27): `kernel.release.sbsa`, a 12.4 MB Mach-O `arm64` executable with no undefined symbols, from Apple's `xnu-12377.1.9` archive plus NeoDarwin's six patches and `sdk/` shims, without Apple's Kernel Debug Kit. It has not been booted: the loader (P1-03) does not exist yet.
+**The SBSA kernel builds and links from public sources alone** (2026-09-27): `kernel.release.sbsa`, a 12.4 MB Mach-O `arm64` executable with no undefined symbols, from Apple's `xnu-12377.1.9` archive plus NeoDarwin's patches and `sdk/` shims, without Apple's Kernel Debug Kit. It boots on QEMU `virt` as far as IOKit start (2026-09-28, `sbsa_boot_test`); the next blocker is the kernel crypto provider (P1-13, `docs/kernel/arm64-sbsa-bringup.md` §2.1.2).
 
 The route there, measured on Apple's own public VMAPPLE configuration: every source compiles, but the link lacks 395 symbols (`link_gaps/vmapple_release.txt`), which Apple's build takes from a closed per-SoC archive in the KDK. They closed as follows.
 

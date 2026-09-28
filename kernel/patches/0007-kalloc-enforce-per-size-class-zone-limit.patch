@@ -1,0 +1,75 @@
+From: NeoDarwin
+Subject: [PATCH] kalloc: enforce the per-size-class kalloc_type zone limit
+
+kalloc_type_create_zones_fixed() holds each size class's signature and
+type zones, plus the shared zone, in kt_zones_for_size[32] on the stack.
+The only guard is an assert, which RELEASE kernels compile out. The SBSA
+kernel's kalloc_type sites give the 48-byte class 15 signature zones and
+17 type zones: the 33rd entry is written past the array, over the
+neighbouring kt_zones_type[], and the next size class computes 1285 zones
+and panics in zone_set_sig_eq() ("zone 0 isn't in the zone_array").
+
+kalloc_type_apply_policy() now caps each size class at
+KT_ZONES_FOR_SIZE_SIZE - 1 zones, taking from the type share first. The
+cap only ever merges zones (less type isolation in the capped class);
+it never changes which zone a signature group is placed in otherwise.
+
+Found booting kernelcache.release.sbsa on QEMU virt (P1-03).
+
+Rebase-risk: low.
+---
+--- a/osfmk/kern/kalloc.c	2026-09-28 07:07:16
++++ b/osfmk/kern/kalloc.c	2026-09-28 07:07:16
+@@ -1563,6 +1563,13 @@
+ 		}
+ 	}
+ }
++
++#ifndef __BUILDING_XNU_LIB_UNITTEST__
++#define KT_ZONES_FOR_SIZE_SIZE 32
++#else /* __BUILDING_XNU_LIB_UNITTEST__ */
++/* different init sequence in unit-test requires a bigger buffer in the kalloc zones initialization */
++#define KT_ZONES_FOR_SIZE_SIZE 35
++#endif /* __BUILDING_XNU_LIB_UNITTEST__ */
+ 
+ static uint16_t
+ kalloc_type_apply_policy(
+@@ -1588,6 +1595,24 @@
+ 	wasted_zones += kalloc_type_distribute_budget(freq_total_list,
+ 	    kt_zones_type, zbudget_type, 0);
+ 	kalloc_type_redistribute_budget(freq_total_list, kt_zones_type);
++
++	/*
++	 * kalloc_type_create_zones_fixed() keeps a size class's zones, plus its
++	 * shared zone, in a KT_ZONES_FOR_SIZE_SIZE array on the stack and only
++	 * asserts that they fit. Enforce the limit here, taking zones from the
++	 * type share first, so a size class with many unique signatures cannot
++	 * overrun that array in a RELEASE kernel.
++	 */
++	for (uint16_t i = 0; i < MAX_K_ZONE(kt_zone_cfg); i++) {
++		while (kt_zones_sig[i] + kt_zones_type[i] + 1 > KT_ZONES_FOR_SIZE_SIZE) {
++			if (kt_zones_type[i] > 0) {
++				kt_zones_type[i]--;
++			} else {
++				kt_zones_sig[i]--;
++			}
++			wasted_zones++;
++		}
++	}
+ 
+ 	/*
+ 	 * Print stats when KT_OPTIONS_DEBUG boot-arg present
+@@ -1731,13 +1756,6 @@
+ 	}
+ }
+ 
+-#ifndef __BUILDING_XNU_LIB_UNITTEST__
+-#define KT_ZONES_FOR_SIZE_SIZE 32
+-#else /* __BUILDING_XNU_LIB_UNITTEST__ */
+-/* different init sequence in unit-test requires a bigger buffer in the kalloc zones initialization */
+-#define KT_ZONES_FOR_SIZE_SIZE 35
+-#endif /* __BUILDING_XNU_LIB_UNITTEST__ */
+-
+ __startup_func
+ static uint16_t
+ kalloc_type_distribute_zone_for_type(

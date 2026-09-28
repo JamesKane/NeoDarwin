@@ -7,7 +7,10 @@ package(default_visibility = ["//visibility:public"])
 swift_embedded_uefi_binary(
     name = "neoboot",
     srcs = glob(["Sources/*.swift"]),
-    c_srcs = ["runtime/mem.c"],
+    c_srcs = [
+        "runtime/arm64.c",
+        "runtime/mem.c",
+    ],
     hdrs = [
         "UEFI/module.modulemap",
         "UEFI/uefi.h",
@@ -19,22 +22,25 @@ lang_audit_test(
     name = "neoboot_lang_audit",
     srcs = [
         "UEFI/uefi.h",
+        "runtime/arm64.c",
         "runtime/mem.c",
     ],
 )
 
-# P0-09 exit: the Embedded Swift EFI application boots as \EFI\BOOT\BOOTAA64.EFI
-# on QEMU virt with EDK2, prints through the firmware console and directly to
-# the PL011, and powers the machine off. Needs QEMU with its EDK2 firmware.
+# The loader starts, finds no \NeoDarwin\kernelcache on an ESP that has none,
+# and says so. Fast and kernel-free, so it runs in the default suite; the
+# kernel boot itself is //kernel:sbsa_boot_test. Needs QEMU with its EDK2
+# firmware.
 sh_test(
     name = "neoboot_qemu_test",
     size = "small",
     srcs = ["//tools/efi:qemu_efi_test.sh"],
     args = [
+        "--until-lines",
         "$(rootpath :neoboot)",
         "45",
-        "'neoboot: Embedded Swift on UEFI (ConOut)'",
-        "'neoboot: Embedded Swift on UEFI (PL011)'",
+        "'neoboot 0.1: loading NeoDarwin'",
+        "'neoboot: no \\NeoDarwin\\kernelcache on the boot volume'",
     ],
     data = [":neoboot"],
     tags = ["qemu"],

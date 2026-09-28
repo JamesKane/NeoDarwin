@@ -107,9 +107,9 @@ epics:
     title: "neoboot v0 (Embedded Swift) — flat kernelcache load (the kernel applies its own fixups), boot_args, EL2→EL1, cache clean, jump"
     phase: 1
     owner: loader
-    status: todo
+    status: done
     depends: [P0-07, P0-09]
-    exit: "kernel prints 'iBoot version:' on PL011 under QEMU virt"
+    exit: "//kernel:sbsa_boot_test: neoboot boots kernelcache.release.sbsa on QEMU virt (neoverse-n2) and the kernel prints 'iBoot version: neoboot-0.1' on the PL011"
     doc: docs/kernel/arm64-sbsa-bringup.md
   - id: P1-04
     title: "DT-ABI v1 + Apple-format DT synthesis from MADT/GTDT/SPCR + dtdump"
@@ -182,6 +182,14 @@ epics:
     status: todo
     depends: [P1-04]
     exit: "console on a 16550 SPCR board under QEMU"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-13
+    title: "Kernel crypto provider — something must call register_crypto_functions() before kmem_crypto_init (Apple's corecrypto kext is closed); decide between an open provider kext and Apple's published corecrypto source under its license"
+    phase: 1
+    owner: kernel-bridge
+    status: todo
+    depends: [P1-03]
+    exit: "the SBSA kernel boots past kmem_crypto_init on QEMU virt (today: data abort at crypto_random_kmem_ctx_size, NULL crypto_functions)"
     doc: docs/kernel/arm64-sbsa-bringup.md
   # ---- Phase 2: Base system, packaging, updates ----
   - id: P2-01
@@ -376,7 +384,7 @@ epics:
     owner: graphics
     status: todo
     depends: [P4-01, P4-02, P4-14, P5-02, P4-17]
-    exit: "deskconform's 53 checks pass against wsys; stats shows p99 under 4 ms and zero composites when idle; Super+1..9 switches workspaces"
+    exit: "deskconform's 57 checks (WP-T-001..057) and the version 2 checks (WP-T-058..153) pass against wsys; stats shows p99 under 4 ms and zero composites when idle; Super+1..9 switches workspaces"
     doc: docs/desktop/window-protocol.md
   - id: P4-04
     title: "Wayland core front door (libwayland, wl_shm, xdg_shell)"

@@ -78,6 +78,7 @@ SBSA_PATCHES = [
     "patches/0004-config-sbsa-exports.patch",
     "patches/0005-bsd-neodarwin-trustcache-runtime.patch",
     "patches/0006-sbsa-no-apple-implementation-registers.patch",
+    "patches/0007-kalloc-enforce-per-size-class-zone-limit.patch",
 ]
 
 libfirehose_kernel(
@@ -157,4 +158,29 @@ sh_test(
         "//tools/kcheck",
     ],
     tags = ["manual", "kernel"],
+)
+
+# P1-03: neoboot boots the collection on QEMU virt and the kernel reaches the
+# listed serial lines. The CPU must implement Armv8.4's range TLB
+# invalidation (the kernel is built for armv8.4-a); QEMU's cortex-a76 and
+# neoverse-v1 models do not, so this uses neoverse-n2.
+sh_test(
+    name = "sbsa_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--until-lines",
+        "$(rootpath //boot/neoboot)",
+        "120",
+        "'Darwin Kernel Version 25.0.0'",
+        "'iBoot version: neoboot-0.1'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+    ],
+    tags = ["manual", "kernel", "qemu"],
 )

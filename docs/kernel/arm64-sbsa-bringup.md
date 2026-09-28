@@ -94,7 +94,7 @@ The kernel creates a linear "physmap" of exactly `[physBase, physBase+memSize)` 
 **Loading rules (mirrors iBoot):**
 | Step | Rule | Why (source) |
 |---|---|---|
-| Placement | Copy the kernelcache file as one image: `kcgen` makes every file offset equal its VM offset and materialises bss, so no per-segment work is needed. The collection header's physical address is 2 MiB aligned | `start.s:545-574`: for a fileset member the base is the collection header at `VM_KERNEL_LINK_ADDRESS + slide`, which iBoot guarantees is on an L2 boundary |
+| Placement | Copy the kernelcache file as one image: `kcgen` makes every file offset equal its VM offset and materialises bss, so no per-segment work is needed. The collection header's physical address must equal its virtual address `VM_KERNEL_LINK_ADDRESS + slide` modulo 32 MiB; with slide 0 on QEMU `virt` that puts it at `0x41004000` | `start.s:545-574`: for a fileset member the base is the collection header. `create_bootstrap_mapping` then maps virtual to physical block for block with 16 KiB-granule L2 blocks, which are 32 MiB |
 | Fixups | None in the loader; it must not touch pointers. The kernel rebases the whole collection from its `LC_DYLD_CHAINED_FIXUPS` before anything else runs. `kcheck` verifies the chains at build time (§2.1.1) | `arm_slide_rebase_and_sign_image()` → `kernel_collection_slide()` (`osfmk/arm/arm_init.c:230-285`, compiled for `config_pmap_ppl`, which SBSA uses like VMAPPLE; the SPTM kernel has its own copy in `arm_init_sptm.c`) |
 | KASLR | `slide` = random multiple of 16 KiB inside the chosen window; it is implied by where the collection is mapped, never written into the image | the kernel computes `slide = &_mh_execute_header − kernel __TEXT.vmaddr` (`arm_init.c:246`) |
 | boot_args | `Revision=2 Version=2`; `virtBase = VM_KERNEL_LINK_ADDRESS + slide − (kernelcache_phys − physBase)`; pointers (`deviceTreeP`) are given in **virtual** terms (kernel uses them after MMU on via `PE_state.deviceTreeHead`, `pe_init.c:423`) | `boot.h:61-64`, `pe_init.c:412-444` |
@@ -123,6 +123,21 @@ The boot collection neoboot loads is built by `//tools/kcgen` (`//kernel:sbsa_kc
 | | `__LINKEDIT` | kernel `__LINKINFO` and `__LINKEDIT`, then the chained fixups | `kernel_collection_slide()` locates the fixups through it |
 
 The kernel is linked as position-independent (`MH_PIE`) with 65,407 local `ARM64_RELOC_UNSIGNED` relocations. `kcgen` moves the whole kernel by one constant, so PC-relative code is unchanged. Each relocation becomes a `DYLD_CHAINED_PTR_64_KERNEL_CACHE` fixup, one chain per 16 KiB page, with no pointer authentication (plain `arm64`). `kcgen` also moves the symbol values, section addresses and entry point by the same constant, and sets `MH_DYLIB_IN_CACHE` on the kernel's header. That flag is how `start.s` and `arm_init` recognise a fileset member.
+
+### 2.1.2 First boot on QEMU (P1-03)
+
+`//kernel:sbsa_boot_test` boots neoboot and `kernelcache.release.sbsa` on QEMU `virt` (`gic-version=3`, 2 GiB, one CPU). In under six seconds the kernel goes through the loader handoff, its own fixups, MMU and VM bootstrap, zalloc, the scheduler, IPC and logging, and prints `iBoot version: neoboot-0.1` from `PE_init_iokit`. The device tree is still hand-written for `virt` in `boot/neoboot/Sources/Platform.swift`; P1-04 derives it from ACPI.
+
+What the first boot established:
+
+| Finding | Consequence |
+|---|---|
+| The kernel executes `TLBI RVALE1IS` (FEAT_TLBIRANGE, part of Armv8.4). QEMU's `cortex-a76` (v8.2) and `neoverse-v1` models don't advertise it, so the instruction is undefined there | test on `neoverse-n2` (Armv9.0); real targets such as the CD8180 (Armv9.2) have it |
+| kalloc_type's zone policy gave the 48-byte class 15 + 17 zones; with the shared zone that overran a 32-entry stack array, which upstream only asserts on | patch 0007 enforces the limit |
+| With no framebuffer, `PE_init_iokit`'s progress-bar centring loop never ends | `-noprogress` in neoboot's default command line until GOP video is passed |
+| Next stop: data abort in `kmem_crypto_init`, because nothing has called `register_crypto_functions()` (Apple's corecrypto kext does this) | P1-13 |
+
+Debugging: QEMU's gdbstub (`-s`) with `lldb`, loading `kernel.release.sbsa.unstripped` with `--slide 0x8000` (the kernel's offset inside the collection at slide 0) and hardware breakpoints (`breakpoint set -H`). Panic `caller` and `pc` values minus 0x8000 symbolise with `atos` against the unstripped kernel.
 
 ### 2.2 ACPI → kernel: the two-tier strategy
 
