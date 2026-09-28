@@ -56,7 +56,7 @@ images/BUILD                      # system_image, esp_image, ramdisk targets
 | `mig_library(name, defs, user_side, server_side)` | MIG C stubs as `cc_library` | Xcode MIG build phases |
 | `exports_list(name, srcs)` | linker export/alias files | `config/*.exports` + `generate_linker_exports.sh` |
 | `kext(name, srcs, info_plist, deps, bundle_id)` | `.kext` bundle with `Info.plist`, symbol set validation against the kernel's exports | Xcode kext templates + `kextsymboltool` |
-| `kext_collection(name, kernel, kexts, kind = "boot" \| "system" \| "aux")` | `MH_FILESET` kernel collection via `kcgen`, fixup chains emitted | `kmutil create` |
+| `kext_collection(name, kernel, kexts, kind = "boot" \| "system" \| "aux")` | `MH_FILESET` kernel collection via `kcgen`, fixup chains emitted. Implemented in `rules/kc.bzl` for `kind = "boot"` with the kernel alone; `kexts` and the other kinds arrive in Phase 5 | `kmutil create` |
 | `dext(name, …)` | DriverKit-style userland driver bundle | Xcode |
 | `nd_package(name, manifest, files, deps, hooks)` | `.ndpkg` with signed manifest | none |
 | `system_image(name, packages, kernel_collection, rootfs = "zfs" \| "hfs" \| "ramdisk")` | bootable image + ESP tree | none |
@@ -75,13 +75,15 @@ Written in Swift 6 (language policy T1); all built by the same graph and used as
 
 | Tool | Role |
 |---|---|
-| `kcgen` | links kernel + kexts into an `MH_FILESET` with `LC_FILESET_ENTRY` and fixup chains; validates symbol resolution against export lists |
-| `kcheck` | verifies every rebased pointer in a collection lands inside the image (loader-fixup correctness) |
+| `kcgen` | links kernel + kexts into an `MH_FILESET` with `LC_FILESET_ENTRY` and fixup chains; validates symbol resolution against export lists. Kernel-only today: layout in `docs/kernel/arm64-sbsa-bringup.md` §2.1.1 |
+| `kcheck` | verifies a collection against the kernel's boot-time assumptions: flat layout, chain format and one chain per page, every fixup target inside the image, the top-level segments `arm_vm_init()` derives kext regions from, `__PRELINK_INFO`; with `--kernel`, round-trips the collection byte for byte against its source kernel |
 | `dtdump` | prints/validates an Apple-format device tree against `dt-abi.md` |
 | `ndimage` | assembles ESP + system image from packages |
 | `ndsign` | Ed25519 signing of manifests, kernel collections and images; keys in `keyd` |
 | `xnu2bazel` | converts XNU `conf/files*`, `Makefile` fragments and `MASTER*` configs into BUILD files |
 | `lang-audit` | lists every first-party C/C++ file with its justification line; fails CI on a missing one |
+
+`kcgen` and `kcheck` share `//tools/macho`, a Mach-O reader and writer with no Foundation dependency. `//tools/kcgen:selftest` exercises both on a synthetic kernel in the default `bazel test //...`. It passes a clean collection and requires kcheck to catch each of nine corruptions.
 
 ## 6. Reproducibility and CI
 

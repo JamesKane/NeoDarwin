@@ -1,0 +1,39 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:swift.bzl", "nd_swift_binary", "nd_swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+nd_swift_library(
+    name = "kcgen_lib",
+    srcs = ["KernelCollection.swift"],
+    module_name = "KCGen",
+    deps = ["//tools/macho:MachO"],
+)
+
+nd_swift_binary(
+    name = "kcgen",
+    srcs = ["main.swift"],
+    deps = [
+        ":kcgen_lib",
+        "//tools/macho:MachO",
+    ],
+)
+
+nd_swift_binary(
+    name = "kc_selftest",
+    testonly = True,
+    srcs = glob(["selftest/*.swift"]),
+    deps = [
+        ":kcgen_lib",
+        "//tools/kcheck:kcheck_lib",
+        "//tools/macho:MachO",
+    ],
+)
+
+sh_test(
+    name = "selftest",
+    size = "small",
+    srcs = ["run_selftest.sh"],
+    args = ["$(rootpath :kc_selftest)"],
+    data = [":kc_selftest"],
+)

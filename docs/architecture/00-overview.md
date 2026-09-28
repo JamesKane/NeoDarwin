@@ -31,7 +31,7 @@ Everything above the kernel is a **package** (see packaging design). The kernel 
 
 | Subsystem | Purpose | Language | Design doc |
 |---|---|---|---|
-| `neoboot` | UEFI loader: ACPI static tables → Apple device tree, Mach-O fileset loading, fixups, boot_args | Embedded Swift (T3); UEFI structures from a C header module; AArch64 UEFI uses AAPCS64, so no calling-convention shim | kernel/arm64-sbsa-bringup.md §2.1, language-policy.md |
+| `neoboot` | UEFI loader: ACPI static tables → Apple device tree, flat Mach-O fileset loading (the kernel applies its own fixups), boot_args | Embedded Swift (T3); UEFI structures from a C header module; AArch64 UEFI uses AAPCS64, so no calling-convention shim | kernel/arm64-sbsa-bringup.md §2.1, language-policy.md |
 | kernel platform layer | `SBSA` board config, GICv3, PSCI IOPMGR, platform expert compiled into the kernel | C / C++ (IOKit; T4 by expressibility) | kernel/arm64-sbsa-bringup.md §2.3 |
 | `ndacpi.kext` | ACPICA runtime, `IOACPIPlatformDevice` nubs, PCIe ECAM, MSI | ACPICA in C (upstream); glue C++; first `kext_swift` trial | kernel/arm64-sbsa-bringup.md §2.2, drivers.md |
 | driver families | virtio, NVMe, AHCI, XHCI/USB, network, SD/MMC, GPIO/I2C/SPI, framebuffer | kexts: C++ shells, FreeBSD-derived C; dexts: Swift (T1 control, T2 data path) | drivers.md |

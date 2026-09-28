@@ -58,10 +58,10 @@ epics:
     title: "kcgen skeleton (MH_FILESET writer, fixup chains) and kcheck"
     phase: 0
     owner: build
-    status: todo
+    status: done
     depends: [P0-02]
-    exit: "kcgen round-trips a kernel-only fileset that the loader boots"
-    doc: docs/architecture/build-system.md
+    exit: "//kernel:sbsa_kc_check: kcheck passes kernelcache.release.sbsa and round-trips it against kernel.release.sbsa (every relocation a fixup, every other byte identical); //tools/kcgen:selftest catches each corruption it plants. Booting the collection is P1-03's exit"
+    doc: docs/kernel/arm64-sbsa-bringup.md
   - id: P0-08
     title: "Verify OpenZFS macOS layer upstream status; create mirror-openzfs"
     phase: 0
@@ -104,7 +104,7 @@ epics:
     exit: "//kernel:sbsa_isa_audit passes with an empty baseline: no implementation-defined system-register access, hvc, AMX or GXF in kernel.release.sbsa"
     doc: kernel/README.md
   - id: P1-03
-    title: "neoboot v0 (Embedded Swift + C shim) — fileset load, chained fixups, boot_args, EL2→EL1, cache clean, jump"
+    title: "neoboot v0 (Embedded Swift) — flat kernelcache load (the kernel applies its own fixups), boot_args, EL2→EL1, cache clean, jump"
     phase: 1
     owner: loader
     status: todo

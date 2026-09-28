@@ -1,4 +1,5 @@
 # XNU kernel builds (docs/kernel/arm64-sbsa-bringup.md, docs/repository.md §3).
+load("//rules:kc.bzl", "kext_collection")
 load("//rules:xnu.bzl", "libfirehose_kernel", "nd_build_sdk", "xnu_headers", "xnu_kernel")
 
 package(default_visibility = ["//visibility:public"])
@@ -127,6 +128,33 @@ sh_test(
     data = [
         "isa_audit/sbsa_release.txt",
         ":sbsa_release",
+    ],
+    tags = ["manual", "kernel"],
+)
+
+# ---------------------------------------------------------------------------
+# Boot kernel collection: the SBSA kernel alone in an MH_FILESET, the format
+# neoboot loads (arm64-sbsa-bringup.md §2.1). The kernel applies the chained
+# fixups itself at arm_init; kcheck verifies them and round-trips the kernel.
+kext_collection(
+    name = "sbsa_kc",
+    kernel = ":sbsa_release",
+    out = "kernelcache.release.sbsa",
+)
+
+sh_test(
+    name = "sbsa_kc_check",
+    size = "small",
+    srcs = ["//tools/kcheck:kcheck_test.sh"],
+    args = [
+        "$(rootpath //tools/kcheck)",
+        "$(rootpath :sbsa_kc)",
+        "$(rootpaths :sbsa_release)",
+    ],
+    data = [
+        ":sbsa_kc",
+        ":sbsa_release",
+        "//tools/kcheck",
     ],
     tags = ["manual", "kernel"],
 )

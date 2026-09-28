@@ -11,6 +11,8 @@ XNU, built from Apple's published `xnu-12377.1.9` (macOS 26.0 release set) by th
 | `//kernel:sbsa_release` | **`kernel.release.sbsa`**: NeoDarwin's generic Arm kernel, patches 0001–0006, plain `arm64`, BTI off; also the unstripped image and a build report | ~9.5 min |
 | `//kernel:sbsa_kernel_test` | the kernel is a Mach-O 64-bit `arm64` executable with no undefined symbols (manual; kernel CI job) | seconds after the build |
 | `//kernel:sbsa_isa_audit` | Apple-ISA audit: fails if the kernel contains implementation-defined system-register accesses, `hvc`, or Apple AMX/GXF encodings (baseline empty; manual; kernel CI job) | seconds after the build |
+| `//kernel:sbsa_kc` | **`kernelcache.release.sbsa`**: the SBSA kernel alone in an `MH_FILESET` boot collection, built by `//tools/kcgen` (layout: `docs/kernel/arm64-sbsa-bringup.md` §2.1.1) | ~1 s after the build |
+| `//kernel:sbsa_kc_check` | `kcheck` on the collection, including the byte-for-byte round-trip against `kernel.release.sbsa` (manual; kernel CI job) | seconds after the build |
 | `//kernel:vmapple_release_gaps` | Apple's public VMAPPLE config with no patches; the report of symbols its link lacks | ~9 min |
 | `//kernel:vmapple_link_gap_ratchet` | fails if that gap grows (manual; kernel CI job) | seconds after the build |
 

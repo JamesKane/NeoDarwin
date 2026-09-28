@@ -1,0 +1,11 @@
+load("//rules:swift.bzl", "nd_swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Mach-O reading and writing for the host tools (kcgen, kcheck). No
+# Foundation, so the same code can move into neoboot's T3 build later.
+nd_swift_library(
+    name = "MachO",
+    srcs = glob(["*.swift"]),
+    module_name = "MachO",
+)

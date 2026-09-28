@@ -37,7 +37,7 @@ neoboot (UEFI application, "UEFI Loader Agent")                         [loader,
   2. Read ESP:\NeoDarwin\kernelcache (MH_FILESET), ESP:\NeoDarwin\ramdisk.img, ESP:\NeoDarwin\boot.cfg
   3. GetMemoryMap → choose the largest hole-free EfiConventional run ≥ 512 MiB → this is [physBase, physBase+memSize)
   4. AllocatePages inside that run: [kernelcache | Apple-DT | ramdisk | boot_args], kernel base 2 MiB-aligned (L2 boundary)
-  5. Apply LC_DYLD_CHAINED_FIXUPS with slide = load_vaddr − VM_KERNEL_LINK_ADDRESS (KASLR chosen here)
+  5. Copy the kernelcache as one flat image (no fixups: the kernel applies them itself in arm_init; KASLR slide chosen here by the placement)
   6. Synthesise Apple-format DT from ACPI (+ CNTFRQ_EL0, MPIDR list, RSDP address, memory-map)
   7. Fill boot_args {Revision=2, Version=2, virtBase, physBase, memSize, topOfKernelData, Video(from GOP), deviceTreeP, CommandLine, bootFlags, memSizeActual}
   8. ExitBootServices; mask DAIF; if CurrentEL==2: program HCR_EL2/CNTHCTL_EL2/CNTVOFF_EL2=0/CPTR_EL2, ERET to EL1
@@ -94,10 +94,10 @@ The kernel creates a linear "physmap" of exactly `[physBase, physBase+memSize)` 
 **Loading rules (mirrors iBoot):**
 | Step | Rule | Why (source) |
 |---|---|---|
-| Placement | Load all fileset segments contiguously preserving link-time relative layout; base 2 MiB aligned | `start.s:553-575` derives kernel base from `_mh_execute_header` and assumes an L2-boundary base |
-| Fixups | Walk `LC_DYLD_CHAINED_FIXUPS` and rebase every pointer by `slide` | Non-SPTM kernel does not self-slide (`kernel_collection_slide` only in `sptm/arm_init_sptm.c:289`) |
-| KASLR | `slide` = random multiple of 16 KiB inside the chosen window | `vm_kernel_slide` is computed from the mach header position (`arm_vm_init.c:105`) |
-| boot_args | `Revision=2 Version=2`; `virtBase = VM_KERNEL_LINK_ADDRESS + slide − (kernel_phys − physBase)`; pointers (`deviceTreeP`) are given in **virtual** terms (kernel uses them after MMU on via `PE_state.deviceTreeHead`, `pe_init.c:423`) | `boot.h:61-64`, `pe_init.c:412-444` |
+| Placement | Copy the kernelcache file as one image: `kcgen` makes every file offset equal its VM offset and materialises bss, so no per-segment work is needed. The collection header's physical address is 2 MiB aligned | `start.s:545-574`: for a fileset member the base is the collection header at `VM_KERNEL_LINK_ADDRESS + slide`, which iBoot guarantees is on an L2 boundary |
+| Fixups | None in the loader; it must not touch pointers. The kernel rebases the whole collection from its `LC_DYLD_CHAINED_FIXUPS` before anything else runs. `kcheck` verifies the chains at build time (§2.1.1) | `arm_slide_rebase_and_sign_image()` → `kernel_collection_slide()` (`osfmk/arm/arm_init.c:230-285`, compiled for `config_pmap_ppl`, which SBSA uses like VMAPPLE; the SPTM kernel has its own copy in `arm_init_sptm.c`) |
+| KASLR | `slide` = random multiple of 16 KiB inside the chosen window; it is implied by where the collection is mapped, never written into the image | the kernel computes `slide = &_mh_execute_header − kernel __TEXT.vmaddr` (`arm_init.c:246`) |
+| boot_args | `Revision=2 Version=2`; `virtBase = VM_KERNEL_LINK_ADDRESS + slide − (kernelcache_phys − physBase)`; pointers (`deviceTreeP`) are given in **virtual** terms (kernel uses them after MMU on via `PE_state.deviceTreeHead`, `pe_init.c:423`) | `boot.h:61-64`, `pe_init.c:412-444` |
 | Video | If GOP present: `v_baseAddr, v_rowBytes, v_width, v_height, v_depth=32, v_display=1`; else `v_display=0` (text console) | `pe_init.c:425-436, 536-548` |
 | CommandLine | `boot.cfg` contents, e.g. `serial=3 debug=0x14e rd=md0 -v cs_enforcement_disable=1` | `PE_boot_args()` in `pe_bootargs.c` |
 | EL | Enter kernel at **EL1**. If firmware hands off at EL2: `HCR_EL2 = RW`, `CNTHCTL_EL2 = EL1PCTEN|EL1PCEN`, `CNTVOFF_EL2 = 0`, `CPTR_EL2` no FP trap, `SCTLR_EL1 = RES1`, `SPSR_EL2 = EL1h + DAIF`, `ERET` | `start.s` never inspects `CurrentEL` and programs only `*_EL1` registers |
@@ -106,6 +106,23 @@ The kernel creates a linear "physmap" of exactly `[physBase, physBase+memSize)` 
 **Memory-map policy:** XNU cannot express holes. The loader selects the largest run of `EfiConventionalMemory` (plus `EfiBootServicesCode/Data` and `EfiLoaderData`, which are reclaimable after `ExitBootServices`) with no non-conventional descriptor inside it. `EfiACPIReclaim`, `EfiACPIMemoryNVS`, `EfiRuntimeServices*` and `EfiReserved` ranges must be *outside* the window; if firmware places one mid-DRAM the loader picks the larger side and logs the loss. ACPI table pages are copied into the window (into the DT-adjacent area, recorded in `/chosen/memory-map` as `ACPITables`) so the kernel-side ACPICA kext can reach them through the physmap.
 
 **Secondary CPU entry:** PSCI `CPU_ON` starts a core with MMU off at the caller's EL with `x0 = context`. XNU's reset vector (`LowResetVectorBase`, `start.s:106-203`) ignores `x0` and identifies itself by `MPIDR_EL1`, matching against `CpuDataEntries` populated from `/cpus`. So the loader has no per-CPU work; it only guarantees that the kernel is at EL1 and that `SMC` from EL1 reaches EL3 (`HCR_EL2.TSC = 0`).
+
+### 2.1.1 Kernel collection layout (`kcgen`)
+
+The boot collection neoboot loads is built by `//tools/kcgen` (`//kernel:sbsa_kc` → `kernelcache.release.sbsa`) and checked by `//tools/kcheck`. It is flat, so the file is the memory image. Offsets below are from the collection header, which sits at `VM_KERNEL_LINK_ADDRESS` (`0xfffffe0007004000`).
+
+| Offset | Top-level segment | Contents | Why (source) |
+|---|---|---|---|
+| 0 | `__TEXT` | collection header and load commands: 8 segments, `LC_DYLD_CHAINED_FIXUPS`, `LC_UUID`, one `LC_FILESET_ENTRY` (`com.apple.kernel`) | `arm_init.c:253`: the collection header is at `VM_KERNEL_LINK_ADDRESS + slide` |
+| 0x4000 | `__PRELINK_INFO` | XML plist: empty `_PrelinkInfoDictionary`, `_PrelinkKCID` = the collection UUID | `libsa/bootstrap.cpp:204-205`: dereferenced unconditionally in a fileset |
+| 0x8000 | `__PRELINK_TEXT` | empty (kexts, M5) | looked up by name (`arm_vm_init.c:2049`) |
+| 0x8000 | `__KERNEL` | kernel `__TEXT`, `__DATA_CONST`, `__TEXT_EXEC`, `__KLD`: the whole kernel moved up by 0x8000 | a NeoDarwin name; the kernel never looks this range up |
+| | `__DATA_CONST` | exactly kernel `__LASTDATA_CONST` | `arm_vm_init.c:2032-2038`: must contain it; the remainder becomes kext `PLK_DATA_CONST` |
+| | `__TEXT_EXEC` | empty, at kernel `__LAST` | `arm_vm_init.c:2020-2029`: must contain `__LAST`; anything after it is remapped as kext text, so it must end there |
+| | `__DATA` | kernel `__KLDDATA`, `__DATA` (bss written out as zeros), `__BOOTDATA` | `arm_vm_init.c:2041-2045`: must contain the kernel's empty `__PRELINK_DATA` |
+| | `__LINKEDIT` | kernel `__LINKINFO` and `__LINKEDIT`, then the chained fixups | `kernel_collection_slide()` locates the fixups through it |
+
+The kernel is linked as position-independent (`MH_PIE`) with 65,407 local `ARM64_RELOC_UNSIGNED` relocations. `kcgen` moves the whole kernel by one constant, so PC-relative code is unchanged. Each relocation becomes a `DYLD_CHAINED_PTR_64_KERNEL_CACHE` fixup, one chain per 16 KiB page, with no pointer authentication (plain `arm64`). `kcgen` also moves the symbol values, section addresses and entry point by the same constant, and sets `MH_DYLIB_IN_CACHE` on the kernel's header. That flag is how `start.s` and `arm_init` recognise a fileset member.
 
 ### 2.2 ACPI → kernel: the two-tier strategy
 
@@ -183,7 +200,7 @@ Each agent owns a directory, a test, and a written contract. Dependencies flow d
 | # | Agent | Inputs | Outputs | Depends on | Definition of done |
 |---|---|---|---|---|---|
 | A0 | **Build & Toolchain** | xnu tree, Xcode toolchain, this doc | `SBSA` machine config; `make SDKROOT=macosx TARGET_CONFIGS="RELEASE ARM64 SBSA" ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64 BTI_BUILD=0` produces `kernel.release.sbsa`; `kcgen` (open MH_FILESET linker for M5); QEMU harness `tools/run-qemu.sh` (`-M virt,gic-version=3 -cpu cortex-a76 -bios QEMU_EFI.fd`) with serial capture and pass/fail grep | — | kernel links; harness boots `BOOTAA64.EFI` and asserts on serial output |
-| A1 | **UEFI Loader (neoboot)** | §2.1 rules, DT-ABI table, ACPI spec 6.5 (MADT/GTDT/SPCR/MCFG/IORT), Mach-O fileset + chained-fixups format, Embedded Swift UEFI target from A0 | `BOOTAA64.EFI` (Embedded Swift, C shim); `dt-abi.md` (generated from code); `dtdump` host tool that prints the synthesised DT; unit tests for fixup walker against a real kernel | A0 (kernel image, Embedded Swift target) | kernel reaches `arm_init` and prints `iBoot version:` line on QEMU virt |
+| A1 | **UEFI Loader (neoboot)** | §2.1 rules, DT-ABI table, ACPI spec 6.5 (MADT/GTDT/SPCR/MCFG/IORT), Mach-O fileset + chained-fixups format, Embedded Swift UEFI target from A0 | `BOOTAA64.EFI` (Embedded Swift, C shim); `dt-abi.md` (generated from code); `dtdump` host tool that prints the synthesised DT | A0 (kernel image, Embedded Swift target) | kernel reaches `arm_init` and prints `iBoot version:` line on QEMU virt |
 | A2 | **Kernel Platform Bridge** | §2.3 table, grep lists | `SBSA.h`, `generic_arm64_common.h`, `proc_reg.h` branch, `APPLEVIRTUALPLATFORM` audit, 16550 serial driver, Group 1 timer option (§5.2), `pe_fiq.c` reads PPI number from `/arm-io/gic` `timer-ppi` | A0 | single-CPU boot to `kernel_bootstrap` complete, timer interrupts counting |
 | A3 | **IOKit Platform (in-kernel)** | §2.3 class table, IOKit headers | `iokit/Kernel/arm/NeoDarwin*.cpp`: platform expert, GICv3 controller, PSCI IOPMGR, PSCI halt/restart | A2 | all CPUs online (`cpus=N` boot-arg respected), IPIs measured, SPI test device (virtio console) interrupts |
 | A4 | **ACPI Runtime (ACPICA kext)** | ACPICA source, `IOACPIPlatformDevice.h` SDK header, IORT/MCFG | `NeoDarwinACPIPlatform.kext`, `IOPCIFamily` open build wired to ECAM, MSI via GIC ITS | A3, A0 (`kcgen`) | `ioreg` shows PCI bus with virtio-pci / NVMe nubs on QEMU and on CD8180 |
@@ -219,7 +236,7 @@ Agent messaging discipline: the DT-ABI table is the interface between A1 and A2/
 *Mitigation:*
 - Loader chooses the largest hole-free conventional run; refuses to boot below 512 MiB; logs the map. `memSizeActual` carries the full total.
 - Deterministic first-light mode: `slide=0`, KASLR off, `-noprogress`, `debug=0x14e`, so an early fault is reproducible; A7 keeps a golden `boot_args`+DT dump.
-- Loader-side fixup walker unit-tested on the host against the same kernel image; A0 provides a `kcheck` tool that verifies every rebased pointer lands inside the image.
+- No loader-side fixup walker: the kernel applies its own chains. `kcheck` (P0-07) checks every chain against the rules of the kernel's walker, checks that every target lands inside the image, and round-trips the collection byte for byte against its source kernel.
 - Explicit cache clean + `dsb sy; ic iallu; tlbi vmalle1` before MMU-off; QEMU cannot catch this, so A7 runs the sequence on hardware early (M6 pre-work on any UEFI SBC).
 
 ### 5.2 Risk 2 — Interrupt-controller binding (GICv3 Group 0 FIQ vs. TrustZone)
@@ -251,7 +268,7 @@ The categories overlap (some pmap symbols are also exported). The authoritative 
 *Mitigation:*
 - Compile the boot-critical platform layer into the kernel image (§2.3), so M0–M4 need no kernelcache at all; `AppleARMSMP.cpp` is the in-tree precedent.
 - Explicit *no-closed-code* list with open replacements: platform expert (new), GIC (new), PSCI PMGR (new), AMFI (none needed; `cs_enforcement_disable`), apfs → HFS+ (open), NVMe (new, spec-driven), IOPCIFamily/IOStorageFamily/IOUSBHostFamily (open source drops).
-- `kcgen` (A0) implements `MH_FILESET` + `LC_FILESET_ENTRY` + fixup-chain emission using the format the kernel already parses (`OSKext.cpp:13701`), so M5 does not depend on `kmutil` behaviour changing.
+- `kcgen` (A0, P0-07) implements `MH_FILESET` + `LC_FILESET_ENTRY` + kernel-cache fixup-chain emission in the format the kernel already walks (`osfmk/mach/dyld_kernel_fixups.h`), so M5 does not depend on `kmutil`. The kernel-only collection exists; kexts join it at M5.
 - EmbeddedDeviceMap bypass is a supported path in the makefiles (`EXTRA_TARGET_CONFIGS_*`, `MakeInc.def:305-320`), not a hack.
 
 ### 5.4 Secondary risks (tracked, not on the critical path)

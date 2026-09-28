@@ -3,4 +3,4 @@
 # Kernel job: full XNU build and the link-gap ratchet (about 10 minutes cold).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-bazel test --config=ci //kernel:vmapple_link_gap_ratchet //kernel:sbsa_kernel_test //kernel:sbsa_isa_audit
+bazel test --config=ci //kernel:vmapple_link_gap_ratchet //kernel:sbsa_kernel_test //kernel:sbsa_isa_audit //kernel:sbsa_kc_check
