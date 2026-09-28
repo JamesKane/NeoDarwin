@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
 # Toolkit API charter (draft for review)
 
-_Status: **S6 draft**, 2026-09-27. Output of the platform API study (epic P4-05, graphics-desktop.md §6.1). It becomes normative when reviewed. P4-12 (toolkit v1) builds against it, and the S7 prototypes test it._
+_Status: **S6 draft, revised after the S7 host prototypes**, 2026-09-27 (study `reports/s7-prototypes.md`). Output of the platform API study (epic P4-05, graphics-desktop.md §6.1). It becomes normative when reviewed. P4-12 (toolkit v1) builds against it, and the S7 prototypes test it._
 
 **Evidence** is in the study repository `../NeoDarwin-api-study`. References in brackets point there:
 
@@ -75,8 +75,8 @@ Modules, the concepts each covers from the study's taxonomy [Q1], and what is de
 | **Frames and surfaces** | PRS.present, PRS.damage, PRS.timing.pacing, PRS.timing.feedback, PRS.latency, PRS.vsync, PRS.vrr, PRS.hdr, WIN.surface.software, PRS.surface.bind | `requestFrame()`; `present(damage:, seq:)`. A **CPU surface** is the shared-memory `surface`, copy or flip. A **GPU surface** is the same object handed to Vulkan WSI or `webgpu.h` through a NeoDarwin window-handle bag [Q2 R7]. | App-run display links (P3). Swapchain micromanagement: one latency number instead. |
 | **Drawing** | WIN.draw2d, WIN.font; GPU.* through the GPU module | 2D through Vesper and libstyle, where the theme's materials are available to widgets. | A toolkit-specific 3D API (§6). |
 | **GPU** | PRS.surface.bind, GPU.interop.external, GPU.mem.residency (budget) | **Vulkan is the interop layer** (surface for a window, buffer import/export, budget). **The toolkit's own GPU drawing API is `webgpu.h`** (Dawn, SPIR-V accepted). See §6. | Metal (no corpus need [Q5]); an SDL_gpu-shaped API (one corpus user [Q5]). |
-| **UI** | WIN.widget.tree, WIN.menu (as data to the server), WIN.dialog (async), WIN.accessibility | Class-named, style-free widgets; flex measure/arrange in logical units; one-expression construction; an immediate builder; node table with handles (P5–P8, P14). The text field ships the IME adapter. | System widgets drawn by the server; the server draws only chrome. |
-| **Audio** | AUD.stream.open/callback/push/capture, AUD.latency, AUD.clock, AUD.device.enumerate, AUD.session, AUD.voice, AUD.format | **Tier 1, a stream:** pull callback on a toolkit-created real-time thread with admitted period and computation, or push; format and rate conversion; a contract record (period, rate, latency, device-time ↔ `mach_absolute_time`, device identity) whose changes are events in the one wait. **Tier 2, voices** on the system mixer [Q2 R10; F-215, F-216]. | AUD.exclusive (a flag on open, if at all); AUD.plugin (third-party standards); AUD.midi (deferred: [Q1] shows 4 OS families, but little corpus use). |
+| **UI** | WIN.widget.tree, WIN.menu (as data to the server), WIN.dialog (async), WIN.accessibility | Class-named, style-free widgets; flex measure/arrange in logical units; one-expression construction; an immediate builder; node table with handles (P5–P8, P14). The text field ships the IME adapter. Text shaping (HarfBuzz-class) is required before v1: the S7 UI draws one glyph per character. | System widgets drawn by the server; the server draws only chrome. |
+| **Audio** | AUD.stream.open/callback/push/capture, AUD.latency, AUD.clock, AUD.device.enumerate, AUD.session, AUD.voice, AUD.format | **Tier 1, a stream:** pull callback on a toolkit-created real-time thread with admitted period and computation, or push; format and rate conversion; a contract record (period, rate, latency, device-time ↔ `mach_absolute_time`, device identity) whose changes are events in the one wait. **Tier 2, voices** on the system mixer [Q2 R10; F-215, F-216]. The render callback is T2: S7 compiled it under `@_noLocks`/`@_noAllocation`, which requires a documented subset (no libm, no first use of a class, no short-circuit operators until the checker improves). A C trampoline is offered for callbacks that cannot meet that subset. | AUD.exclusive (a flag on open, if at all); AUD.plugin (third-party standards); AUD.midi (deferred: [Q1] shows 4 OS families, but little corpus use). |
 | **Time and threads** | TIM.monotonic, TIM.sleep (deadline), THR.create, THR.name, THR.priority as **intent** (interactive / throughput / background / audio), THR.pool (libdispatch), THR.perfmode | Thread intent maps onto XNU QoS and core placement (F-204). No affinity API for apps. | TIM.resolution: none exists (P10). THR.hetero as a separate call: intent covers it. |
 | **Files and I/O** | IO.file.async, IO.path.known, IO.watch | Asynchronous reads complete into the one wait, through libdispatch (F-217). Known folders are resolved from the namespace. | IO.gpu.direct (no corpus demand [F graphics triage]). |
 | **Agent and export** | (NeoDarwin-specific) | The node table is exported as `/n/app/…` and served to `/n/agent/APPID` (agent-protocol.md). | — |
@@ -127,7 +127,8 @@ Modules, the concepts each covers from the study's taxonomy [Q1], and what is de
 3. **The toolkit's own GPU drawing API is `webgpu.h`**, backed by Dawn, rather than a new API:
    - It answers F-106 (barriers) and F-111 (binding and IR translation) with an API the corpus already uses: bevy, zed and egui through wgpu [Q5].
    - Swift bindings are generated from the C header.
-   - This is **provisional** until S7's game-loop and compute-to-display prototypes run on it.
+   - S7 ran it: zero-copy compute to display works once a 7-line wgpu-native bug is fixed (upstream it, or use Dawn).
+   - S7 also showed that reaching the first GPU frame takes 26 `webgpu.h` calls. So the toolkit adds **one helper call** that returns a configured device, queue and surface for a window; engines keep the raw path.
 4. **Not offered:**
    - Metal: no project in the corpus needs it; all 11 Metal users also have Vulkan or GL [Q5].
    - An SDL_gpu-shaped toolkit API: one corpus user [Q5]; SDL_gpu itself still runs on NeoDarwin's Vulkan.
@@ -173,6 +174,8 @@ These are proposals against other documents and epics, as listed in `friction-re
 | **Thread intent → QoS and placement; real-time admission for audio** | kernel scheduling contract | F-204, F-215 |
 | **A GPU buffer object (Mach memory entry + format + fence), host-pointer import, a per-task GPU budget with a pressure signal** | P7 with the VM | F-107–F-109 |
 | **An audio service: system mixer on a fixed period, a stream contract, voices** | audio service (new epic) | F-215, F-216 |
+| **A buffer size for GPU surfaces set independently of the window** (viewport/scaling by the compositor, like `wp_viewporter`) | window-protocol.md | S7 compute-display: without it, a fixed-size simulation needs an extra rescale pass |
+| **Actual presentation feedback for CPU `image`/`surface` presents, not only GPU presents** | window-protocol.md, wsys | S7: host CPU frames only had estimated times |
 
 ## 10. How the charter is validated (S7)
 
@@ -188,7 +191,9 @@ The four prototypes are each written three ways: against the candidate API, agai
 
 ## 11. Open questions for review
 
-1. **Drawing API:** is `webgpu.h` right, or is a smaller 2D-plus-mesh API over Vulkan better for the audience? The evidence favours `webgpu.h` for reach [Q5]; the heritage evidence favours smaller [Q6]. S7 decides.
-2. **Immediate layer:** does the immediate builder (P8) ship in v1, or after the retained core?
-3. **Wayland extensions:** which of the 16 are in core+ for the first release [Q5 lists them with project counts]?
-4. **One loop or loop per window by default:** Haiku's per-window threads made single-threaded engine ports marshal every event [Q6; Haiku notes]. The proposal is one loop per app by default, with more loops allowed.
+Updated after S7 (study `reports/s7-prototypes.md` §4):
+
+1. **Drawing API:** **`webgpu.h`, plus the one-call GPU-surface helper** (§6). The CPU surface and the UI module cover 2D and tools at heritage call counts (minimal program: 12 calls; text editor: 44 lines of app code).
+2. **Immediate layer:** deferred until after the retained core. The retained UI met the editor target without it.
+3. **Wayland extensions:** still open; Q5 lists the 16 with project counts.
+4. **One loop or loop per window by default:** one per app by default. S7 ran loops on the main thread and on a background thread through the same API.
