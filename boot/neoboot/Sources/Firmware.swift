@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// The UEFI boot services neoboot uses: page allocation, the memory map,
-// file reads from the volume it was loaded from, and ExitBootServices.
+// The UEFI services neoboot uses: page allocation, the memory map, file
+// reads from the volume it was loaded from, the time of day, and
+// ExitBootServices.
 
 import UEFI
 
@@ -12,6 +13,7 @@ let uefiPage: UInt64 = 0x1000
 struct Firmware {
     let image: EFI_HANDLE?
     let boot: UnsafeMutablePointer<EFI_BOOT_SERVICES>
+    let runtime: UnsafeMutablePointer<EFI_RUNTIME_SERVICES>
 
     func allocate(pages: UInt64, at address: UInt64? = nil) -> UInt64? {
         var memory = address ?? 0
@@ -22,6 +24,25 @@ struct Firmware {
 
     func free(_ address: UInt64, pages: UInt64) {
         _ = boot.pointee.FreePages(address, pages)
+    }
+
+    /// The firmware's time of day as seconds since 1970, or nil if it has no
+    /// clock. Read as UTC and TimeZone ignored, as Linux's efi-rtc does:
+    /// firmware on these machines keeps UTC and seldom sets the field.
+    func utcSeconds() -> UInt64? {
+        var t = EFI_TIME()
+        guard runtime.pointee.GetTime(&t, nil) == efiSuccess,
+              t.Year >= 1970, t.Year <= 9999, t.Month >= 1, t.Month <= 12, t.Day >= 1, t.Day <= 31,
+              t.Hour < 24, t.Minute < 60, t.Second < 60 else { return nil }
+        // Days from 1970-01-01 (the civil-calendar algorithm: years start in March).
+        let y = Int(t.Year) - (t.Month <= 2 ? 1 : 0)
+        let m = Int(t.Month)
+        let era = y / 400
+        let yearOfEra = y - era * 400
+        let dayOfYear = (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + Int(t.Day) - 1
+        let dayOfEra = yearOfEra * 365 + yearOfEra / 4 - yearOfEra / 100 + dayOfYear
+        let days = era * 146_097 + dayOfEra - 719_468
+        return UInt64(days) * 86_400 + UInt64(t.Hour) * 3_600 + UInt64(t.Minute) * 60 + UInt64(t.Second)
     }
 
     func disableWatchdog() {

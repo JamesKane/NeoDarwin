@@ -13,7 +13,7 @@ XNU, built from Apple's published `xnu-12377.1.9` (macOS 26.0 release set) by th
 | `//kernel:sbsa_isa_audit` | Apple-ISA audit: fails if the kernel contains implementation-defined system-register accesses, `hvc`, or Apple AMX/GXF encodings (baseline empty; manual; kernel CI job) | seconds after the build |
 | `//kernel:sbsa_kc` | **`kernelcache.release.sbsa`**: the SBSA kernel alone in an `MH_FILESET` boot collection, built by `//tools/kcgen` (layout: `docs/kernel/arm64-sbsa-bringup.md` §2.1.1) | ~1 s after the build |
 | `//kernel:sbsa_kc_check` | `kcheck` on the collection, including the byte-for-byte round-trip against `kernel.release.sbsa` (manual; kernel CI job) | seconds after the build |
-| `//kernel:sbsa_boot_test` | neoboot boots the collection on QEMU `virt` (`neoverse-n2`) with `//tests/qemu/pid1` as the ramdisk: through crypto and PRNG setup, trust caches, IOKit and BSD initialisation, to a mockfs root on md0 and PID 1's userland checks (manual; kernel CI job; needs QEMU) | ~36 s after the build (a 30 s idle stall is open, `docs/kernel/arm64-sbsa-bringup.md` §2.1.2) |
+| `//kernel:sbsa_boot_test` | neoboot boots the collection on QEMU `virt` (`neoverse-n2`) with `//tests/qemu/pid1` as the ramdisk: through crypto and PRNG setup, trust caches, IOKit and BSD initialisation, to a mockfs root on md0 and PID 1's userland checks (manual; kernel CI job; needs QEMU) | ~6 s after the build |
 | `//kernel:vmapple_release_gaps` | Apple's public VMAPPLE config with no patches; the report of symbols its link lacks | ~9 min |
 | `//kernel:vmapple_link_gap_ratchet` | fails if that gap grows (manual; kernel CI job) | seconds after the build |
 

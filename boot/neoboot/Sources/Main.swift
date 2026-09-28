@@ -35,7 +35,7 @@ let efiLoadError: EFI_STATUS = 0x8000_0000_0000_0001
 @_cdecl("efi_main")
 func efiMain(_ image: EFI_HANDLE?, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> EFI_STATUS {
     Console.firmware = system.pointee.ConOut
-    let fw = Firmware(image: image, boot: system.pointee.BootServices)
+    let fw = Firmware(image: image, boot: system.pointee.BootServices, runtime: system.pointee.RuntimeServices)
     fw.disableWatchdog()
     put("neoboot 0.1: loading NeoDarwin\n")
     return boot(fw)  // returns only on failure
@@ -124,9 +124,17 @@ func boot(_ fw: Firmware) -> EFI_STATUS {
     let memSize = (window.end - base) & ~(kernelPage - 1)
     let entry = base + (entryVA - kc.linkAddress)
 
+    // The time of day, and the counter it was read at: the kernel has no RTC
+    // driver and no UEFI runtime services (arm64-sbsa-bringup.md §2.2). The
+    // counter is the one the kernel reads, CNTVCT, which equals CNTPCT once
+    // nd_enter_kernel has left EL2 with CNTVOFF_EL2 = 0.
+    let utc = fw.utcSeconds() ?? 0
+    let utcCounter = nd_current_el() == 2 ? nd_cntpct() : nd_cntvct()
+
     var tree = DeviceTreeWriter(base: image + Int(dtOffset), capacity: Int(treeCapacity))
     let facts = Platform.Facts(dramBase: base, dramSize: memSize, timebase: nd_cntfrq(), mpidr: nd_mpidr(), seed: nd_cntpct(),
-                                ramdiskBase: ramdiskSize == 0 ? 0 : base + ramdiskOffset, ramdiskSize: ramdiskSize)
+                                ramdiskBase: ramdiskSize == 0 ? 0 : base + ramdiskOffset, ramdiskSize: ramdiskSize,
+                                utcSeconds: utc, utcCounter: utcCounter)
     guard let treeLength = Platform.deviceTree(into: &tree, facts) else { return fail("the device tree does not fit") }
 
     // Command line: \NeoDarwin\boot.cfg if present, read into the spare half
@@ -182,6 +190,7 @@ func boot(_ fw: Firmware) -> EFI_STATUS {
     log("  boot_args at       ", base + argsOffset)
     log("  memSize            ", memSize)
     log("  timebase (Hz)      ", facts.timebase)
+    log("  UTC seconds        ", utc)
     log("  current EL         ", nd_current_el())
     put("  command line       ")
     put(bytes: UnsafeRawBufferPointer(start: args + BootArgs.Offset.commandLine, count: lineLength))

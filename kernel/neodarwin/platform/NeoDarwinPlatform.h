@@ -6,7 +6,9 @@
 // iokit/Kernel/arm/AppleARMSMP.cpp is, so boot needs no kexts:
 //
 //  - NeoDarwinPlatformExpert matches the device tree root "NeoDarwin,sbsa",
-//    publishes nubs from the tree, and creates the two classes below.
+//    publishes nubs from the tree, and creates the two classes below. It is
+//    also the RTC: it keeps the time of day neoboot read from UEFI and
+//    publishes IORTC, which bsd_init waits for.
 //  - NeoDarwinGICv3 is the IRQ interrupt controller: Group 1 interrupts
 //    through ICC_IAR1/EOIR1, IPIs as SGIs. XNU's pe_fiq.c keeps the timer on
 //    Group 0 (FIQ).
@@ -18,6 +20,7 @@
 #include <IOKit/IOPlatformExpert.h>
 #include <IOKit/IOInterruptController.h>
 #include <IOKit/IOPMGR.h>
+#include <IOKit/IOLocks.h>
 
 class NeoDarwinGICv3;
 class NeoDarwinPSCI;
@@ -30,10 +33,19 @@ public:
 	virtual bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
 	virtual const char *deleteList(void) APPLE_KEXT_OVERRIDE;
 	virtual const char *excludeList(void) APPLE_KEXT_OVERRIDE;
+	virtual void getUTCTimeOfDay(clock_sec_t *secs, clock_nsec_t *nsecs) APPLE_KEXT_OVERRIDE;
+	virtual void setUTCTimeOfDay(clock_sec_t secs, clock_nsec_t nsecs) APPLE_KEXT_OVERRIDE;
 
 private:
+	void startClock(void);
+
 	NeoDarwinGICv3 *gic;
 	NeoDarwinPSCI *psci;
+	// The time of day at a counter value; now is that plus the ticks since.
+	IOSimpleLock *clockLock;
+	clock_sec_t clockSecs;
+	clock_nsec_t clockNsecs;
+	uint64_t clockCounter;
 };
 
 class NeoDarwinGICv3 : public IOInterruptController

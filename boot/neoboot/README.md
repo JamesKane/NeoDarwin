@@ -5,6 +5,7 @@ The UEFI loader (`BOOTAA64.EFI`), in Embedded Swift (language policy T3). Design
 
 **Current stage (P1-03):** the loader boots the kernel. `efi_main` (`Sources/Main.swift`) does the following:
 - reads `\NeoDarwin\kernelcache` from the ESP, plus the command line from `\NeoDarwin\boot.cfg` and the ramdisk from `\NeoDarwin\ramdisk` if present;
+- reads the time of day from UEFI's `GetTime()`, for the kernel's clock (`/chosen/neodarwin,utc-seconds`);
 - takes the largest hole-free run of RAM the kernel may own, and places the flat collection at the lowest free address congruent to its link address modulo 32 MiB (slide 0);
 - writes an Apple-format device tree after it (hand-written for QEMU `virt` until P1-04), then the ramdisk, which it publishes as `/chosen/memory-map/RAMDisk` and roots on with `rd=md0` unless the command line names a root, then `boot_args`;
 - cleans the caches, exits boot services, and enters `_start` at EL1 with the MMU off, dropping from EL2 first if the firmware ran there.

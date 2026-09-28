@@ -21,8 +21,16 @@ typedef struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
 typedef enum { EfiResetCold, EfiResetWarm, EfiResetShutdown, EfiResetPlatformSpecific } EFI_RESET_TYPE;
 typedef void (*EFI_RESET_SYSTEM)(EFI_RESET_TYPE ResetType, EFI_STATUS ResetStatus, uint64_t DataSize, void *ResetData);
 typedef struct {
+	uint16_t Year;
+	uint8_t Month, Day, Hour, Minute, Second, Pad1;
+	uint32_t Nanosecond;
+	int16_t TimeZone;
+	uint8_t Daylight, Pad2;
+} EFI_TIME;
+typedef struct {
 	EFI_TABLE_HEADER Hdr;
-	void *GetTime, *SetTime, *GetWakeupTime, *SetWakeupTime;
+	EFI_STATUS (*GetTime)(EFI_TIME *Time, void *Capabilities);
+	void *SetTime, *GetWakeupTime, *SetWakeupTime;
 	void *SetVirtualAddressMap, *ConvertPointer;
 	void *GetVariable, *GetNextVariableName, *SetVariable;
 	void *GetNextHighMonotonicCount;
@@ -104,6 +112,7 @@ typedef struct {
 uint64_t nd_current_el(void);
 uint64_t nd_cntfrq(void);
 uint64_t nd_cntpct(void);
+uint64_t nd_cntvct(void);
 uint64_t nd_mpidr(void);
 void nd_dcache_clean_poc(uint64_t start, uint64_t length);
 [[noreturn]] void nd_enter_kernel(uint64_t entry, uint64_t boot_args);

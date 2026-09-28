@@ -26,6 +26,12 @@ uint64_t nd_cntpct(void) {
 	return v;
 }
 
+uint64_t nd_cntvct(void) {
+	uint64_t v;
+	__asm__ volatile("isb; mrs %0, cntvct_el0" : "=r"(v));
+	return v;
+}
+
 uint64_t nd_mpidr(void) {
 	uint64_t v;
 	__asm__ volatile("mrs %0, mpidr_el1" : "=r"(v));

@@ -12,7 +12,9 @@
 //   3. anonymous memory maps, holds a pattern, and unmaps;
 //   4. Mach traps answer: task_self_trap and mach_reply_port return names;
 //   5. a Mach message sent to its own receive right comes back intact
-//      through mach_msg2_trap, the path libsystem_kernel's mach_msg() takes.
+//      through mach_msg2_trap, the path libsystem_kernel's mach_msg() takes;
+//   6. the calendar is set: gettimeofday is past 2024, from the time of day
+//      neoboot read from UEFI and the platform expert serves as IORTC.
 //
 // A check that fails prints why and exits with its number; the kernel then
 // panics with "initproc exited", which carries that status. On success it
@@ -26,6 +28,7 @@ let sysWrite: Int64 = 4
 let sysOpen: Int64 = 5
 let sysGetpid: Int64 = 20
 let sysMunmap: Int64 = 73
+let sysGettimeofday: Int64 = 116
 let sysMmap: Int64 = 197
 
 // Mach traps (osfmk/kern/syscall_sw.c).
@@ -47,6 +50,7 @@ let headerSize: UInt32 = 24  // mach_msg_header_t
 let messageSize: UInt32 = headerSize + 8
 let messageID: UInt32 = 0x4e44_0001
 let payload: UInt64 = 0x6e65_6f64_6172_7769  // "neodarwi"
+let year2024: Int64 = 1_704_067_200  // 2024-01-01T00:00:00Z
 
 // Single-threaded: PID 1 never creates a second thread.
 nonisolated(unsafe) var console: UInt64 = 0
@@ -153,6 +157,17 @@ func pid1Main() -> Never {
         fail(5, "the received Mach message differs from the one sent")
     }
     put("pid1: mach: message round trip through mach_msg2\n")
+
+    // 6. The calendar: struct timeval is { int64 tv_sec; int32 tv_usec }.
+    let timeval = scratch + 0x3000
+    guard syscall(sysGettimeofday, UInt64(UInt(bitPattern: timeval)), 0, 0) == 0 else {
+        fail(6, "gettimeofday")
+    }
+    let seconds = timeval.load(as: Int64.self)
+    put("pid1: time: gettimeofday says ")
+    putHex(UInt64(bitPattern: seconds), scratch + 0x2000)
+    put(" seconds since 1970\n")
+    guard seconds > year2024 else { fail(6, "the calendar is not set") }
 
     put("pid1: all checks passed\n")
 

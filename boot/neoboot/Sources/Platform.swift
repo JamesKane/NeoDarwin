@@ -38,6 +38,8 @@ enum Platform {
         var seed: UInt64
         var ramdiskBase: UInt64 = 0  // physical; 0 when there is none
         var ramdiskSize: UInt64 = 0
+        var utcSeconds: UInt64 = 0  // 0 when the firmware has no clock
+        var utcCounter: UInt64 = 0  // CNTVCT when utcSeconds was read
     }
 
     /// Writes the tree; returns its length, or nil if it did not fit.
@@ -63,6 +65,10 @@ enum Platform {
                 x ^= x << 13; x ^= x >> 7; x ^= x << 17  // xorshift64
                 v.storeBytes(of: x, toByteOffset: i * 8, as: UInt64.self)
             }
+        }
+        if f.utcSeconds != 0 {  // NeoDarwinPlatformExpert: the time of day, and IORTC
+            w.property("neodarwin,utc-seconds", u64: f.utcSeconds)
+            w.property("neodarwin,utc-counter", u64: f.utcCounter)
         }
         w.property("AAPL,phandle", u32: 2)
         w.begin()  // /chosen/memory-map: RAMDisk; ACPITables later
