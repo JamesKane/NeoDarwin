@@ -6,7 +6,7 @@ set -euo pipefail
 report="$1"; baseline="$2"
 current="$(mktemp)"; base="$(mktemp)"; trap 'rm -f "$current" "$base"' EXIT
 sed -n '/^--- symbol/,/^--- raw/p' "$report" | sed '1d;$d' | cut -f1 | sort -u > "$current"
-grep -v '^#' "$baseline" | cut -f1 | sed '/^$/d' | sort -u > "$base"
+{ grep -v '^#' "$baseline" || true; } | cut -f1 | sed '/^$/d' | sort -u > "$base"
 new="$(comm -23 "$current" "$base")"
 gone="$(comm -13 "$current" "$base")"
 echo "link gaps: $(wc -l < "$current" | tr -d ' ') now, $(wc -l < "$base" | tr -d ' ') in baseline"

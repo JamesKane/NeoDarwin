@@ -1,0 +1,88 @@
+From: NeoDarwin
+Subject: [PATCH] SBSA: no Apple implementation registers
+
+Generic Arm cores raise an undefined-instruction exception on Apple's
+implementation-defined registers. After 0001-0005 the SBSA kernel still
+touched 41 of them in two places:
+
+- The performance-counter driver (monotonic, kpc) programs Apple PMCs at
+  CPU bring-up and from sleh_fiq. doconf now defines SOC_IS_GENERIC_ARM for
+  the sbsa machine config (as it defines SOC_IS_VIRTUALIZED for vm*), and
+  MASTER.arm64.MacOSX gives both the empty CPU_COUNTERS_BASE, so the
+  counters are not built. An Arm PMUv3 driver can return them later.
+- AWL bookkeeping writes Apple's WATCHDOG_DIAG0; compiled out for
+  GENERIC_ARM64_PLATFORM (it was already gated at run time by a device-tree
+  property NeoDarwin's loader never emits).
+
+Measured by //kernel:sbsa_isa_audit: 0 implementation-defined register
+accesses, no HVC, no AMX or GXF encodings.
+
+Rebase-risk: low.
+---
+diff --git a/SETUP/config/doconf b/SETUP/config/doconf
+index 39ebe9a..16f69d0 100755
+--- a/SETUP/config/doconf
++++ b/SETUP/config/doconf
+@@ -74,6 +74,7 @@ set CONFIG_DIR=$OBJROOT/SETUP/config
+ set MASTER_CONF_DIR=.
+ 
+ set DEF_SEED=""
++set DEF_GENERIC="-USOC_IS_GENERIC_ARM"
+ set DEF_EXCLAVES="-UMASTER_CONFIG_ENABLE_EXCLAVES"
+ set DEF_SPTM="-UMASTER_CONFIG_ENABLE_SPTM"
+ set DEF_BUILD=""
+@@ -113,6 +114,12 @@ while ($#argv >= 1)
+ 	    else
+ 	        set DEF_AVP="-USOC_IS_VIRTUALIZED"
+ 	    endif
++	    # NeoDarwin: generic Arm (SBSA) machines have no Apple implementation registers.
++	    if ("$SOC_CONFIG" == "sbsa") then
++	        set DEF_GENERIC="-DSOC_IS_GENERIC_ARM"
++	    else
++	        set DEF_GENERIC="-USOC_IS_GENERIC_ARM"
++	    endif
+ 	    shift
+ 	    breaksw
+ 	case "-platform":
+@@ -203,7 +210,7 @@ foreach SYS ($argv)
+     cat $MASTER $MASTER_CPU - \
+         $MASTER $MASTER_CPU \
+     | \
+-    unifdef -t -DPLATFORM_${PLATFORM} -DCPU_$cpu -DSOC_CONFIG_${SOC_CONFIG} -DSYS_${SYS} $DEF_AVP $DEF_SEED $DEF_EXCLAVES $DEF_SPTM $DEF_BUILD $DEF_TAG - \
++    unifdef -t -DPLATFORM_${PLATFORM} -DCPU_$cpu -DSOC_CONFIG_${SOC_CONFIG} -DSYS_${SYS} $DEF_AVP $DEF_GENERIC $DEF_SEED $DEF_EXCLAVES $DEF_SPTM $DEF_BUILD $DEF_TAG - \
+     | \
+     sed -n \
+ 	-e "/^+/{" \
+diff --git a/config/MASTER.arm64.MacOSX b/config/MASTER.arm64.MacOSX
+index 9c0fde7..2d6a55a 100644
+--- a/config/MASTER.arm64.MacOSX
++++ b/config/MASTER.arm64.MacOSX
+@@ -56,7 +56,7 @@
+ #  LIBKERN_RELEASE =[ LIBKERN_BASE zlib ]
+ #  LIBKERN_DEV =    [ LIBKERN_BASE zlib iotracking ]
+ #  LIBKERN_DEBUG =  [ LIBKERN_BASE zlib iotracking ]
+-#if SOC_IS_VIRTUALIZED
++#if SOC_IS_VIRTUALIZED || SOC_IS_GENERIC_ARM
+ #  CPU_COUNTERS_BASE = [ ]
+ #else /*!SOC_IS_VIRTUALIZED*/
+ #  CPU_COUNTERS_BASE = [ config_cpu_counters config_pervasive_cpi config_pervasive_energy ]
+diff --git a/osfmk/kern/debug.c b/osfmk/kern/debug.c
+index dfe70a7..ce3b8ca 100644
+--- a/osfmk/kern/debug.c
++++ b/osfmk/kern/debug.c
+@@ -2423,12 +2423,13 @@ check_for_failure_injection(failure_injection_stage_t current_stage)
+ static inline void
+ awl_set_scratch_reg_hv_bit(void)
+ {
+-#if defined(__arm64__)
++/* WATCHDOG_DIAG0 is an Apple implementation register; generic Arm has none. */
++#if defined(__arm64__) && !GENERIC_ARM64_PLATFORM
+ #define WATCHDOG_DIAG0     "S3_5_c15_c2_6"
+ 	uint64_t awl_diag0 = __builtin_arm_rsr64(WATCHDOG_DIAG0);
+ 	awl_diag0 |= AWL_HV_ENTRY_FLAG;
+ 	__builtin_arm_wsr64(WATCHDOG_DIAG0, awl_diag0);
+-#endif // defined(__arm64__)
++#endif // defined(__arm64__) && !GENERIC_ARM64_PLATFORM
+ }
+ 
+ void

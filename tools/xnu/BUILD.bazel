@@ -2,7 +2,16 @@ package(default_visibility = ["//visibility:public"])
 
 exports_files(glob(["*.sh"]))
 
+# Inputs of the XNU build actions: the action scripts and the helpers they
+# source. Test-only scripts (check_kernel.sh, isa_audit.sh, gap_ratchet.sh)
+# are deliberately excluded so editing a test never invalidates a kernel build.
 filegroup(
     name = "scripts",
-    srcs = glob(["*.sh"]),
+    srcs = [
+        "common.sh",
+        "firehose.sh",
+        "headers.sh",
+        "kernel.sh",
+        "mksdk.sh",
+    ],
 )

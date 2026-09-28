@@ -152,7 +152,7 @@ Created by forking `VMAPPLE`:
 | `osfmk/arm64/proc_reg.h` | add `#elif defined(SBSA)` cache-line branch | `proc_reg.h:238-247` (`#error processor not supported`) |
 | `apple_arm64_common.h` → `generic_arm64_common.h` | drop `AIC.h`, `apple_arm64_regs.h`, `apple_arm64_cpu.h`, `apple_uart_regs.h`; keep `ARM_ARCH_TIMER`, `__ARM_COHERENT_CACHE__`; **do not** define `APPLE_ARM64_ARCH_FAMILY` | `apple_arm64_common.h` |
 | `APPLEVIRTUALPLATFORM` sites (≈30) | audit each: GIC ack in `sleh_fiq` (`sleh.c:2624, 2670`) and `reset_vector_vaddr` (`arm_init.c:192, 359`; `cpu.c:97-101, 351-355, 1086-1132`; `AppleARMSMP.cpp:279-281`) become `GENERIC_ARM64_PLATFORM`; hypercall probes in `arm64_hypercall.c` and `machine_routines_apple.c:197-264` compile to the `#else` stubs (an `hvc` at EL1 with no hypervisor is UNDEFINED → panic) | grep list in this drop |
-| Implementation-defined sysregs | `HID*_EL1`, `S3_x_C15_*` accesses in `machine_routines.c`, `sleh.c`, `caches_asm.s`, `machine_routines_asm.s`, `machine_routines_apple.c`, `pmap.c:11039-11071` must be under `APPLE_ARM64_ARCH_FAMILY`; any that are not get guarded | grep in this drop |
+| Implementation-defined sysregs | none in the SBSA kernel: `generic_arm64_common.h` leaves `APPLE_ARM64_ARCH_FAMILY` undefined, and patch 0006 removes the Apple PMC counter driver and AWL writes | `//kernel:sbsa_isa_audit` (disassembly, empty baseline) |
 | Timer | virtual timer (`CNTV_*`, `machine_routines.c:2383-2551`) + PPI 27 — matches SBSA; loader must leave `CNTVOFF_EL2 = 0` | `pe_fiq.c:147-150` |
 | IPIs | no `HAS_IPI` → `PE_cpu_signal` → `gAIC->sendIPI` when the CPU node exposes 3 interrupt specifiers (`aic_ipis = true` path) | `AppleARMSMP.cpp:131-144, 332-360`; `cpu_common.c:503-521` |
 | Page size | 16 KiB kernel granule requires `ID_AA64MMFR0_EL1.TGran16` (Cortex-A55/A7x/A720: yes; A53/A72: no). Ship 16K primary; keep a 4K build variant alive (`WKdmCompress_4k.s` etc. exist) | `proc_reg.h:915-1069` |
@@ -244,7 +244,7 @@ Building `xnu-12377.1.9` VMAPPLE RELEASE from public sources (`//kernel:vmapple_
 
 The categories overlap (some pmap symbols are also exported). The authoritative list is `kernel/link_gaps/vmapple_release.txt`, and a ratchet test keeps it from growing.
 
-**Status, 2026-09-27:** closed. `//kernel:sbsa_release` links `kernel.release.sbsa` (Mach-O `arm64`, no undefined symbols) from the public archive plus `kernel/patches/0001`–`0005`; `kernel/README.md` records how each gap closed. The remaining pre-boot hazard is measured separately: implementation-defined system-register accesses (`kernel/sysreg_audit/sbsa_release.txt`), owned by P1-02.
+**Status, 2026-09-27:** closed. `//kernel:sbsa_release` links `kernel.release.sbsa` (Mach-O `arm64`, no undefined symbols) from the public archive plus `kernel/patches/0001`–`0005`; `kernel/README.md` records how each gap closed. Apple-specific instructions are audited separately (`//kernel:sbsa_isa_audit`: implementation-defined registers, `hvc`, AMX, GXF); after patch 0006 the kernel has none.
 
 ### 5.3 Risk 3 — Closed kexts and kernelcache tooling
 *Failure mode:* the project stalls on binaries it cannot build: `AppleARMPlatform`, `AppleInterruptController`, `AppleVirtualPlatform`, `AppleMobileFileIntegrity`, `apfs`, `IONVMeFamily`, and the `kmutil`/EmbeddedDeviceMap build tooling.

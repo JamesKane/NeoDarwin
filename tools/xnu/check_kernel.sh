@@ -4,7 +4,7 @@
 # Mach-O executable for ARCH with no undefined symbols.
 set -euo pipefail
 arch="${@: -1}"; kernel=""
-for f in "${@:1:$#-1}"; do case "$(basename "$f")" in kernel.*) kernel="$f" ;; esac; done
+for f in "${@:1:$#-1}"; do case "$(basename "$f")" in *.unstripped) ;; kernel.*) kernel="$f" ;; esac; done
 [ -n "$kernel" ] || { echo "no kernel.* among inputs"; exit 1; }
 desc="$(file -b "$kernel")"; echo "$(basename "$kernel"): $desc"
 case "$desc" in "Mach-O 64-bit executable $arch") ;; *) echo "expected Mach-O 64-bit executable $arch"; exit 1 ;; esac

@@ -96,13 +96,13 @@ epics:
     exit: "kernel.release.sbsa links (Mach-O arm64, no undefined symbols) from the public xnu archive plus kernel/patches/0001-0005, no KDK archive; //kernel:sbsa_kernel_test"
     doc: kernel/README.md
   - id: P1-02
-    title: "Apple-specific code audit for GENERIC_ARM64_PLATFORM — done: hypercalls compiled out, exclaves/Tightbeam and Apple-IOMMU exports dropped, amcc_rorgn excluded, libTrustCache runtime; remaining: implementation-defined sysreg accesses (Apple PMCs in the monotonic driver, AWL)"
+    title: "Apple-specific code audit for GENERIC_ARM64_PLATFORM: hypercalls compiled out, exclaves/Tightbeam and Apple-IOMMU exports dropped, amcc_rorgn excluded, libTrustCache runtime, Apple PMC counters and AWL registers removed"
     phase: 1
     owner: kernel-bridge
-    status: doing
+    status: done
     depends: [P1-01]
-    exit: "kernel/sysreg_audit/sbsa_release.txt is empty and //kernel:sbsa_sysreg_audit passes; no hvc in the kernel"
-    doc: docs/kernel/arm64-sbsa-bringup.md
+    exit: "//kernel:sbsa_isa_audit passes with an empty baseline: no implementation-defined system-register access, hvc, AMX or GXF in kernel.release.sbsa"
+    doc: kernel/README.md
   - id: P1-03
     title: "neoboot v0 (Embedded Swift + C shim) — fileset load, chained fixups, boot_args, EL2→EL1, cache clean, jump"
     phase: 1

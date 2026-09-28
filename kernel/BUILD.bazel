@@ -76,6 +76,7 @@ SBSA_PATCHES = [
     "patches/0003-osfmk-generic-arm64-guards.patch",
     "patches/0004-config-sbsa-exports.patch",
     "patches/0005-bsd-neodarwin-trustcache-runtime.patch",
+    "patches/0006-sbsa-no-apple-implementation-registers.patch",
 ]
 
 libfirehose_kernel(
@@ -113,19 +114,18 @@ sh_test(
     tags = ["manual", "kernel"],
 )
 
-# Implementation-defined system registers the SBSA kernel still touches
-# (Apple PMCs in the monotonic driver, AWL). Each would fault on a generic
-# core; P1-02 drives the list to zero. The set may only shrink.
+# Apple-ISA audit: no implementation-defined system registers, HVC, AMX or GXF
+# in the SBSA kernel. The baseline is empty and must stay empty.
 sh_test(
-    name = "sbsa_sysreg_audit",
+    name = "sbsa_isa_audit",
     size = "small",
-    srcs = ["//tools/xnu:sysreg_audit.sh"],
+    srcs = ["//tools/xnu:isa_audit.sh"],
     args = [
         "$(rootpaths :sbsa_release)",
-        "$(rootpath sysreg_audit/sbsa_release.txt)",
+        "$(rootpath isa_audit/sbsa_release.txt)",
     ],
     data = [
-        "sysreg_audit/sbsa_release.txt",
+        "isa_audit/sbsa_release.txt",
         ":sbsa_release",
     ],
     tags = ["manual", "kernel"],

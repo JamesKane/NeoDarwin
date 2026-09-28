@@ -8,15 +8,15 @@ XNU, built from Apple's published `xnu-12377.1.9` (macOS 26.0 release set) by th
 | `//kernel:build_sdk` | NeoDarwin's additions to the host macOS SDK: `availability.pl` (AvailabilityVersions), the kernel firehose header (libdispatch), and the shims in `sdk/` | seconds |
 | `//kernel:headers` | `make installhdrs`: `Kernel.framework` and `usr/local` headers | ~15 s |
 | `//kernel:firehose_kernel` | `libfirehose_kernel.a`, built from libdispatch source | seconds |
-| `//kernel:sbsa_release` | **`kernel.release.sbsa`**: NeoDarwin's generic Arm kernel, patches 0001–0005, plain `arm64`, BTI off; also the unstripped image and a build report | ~9.5 min |
+| `//kernel:sbsa_release` | **`kernel.release.sbsa`**: NeoDarwin's generic Arm kernel, patches 0001–0006, plain `arm64`, BTI off; also the unstripped image and a build report | ~9.5 min |
 | `//kernel:sbsa_kernel_test` | the kernel is a Mach-O 64-bit `arm64` executable with no undefined symbols (manual; kernel CI job) | seconds after the build |
-| `//kernel:sbsa_sysreg_audit` | lists implementation-defined system-register accesses in the kernel; fails if any new one appears (manual; kernel CI job) | seconds after the build |
+| `//kernel:sbsa_isa_audit` | Apple-ISA audit: fails if the kernel contains implementation-defined system-register accesses, `hvc`, or Apple AMX/GXF encodings (baseline empty; manual; kernel CI job) | seconds after the build |
 | `//kernel:vmapple_release_gaps` | Apple's public VMAPPLE config with no patches; the report of symbols its link lacks | ~9 min |
 | `//kernel:vmapple_link_gap_ratchet` | fails if that gap grows (manual; kernel CI job) | seconds after the build |
 
 ## What the build established
 
-**The SBSA kernel builds and links from public sources alone** (2026-09-27): `kernel.release.sbsa`, a 12.4 MB Mach-O `arm64` executable with no undefined symbols, from Apple's `xnu-12377.1.9` archive plus NeoDarwin's five patches and `sdk/` shims, without Apple's Kernel Debug Kit. It has not been booted: the loader (P1-03) does not exist yet.
+**The SBSA kernel builds and links from public sources alone** (2026-09-27): `kernel.release.sbsa`, a 12.4 MB Mach-O `arm64` executable with no undefined symbols, from Apple's `xnu-12377.1.9` archive plus NeoDarwin's six patches and `sdk/` shims, without Apple's Kernel Debug Kit. It has not been booted: the loader (P1-03) does not exist yet.
 
 The route there, measured on Apple's own public VMAPPLE configuration: every source compiles, but the link lacks 395 symbols (`link_gaps/vmapple_release.txt`), which Apple's build takes from a closed per-SoC archive in the KDK. They closed as follows.
 
@@ -29,9 +29,11 @@ The route there, measured on Apple's own public VMAPPLE configuration: every sou
 | libTrustCache runtime | 2 | 0005 |
 | `libfirehose_kernel` built for the wrong architecture | 5 | a second firehose build for `arm64` |
 
-## What is still unsafe to run
+## Apple-specific instructions: none
 
-Linking is not the same as running. `sysreg_audit/sbsa_release.txt` lists every access to an implementation-defined system register (`S3_*_C15_*`), all of which fault on a generic core. There are 41, in three places: the performance-counter driver (`mt_*`, 35, Apple PMCs, reached at CPU bring-up), its hook in `sleh_fiq` (2), and AWL bookkeeping (`awl_*`, 4). P1-02 drives the list to zero, by disabling the counters on SBSA or driving the architectural PMUv3 instead. No `hvc` instructions remain: the Apple-hypervisor paths compiled away with `APPLEVIRTUALPLATFORM`.
+Linking is not the same as running, so `//kernel:sbsa_isa_audit` disassembles the kernel and fails on anything a generic Arm core would fault on for Apple-specific reasons: accesses to implementation-defined system registers (`S3_*_C15_*`), `hvc`, and Apple AMX or GXF encodings. The first SBSA link had 41 register accesses: the performance-counter driver (35, Apple PMCs, reached at CPU bring-up), its hook in `sleh_fiq` (2), and AWL bookkeeping (4). Patch 0006 removed them; the baseline is now empty. Parser controls (NOPs and system-register moves must be found) make the audit fail loudly if the disassembler's output format changes.
+
+The Apple-hypervisor paths compiled away with `APPLEVIRTUALPLATFORM`, so there are no `hvc` instructions. Performance counters return later through an Arm PMUv3 driver.
 
 ## `sdk/`: NeoDarwin shims
 
