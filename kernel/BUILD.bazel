@@ -93,6 +93,7 @@ SBSA_PATCHES = [
     "patches/0011-mockfs-sbsa-root.patch",
     "patches/0012-iokit-publish-hidden-media-without-iomedia.patch",
     "patches/0013-mach-loader-static-pid1-on-sbsa.patch",
+    "patches/0014-sleh-ack-group0-on-generic-gicv3.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.

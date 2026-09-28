@@ -1,0 +1,41 @@
+From: NeoDarwin
+Subject: [PATCH] sleh: acknowledge and complete Group 0 interrupts on generic GICv3
+
+sleh_fiq reads ICC_IAR0_EL1 and writes ICC_EOIR0_EL1 only for
+APPLEVIRTUALPLATFORM, the other board config with a GICv3. pe_fiq.c puts
+the virtual timer (PPI 27) in Group 0 for SBSA as well, so the SBSA kernel
+handled every timer FIQ without touching the GIC: the interrupt never
+became active and was never completed. Timekeeping worked only because the
+timer is level-sensitive, so reprogramming the deadline dropped the line
+and the pending state with it. Found while tracing the IORTC boot stall
+(no IAR0 reads in QEMU's GICv3 trace).
+
+GENERIC_ARM64_PLATFORM now acknowledges and completes Group 0 as
+APPLEVIRTUALPLATFORM does (EOImode 0, set by pe_fiq.c, so EOIR also
+deactivates), as the bring-up design planned
+(docs/kernel/arm64-sbsa-bringup.md §2.3).
+
+Rebase-risk: low (two preprocessor conditions).
+---
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -2621,7 +2621,8 @@
+ 
+ 	sleh_interrupt_handler_prologue(state, type);
+ 
+-#if APPLEVIRTUALPLATFORM
++#if APPLEVIRTUALPLATFORM || GENERIC_ARM64_PLATFORM
++	/* Group 0 (FIQ) is the GICv3 virtual timer, PPI 27 (pexpert/arm/pe_fiq.c). */
+ 	uint64_t iar = __builtin_arm_rsr64("ICC_IAR0_EL1");
+ #endif
+ 
+@@ -2667,7 +2668,7 @@
+ 		ml_interrupt_masked_debug_end();
+ 	}
+ 
+-#if APPLEVIRTUALPLATFORM
++#if APPLEVIRTUALPLATFORM || GENERIC_ARM64_PLATFORM
+ 	if (iar != GIC_SPURIOUS_IRQ) {
+ 		__builtin_arm_wsr64("ICC_EOIR0_EL1", iar);
+ 		__builtin_arm_isb(ISB_SY);

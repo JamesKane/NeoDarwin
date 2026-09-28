@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
 # XNU patch series
 
-Ordered patches applied to the pristine `xnu-12377.1.9` archive inside the build sandbox (`docs/repository.md` §3). A target lists the patches it applies in its `patches` attribute; nothing here edits a checkout. Applying 0001 to 0013 in order to the pristine archive must reproduce the tree the SBSA kernel is built from; each patch carries a rationale and a `Rebase-risk:` line.
+Ordered patches applied to the pristine `xnu-12377.1.9` archive inside the build sandbox (`docs/repository.md` §3). A target lists the patches it applies in its `patches` attribute; nothing here edits a checkout. Applying 0001 to 0014 in order to the pristine archive must reproduce the tree the SBSA kernel is built from; each patch carries a rationale and a `Rebase-risk:` line.
 
 | Patch | What it does | Used by |
 |---|---|---|
@@ -17,4 +17,5 @@ Ordered patches applied to the pristine `xnu-12377.1.9` archive inside the build
 | `0010-libkern-build-libpthread-kern.patch` | builds Apple's libpthread-539 `kern/` (APSL, overlaid at `libkern/ndpthread/libpthread`) and NeoDarwin's start glue (`kernel/neodarwin/pthread`) into libkern, with the kext's search paths, a compat `TargetConditionals.h` and libpthread's `current_uthread()` renamed | `sbsa_release` |
 | `0011-mockfs-sbsa-root.patch` | builds mockfs into the SBSA kernel (a `FILESYS_ROOT` set under `SOC_IS_GENERIC_ARM`) and repairs its arm64 rot: nodes allocated as the pointer typedef, and the memory device mapped from a 32-bit, 4 KiB page count instead of `mdevgetrange()`'s address | `sbsa_release` |
 | `0012-iokit-publish-hidden-media-without-iomedia.patch` | `publishHiddenMedia()` skips its walk when no IOMedia class is loaded; it dereferenced the NULL metaclass once IOFindBSDRoot chose md0, before any storage family exists (P1-07) | `sbsa_release` |
+| `0014-sleh-ack-group0-on-generic-gicv3.patch` | `sleh_fiq` acknowledges (`ICC_IAR0_EL1`) and completes (`ICC_EOIR0_EL1`) the Group 0 timer FIQ on `GENERIC_ARM64_PLATFORM` as on `APPLEVIRTUALPLATFORM`; SBSA handled it without touching the GIC | `sbsa_release` |
 | `0013-mach-loader-static-pid1-on-sbsa.patch` | for `GENERIC_ARM64_PLATFORM`, process 1 may be a static executable, which RELEASE kernels otherwise refuse; the first PID 1 runs before the system has dyld (P1-07) | `sbsa_release` |

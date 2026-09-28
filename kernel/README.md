@@ -8,7 +8,7 @@ XNU, built from Apple's published `xnu-12377.1.9` (macOS 26.0 release set) by th
 | `//kernel:build_sdk` | NeoDarwin's additions to the host macOS SDK: `availability.pl` (AvailabilityVersions), the kernel firehose header (libdispatch), and the shims in `sdk/` | seconds |
 | `//kernel:headers` | `make installhdrs`: `Kernel.framework` and `usr/local` headers | ~15 s |
 | `//kernel:firehose_kernel` | `libfirehose_kernel.a`, built from libdispatch source | seconds |
-| `//kernel:sbsa_release` | **`kernel.release.sbsa`**: NeoDarwin's generic Arm kernel, patches 0001–0013 and the `neodarwin/` sources, plain `arm64`, BTI off; also the unstripped image and a build report | ~9.5 min |
+| `//kernel:sbsa_release` | **`kernel.release.sbsa`**: NeoDarwin's generic Arm kernel, patches 0001–0014 and the `neodarwin/` sources, plain `arm64`, BTI off; also the unstripped image and a build report | ~9.5 min |
 | `//kernel:sbsa_kernel_test` | the kernel is a Mach-O 64-bit `arm64` executable with no undefined symbols (manual; kernel CI job) | seconds after the build |
 | `//kernel:sbsa_isa_audit` | Apple-ISA audit: fails if the kernel contains implementation-defined system-register accesses, `hvc`, or Apple AMX/GXF encodings (baseline empty; manual; kernel CI job) | seconds after the build |
 | `//kernel:sbsa_kc` | **`kernelcache.release.sbsa`**: the SBSA kernel alone in an `MH_FILESET` boot collection, built by `//tools/kcgen` (layout: `docs/kernel/arm64-sbsa-bringup.md` §2.1.1) | ~1 s after the build |
