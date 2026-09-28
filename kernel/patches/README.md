@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
 # XNU patch series
 
-Ordered patches applied to the pristine `xnu-12377.1.9` archive inside the build sandbox (`docs/repository.md` §3). A target lists the patches it applies in its `patches` attribute; nothing here edits a checkout. Applying 0001 to 0009 in order to the pristine archive must reproduce the tree the SBSA kernel is built from; each patch carries a rationale and a `Rebase-risk:` line.
+Ordered patches applied to the pristine `xnu-12377.1.9` archive inside the build sandbox (`docs/repository.md` §3). A target lists the patches it applies in its `patches` attribute; nothing here edits a checkout. Applying 0001 to 0010 in order to the pristine archive must reproduce the tree the SBSA kernel is built from; each patch carries a rationale and a `Rebase-risk:` line.
 
 | Patch | What it does | Used by |
 |---|---|---|
@@ -14,3 +14,4 @@ Ordered patches applied to the pristine `xnu-12377.1.9` archive inside the build
 | `0007-kalloc-enforce-per-size-class-zone-limit.patch` | caps each kalloc_type size class at the 31 zones its stack array holds; upstream only asserts it, so a RELEASE kernel overran the array and panicked in `zone_set_sig_eq` (found at first boot, P1-03) | `sbsa_release` |
 | `0008-libkern-build-ndcrypto.patch` | adds ndcrypto (`kernel/neodarwin/crypto`, overlaid at `libkern/ndcrypto` with the pinned FreeBSD sources) to libkern's file list, with its include roots and FreeBSD prelude | `sbsa_release` |
 | `0009-iokit-build-neodarwin-platform.patch` | adds NeoDarwin's platform expert, GICv3 interrupt controller and PSCI power manager (`kernel/neodarwin/platform`, overlaid at `iokit/ndplatform`) to the arm64 IOKit file list, and a built-in personality matching the device tree root `NeoDarwin,sbsa` | `sbsa_release` |
+| `0010-libkern-build-libpthread-kern.patch` | builds Apple's libpthread-539 `kern/` (APSL, overlaid at `libkern/ndpthread/libpthread`) and NeoDarwin's start glue (`kernel/neodarwin/pthread`) into libkern, with the kext's search paths, a compat `TargetConditionals.h` and libpthread's `current_uthread()` renamed | `sbsa_release` |

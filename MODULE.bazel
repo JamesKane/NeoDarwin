@@ -46,6 +46,19 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/libdispatch/archive/refs/tags/libdispatch-1542.0.4.tar.gz"],
 )
 
+# pthread's kernel half (kern/), built into the SBSA kernel (kernel/neodarwin/pthread).
+http_archive(
+    name = "apple_libpthread",
+    build_file_content = """filegroup(
+    name = "kernel_srcs",
+    srcs = glob(["kern/*", "private/**", "include/**"]),
+    visibility = ["//visibility:public"],
+)""",
+    sha256 = "a9786dd16427812da39bcb330b786f5e9d95a40e55d9540df14fffe200b724b7",
+    strip_prefix = "libpthread-libpthread-539",
+    urls = ["https://github.com/apple-oss-distributions/libpthread/archive/refs/tags/libpthread-539.tar.gz"],
+)
+
 # xnu's corecrypto subset and headers, for ndcrypto's host tests: the same
 # archive as apple_xnu (the repository cache serves it once), with its own
 # BUILD file so the kernel's inputs are untouched.

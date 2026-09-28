@@ -1,0 +1,65 @@
+From: NeoDarwin
+Subject: [PATCH] libkern: build pthread's kernel half from Apple's libpthread
+
+bsd_init() calls pthread_init() through the function table pthread.kext
+registers, and panicked without it ("pthread kernel extension not
+loaded"). The SBSA kernel loads no kexts yet, so it builds Apple's
+libpthread-539 kern/ (APSL, the same release set as this xnu) into
+libkern, with the kext target's search paths. NeoDarwin's glue
+(kernel/neodarwin/pthread) calls pthread_start() at EARLY_BOOT, as the
+kext loader would.
+
+The build overlays libpthread at libkern/ndpthread/libpthread and the
+glue at libkern/ndpthread. libpthread's current_uthread() is renamed for
+its own objects, as is its pthread_kern, since the kernel defines both
+symbols.
+
+Rebase-risk: low (appended blocks; applies after 0008).
+---
+--- a/libkern/conf/files	2026-09-28 11:33:42
++++ b/libkern/conf/files	2026-09-28 11:33:42
+@@ -139,7 +139,14 @@
+ libkern/ndcrypto/freebsd/contrib/bearssl/src/rsa/rsa_i31_pkcs1_vrfy.c	optional crypto
+ libkern/ndcrypto/freebsd/contrib/bearssl/src/rsa/rsa_i31_pub.c	optional crypto
+ libkern/ndcrypto/freebsd/contrib/bearssl/src/rsa/rsa_pkcs1_sig_unpad.c	optional crypto
++# pthread's kernel half: Apple's libpthread kern/ and NeoDarwin's start glue
++# (kernel/neodarwin/pthread; the build adds libkern/ndpthread before patching).
++libkern/ndpthread/nd_pthread.c	standard
++libkern/ndpthread/libpthread/kern/kern_init.c	standard
++libkern/ndpthread/libpthread/kern/kern_support.c	standard
++libkern/ndpthread/libpthread/kern/kern_synch.c	standard
+ 
++
+ libkern/coretrust/coretrust.c   standard
+ 
+ libkern/apple_encrypted_archive/apple_encrypted_archive.c	standard
+--- a/libkern/conf/Makefile.template	2026-09-28 11:33:42
++++ b/libkern/conf/Makefile.template	2026-09-28 11:33:42
+@@ -37,7 +37,27 @@
+ $(foreach o,$(ND_CRYPTO_FREEBSD_OBJS),$(eval $(o)_CFLAGS_ADD += $(ND_CRYPTO_INC) -w))
+ $(foreach o,$(ND_CRYPTO_BEARSSL_OBJS),$(eval $(o)_CFLAGS_ADD += -I$(ND_CRYPTO)/compat/kernel \
+ 	-I$(ND_CRYPTO)/freebsd/contrib/bearssl/inc -I$(ND_CRYPTO)/freebsd/contrib/bearssl/src -w))
++# libpthread's kern/ is kext code: it compiles against Kernel.framework,
++# whose headers keep KERNEL_PRIVATE sections but not xnu's internal ones.
++# Removing XNU_KERNEL_PRIVATE and LIBKERN_KERNEL_PRIVATE gives these
++# objects that view of the exported headers (with XNU_KERNEL_PRIVATE,
++# sys/eventvar.h wants BSD-only workqueue types). The search paths and
++# define are the kext target's (xcodescripts/kext.xcconfig); the kext's
++# MACH_KERNEL_PRIVATE and friends only act on SDK headers, which arrive
++# already processed. TargetConditionals.h, which the kext takes from the
++# SDK, comes from NeoDarwin's compat directory. libpthread's
++# current_uthread() and its pthread_kern (the callback table copy that
++# pthread_kext_register() fills) share names with the kernel's, so its
++# copies are renamed.
++# kern_trace.h passes a pointer as vm_offset_t, an error in current clang.
++ND_PTHREAD = $(SRCROOT)/libkern/ndpthread/libpthread
++ND_PTHREAD_OBJS = kern_init.o kern_support.o kern_synch.o
++$(foreach o,$(ND_PTHREAD_OBJS),$(eval $(o)_CFLAGS_RM += -DXNU_KERNEL_PRIVATE -DLIBKERN_KERNEL_PRIVATE))
++$(foreach o,$(ND_PTHREAD_OBJS),$(eval $(o)_CFLAGS_ADD += -I$(ND_PTHREAD)/private -I$(ND_PTHREAD)/include \
++	-I$(ND_PTHREAD) -I$(SRCROOT)/libkern/ndpthread/compat -D__PTHREAD_EXPOSE_INTERNALS__ \
++	-Dcurrent_uthread=nd_pthread_current_uthread -Dpthread_kern=nd_pthread_kern -Wno-int-conversion))
+ 
++
+ #
+ # Directories for mig generated files
+ #

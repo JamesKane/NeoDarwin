@@ -8,18 +8,18 @@ XNU, built from Apple's published `xnu-12377.1.9` (macOS 26.0 release set) by th
 | `//kernel:build_sdk` | NeoDarwin's additions to the host macOS SDK: `availability.pl` (AvailabilityVersions), the kernel firehose header (libdispatch), and the shims in `sdk/` | seconds |
 | `//kernel:headers` | `make installhdrs`: `Kernel.framework` and `usr/local` headers | ~15 s |
 | `//kernel:firehose_kernel` | `libfirehose_kernel.a`, built from libdispatch source | seconds |
-| `//kernel:sbsa_release` | **`kernel.release.sbsa`**: NeoDarwin's generic Arm kernel, patches 0001–0006, plain `arm64`, BTI off; also the unstripped image and a build report | ~9.5 min |
+| `//kernel:sbsa_release` | **`kernel.release.sbsa`**: NeoDarwin's generic Arm kernel, patches 0001–0010 and the `neodarwin/` sources, plain `arm64`, BTI off; also the unstripped image and a build report | ~9.5 min |
 | `//kernel:sbsa_kernel_test` | the kernel is a Mach-O 64-bit `arm64` executable with no undefined symbols (manual; kernel CI job) | seconds after the build |
 | `//kernel:sbsa_isa_audit` | Apple-ISA audit: fails if the kernel contains implementation-defined system-register accesses, `hvc`, or Apple AMX/GXF encodings (baseline empty; manual; kernel CI job) | seconds after the build |
 | `//kernel:sbsa_kc` | **`kernelcache.release.sbsa`**: the SBSA kernel alone in an `MH_FILESET` boot collection, built by `//tools/kcgen` (layout: `docs/kernel/arm64-sbsa-bringup.md` §2.1.1) | ~1 s after the build |
 | `//kernel:sbsa_kc_check` | `kcheck` on the collection, including the byte-for-byte round-trip against `kernel.release.sbsa` (manual; kernel CI job) | seconds after the build |
-| `//kernel:sbsa_boot_test` | neoboot boots the collection on QEMU `virt` (`neoverse-n2`) past `iBoot version: neoboot-0.1` and the crypto and PRNG setup (manual; kernel CI job; needs QEMU) | ~6 s after the build |
+| `//kernel:sbsa_boot_test` | neoboot boots the collection on QEMU `virt` (`neoverse-n2`) through crypto and PRNG setup, trust caches, IOKit and BSD initialisation to the root-device wait (manual; kernel CI job; needs QEMU) | ~6 s after the build |
 | `//kernel:vmapple_release_gaps` | Apple's public VMAPPLE config with no patches; the report of symbols its link lacks | ~9 min |
 | `//kernel:vmapple_link_gap_ratchet` | fails if that gap grows (manual; kernel CI job) | seconds after the build |
 
 ## What the build established
 
-**The SBSA kernel builds and links from public sources alone** (2026-09-27): `kernel.release.sbsa`, a 12.4 MB Mach-O `arm64` executable with no undefined symbols, from Apple's `xnu-12377.1.9` archive plus NeoDarwin's patches and `sdk/` shims, without Apple's Kernel Debug Kit. It boots on QEMU `virt` as far as IOKit start (2026-09-28, `sbsa_boot_test`); with ndcrypto (`neodarwin/crypto`, P1-13) and ndamfi (`neodarwin/amfi`, P1-14) it and the platform layer (`neodarwin/platform`, P1-06) gets through crypto, PRNG, trust caches and IOKit into BSD initialisation; the next blocker is pthread support (P1-16, `docs/kernel/arm64-sbsa-bringup.md` §2.1.2).
+**The SBSA kernel builds and links from public sources alone** (2026-09-27): `kernel.release.sbsa`, a 12.4 MB Mach-O `arm64` executable with no undefined symbols, from Apple's `xnu-12377.1.9` archive plus NeoDarwin's patches and `sdk/` shims, without Apple's Kernel Debug Kit. It boots on QEMU `virt` as far as IOKit start (2026-09-28, `sbsa_boot_test`). With ndcrypto (`neodarwin/crypto`, P1-13), ndamfi (`neodarwin/amfi`, P1-14), the platform layer (`neodarwin/platform`, P1-06 boot CPU) and Apple's libpthread `kern/` (`neodarwin/pthread`, P1-16), it gets through crypto, PRNG, trust caches, IOKit and BSD initialisation, including networking (`lo0`), and stops waiting for a root device. That wait is the next blocker: P1-07 (`docs/kernel/arm64-sbsa-bringup.md` §2.1.2).
 
 The route there, measured on Apple's own public VMAPPLE configuration: every source compiles, but the link lacks 395 symbols (`link_gaps/vmapple_release.txt`), which Apple's build takes from a closed per-SoC archive in the KDK. They closed as follows.
 

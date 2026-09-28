@@ -1,0 +1,22 @@
+# pthread's kernel half: Apple's libpthread kern/ (@apple_libpthread, APSL),
+# built into the SBSA kernel, and the glue that starts it (patch 0010).
+load("//rules:cc.bzl", "lang_audit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Overlaid at libkern/ndpthread (kernel/BUILD.bazel).
+filegroup(
+    name = "kernel_srcs",
+    srcs = [
+        "compat/TargetConditionals.h",
+        "nd_pthread.c",
+    ],
+)
+
+lang_audit_test(
+    name = "pthread_lang_audit",
+    srcs = [
+        "compat/TargetConditionals.h",
+        "nd_pthread.c",
+    ],
+)

@@ -211,9 +211,9 @@ epics:
     title: "pthread kernel support: build libpthread's kern/ (Apple open source, APSL) into the kernel and register its function table, as pthread.kext does on Apple systems"
     phase: 1
     owner: kernel-bridge
-    status: todo
+    status: done
     depends: [P1-06]
-    exit: "the SBSA kernel boots past bsdinit's pthread check ('pthread kernel extension not loaded')"
+    exit: "the SBSA kernel boots past bsd_init's pthread check ('pthread kernel extension not loaded'); //kernel:sbsa_boot_test reaches the root-device wait"
     doc: docs/kernel/arm64-sbsa-bringup.md
   # ---- Phase 2: Base system, packaging, updates ----
   - id: P2-01

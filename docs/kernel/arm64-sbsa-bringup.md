@@ -126,7 +126,7 @@ The kernel is linked as position-independent (`MH_PIE`) with 65,407 local `ARM64
 
 ### 2.1.2 First boot on QEMU (P1-03)
 
-`//kernel:sbsa_boot_test` boots neoboot and `kernelcache.release.sbsa` on QEMU `virt` (`gic-version=3`, 2 GiB, one CPU). In under six seconds the kernel goes through the loader handoff, its own fixups, MMU and VM bootstrap, zalloc, the scheduler, IPC and logging, and prints `iBoot version: neoboot-0.1` from `PE_init_iokit`. With ndcrypto (P1-13), ndamfi (P1-14) and the platform expert (P1-06) it continues through crypto, PRNG, trust caches and IOKit into BSD initialisation. The device tree is still hand-written for `virt` in `boot/neoboot/Sources/Platform.swift`; P1-04 derives it from ACPI.
+`//kernel:sbsa_boot_test` boots neoboot and `kernelcache.release.sbsa` on QEMU `virt` (`gic-version=3`, 2 GiB, one CPU). In under six seconds the kernel goes through the loader handoff, its own fixups, MMU and VM bootstrap, zalloc, the scheduler, IPC and logging, and prints `iBoot version: neoboot-0.1` from `PE_init_iokit`. With ndcrypto (P1-13), ndamfi (P1-14), the platform expert (P1-06) and libpthread's `kern/` (P1-16) it continues through crypto, PRNG, trust caches, IOKit and BSD initialisation, including networking, to the root-device wait. The device tree is still hand-written for `virt` in `boot/neoboot/Sources/Platform.swift`; P1-04 derives it from ACPI.
 
 What the first boot established:
 
@@ -139,9 +139,20 @@ What the first boot established:
 | `image4 interface not available` in `bsd/kern/kern_trustcache.c`. AppleImage4 and AMFI, both closed kexts, normally register the Image4 and AMFI interfaces | P1-14, done: ndamfi (`amfi-provider.md`), with Apple's published trust-cache format and lookup |
 | `Unable to find driver for this platform: "NeoDarwin,sbsa"` (`IOPlatformExpert.cpp`) | P1-06, boot CPU done: `NeoDarwinPlatformExpert`, `NeoDarwinGICv3`, `NeoDarwinPSCI` (patch 0009), matched by a built-in personality |
 | A 16 MB `kmem_alloc` failed while mapping the GIC redistributors: the device tree gave QEMU's whole 123-CPU region | the tree now describes one frame per CPU present (P1-04 takes them from the MADT), and the GIC driver caps its mapping at `MAX_CPUS` frames |
-| Next stop: `pthread kernel extension not loaded` (`pthread_shims.c`), after BSD init has brought up the MAC framework, buffer cache and mbufs | P1-16: libpthread's `kern/` is Apple open source |
+| `pthread kernel extension not loaded` (`pthread_shims.c`), after BSD init has brought up the MAC framework, buffer cache and mbufs: pthread.kext registers the pthread function table | P1-16, done: Apple's libpthread-539 `kern/` (APSL) built into libkern by patch 0010 and started at `EARLY_BOOT` by `kernel/neodarwin/pthread`. It compiles as the kext does, against the exported headers without `XNU_KERNEL_PRIVATE`, with a compat `TargetConditionals.h`; its `current_uthread` and `pthread_kern` are renamed to avoid clashing with the kernel's |
+| Next stop: `Waiting on <dict …IOProviderClass… IOMedia … Apple_HFS…>`, after `dlil` and `lo0`: no root device | P1-07 (mockfs PID 1) gives the first root; P1-08 an HFS+ ramdisk, P1-10 virtio-blk |
 
 Debugging: QEMU's gdbstub (`-s`) with `lldb`, loading `kernel.release.sbsa.unstripped` with `--slide 0x8000` (the kernel's offset inside the collection at slide 0) and hardware breakpoints (`breakpoint set -H`). Panic `caller` and `pc` values minus 0x8000 symbolise with `atos` against the unstripped kernel.
+
+**Open threads (parked 2026-09-28).** In order of the boot path:
+- **P1-07, the next boot blocker.** Boot stops in the root-device wait above. The first root is mockfs with a PID 1 test binary. `sbsa_boot_test`'s last expected line (`Waiting on <dict ID=`) moves on when it lands.
+- **P1-06, SMP half (status `doing`).** The boot CPU is done. Still to do: bringing up secondaries through `NeoDarwinPSCI` (`CPU_ON`), per-CPU GIC redistributor init and IPI measurement. The exit is `hw.ncpu` equal to the MADT count.
+  - **PSCI conduit:** QEMU `virt` without EL3 firmware uses `hvc`, but `sbsa_isa_audit` forbids `hvc` in the kernel, so the conduit choice (take it from the FADT/DT, and how the audit treats it) comes first.
+  - **Testing:** `tools/efi/qemu_efi_test.sh --smp N` runs SMP boots.
+- **P1-15.** CoreEntitlements, static trust caches from neoboot, and signed trust-cache loads, replacing ndamfi's default deny.
+- **P1-04.** The device tree from ACPI, replacing `Platform.swift`'s hand-written `virt` tree.
+
+Each probe build of `//kernel:sbsa_kc` takes about 9 minutes. Never run `bazel clean`: it throws the kernel build away.
 
 ### 2.2 ACPI → kernel: the two-tier strategy
 

@@ -89,6 +89,7 @@ SBSA_PATCHES = [
     "patches/0007-kalloc-enforce-per-size-class-zone-limit.patch",
     "patches/0008-libkern-build-ndcrypto.patch",
     "patches/0009-iokit-build-neodarwin-platform.patch",
+    "patches/0010-libkern-build-libpthread-kern.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -96,6 +97,8 @@ SBSA_OVERLAYS = {
     "//kernel/neodarwin/amfi:kernel_srcs": "bsd/ndamfi",
     "//kernel/neodarwin/crypto:kernel_srcs": "libkern/ndcrypto",
     "//kernel/neodarwin/platform:kernel_srcs": "iokit/ndplatform",
+    "//kernel/neodarwin/pthread:kernel_srcs": "libkern/ndpthread",
+    "@apple_libpthread//:kernel_srcs": "libkern/ndpthread/libpthread",
     "@freebsd_crypto//:all": "libkern/ndcrypto/freebsd",
 }
 
@@ -202,6 +205,10 @@ sh_test(
         "'no external trust caches found'",
         # BSD initialisation, reached through the platform expert (P1-06).
         "'MAC Framework successfully initialized'",
+        # Past bsd_init's pthread check, with libpthread's kern/ built in (P1-16).
+        "'ifnet_attach: All kernel threads created for interface lo0'",
+        # Where boot stops today: no root device until P1-07.
+        "'Waiting on <dict ID='",
     ],
     data = [
         ":sbsa_kc",
