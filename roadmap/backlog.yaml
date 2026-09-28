@@ -192,13 +192,21 @@ epics:
     exit: "//kernel/neodarwin/crypto:ndcrypto_kat_test passes 110 known-answer and negative checks through the table; //kernel:sbsa_boot_test boots past kmem_crypto_init and the kernel PRNG setup to lockdown_mode"
     doc: docs/kernel/crypto-provider.md
   - id: P1-14
-    title: "Image4 and AMFI interfaces for kern_trustcache — XNU panics 'image4 interface not available' (bsd/kern/kern_trustcache.c) because AppleImage4 and AMFI, both closed kexts, normally register img4if and the AMFI interface; decide NeoDarwin's providers (trust caches from ndsign/keyd, an open Image4 subset, or a trust-cache path without Image4) per the reuse order"
+    title: "ndamfi: AMFI and Image4 interfaces for kern_trustcache, compiled in. NeoDarwin's libTrustCache over the version 1 module format and lookup Apple published in xnu, default-deny entitlements, and an Image4 interface that declines Image4 objects. Design: docs/kernel/amfi-provider.md"
+    phase: 1
+    owner: kernel-bridge
+    status: done
+    depends: [P1-13]
+    exit: "//kernel/neodarwin/amfi:trustcache_test passes; //kernel:sbsa_boot_test boots past trust-cache initialisation ('no external trust caches found') to IOKit platform matching (P1-06)"
+    doc: docs/kernel/amfi-provider.md
+  - id: P1-15
+    title: "Entitlements and trust-cache signing: a CoreEntitlements implementation behind amfi (replacing ndamfi's default deny), static trust caches from neoboot, and trust-cache load grants tied to ndsign/keyd"
     phase: 1
     owner: kernel-bridge
     status: todo
-    depends: [P1-13]
-    exit: "the SBSA kernel boots past trust-cache initialisation on QEMU virt"
-    doc: docs/kernel/arm64-sbsa-bringup.md
+    depends: [P1-14]
+    exit: "a platform binary listed in a neoboot-supplied trust cache runs with its entitlements; one not listed is refused under cs_enforcement"
+    doc: docs/kernel/amfi-provider.md
   # ---- Phase 2: Base system, packaging, updates ----
   - id: P2-01
     title: "ndpkg format, manifest schema, nd_package rule, ndsign"

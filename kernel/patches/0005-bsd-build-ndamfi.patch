@@ -1,0 +1,29 @@
+From: NeoDarwin
+Subject: [PATCH] bsd: build ndamfi, NeoDarwin's AMFI and Image4 interface provider
+
+XNU's code-signing path requires two interfaces that Apple's closed
+AppleMobileFileIntegrity and AppleImage4 kexts register: the AMFI table
+(including libTrustCache's functions) and the Image4 interface;
+trust_cache_runtime_init() panics without them. It also links
+trustCacheInitializeRuntime() and TCTypeConfig directly.
+
+ndamfi (kernel/neodarwin/amfi) provides all of it: NeoDarwin's
+libTrustCache over the version 1 module format and lookup Apple
+published in xnu, default-deny entitlements, and an Image4 interface
+that declines Image4 objects. The build overlays it at bsd/ndamfi; this
+patch adds it to bsd's file list. Design: docs/kernel/amfi-provider.md.
+
+Rebase-risk: low (three lines in bsd/conf/files).
+---
+--- a/bsd/conf/files	2026-09-28 10:04:30
++++ b/bsd/conf/files	2026-09-28 10:04:30
+@@ -434,6 +434,9 @@
+ bsd/kern/kern_sfi.c			standard
+ bsd/kern/kern_time.c			standard
+ bsd/kern/kern_trustcache.c  standard
++bsd/ndamfi/nd_amfi.c	standard
++bsd/ndamfi/nd_trustcache.c	standard
++bsd/ndamfi/nd_tc_lookup.c	standard
+ bsd/kern/kern_codesigning.c standard
+ bsd/kern/code_signing/txm.c standard
+ bsd/kern/code_signing/ppl.c standard

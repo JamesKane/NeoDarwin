@@ -1,4 +1,5 @@
 # XNU kernel builds (docs/kernel/arm64-sbsa-bringup.md, docs/repository.md §3).
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("//rules:kc.bzl", "kext_collection")
 load("//rules:xnu.bzl", "libfirehose_kernel", "nd_build_sdk", "xnu_headers", "xnu_kernel")
 
@@ -9,6 +10,13 @@ DARWIN_VERSION = "25.0.0"  # macOS 26.0 release set; see upstream.lock
 filegroup(
     name = "sdk_shims",
     srcs = glob(["sdk/**"]),
+)
+
+# NeoDarwin's libTrustCache interface (a kernel SDK shim), for host tests.
+cc_library(
+    name = "trustcache_shim",
+    hdrs = ["sdk/usr/local/include/TrustCache/API.h"],
+    strip_include_prefix = "sdk/usr/local/include",
 )
 
 # NeoDarwin additions to the host SDK: availability.pl, the kernel firehose
@@ -76,7 +84,7 @@ SBSA_PATCHES = [
     "patches/0002-sbsa-board-config.patch",
     "patches/0003-osfmk-generic-arm64-guards.patch",
     "patches/0004-config-sbsa-exports.patch",
-    "patches/0005-bsd-neodarwin-trustcache-runtime.patch",
+    "patches/0005-bsd-build-ndamfi.patch",
     "patches/0006-sbsa-no-apple-implementation-registers.patch",
     "patches/0007-kalloc-enforce-per-size-class-zone-limit.patch",
     "patches/0008-libkern-build-ndcrypto.patch",
@@ -84,6 +92,7 @@ SBSA_PATCHES = [
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
 SBSA_OVERLAYS = {
+    "//kernel/neodarwin/amfi:kernel_srcs": "bsd/ndamfi",
     "//kernel/neodarwin/crypto:kernel_srcs": "libkern/ndcrypto",
     "@freebsd_crypto//:all": "libkern/ndcrypto/freebsd",
 }
@@ -187,6 +196,8 @@ sh_test(
         "'iBoot version: neoboot-0.1'",
         # Printed after ndcrypto has installed the crypto table and the kernel PRNG (P1-13).
         "'lockdown_mode: lockdown mode in nvram is off'",
+        # After ndamfi has registered the AMFI and Image4 interfaces (P1-14).
+        "'no external trust caches found'",
     ],
     data = [
         ":sbsa_kc",

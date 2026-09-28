@@ -1,0 +1,47 @@
+# ndamfi: NeoDarwin's provider for XNU's AMFI and Image4 interfaces
+# (docs/kernel/amfi-provider.md). nd_amfi.c registers them in the kernel;
+# the trust-cache engine also builds on the host for its tests.
+load("//rules:cc.bzl", "nd_cc_library", "nd_cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+nd_cc_library(
+    name = "img4_test_stub",
+    hdrs = ["test/include/img4/firmware.h"],
+    includes = ["test/include"],
+    testonly = True,
+)
+
+# The trust-cache engine alone: it needs no kernel headers.
+nd_cc_library(
+    name = "trustcache_host",
+    testonly = True,
+    srcs = [
+        "nd_tc_lookup.c",
+        "nd_trustcache.c",
+    ],
+    hdrs = ["nd_trustcache.h"],
+    deps = [
+        ":img4_test_stub",
+        "//kernel:trustcache_shim",
+        "@apple_xnu_corecrypto//:kern_trustcache_headers",
+    ],
+)
+
+nd_cc_test(
+    name = "trustcache_test",
+    size = "small",
+    srcs = ["test/tc_test.c"],
+    deps = [":trustcache_host"],
+)
+
+# Overlaid at bsd/ndamfi by the kernel build (kernel/BUILD.bazel, patch 0005).
+filegroup(
+    name = "kernel_srcs",
+    srcs = [
+        "nd_amfi.c",
+        "nd_tc_lookup.c",
+        "nd_trustcache.c",
+        "nd_trustcache.h",
+    ],
+)

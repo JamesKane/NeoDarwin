@@ -1,6 +1,7 @@
 # BUILD file for @apple_xnu_corecrypto: the same pinned xnu archive as
-# @apple_xnu, exposing xnu's own corecrypto subset (osfmk/corecrypto) and
-# the APSL corecrypto and libkern crypto headers, for ndcrypto's host tests.
+# @apple_xnu, exposing the xnu sources NeoDarwin's host tests build against:
+# xnu's own corecrypto subset (osfmk/corecrypto), the APSL corecrypto and
+# libkern crypto headers (ndcrypto), and the trust-cache format (ndamfi).
 # Only these headers are exposed: EXTERNAL_HEADERS as a whole shadows libc.
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
@@ -49,4 +50,14 @@ cc_library(
         ":corecrypto_internal",
         ":libkern_crypto_headers",
     ],
+)
+
+# Apple's trust-cache module format, for ndamfi's host tests.
+cc_library(
+    name = "kern_trustcache_headers",
+    hdrs = [
+        "osfmk/kern/cs_blobs.h",
+        "osfmk/kern/trustcache.h",
+    ],
+    strip_include_prefix = "osfmk",
 )

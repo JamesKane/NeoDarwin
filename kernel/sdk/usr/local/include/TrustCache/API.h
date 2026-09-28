@@ -47,13 +47,17 @@ typedef enum {
 } TCQueryType_t;
 
 typedef uint64_t TCCapabilities_t;
-#define kTCCapabilityNone ((TCCapabilities_t)0)
+#define kTCCapabilityNone     ((TCCapabilities_t)0)
+#define kTCCapabilityHashType ((TCCapabilities_t)1 << 0)  /* entries carry a code-directory hash type */
+#define kTCCapabilityFlags    ((TCCapabilities_t)1 << 1)  /* entries carry flags (CS_TRUST_CACHE_*) */
 
 enum {
 	kTCReturnSuccess = 0,
 	kTCReturnError,
 	kTCReturnNotFound,
 	kTCReturnDuplicate,
+	kTCReturnNotPermitted,   /* NeoDarwin: e.g. Image4-manifested trust caches */
+	kTCReturnInvalidModule,  /* NeoDarwin: malformed or unsupported module */
 };
 
 typedef union {
