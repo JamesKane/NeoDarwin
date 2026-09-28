@@ -114,5 +114,13 @@ struct DeviceTreeWriter {
         }
     }
 
+    mutating func property(_ name: StaticString, u32s a: UInt32, _ b: UInt32, _ c: UInt32) {
+        property(name, length: 12) { v in
+            v.storeBytes(of: a, toByteOffset: 0, as: UInt32.self)
+            v.storeBytes(of: b, toByteOffset: 4, as: UInt32.self)
+            v.storeBytes(of: c, toByteOffset: 8, as: UInt32.self)
+        }
+    }
+
     var complete: Bool { !failed && depth == 0 }
 }

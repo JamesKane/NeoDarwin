@@ -19,7 +19,7 @@ XNU, built from Apple's published `xnu-12377.1.9` (macOS 26.0 release set) by th
 
 ## What the build established
 
-**The SBSA kernel builds and links from public sources alone** (2026-09-27): `kernel.release.sbsa`, a 12.4 MB Mach-O `arm64` executable with no undefined symbols, from Apple's `xnu-12377.1.9` archive plus NeoDarwin's patches and `sdk/` shims, without Apple's Kernel Debug Kit. It boots on QEMU `virt` as far as IOKit start (2026-09-28, `sbsa_boot_test`); with ndcrypto (`neodarwin/crypto`, P1-13) and ndamfi (`neodarwin/amfi`, P1-14) it gets through crypto, PRNG and trust-cache setup to IOKit platform matching, the next blocker (P1-06, `docs/kernel/arm64-sbsa-bringup.md` §2.1.2).
+**The SBSA kernel builds and links from public sources alone** (2026-09-27): `kernel.release.sbsa`, a 12.4 MB Mach-O `arm64` executable with no undefined symbols, from Apple's `xnu-12377.1.9` archive plus NeoDarwin's patches and `sdk/` shims, without Apple's Kernel Debug Kit. It boots on QEMU `virt` as far as IOKit start (2026-09-28, `sbsa_boot_test`); with ndcrypto (`neodarwin/crypto`, P1-13) and ndamfi (`neodarwin/amfi`, P1-14) it and the platform layer (`neodarwin/platform`, P1-06) gets through crypto, PRNG, trust caches and IOKit into BSD initialisation; the next blocker is pthread support (P1-16, `docs/kernel/arm64-sbsa-bringup.md` §2.1.2).
 
 The route there, measured on Apple's own public VMAPPLE configuration: every source compiles, but the link lacks 395 symbols (`link_gaps/vmapple_release.txt`), which Apple's build takes from a closed per-SoC archive in the KDK. They closed as follows.
 

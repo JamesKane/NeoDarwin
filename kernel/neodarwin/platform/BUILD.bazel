@@ -1,0 +1,24 @@
+# NeoDarwin's in-kernel platform layer for generic Arm: platform expert,
+# GICv3 interrupt controller, PSCI power manager
+# (docs/kernel/arm64-sbsa-bringup.md §2.3). Kernel-only IOKit C++.
+load("//rules:cc.bzl", "lang_audit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+SRCS = [
+    "NeoDarwinGICv3.cpp",
+    "NeoDarwinPSCI.cpp",
+    "NeoDarwinPlatform.h",
+    "NeoDarwinPlatformExpert.cpp",
+]
+
+# Overlaid at iokit/ndplatform by the kernel build (kernel/BUILD.bazel, patch 0009).
+filegroup(
+    name = "kernel_srcs",
+    srcs = SRCS,
+)
+
+lang_audit_test(
+    name = "platform_lang_audit",
+    srcs = SRCS,
+)

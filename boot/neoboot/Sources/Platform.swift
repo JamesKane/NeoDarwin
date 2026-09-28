@@ -13,12 +13,22 @@ enum Platform {
     static let gicdOffset: UInt64 = 0x0
     static let gicdSize: UInt64 = 0x1_0000
     static let gicrOffset: UInt64 = 0xa_0000
-    static let gicrSize: UInt64 = 0xf6_0000
+    // One 128 KiB redistributor frame (RD_base + SGI_base) per CPU present;
+    // QEMU reserves 0xf60000 for 123 CPUs, but only these frames exist.
+    // P1-04 takes the frames from the MADT's GICC entries.
+    static let cpuCount: UInt64 = 1
+    static let gicrSize: UInt64 = 0x2_0000 * cpuCount
     static let uartOffset: UInt64 = 0x100_0000
     static let uartSize: UInt64 = 0x1000
     static let uartBase: UInt = UInt(socBase + uartOffset)
 
     static let uartPhandle: UInt32 = 3
+    static let gicPhandle: UInt32 = 5
+    // GIC INTIDs the CPU node names, in AppleARMSMP.cpp's three-entry order:
+    // IPI, PMI, deferred IPI. IPIs are SGIs; the PMU is PPI 23 on SBSA.
+    static let sgiIPI: UInt32 = 0
+    static let ppiPMU: UInt32 = 23
+    static let sgiDeferredIPI: UInt32 = 1
 
     struct Facts {
         var dramBase: UInt64
@@ -73,6 +83,8 @@ enum Platform {
         w.property("reg", u32: UInt32(truncatingIfNeeded: f.mpidr & 0xff_ffff))
         w.property("state", string: "running")
         w.property("timebase-frequency", u32: UInt32(truncatingIfNeeded: f.timebase))  // the kernel never reads CNTFRQ
+        w.property("interrupt-parent", u32: gicPhandle)
+        w.property("interrupts", u32s: sgiIPI, ppiPMU, sgiDeferredIPI)
         w.property("AAPL,phandle", u32: 10)
         w.end()
         w.end()
@@ -89,7 +101,10 @@ enum Platform {
         w.property("name", string: "gic")
         w.property("compatible", string: "arm,gic-v3")
         w.property("reg", gicdOffset, gicdSize, gicrOffset, gicrSize)  // pe_fiq.c
-        w.property("AAPL,phandle", u32: 5)
+        w.property("interrupt-controller", string: "gic")  // IODTMapOneInterrupt stops here
+        w.property("#interrupt-cells", u32: 1)  // one cell: the INTID (NeoDarwinGICv3)
+        w.property("#address-cells", u32: 0)
+        w.property("AAPL,phandle", u32: gicPhandle)
         w.end()
 
         w.begin()  // /arm-io/interrupt-controller: legacy lookup in pe_identify_machine.c

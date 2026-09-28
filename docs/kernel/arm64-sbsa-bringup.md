@@ -126,7 +126,7 @@ The kernel is linked as position-independent (`MH_PIE`) with 65,407 local `ARM64
 
 ### 2.1.2 First boot on QEMU (P1-03)
 
-`//kernel:sbsa_boot_test` boots neoboot and `kernelcache.release.sbsa` on QEMU `virt` (`gic-version=3`, 2 GiB, one CPU). In under six seconds the kernel goes through the loader handoff, its own fixups, MMU and VM bootstrap, zalloc, the scheduler, IPC and logging, and prints `iBoot version: neoboot-0.1` from `PE_init_iokit`. With ndcrypto (P1-13) and ndamfi (P1-14) it continues through crypto, PRNG and trust-cache setup to IOKit platform matching. The device tree is still hand-written for `virt` in `boot/neoboot/Sources/Platform.swift`; P1-04 derives it from ACPI.
+`//kernel:sbsa_boot_test` boots neoboot and `kernelcache.release.sbsa` on QEMU `virt` (`gic-version=3`, 2 GiB, one CPU). In under six seconds the kernel goes through the loader handoff, its own fixups, MMU and VM bootstrap, zalloc, the scheduler, IPC and logging, and prints `iBoot version: neoboot-0.1` from `PE_init_iokit`. With ndcrypto (P1-13), ndamfi (P1-14) and the platform expert (P1-06) it continues through crypto, PRNG, trust caches and IOKit into BSD initialisation. The device tree is still hand-written for `virt` in `boot/neoboot/Sources/Platform.swift`; P1-04 derives it from ACPI.
 
 What the first boot established:
 
@@ -137,7 +137,9 @@ What the first boot established:
 | With no framebuffer, `PE_init_iokit`'s progress-bar centring loop never ends | `-noprogress` in neoboot's default command line until GOP video is passed |
 | Data abort in `kmem_crypto_init`: nothing had called `register_crypto_functions()`, which Apple's corecrypto kext does. Apple's full corecrypto source is evaluation-only, so it can't be used | P1-13, done: ndcrypto, compiled into the kernel from xnu's own corecrypto subset and FreeBSD's kernel crypto (`crypto-provider.md`) |
 | `image4 interface not available` in `bsd/kern/kern_trustcache.c`. AppleImage4 and AMFI, both closed kexts, normally register the Image4 and AMFI interfaces | P1-14, done: ndamfi (`amfi-provider.md`), with Apple's published trust-cache format and lookup |
-| Next stop: `Unable to find driver for this platform: "NeoDarwin,sbsa"` (`IOPlatformExpert.cpp`). The kernel reaches IOKit platform matching | P1-06: the in-kernel platform expert |
+| `Unable to find driver for this platform: "NeoDarwin,sbsa"` (`IOPlatformExpert.cpp`) | P1-06, boot CPU done: `NeoDarwinPlatformExpert`, `NeoDarwinGICv3`, `NeoDarwinPSCI` (patch 0009), matched by a built-in personality |
+| A 16 MB `kmem_alloc` failed while mapping the GIC redistributors: the device tree gave QEMU's whole 123-CPU region | the tree now describes one frame per CPU present (P1-04 takes them from the MADT), and the GIC driver caps its mapping at `MAX_CPUS` frames |
+| Next stop: `pthread kernel extension not loaded` (`pthread_shims.c`), after BSD init has brought up the MAC framework, buffer cache and mbufs | P1-16: libpthread's `kern/` is Apple open source |
 
 Debugging: QEMU's gdbstub (`-s`) with `lldb`, loading `kernel.release.sbsa.unstripped` with `--slide 0x8000` (the kernel's offset inside the collection at slide 0) and hardware breakpoints (`breakpoint set -H`). Panic `caller` and `pc` values minus 0x8000 symbolise with `atos` against the unstripped kernel.
 

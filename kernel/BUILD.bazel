@@ -88,12 +88,14 @@ SBSA_PATCHES = [
     "patches/0006-sbsa-no-apple-implementation-registers.patch",
     "patches/0007-kalloc-enforce-per-size-class-zone-limit.patch",
     "patches/0008-libkern-build-ndcrypto.patch",
+    "patches/0009-iokit-build-neodarwin-platform.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
 SBSA_OVERLAYS = {
     "//kernel/neodarwin/amfi:kernel_srcs": "bsd/ndamfi",
     "//kernel/neodarwin/crypto:kernel_srcs": "libkern/ndcrypto",
+    "//kernel/neodarwin/platform:kernel_srcs": "iokit/ndplatform",
     "@freebsd_crypto//:all": "libkern/ndcrypto/freebsd",
 }
 
@@ -198,6 +200,8 @@ sh_test(
         "'lockdown_mode: lockdown mode in nvram is off'",
         # After ndamfi has registered the AMFI and Image4 interfaces (P1-14).
         "'no external trust caches found'",
+        # BSD initialisation, reached through the platform expert (P1-06).
+        "'MAC Framework successfully initialized'",
     ],
     data = [
         ":sbsa_kc",

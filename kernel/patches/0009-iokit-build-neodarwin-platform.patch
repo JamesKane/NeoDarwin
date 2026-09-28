@@ -1,0 +1,46 @@
+From: NeoDarwin
+Subject: [PATCH] iokit: build NeoDarwin's generic Arm platform expert
+
+On a machine whose device tree root is "NeoDarwin,sbsa" no platform
+expert matched and IOPanicPlatform panicked ("Unable to find driver for
+this platform"). Apple's ARM platform experts, interrupt controllers and
+power managers are closed kexts. NeoDarwin's (kernel/neodarwin/platform,
+overlaid at iokit/ndplatform) are compiled into the kernel, as
+AppleARMSMP.cpp is:
+- NeoDarwinPlatformExpert, an IODTPlatformExpert;
+- NeoDarwinGICv3, the IRQ interrupt controller and IPIs;
+- NeoDarwinPSCI, the IOPMGR.
+
+This patch lists them for arm64 and adds the built-in personality that
+matches the platform expert to the device tree root.
+
+Rebase-risk: low (appended entries).
+---
+--- a/iokit/conf/files.arm64	2026-09-28 10:28:52
++++ b/iokit/conf/files.arm64	2026-09-28 10:28:52
+@@ -6,5 +6,10 @@
+ # SMP
+ iokit/Kernel/arm/AppleARMSMP.cpp    					optional iokitcpp
+ 
++# NeoDarwin generic Arm platform: expert, GICv3, PSCI (kernel/neodarwin/platform)
++iokit/ndplatform/NeoDarwinPlatformExpert.cpp	optional iokitcpp
++iokit/ndplatform/NeoDarwinGICv3.cpp	optional iokitcpp
++iokit/ndplatform/NeoDarwinPSCI.cpp	optional iokitcpp
++
+ # tightbeamc generated implementation files
+ ./Exclaves/IOService.tightbeam.c		optional iokitcpp config_exclaves
+--- a/iokit/KernelConfigTables.cpp	2026-09-28 10:28:52
++++ b/iokit/KernelConfigTables.cpp	2026-09-28 10:28:52
+@@ -40,6 +40,12 @@
+     "     'IOProbeScore'    = 0:32;"
+     "   },"
+     "   {"
++    "     'IOClass'         = NeoDarwinPlatformExpert;"
++    "     'IOProviderClass' = IOPlatformExpertDevice;"
++    "     'IONameMatch'     = 'NeoDarwin,sbsa';"
++    "     'IOProbeScore'    = 1000:32;"
++    "   },"
++    "   {"
+     "     'IOClass'         = IOExclaveProxy;"
+     "     'IOProviderClass' = IOService;"
+     "     'IOExclaveProxy'  = 1:32;"

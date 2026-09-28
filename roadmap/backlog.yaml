@@ -131,7 +131,7 @@ epics:
     title: "In-kernel platform expert, GICv3InterruptController, PSCIPowerManager (IOPMGR)"
     phase: 1
     owner: iokit-platform
-    status: todo
+    status: doing
     depends: [P1-05]
     exit: "all CPUs online; hw.ncpu == MADT count; IPIs measured"
     doc: docs/kernel/arm64-sbsa-bringup.md
@@ -207,6 +207,14 @@ epics:
     depends: [P1-14]
     exit: "a platform binary listed in a neoboot-supplied trust cache runs with its entitlements; one not listed is refused under cs_enforcement"
     doc: docs/kernel/amfi-provider.md
+  - id: P1-16
+    title: "pthread kernel support: build libpthread's kern/ (Apple open source, APSL) into the kernel and register its function table, as pthread.kext does on Apple systems"
+    phase: 1
+    owner: kernel-bridge
+    status: todo
+    depends: [P1-06]
+    exit: "the SBSA kernel boots past bsdinit's pthread check ('pthread kernel extension not loaded')"
+    doc: docs/kernel/arm64-sbsa-bringup.md
   # ---- Phase 2: Base system, packaging, updates ----
   - id: P2-01
     title: "ndpkg format, manifest schema, nd_package rule, ndsign"
