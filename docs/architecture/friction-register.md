@@ -48,17 +48,22 @@ The heritage study (`reports/heritage.md` in the study repository: AmigaOS, Atar
 
 | Layer | Entries | Existing epic | Gap |
 |---|---|---|---|
-| **wsys fast path**, as window-protocol extension proposals | F-101, F-102, F-202, F-205–F-213 (12) | P4-03 wsys, P4-02 inputd | The extensions (frame event with presentation feedback, sequenced ctl acknowledgements with anchored popups, per-output scale events, visibility state, IME/pen/relative-pointer channels, `DS_INTERACTIVE`) need a protocol revision before `wsys` freezes it. |
+| **wsys fast path**, as window-protocol extension proposals | F-101, F-102, F-202, F-205–F-213 (12) | P4-17 (protocol revision 2), then P4-03 wsys, P4-02 inputd | — |
 | **toolkit** | F-201, F-216, plus the toolkit halves of F-203, F-210, F-211, F-215 | P4-12 toolkit v1 (via the charter) | — |
-| **P7 GPU/compute** | F-103–F-107, F-110, F-111 (7) | P7-01 GPU driver + Mesa | The Vulkan profile, conformance gate, shared quirk database and offline pipeline caches are not yet epics. |
-| **kernel scheduler/VM** | F-108, F-109, F-203, F-204, F-215, F-217, F-218 (7) | **none** | **No epic** covers the scheduling contract (absolute-deadline wait, thread intent, real-time admission) or the VM-owned GPU budget. |
+| **P7 GPU/compute** | F-103–F-107, F-110, F-111 (7) | P7-01 GPU driver + Mesa; P7-07 (Vulkan profile and conformance gate); P7-06 (buffer object) | — |
+| **kernel scheduler/VM** | F-108, F-109, F-203, F-204, F-215, F-217, F-218 (7) | P4-16 (scheduling contract), P7-06 (GPU budget and sharing) | F-217 (async I/O queue) and F-218 (address-space views) are not yet scoped into an epic. |
 | **kernel HID** | F-214 | P3-07 USB + HID dexts, P4-02 inputd | A controller class and database is not scoped. |
-| **audio service** | F-216 (+F-215) | **none** (Phase 7 narrative only) | **No audio epic.** |
+| **audio service** | F-216 (+F-215) | P4-18 | — |
 | **build/packaging** | F-219, and the cache halves of F-103 and F-111 | P2-01 ndpkg | Optional-library and weak-linking policy. |
 
-## Proposed backlog additions
+## Backlog additions
 
-These are for the roadmap owner to accept or reshape; they are not yet in `roadmap/backlog.yaml`.
+Accepted 2026-09-28 and added to `roadmap/backlog.yaml`:
+- **P4-16:** item 1
+- **P4-17:** item 2 (P4-03 now depends on it)
+- **P4-18:** item 3 (P4-12 now depends on P4-16 and P4-18)
+- **P7-06:** item 4
+- **P7-07:** item 5
 
 1. **Scheduling contract** (kernel, before P4-12 freezes the toolkit loop):
    - one absolute-deadline wait with leeway on every waitable source;

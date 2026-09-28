@@ -375,7 +375,7 @@ epics:
     phase: 4
     owner: graphics
     status: todo
-    depends: [P4-01, P4-02, P4-14, P5-02]
+    depends: [P4-01, P4-02, P4-14, P5-02, P4-17]
     exit: "deskconform's 53 checks pass against wsys; stats shows p99 under 4 ms and zero composites when idle; Super+1..9 switches workspaces"
     doc: docs/desktop/window-protocol.md
   - id: P4-04
@@ -455,7 +455,7 @@ epics:
     phase: 4
     owner: graphics
     status: todo
-    depends: [P4-05, P4-07]
+    depends: [P4-05, P4-07, P4-16, P4-18]
     exit: "the three study prototypes (game loop, editor, synth UI) build against the shipped API"
     doc: docs/architecture/graphics-desktop.md
   - id: P4-13
@@ -466,6 +466,30 @@ epics:
     depends: [P4-12]
     exit: "a11y dump of a window matches the visible widgets"
     doc: docs/architecture/graphics-desktop.md
+  - id: P4-16
+    title: "Kernel scheduling contract — one kevent wait over 9P event fids, EVFILT_USER wake and absolute-deadline timers with leeway (no resolution knob); thread intent (interactive/throughput/background/audio) mapped to XNU QoS and core placement; real-time admission for audio (Plan 9 EDF admit as the model)"
+    phase: 4
+    owner: kernel-bridge
+    status: todo
+    depends: [P5-02]
+    exit: "one kevent wait returns wsys events, a user wake and a deadline timer; the S7 game-loop prototype on NeoDarwin reports p99 wake error and frame-pacing error <= 1 ms with no timer-resolution call; an audio thread is admitted with period and computation"
+    doc: docs/architecture/friction-register.md
+  - id: P4-17
+    title: "Window protocol revision 2 — frame event with actual presentation time, target and seq; latency n; throttled clock for hidden windows; configure event (logical and pixel size, rational scale, config seq) and presents tagged with it; sequenced ctl acknowledgements and anchored popups; decor none with hit-test regions; DS_INTERACTIVE; key/keymap, IME, pen, relative-pointer and gamepad channels; GPU-surface buffer size independent of the window; Deskevent mask wider than 32 types; extended event record with ns timestamp and payload span"
+    phase: 4
+    owner: graphics
+    status: todo
+    depends: [P4-05]
+    exit: "window-protocol.md and desktop.h revised with capability queries; each item has a deskconform check; no global lock and no modal loop in the protocol"
+    doc: docs/desktop/toolkit-charter.md
+  - id: P4-18
+    title: "Audio service and toolkit audio stream — system mixer on a fixed period, stream contract record (period, rate, latency, device-time to mach time, device identity) with changes as events, deadline-scheduled streams, voices, PulseAudio-protocol door"
+    phase: 4
+    owner: userland
+    status: todo
+    depends: [P4-16, P3-05]
+    exit: "the S7 synth-ui prototype on NeoDarwin holds a 128-frame period with 0 underruns and reports latency from the contract; a PulseAudio client plays through the door"
+    doc: docs/architecture/friction-register.md
   # ---- Phase 5: Namespaces, state as files, agent-era security ----
   - id: P5-01
     title: "libns (Swift over libagent/lib9p) and nsd multiplexer with per-process mount tables and the agentd registry"
@@ -597,3 +621,19 @@ epics:
     depends: [P2-03, P4-10, P5-07]
     exit: "a stranger installs NeoDarwin from the release page"
     doc: roadmap/ROADMAP.md
+  - id: P7-06
+    title: "GPU memory and sharing — one buffer object (Mach memory entry + format + fence) across Vulkan, compute, processes and wsys; host-pointer import; per-task GPU budget with a pressure signal owned by the VM"
+    phase: 7
+    owner: graphics
+    status: todo
+    depends: [P7-01]
+    exit: "the S7 compute-display prototype presents with 0 copies on NeoDarwin; an mmap'd file is imported as a GPU buffer without a copy; the budget is reported exactly and pressure arrives as an event"
+    doc: docs/architecture/friction-register.md
+  - id: P7-07
+    title: "Vulkan profile and conformance gate — one guaranteed NeoDarwin Vulkan profile, drivers gated on a CTS subset in CI, a shared per-driver quirk database, pipeline caches built at package time"
+    phase: 7
+    owner: graphics
+    status: todo
+    depends: [P7-01, P2-01]
+    exit: "the profile is published; a driver failing the CTS subset cannot ship; an ndpkg install prebuilds pipeline caches for a Vulkan app"
+    doc: docs/architecture/friction-register.md
