@@ -4,8 +4,9 @@
 ## 1. Shape: one monorepo plus upstream mirrors
 
 - **`neodarwin/neodarwin`** (monorepo): all first-party code, BUILD files, docs, roadmap, CI. Cloning it and running `bazel build //images:qemu-virt` produces a bootable image; Bazel fetches vendored upstream by pinned commit.
-- **`neodarwin/mirror-<component>`**: verbatim mirrors of upstream drops, one repository each, tagged per upstream release (`apple/xnu-12377.1.9`, `openzfs/zfs-2.4.x`). Components: `xnu`, `dyld`, `Libc`, `libplatform`, `libpthread`, `libmalloc`, `libdispatch`, `Libinfo`, `IOPCIFamily`, `IOStorageFamily`, `IOGraphics`, `IOSerialFamily`, `hfs`, `launchd-842`, `swift-corelibs-foundation`, `openzfs` (the OpenZFS on OS X fork until the macOS layer is upstream), `plan-neo` (the pilot; source of `libstyle`, `libagent`, `lib9p` and `wsys`'s reference implementation), `nuaqua` (the pilot; source of Vesper and Typeface), `acpica`, `libwayland`. Never edited; NeoDarwin never commits to them. They keep the monorepo small and make a new upstream drop a tag, not a 400 MB commit.
-- **`neodarwin/ports`**: the pkgsrc overlay and `pkgsrc2nd` outputs (packaging design §7), separate because its cadence and licences differ.
+- **`neodarwin/mirror-<component>`**: verbatim mirrors of upstream drops, one repository each, tagged per upstream release (`apple/xnu-12377.1.9`, `openzfs/zfs-2.4.x`). Components: `xnu`, `dyld`, `Libc`, `libplatform`, `libpthread`, `libmalloc`, `libdispatch`, `Libinfo`, `IOPCIFamily`, `IOStorageFamily`, `IOGraphics`, `IOSerialFamily`, `hfs`, `launchd-842`, `swift-corelibs-foundation`, `openzfs` (the OpenZFS on OS X fork until the macOS layer is upstream), `acpica`, the Apple command projects (`file_cmds`, `shell_cmds`, `system_cmds`, `network_cmds`, …) and `OpenSSH`. The pilot mirrors (`plan-neo`, `nuaqua`) and `libwayland` moved to Magi. Never edited; NeoDarwin never commits to them. They keep the monorepo small and make a new upstream drop a tag, not a 400 MB commit.
+- **`neodarwin/ports`**: the ports tree (`ports.md`), checked out at `/usr/ports`; separate because its cadence and licences differ.
+- **Downstreams** live in their own repositories and consume this one as a Bazel module (`docs/architecture/downstream.md`). Magi is `../Magi` today.
 - **`neodarwin/hardware`**: board notes, DT dumps, firmware download scripts, hardware-in-the-loop runner configs. No binaries; firmware blobs are LFS pointers to a release bucket.
 
 ## 2. Monorepo layout
@@ -21,20 +22,18 @@ neodarwin/
     patches/NNNN-<topic>.patch                    # ordered series applied by the build (§3)
     neodarwin/                                    # NeoDarwin-owned kernel sources: SBSA board config, platform expert, GICv3, PSCI, exported KPIs for zfs/9p/fuse
     BUILD.bazel
-  kexts/{ndacpi,zfs,hfs,nd9p,ndfuse,msdosfs,ndsandbox,ndfb,virtio,nvme,ahci,ndusb,…}/   # each: upstream.lock (if adopted) + patches/ + BUILD
+  kexts/{ndacpi,zfs,hfs,ndfuse,msdosfs,ndfb,virtio,nvme,ahci,ndusb,…}/   # each: upstream.lock (if adopted) + patches/ + BUILD
   dexts/{hid,net-e1000,net-virtio,gpio,…}/
   base/{dyld,libc,libdispatch,libplatform,libpthread,libmalloc,launchd,foundation,…}/   # upstream.lock + patches/ + BUILD overlay
-  services/{nsd,keyd,pkgd,wsys,inputd,auditd,netd,zed}/
-  libs/{libns,libnd,libwayland-glue}/
-  desktop/{chrome,toolkit,viewer,prefs,terminal,schemes}/   # desktop chrome and clients
-  desktop/vesper/                                 # renderer + Typeface from the NuAqua pilot, namespaces refactored
-  docs/desktop/                                   # window protocol, theme engine, UI configuration, agent protocol
-  tools/{kcgen,kcheck,dtdump,ndimage,ndsign,xnu2bazel,pkgsrc2nd,upstream-bump,backlog-sync}/
+  base/{service,sysrc,…}/                         # first-party administration front ends (freebsd-parity.md §3)
+  services/{pkgd,netd,consoled,zed}/
+  libs/{libnd}/
+  tools/{kcgen,kcheck,dtdump,ndimage,ndsign,ndports,parity,xnu2bazel,upstream-bump,backlog-sync}/
   images/                                         # system_image, esp_image, ramdisk targets
   tests/{qemu,hil,abi}/
   docs/                                           # this tree
   roadmap/ROADMAP.md  roadmap/backlog.yaml
-  third_party/{acpica,libsolv,zstd,libarchive,libwayland,sqlite,…}/   # BUILD + pinned archives; no vendored source
+  third_party/{acpica,libsolv,zstd,libarchive,sqlite,…}/   # BUILD + pinned archives; no vendored source
   .github/workflows/  .forgejo/workflows -> ../.github/workflows       # §5
   .github/ISSUE_TEMPLATE/  .github/PULL_REQUEST_TEMPLATE.md
 ```

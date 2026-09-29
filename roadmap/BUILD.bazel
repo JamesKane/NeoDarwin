@@ -13,3 +13,6 @@ sh_test(
         "validate_backlog.rb",
     ],
 )
+
+# Downstreams validate their neodarwin:<id> dependencies against this file.
+exports_files(["backlog.yaml"])

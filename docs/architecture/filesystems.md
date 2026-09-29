@@ -12,7 +12,7 @@ Why ZFS fits the charter better than any alternative:
 | Atomic, reversible upgrades of the whole system (goal 3) | **boot environments**: each system set is a dataset clone; `neoboot` and `pkgd` select one; rollback is a property flip, not a slot copy |
 | Integrity of the system image | end-to-end checksums plus `zfs send` streams verified by signature; no separate verity layer needed |
 | Package store that shares blocks across versions | per-package datasets or clones, `compression=zstd` default, optional dedup |
-| Agent-era observability | snapshots as immutable state points; dataset properties as a metadata store readable under `/n/sys/fs` |
+| Observability | snapshots as immutable state points; dataset properties as a metadata store readable with `zfs get -j` and by downstreams |
 | Licensing | CDDL-1.0, file-scope copyleft, shippable alongside APSL/BSD code as a kext (this is how ZFS has shipped on macOS and FreeBSD for years); nothing GPL enters the kernel |
 | Existing XNU port | OpenZFS has run on XNU for a decade through the OpenZFS on OS X project (`zfs.kext` + SPL); NeoDarwin inherits a working IOKit/VFS binding instead of writing a filesystem |
 
@@ -31,13 +31,13 @@ Plan:
 
 | Piece | Design |
 |---|---|
-| Pool layout | `ndpool/ROOT/<be-name>` (system sets, `readonly=on`), `ndpool/pkg` (package store, `compression=zstd`), `ndpool/home/<user>`, `ndpool/var`, `ndpool/n` (namespace-backed datasets, optional) |
+| Pool layout | `ndpool/ROOT/<be-name>` (system sets, `readonly=on`), `ndpool/pkg` (package store, `compression=zstd`), `ndpool/home/<user>`, `ndpool/var` |
 | Root mount | `neoboot` passes `rd=zfs:ndpool/ROOT/<be>`; a small extension where `bsd_init` parses `rd=` (`bsd/kern/bsd_init.c:460`) lets `zfs.kext` import the pool from the devices named in `boot.cfg` and mount the dataset as root once IOStorageFamily has published them |
 | Boot environments | `ndpkg system upgrade` clones the current BE, applies the system-set transaction inside it, snapshots it, marks it `next`; `neoboot` reads `boot.cfg` (`default`, `next`, `tries`); success promotes `next`, failure boots the previous BE. `bectl`-style commands: `ndpkg system list/activate/rollback/destroy` |
 | Kernel collection placement | each BE's kernel collection lives on the ESP under `/EFI/NeoDarwin/be/<be-name>/kc.boot`, written by the same transaction, so `neoboot` needs no ZFS reader. A later epic (P3-06) adds a read-only ZFS reader to `neoboot` (FreeBSD's `stand/libsa/zfs`, BSD-licensed, is the reference) so kernels can live inside the BE |
 | Integrity | system sets are received from signed `zfs send` streams (`ndsign` over the stream hash); the BE's checksum tree is the image verification |
-| Encryption | ZFS native encryption for `home` and `var`; keys held by `keyd`; unlock at login via `/n/sys/keys` |
-| Snapshots for agents | `ndpkg` and `nsd` take named snapshots before risky operations (`pre-upgrade`, `pre-agent-session-<id>`) and expose them under `/n/sys/fs/snapshots`, giving an undo for agent actions on user data |
+| Encryption | ZFS native encryption for `home` and `var`; a passphrase or key file unlocked with `zfs load-key` at boot or login, as on FreeBSD (P3-10). A downstream may hold keys in its own key service |
+| Snapshots before risky operations | `ndpkg` takes named snapshots (`pre-upgrade-<txn>`) before every transaction. The mechanism is available to downstreams, and Magi snapshots around agent sessions this way |
 
 ## 4. Other filesystems
 
@@ -46,10 +46,9 @@ Plan:
 | `hfs.kext` | Apple open source | bootstrap root during Phase 1; read HFS+ media. Built into the kernel until `kcgen` links kexts (M5): patch 0015, P1-08a | P1 |
 | `msdosfs` | FreeBSD `sys/fs/msdosfs` (BSD) | ESP maintenance from userland (write kernel collections, `boot.cfg`) | P2 |
 | `ndfuse.kext` | port of FreeBSD `sys/fs/fuse` (BSD-2) | FUSE protocol for userland filesystems (SMB/NFS/S3 gateways, experimental formats) | P3 |
-| `nd9p.kext` | port of FreeBSD `sys/fs/p9fs` (BSD-2) | mounts `/n` (namespaces design); virtio-9p shared folders for development | P3/P5 |
 | exFAT, NTFS, ext4 | userland via FUSE from ports | removable media | ports |
 
-All plug in through `vfs_fsadd` (`bsd/sys/mount.h:569-875`), the same KPI Apple's `hfs` uses; the first port teaches the pattern for the rest.
+All plug in through `vfs_fsadd` (`bsd/sys/mount.h:569-875`), the same KPI Apple's `hfs` uses; the first port teaches the pattern for the rest. The KPI is on the exported list that downstreams rely on (`downstream.md` §3); Magi's `nd9p.kext` (a FreeBSD `p9fs` port) plugs in this way.
 
 ## 5. Bring-up ladder
 
