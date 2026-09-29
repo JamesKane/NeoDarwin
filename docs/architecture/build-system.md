@@ -5,7 +5,7 @@
 
 **Bazel (Bzlmod) with a hermetic, pinned LLVM + Swift toolchain, cross-compiling every target from any macOS or Linux host, with remote caching from day one.**
 
-The build replaces four incompatible upstream systems: XNU's GNU make with Apple-internal helpers (`EmbeddedDeviceMap`, `kextsymboltool`, `setsegname`, `config`), Xcode projects (dyld, Libc, libdispatch, IOKit families), autotools/CMake in third-party code, and SwiftPM in NuAqua.
+The build replaces three incompatible upstream systems: XNU's GNU make with Apple-internal helpers (`EmbeddedDeviceMap`, `kextsymboltool`, `setsegname`, `config`), Xcode projects (dyld, Libc, libdispatch, IOKit families), and autotools/CMake in third-party code.
 
 ### Why Bazel
 
@@ -41,7 +41,6 @@ kexts/<family>/BUILD
 boot/neoboot/BUILD
 base/<component>/BUILD            # dyld, Libc, libdispatch, launchd, …
 services/<daemon>/BUILD
-desktop/nuaqua/BUILD
 tools/<tool>/BUILD
 third_party/<pkg>/BUILD           # wrapped upstream (CMake/autotools via rules_foreign_cc, or native BUILD)
 images/BUILD                      # system_image, esp_image, ramdisk targets
@@ -79,7 +78,7 @@ Written in Swift 6 (language policy T1); all built by the same graph and used as
 | `kcheck` | verifies a collection against the kernel's boot-time assumptions: flat layout, chain format and one chain per page, every fixup target inside the image, the top-level segments `arm_vm_init()` derives kext regions from, `__PRELINK_INFO`; with `--kernel`, round-trips the collection byte for byte against its source kernel |
 | `dtdump` | prints/validates an Apple-format device tree against `dt-abi.md` |
 | `ndimage` | assembles ESP + system image from packages |
-| `ndsign` | Ed25519 signing of manifests, kernel collections and images; keys in `keyd` |
+| `ndsign` | Ed25519 signing of manifests, kernel collections and images; keys in the key chain of packaging.md §4 |
 | `xnu2bazel` | converts XNU `conf/files*`, `Makefile` fragments and `MASTER*` configs into BUILD files |
 | `lang-audit` | lists every first-party C/C++ file with its justification line; fails CI on a missing one |
 
@@ -100,6 +99,5 @@ Written in Swift 6 (language policy T1); all built by the same graph and used as
 | dyld, Libc, libplatform, libpthread, libmalloc, libdispatch, Libinfo, Libnotify, libsystem | Xcode projects | `xcodeproj2bazel` one-shot conversion per drop; hand-maintained BUILD overlays under `base/<component>/` |
 | IOKit families (IOPCIFamily, IOStorageFamily, IOGraphics, hfs) | Xcode | `kext` rule with BUILD overlays |
 | swift-corelibs-foundation, libdispatch (swift branch) | CMake | `rules_foreign_cc` initially, native later |
-| ACPICA, libwayland, zstd, libarchive, sqlite | CMake/autotools | `rules_foreign_cc` or native BUILD; vendored with SHA pins |
-| NuAqua | SwiftPM | `rules_swift` BUILD files; SwiftPM manifest kept for macOS-host development |
-| pkgsrc bootstrap | bmake | runs *outside* Bazel in a builder container; its outputs are imported as packages (packaging design §6) |
+| ACPICA, zstd, libarchive, sqlite | CMake/autotools | `rules_foreign_cc` or native BUILD; vendored with SHA pins |
+| ports | per-port upstream build systems | built by `ndports` from recipes in a clean-room boot environment, *outside* the base Bazel graph; the outputs are packages (ports.md) |

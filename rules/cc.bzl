@@ -12,14 +12,19 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 ND_C_COPTS = ["-std=c23", "-Wall", "-Wextra", "-Werror"]
 
+# Label() resolves in this repository, so the macros also work when a
+# downstream module loads them as @neodarwin//rules:cc.bzl.
+_LANG_AUDIT = Label("//tools/lang_audit")
+_LANG_AUDIT_RUN = Label("//tools/lang_audit:run.sh")
+
 def lang_audit_test(name, srcs, **kwargs):
     """Fails if any file in srcs lacks a NeoDarwin-Language justification."""
     sh_test(
         name = name,
         size = "small",
-        srcs = ["//tools/lang_audit:run.sh"],
-        args = ["$(rootpath //tools/lang_audit)"] + ["$(rootpath %s)" % s for s in srcs],
-        data = ["//tools/lang_audit"] + srcs,
+        srcs = [_LANG_AUDIT_RUN],
+        args = ["$(rootpath %s)" % _LANG_AUDIT] + ["$(rootpath %s)" % s for s in srcs],
+        data = [_LANG_AUDIT] + srcs,
         **kwargs
     )
 

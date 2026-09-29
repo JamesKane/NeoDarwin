@@ -1,6 +1,6 @@
 # Kernel bring-up: XNU on ARM64 SBSA boards (UEFI + ACPI)
 
-> **Scope.** This document is the *kernel bring-up* design for the ARM64 lane of NeoDarwin. The project-wide charter, build system, packaging, drivers, graphics, filesystems, namespaces and multi-arch designs live under `docs/architecture/`; the phased plan lives in `roadmap/`. Milestones M0–M7 below map onto roadmap Phase 1 (`P1-*` epics).
+> **Scope.** This document is the *kernel bring-up* design for the ARM64 lane of NeoDarwin. The project-wide charter, build system, packaging, ports, drivers, console, filesystems, FreeBSD-parity and multi-arch designs live under `docs/architecture/`; the phased plan lives in `roadmap/`. Milestones M0–M7 below map onto roadmap Phase 1 (`P1-*` epics).
 
 _XNU (xnu-12377.1.9, macOS 26 era) as a standalone OS on generic ARM64 SBCs via UEFI + ACPI (SBSA/SBBR)._
 _Drafted 2026-09-27 against `/Users/jkane/Projects/OS/xnu` (git f6217f8). Every claim below cites a file in that tree._
@@ -310,7 +310,7 @@ Agent messaging discipline: the DT-ABI table is the interface between A1 and A2/
 | **M4 Terminal OS** | HFS+ ramdisk root, launchd, getty, shell, coreutils; `boot-uuid` plumbing | A5, A6 | interactive shell over serial; reboot/halt via PSCI |
 | **M5 ACPI runtime + storage** | ACPICA kext, IOPCIFamily, virtio-blk/NVMe, root from disk, `kcgen` kernelcache with real kexts | A4, A5, A0 | boot from NVMe on QEMU sbsa-ref |
 | **M6 Hardware** | OrangePi 6 Plus (CIX CD8180, GIC-700, PL011, UEFI+ACPI) boots to shell | A7 + all | HIL nightly green |
-| **M7 Graphics groundwork** | GOP framebuffer via `Boot_Video` → `IOFramebuffer` stub; input over USB (open IOUSBHostFamily build); Wayland compositor spike in userland | new agents | pixels on HDMI from userland |
+| **M7 Graphics groundwork** | GOP framebuffer via `Boot_Video` → `IOFramebuffer` stub; input over USB (open IOUSBHostFamily build); the framebuffer console (`docs/architecture/console.md`) | new agents | pixels on HDMI from userland |
 
 ---
 

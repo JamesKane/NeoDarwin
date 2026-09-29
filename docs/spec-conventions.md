@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
 # Conventions for normative API specifications
 
-These rules apply to every NeoDarwin API specification that development builds against. They were introduced for the toolkit API and its lower layers (P4-12, P4-16, P4-17, P4-18) and apply to every later specification.
+These rules apply to every NeoDarwin API specification that development builds against. They were introduced for the toolkit API and its lower layers, which moved to Magi on 2026-09-29 and keep a copy of these conventions. They apply to every NeoDarwin specification, such as the kernel crypto provider's.
 
 A specification is three things kept together:
 1. a normative text;
@@ -14,10 +14,10 @@ A specification is three things kept together:
 |---|---|
 | Normative text | `docs/<area>/<name>.md` |
 | C header(s) | beside the text: `docs/<area>/<name>.h` |
-| Swift interface (toolkit only) | `docs/<area>/<Module>.swift` |
+| Swift interface (public Swift APIs only) | `docs/<area>/<Module>.swift` |
 | Build targets that compile-check the headers | `docs/<area>/BUILD.bazel` |
 
-**The check.** Each header is compiled by an `nd_cc_library`, with a tiny `nd_cc_binary` or test that includes it and `static_assert`s its record layouts. Swift interfaces are type-checked by an `nd_swift_library`. `bazel test //docs/...` must pass.
+**The check.** Each header is compiled by an `nd_cc_library`, with a tiny `nd_cc_binary` or test that includes it and `static_assert`s its record layouts. Swift interfaces are type-checked by an `nd_swift_library`. These targets run in `bazel test //...`, which must pass.
 
 **Header copies in the implementation.** When an implementation epic starts, it copies the header into its component. The spec's copy stays the reference, and a test compares the two.
 
@@ -72,7 +72,7 @@ Each specification has these sections, in this order:
    - threading;
    - lifetime and ownership.
 5. **Versioning and capabilities.**
-6. **Security and capabilities**, meaning which namespace path or token grants what. Refer to `docs/architecture/namespaces-agents.md`.
+6. **Security**, meaning which privilege, entitlement or MAC policy check governs each operation.
 7. **Performance contract**: measurable targets that are requirements, not goals, each tied to a conformance test.
 8. **Conformance**: a table with these columns:
    - test id (`<PREFIX>-T-NNN`);
@@ -103,17 +103,17 @@ Each specification has these sections, in this order:
   - Errors are an `enum` of codes; functions return `bool` or an error code, with thread-local detail where relevant (charter P12).
 - **Mirror of the text:** a header never contradicts its text. Where they differ, the text is normative and the header is a defect.
 
-## 6. Swift interfaces (toolkit)
+## 6. Swift interfaces
 
 - **Form:** the public Swift surface is written as a compilable interface file. It declares public protocols, value types, enums and function signatures.
 - **Where bodies are needed:** they MUST be `fatalError("interface only")`. The file is type-checked, never linked into a product.
 - **Language rules:** it follows language-policy.md §4 (`~Copyable` owners, `Span` views, typed throws, `Sendable`).
-- **T2 marking:** functions on the T2 paths (event decode, layout, draw, audio render) are marked in the text and carry the performance-annotation attributes that the pinned toolchain supports.
+- **T2 marking:** functions on T2 paths (language-policy.md §2) are marked in the text and carry the performance-annotation attributes that the pinned toolchain supports.
 
 ## 7. Cross-references between specifications
 
 - **Owning layer:** a lower-layer specification owns its records and semantics.
 - **Upper layers:**
   - They cite requirement ids and never restate them.
-  - The toolkit API specification maps each of its concepts to the lower-layer requirements it relies on.
+  - An upper-layer specification maps each of its concepts to the lower-layer requirements it relies on.
 - **Order of changes:** a change needed in a lower layer is made there first.

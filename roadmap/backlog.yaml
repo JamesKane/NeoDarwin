@@ -2,7 +2,8 @@
 # Schema: id, title, phase, owner (agent workstream), status (todo|doing|host|done|dropped; host = works on a macOS/Linux host, not yet on NeoDarwin),
 #         depends (ids), exit (test that closes it), doc (design reference), superseded_by (optional)
 # Owners: build, loader, kernel-bridge, iokit-platform, acpi, storage, userland, verification, dt-abi-keeper,
-#         packaging, drivers, graphics, namespaces, security, arch-amd64, arch-riscv64
+#         packaging, drivers, graphics, security, arch-amd64, arch-riscv64
+# Epics that moved to Magi on 2026-09-29 are in ../Magi/roadmap/backlog.yaml; their ids are not reused.
 schema: 1
 epics:
   # ---- Phase 0: Foundation ----
@@ -216,7 +217,7 @@ epics:
     exit: "//kernel/neodarwin/amfi:trustcache_test passes; //kernel:sbsa_boot_test boots past trust-cache initialisation ('no external trust caches found') to IOKit platform matching (P1-06)"
     doc: docs/kernel/amfi-provider.md
   - id: P1-15
-    title: "Entitlements and trust-cache signing: a CoreEntitlements implementation behind amfi (replacing ndamfi's default deny), static trust caches from neoboot, and trust-cache load grants tied to ndsign/keyd"
+    title: "Entitlements and trust-cache signing: a CoreEntitlements implementation behind amfi (replacing ndamfi's default deny), static trust caches from neoboot, and trust-cache load grants tied to ndsign and the package key chain"
     phase: 1
     owner: kernel-bridge
     status: todo
@@ -265,13 +266,13 @@ epics:
     exit: "client installs from an HTTP repo with signature verification"
     doc: docs/architecture/packaging.md
   - id: P2-05
-    title: "pkgsrc bootstrap on NeoDarwin SDK + pkgsrc2nd bridge"
+    title: "Ports tree v1 — the recipe format (port.toml, patches/, pkg-plist), ndports build/install/package, clean-room builds in a fresh ZFS clone of the build BE, output signed as .ndpkg kind=port"
     phase: 2
     owner: packaging
     status: todo
     depends: [P2-04, P1-08]
-    exit: "100 ports build and install as .ndpkg"
-    doc: docs/architecture/packaging.md
+    exit: "100 ports build from recipes and install as .ndpkg; ndports install from source and ndpkg install of the built package give identical file trees"
+    doc: docs/architecture/ports.md
   - id: P2-06
     title: "xnu_kernel phase-2 native Bazel graph via xnu2bazel"
     phase: 2
@@ -304,6 +305,22 @@ epics:
     depends: [P2-04]
     exit: "client verifies inclusion proof"
     doc: docs/architecture/packaging.md
+  - id: P2-10
+    title: "Ports importers — generate recipe skeletons from FreeBSD ports and pkgsrc metadata (distfiles, checksums, patches, licence, dependencies); a Darwin-patch carry list"
+    phase: 2
+    owner: packaging
+    status: todo
+    depends: [P2-05]
+    exit: "the importer produces a recipe that builds unmodified for 60% of a 200-port sample"
+    doc: docs/architecture/ports.md
+  - id: P2-11
+    title: "Bulk builder and ports repository — poudriere-shaped bulk builds on the build farm, a ports index per channel, build logs and failure triage published per port"
+    phase: 2
+    owner: packaging
+    status: todo
+    depends: [P2-05, P2-04]
+    exit: "a nightly bulk build of the ports tree publishes a signed ports index and a per-port status page"
+    doc: docs/architecture/ports.md
   # ---- Phase 3: Storage, OpenZFS, drivers breadth ----
   - id: P3-01
     title: "zfs.kext on NeoDarwin (module/os/neodarwin from macOS layer; KPI exports as kernel patches)"
@@ -319,7 +336,7 @@ epics:
     owner: storage
     status: todo
     depends: [P3-01, P2-02]
-    exit: "zed runs under launchd; events under /n/sys/fs"
+    exit: "zed runs under launchd and logs pool events to syslog"
     doc: docs/architecture/filesystems.md
   - id: P3-03
     title: "Root on ZFS (rd=zfs:pool/ROOT/be) and boot environment switching"
@@ -330,12 +347,12 @@ epics:
     exit: "boot from ndpool/ROOT/be; ndpkg system rollback works"
     doc: docs/architecture/filesystems.md
   - id: P3-04
-    title: "msdosfs (ESP from userland), ndfuse (FreeBSD fuse port), nd9p (FreeBSD p9fs port)"
+    title: "msdosfs (ESP from userland) and ndfuse (FreeBSD fuse port); nd9p moved to Magi (U1-02)"
     phase: 3
     owner: storage
     status: todo
     depends: [P1-08]
-    exit: "mount an ESP, a libfuse FS and a virtio-9p share"
+    exit: "mount an ESP and a libfuse filesystem"
     doc: docs/architecture/filesystems.md
   - id: P3-05
     title: "NDDriverKit userland runtime (IOUserServer client) and dext rule"
@@ -378,30 +395,14 @@ epics:
     exit: "boot from SD on CD8180; tty over serial"
     doc: docs/architecture/drivers.md
   - id: P3-10
-    title: "ZFS native encryption for home/var with keyd unlock"
+    title: "ZFS native encryption for home/var; passphrase or key-file unlock with zfs load-key at boot, as on FreeBSD"
     phase: 3
     owner: security
     status: todo
-    depends: [P3-03, P5-03]
-    exit: "encrypted home unlocks at login"
+    depends: [P3-03]
+    exit: "an encrypted var unlocks at boot from a prompt on the console; an encrypted home unlocks with zfs load-key"
     doc: docs/architecture/filesystems.md
-  # ---- Phase 4: Graphic console and desktop ----
-  - id: P4-00
-    title: "Desktop specifications baselined in docs/desktop (window protocol, theme engine, UI configuration, agent protocol, headers); mirror-plan-neo and mirror-nuaqua created"
-    phase: 4
-    owner: graphics
-    status: done
-    depends: [P0-01]
-    exit: "the four specs and three headers exist with provenance lines; mirrors resolve by pinned commit"
-    doc: docs/desktop/README.md
-  - id: P4-14
-    title: "Bring libstyle, libagent, lib9p (from the plan-neo pilot) and Vesper/Typeface (from the NuAqua pilot) into the NeoDarwin build with refactored module namespaces; run render.sums and the agent demo in CI"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P0-02, P4-00]
-    exit: "bazel test passes render-cyberpunk, render-amber, agent-demo and the Vesper render demo on macOS and Linux hosts"
-    doc: docs/desktop/README.md
+  # ---- Phase 4: FreeBSD command-line parity ----
   - id: P4-01
     title: "ndfb IOFramebuffer over GOP/simple-framebuffer on Apple IOGraphics"
     phase: 4
@@ -409,192 +410,96 @@ epics:
     status: todo
     depends: [P1-09]
     exit: "userland draws to the framebuffer; kernel console handoff"
-    doc: docs/architecture/graphics-desktop.md
-  - id: P4-02
-    title: "inputd (HID/virtio-input → batched events; key-chord table as data)"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P3-07]
-    exit: "keyboard and mouse events published under /n/sys/input"
-    doc: docs/architecture/graphics-desktop.md
-  - id: P4-03
-    title: "wsys — the window system implementing the NeoDarwin window protocol (9P tree at /n/desktop, ctl vocabulary, Deskwin/Deskevent, image+present, surface fast path, outputs/, menus, drag/drop, workspaces) over nsd, with the Vesper compositor and inputd"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P4-01, P4-02, P4-14, P5-02, P4-17]
-    exit: "deskconform's 57 checks (WP-T-001..057) and the version 2 checks (WP-T-058..153) pass against wsys; stats shows p99 under 4 ms and zero composites when idle; Super+1..9 switches workspaces"
-    doc: docs/desktop/window-protocol.md
-  - id: P4-04
-    title: "Wayland core front door (libwayland, wl_shm, xdg_shell)"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P4-03]
-    exit: "foot or weston-terminal runs on wsys"
-    doc: docs/architecture/graphics-desktop.md
-  - id: P4-05
-    title: "Platform API and source-corpus study (Windows, macOS, Linux, Haiku, Plan 9; engines, translation layers, HPC) → friction register + Toolkit API charter; research in ../NeoDarwin-api-study"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: []
-    exit: "charter approved: surface area, C ABI + bindings, ownership/threading model, compatibility layers (e.g. SDL3 backend)"
-    doc: docs/architecture/graphics-desktop.md
-  - id: P4-06
-    title: "Vesper renderer (NuAqua core, refactored namespaces) upgrades for the chrome materials — inner/outer shadows, glow/bloom, backdrop blur, procedural noise, conic/repeating gradients, masks, HVIF-style vector icons"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P0-02]
-    exit: "the chrome study's materials page renders pixel-close from Vesper on macOS host"
-    doc: docs/architecture/graphics-desktop.md
-  - id: P4-07
-    title: "Theme v2 (ui-configuration D12, D13) — selectors, specificity, class table, inheritance, three-file cascade, style_explain, named frames/backgrounds, client API; plus the study's materials (anodized, brushed, glass, lcd, glow, bloom) and neon/neon-hc/daylight themes; Vesper as the vector backend; WCAG AA contrast test"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P4-06, P4-14]
-    exit: "a v1 theme loads unchanged; term/button.pad applies only there; the study's materials render from a .theme file; a failing-contrast theme fails the build"
-    doc: docs/desktop/window-protocol.md
-  - id: P4-15
-    title: "Binds, modes and window rules (ui-configuration D14, D15, D16) — /n/desktop/binds, variables, five bind variants, live reload, conflict detection, modes with timeout, rules, Super as DK_META, mouse binds over grab"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P4-03]
-    exit: "every ctl message is reachable from a key; a duplicate bind is refused with both line numbers; a resize mode and a leader key work"
-    doc: docs/desktop/ui-configuration.md
-  - id: P4-08
-    title: "Desktop chrome — window frames (Amiga gadgets), NeXT docked/pop-up/torn-off menus, screen bar, dock with live tiles"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P4-03, P4-06, P4-07]
-    exit: "the study's markers A, B, C, D, H, I are live on the board"
-    doc: docs/architecture/graphics-desktop.md
-  - id: P4-09
-    title: "Column file viewer over /n and the generated prefs panel (ui-configuration D17)"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P4-08, P4-07]
-    exit: "browse /n/desktop and a union dir in Miller columns; prefs shows every class and key with its cascade source; Save/Use/Cancel rewrite ~/lib/style"
-    doc: docs/architecture/graphics-desktop.md
-  - id: P4-10
-    title: "Graphic terminal and login flow"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P4-08]
-    exit: "log in on the framebuffer, open terminal, run shell"
-    doc: docs/architecture/graphics-desktop.md
-  - id: P4-11
-    title: "Desktop modernisation study — tiling/scrollable layouts, overview, layer-shell, portals, colour management, VRR, launchers"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P4-08, P4-05]
-    exit: "written evaluation with adopt/defer decisions per feature"
-    doc: docs/architecture/graphics-desktop.md
-  - id: P4-12
-    title: "Native toolkit v1 per the API charter (table-based UI model, /n/app auto-export, accessibility as a view)"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P4-05, P4-07, P4-16, P4-18]
-    exit: "the three study prototypes (game loop, editor, synth UI) build against the shipped API"
-    doc: docs/architecture/graphics-desktop.md
-  - id: P4-13
-    title: "Accessibility tree over the UI table; screen-reader hooks"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P4-12]
-    exit: "a11y dump of a window matches the visible widgets"
-    doc: docs/architecture/graphics-desktop.md
-  - id: P4-16
-    title: "Kernel scheduling contract — one kevent wait over 9P event fids, EVFILT_USER wake and absolute-deadline timers with leeway (no resolution knob); thread intent (interactive/throughput/background/audio) mapped to XNU QoS and core placement; real-time admission for audio (Plan 9 EDF admit as the model)"
-    phase: 4
-    owner: kernel-bridge
-    status: todo
-    depends: [P5-02]
-    exit: "one kevent wait returns wsys events, a user wake and a deadline timer; the S7 game-loop prototype on NeoDarwin reports p99 wake error and frame-pacing error <= 1 ms with no timer-resolution call; an audio thread is admitted with period and computation"
-    doc: docs/architecture/friction-register.md
-  - id: P4-17
-    title: "Window protocol revision 2 — frame event with actual presentation time, target and seq; latency n; throttled clock for hidden windows; configure event (logical and pixel size, rational scale, config seq) and presents tagged with it; sequenced ctl acknowledgements and anchored popups; decor none with hit-test regions; DS_INTERACTIVE; key/keymap, IME, pen, relative-pointer and gamepad channels; GPU-surface buffer size independent of the window; Deskevent mask wider than 32 types; extended event record with ns timestamp and payload span"
-    phase: 4
-    owner: graphics
-    status: todo
-    depends: [P4-05]
-    exit: "window-protocol.md and desktop.h revised with capability queries; each item has a deskconform check; no global lock and no modal loop in the protocol"
-    doc: docs/desktop/toolkit-charter.md
-  - id: P4-18
-    title: "Audio service and toolkit audio stream — system mixer on a fixed period, stream contract record (period, rate, latency, device-time to mach time, device identity) with changes as events, deadline-scheduled streams, voices, PulseAudio-protocol door"
+    doc: docs/architecture/console.md
+  - id: P4-20
+    title: "Parity inventory — tools/parity lists FreeBSD base programs from a pinned freebsd-src and records each one's NeoDarwin status (apple, freebsd, equivalent, port, not-applicable); CI publishes coverage"
     phase: 4
     owner: userland
     status: todo
-    depends: [P4-16, P3-05]
-    exit: "the S7 synth-ui prototype on NeoDarwin holds a 128-frame period with 0 underruns and reports latency from the contract; a PulseAudio client plays through the door"
-    doc: docs/architecture/friction-register.md
-  # ---- Phase 5: Namespaces, state as files, agent-era security ----
-  - id: P5-01
-    title: "libns (Swift over libagent/lib9p) and nsd multiplexer with per-process mount tables and the agentd registry"
-    phase: 5
-    owner: namespaces
+    depends: [P1-08]
+    exit: "the inventory covers every program in bin, sbin, usr.bin and usr.sbin of the pinned release, and CI fails if a row loses its status"
+    doc: docs/architecture/freebsd-parity.md
+  - id: P4-21
+    title: "Base userland completion — the remaining Apple command projects (file_cmds, text_cmds, shell_cmds, system_cmds, adv_cmds, misc_cmds, diskdev_cmds, patch_cmds, network_cmds), FreeBSD sources where Apple is closed, a line-editing sh, vi, less, mandoc"
+    phase: 4
+    owner: userland
     status: todo
-    depends: [P0-02, P4-14]
-    exit: "agentctl.py demo passes against a Swift app on macOS host; /n/agent/index lists it; bind/union work"
-    doc: docs/architecture/namespaces-agents.md
-  - id: P5-02
-    title: "nd9p.kext mounts /n at boot; nsd as launchd service"
-    phase: 5
-    owner: namespaces
-    status: todo
-    depends: [P3-04, P5-01]
-    exit: "/n/sys/proc readable on the board"
-    doc: docs/architecture/namespaces-agents.md
-  - id: P5-03
-    title: "keyd — key storage, capability tokens, attenuation, revocation"
-    phase: 5
+    depends: [P4-20, P1-08]
+    exit: "every inventory row marked base is built and installed, and passes its program's tests from the FreeBSD test suite where one exists"
+    doc: docs/architecture/freebsd-parity.md
+  - id: P4-22
+    title: "Accounts and authentication — pw-style useradd/groupadd over the flat files, pwd.db, login.conf, OpenPAM with libSystem-only modules, su"
+    phase: 4
     owner: security
     status: todo
-    depends: [P5-01]
-    exit: "token-gated attach; revoked token rejected within one request"
-    doc: docs/architecture/namespaces-agents.md
-  - id: P5-04
-    title: "ndsandbox.kext MAC policy — namespace confinement, manifest entitlements, audit"
-    phase: 5
+    depends: [P4-21]
+    exit: "add, modify and remove a user and a group; log in with a password; su with pam_group"
+    doc: docs/architecture/freebsd-parity.md
+  - id: P4-23
+    title: "Service administration — service(8) and sysrc(8) front ends over launchd, /etc/rc.conf overrides applied to job plists, cron, periodic, newsyslog, syslogd"
+    phase: 4
+    owner: userland
+    status: todo
+    depends: [P1-08, P4-21]
+    exit: "enable, start, stop and disable sshd with service and sysrc; the change survives reboot; periodic daily runs"
+    doc: docs/architecture/freebsd-parity.md
+  - id: P4-24
+    title: "Networking userland — ifconfig, route, netstat, ping, arp, ndp and traceroute from network_cmds, a DHCP client, resolv.conf, pf and pfctl (in xnu), an NTP client"
+    phase: 4
+    owner: userland
+    status: todo
+    depends: [P3-08, P4-23]
+    exit: "the board takes a DHCP lease, resolves names, syncs time and enforces a pf ruleset from /etc/pf.conf"
+    doc: docs/architecture/freebsd-parity.md
+  - id: P4-25
+    title: "Remote access — OpenSSH (Apple's open-source drop) sshd and ssh, host keys generated at first boot, scp and sftp"
+    phase: 4
     owner: security
     status: todo
-    depends: [P5-02]
-    exit: "process cannot open /n paths outside its table; audit record emitted"
-    doc: docs/architecture/namespaces-agents.md
-  - id: P5-05
-    title: "System daemons publish /n/sys/{pkg,display,input,net,power,fs,dev,audit}"
-    phase: 5
-    owner: namespaces
-    status: todo
-    depends: [P5-02]
-    exit: "ndpkg upgrade via /n/sys/pkg/ctl; display surfaces listed"
-    doc: docs/architecture/namespaces-agents.md
-  - id: P5-06
-    title: "wsys and toolkit as agent endpoints — schema on /n/desktop, per-app agent trees generated by the toolkit, capability-gated snapshots"
-    phase: 5
+    depends: [P4-22, P4-24]
+    exit: "ssh into the board with a key, scp a file both ways"
+    doc: docs/architecture/freebsd-parity.md
+  - id: P4-26
+    title: "Framebuffer console — virtual terminals on ndfb (switching, scrollback, UTF-8, a bundled OFL console font), keymaps from USB HID"
+    phase: 4
     owner: graphics
     status: todo
-    depends: [P4-12, P5-03]
-    exit: "an agent lists and moves a window through /n/desktop/actions and drives a toolkit app through /n/agent/APPID/actions"
-    doc: docs/architecture/namespaces-agents.md
-  - id: P5-07
-    title: "Agent session flow — grants, curated union namespace, ZFS snapshot around session, audit reconstruction"
-    phase: 5
-    owner: security
+    depends: [P4-01, P3-07]
+    exit: "log in on vt1 and vt2 of the CD8180 with a USB keyboard and switch between them"
+    doc: docs/architecture/console.md
+  - id: P4-27
+    title: "Handbook workflows as tests — a scripted set of FreeBSD Handbook administration tasks run against a QEMU image in CI"
+    phase: 4
+    owner: verification
     status: todo
-    depends: [P5-04, P5-05, P3-03]
-    exit: "phase-5 exit scenario passes end to end"
-    doc: docs/architecture/namespaces-agents.md
+    depends: [P4-22, P4-23, P4-24, P4-25, P3-03, P2-05]
+    exit: "the workflow suite in freebsd-parity.md §4 passes end to end in CI"
+    doc: docs/architecture/freebsd-parity.md
+  # ---- Phase 5: Self-hosting ----
+  - id: P5-10
+    title: "Native toolchain on NeoDarwin — the pinned clang, lld, swiftc and lldb run on NeoDarwin (package from the same build), with the SDK installed in the base"
+    phase: 5
+    owner: build
+    status: todo
+    depends: [P2-07, P4-21]
+    exit: "hello-world C, C++ and Swift programs compile, link and debug on the board"
+    doc: docs/architecture/self-hosting.md
+  - id: P5-11
+    title: "Bazel on NeoDarwin — OpenJDK port and Bazel bootstrap from source through the ports tree"
+    phase: 5
+    owner: build
+    status: todo
+    depends: [P5-10, P2-05]
+    exit: "bazel build //tools/... succeeds on the board"
+    doc: docs/architecture/self-hosting.md
+  - id: P5-12
+    title: "NeoDarwin builds NeoDarwin — the kernel collection, the system set and the ports tree build on NeoDarwin, byte-identical to CI output"
+    phase: 5
+    owner: build
+    status: todo
+    depends: [P5-11, P2-08]
+    exit: "a system set built on the board is byte-identical to the one CI built from the same commit, and boots"
+    doc: docs/architecture/self-hosting.md
   # ---- Phase 6: Multi-arch ----
   - id: P6-01
     title: "neoboot x86_64 mode (x86 boot_args, EFI memory map, ACPI pointer)"
@@ -628,15 +533,15 @@ epics:
     depends: [P6-03, P1-06]
     exit: "kernel_bootstrap completes on QEMU riscv64 virt"
     doc: docs/architecture/multi-arch.md
-  # ---- Phase 7: Acceleration and polish ----
+  # ---- Phase 7: Hardware breadth and release ----
   - id: P7-01
     title: "GPU kernel driver + Mesa userland (first target chosen by licence and docs)"
     phase: 7
     owner: graphics
     status: todo
-    depends: [P4-03, P3-05]
-    exit: "wsys composites on the GPU; vkcube runs"
-    doc: docs/architecture/graphics-desktop.md
+    depends: [P4-01, P3-05]
+    exit: "vkcube renders through Mesa and presents to the framebuffer; the driver and Mesa ship as packages that ports and downstreams use"
+    doc: docs/architecture/console.md
   - id: P7-02
     title: "Power management — CPU idle states via PSCI CPU_SUSPEND, suspend/resume"
     phase: 7
@@ -645,43 +550,19 @@ epics:
     depends: [P1-06]
     exit: "idle power drops; S2R on CD8180"
     doc: docs/kernel/arm64-sbsa-bringup.md
-  - id: P7-04
-    title: "edit — native editor (rope with summaries, renderer seam, glyph atlas, tree-sitter, agent endpoint; design from the plan-neo pilot)"
-    phase: 7
-    owner: graphics
-    status: todo
-    depends: [P4-12, P5-01]
-    exit: "opens a 100 MB file and keeps p99 frame time under budget; drivable through /n/agent/edit"
-    doc: docs/desktop/README.md
-  - id: P7-05
-    title: "dbg — native debugger over Mach exception ports with a .ndi symbol index emitted by the toolchain (design from the plan-neo pilot)"
-    phase: 7
-    owner: build
-    status: todo
-    depends: [P4-12, P2-06]
-    exit: "breakpoint, step, locals and backtrace on a NeoDarwin binary; drivable through /n/agent/dbg"
-    doc: docs/desktop/README.md
   - id: P7-03
-    title: "Installer, release images, documentation site, first public release"
+    title: "Text installer (bsdinstall-shaped: disk, pool, network, users, services), release images, documentation site, NeoDarwin 1.0"
     phase: 7
     owner: packaging
     status: todo
-    depends: [P2-03, P4-10, P5-07]
-    exit: "a stranger installs NeoDarwin from the release page"
+    depends: [P2-03, P4-27, P5-12]
+    exit: "a stranger installs NeoDarwin from the release page and completes the P4-27 workflows"
     doc: roadmap/ROADMAP.md
-  - id: P7-06
-    title: "GPU memory and sharing — one buffer object (Mach memory entry + format + fence) across Vulkan, compute, processes and wsys; host-pointer import; per-task GPU budget with a pressure signal owned by the VM"
+  - id: P7-08
+    title: "Audio hardware — NDAudioFamily in NDDriverKit with virtio-snd, USB Audio Class and HD Audio dexts; a command-line player"
     phase: 7
-    owner: graphics
+    owner: drivers
     status: todo
-    depends: [P7-01]
-    exit: "the S7 compute-display prototype presents with 0 copies on NeoDarwin; an mmap'd file is imported as a GPU buffer without a copy; the budget is reported exactly and pressure arrives as an event"
-    doc: docs/architecture/friction-register.md
-  - id: P7-07
-    title: "Vulkan profile and conformance gate — one guaranteed NeoDarwin Vulkan profile, drivers gated on a CTS subset in CI, a shared per-driver quirk database, pipeline caches built at package time"
-    phase: 7
-    owner: graphics
-    status: todo
-    depends: [P7-01, P2-01]
-    exit: "the profile is published; a driver failing the CTS subset cannot ship; an ndpkg install prebuilds pipeline caches for a Vulkan app"
-    doc: docs/architecture/friction-register.md
+    depends: [P3-05]
+    exit: "a WAV file plays through virtio-snd in QEMU and through USB audio on the CD8180"
+    doc: docs/architecture/drivers.md
