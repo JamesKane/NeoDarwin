@@ -1,0 +1,10 @@
+# Upstream pins for the userland base (docs/base/libsystem.md). Must match the
+# http_archive entries in MODULE.bazel. Release set: macOS 26.0
+# (distribution-macOS macos-260), the kernel's set (kernel/upstream.lock).
+xnu                  xnu-12377.1.9                 libsyscall/; pinned in kernel/upstream.lock
+libplatform          libplatform-359.1.2           sha256:d6e3fb2b67f474fa41577397157ec4dbf4ee05a164acbf06224ca0b07be163cf
+libpthread           libpthread-539                pinned in kernel/upstream.lock
+libmalloc            libmalloc-792.1.1             sha256:6c6673a8736eedf558803bde87c9972ee90c9da3359fa87c3af8ea29175c55f8
+dyld                 dyld-1323.3                   sha256:9696c72b4800da6941adc51f26cc40629ccb9f965e78c1324bebaf219c43be75
+AvailabilityVersions AvailabilityVersions-155      pinned in kernel/upstream.lock
+Libc                 Libc-1725.0.11                sha256:e5cb194a8017db90ee43e303e87bf7fe9b34245d0a94d0245cfedfa3ba012a3e

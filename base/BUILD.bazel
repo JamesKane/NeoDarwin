@@ -1,0 +1,80 @@
+# The userland base built from Apple source: docs/base/libsystem.md.
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:base.bzl", "base_library", "base_sysroot")
+load("//rules:cc.bzl", "lang_audit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+base_sysroot(
+    name = "sysroot",
+    availability = "@apple_availability_versions//:all",
+    dyld = "@apple_dyld//:all",
+    libc = "@apple_libc//:all",
+    libmalloc = "@apple_libmalloc//:all",
+    libplatform = "@apple_libplatform//:all",
+    libpthread = "@apple_libpthread//:all",
+    shims = "//base/sdk:headers",
+    shims_root = "base/sdk",
+    xnu = "@apple_xnu//:all",
+    xnu_headers = "//kernel:headers",
+)
+
+base_library(
+    name = "libsystem_kernel",
+    data = glob(["libsyscall/**"]),
+    script = "libsyscall/build.sh",
+    srcs = "@apple_xnu//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libsystem_platform",
+    data = glob(["libplatform/**"]),
+    deps = [":libsystem_kernel"],
+    script = "libplatform/build.sh",
+    srcs = "@apple_libplatform//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libsystem_pthread",
+    data = glob(["libpthread/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform"],
+    script = "libpthread/build.sh",
+    srcs = "@apple_libpthread//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libsystem_malloc",
+    data = glob(["libmalloc/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread"],
+    script = "libmalloc/build.sh",
+    srcs = "@apple_libmalloc//:all",
+    sysroot = ":sysroot",
+)
+
+[sh_test(
+    name = lib + "_exports_test",
+    size = "small",
+    srcs = ["//tools/base:exports_test.sh"],
+    args = [
+        "$(rootpath :%s)" % lib,
+        "usr/lib/system/%s.dylib" % lib,
+        "$(rootpath %s/exports.txt)" % project,
+    ],
+    data = [
+        ":" + lib,
+        project + "/exports.txt",
+    ],
+) for project, lib in [
+    ("libsyscall", "libsystem_kernel"),
+    ("libplatform", "libsystem_platform"),
+    ("libpthread", "libsystem_pthread"),
+    ("libmalloc", "libsystem_malloc"),
+]]
+
+lang_audit_test(
+    name = "base_lang_audit",
+    srcs = ["libplatform/src/nd_bitops.c"],
+)

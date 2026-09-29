@@ -53,10 +53,50 @@ http_archive(
     name = "kernel_srcs",
     srcs = glob(["kern/*", "private/**", "include/**"]),
     visibility = ["//visibility:public"],
+)
+
+# The whole tree: libsystem_pthread (base/libpthread).
+filegroup(
+    name = "all",
+    srcs = glob(["**"]),
+    visibility = ["//visibility:public"],
 )""",
     sha256 = "a9786dd16427812da39bcb330b786f5e9d95a40e55d9540df14fffe200b724b7",
     strip_prefix = "libpthread-libpthread-539",
     urls = ["https://github.com/apple-oss-distributions/libpthread/archive/refs/tags/libpthread-539.tar.gz"],
+)
+
+# Userland libSystem components (docs/base/libsystem.md), macOS 26.0 set.
+http_archive(
+    name = "apple_libplatform",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "d6e3fb2b67f474fa41577397157ec4dbf4ee05a164acbf06224ca0b07be163cf",
+    strip_prefix = "libplatform-libplatform-359.1.2",
+    urls = ["https://github.com/apple-oss-distributions/libplatform/archive/refs/tags/libplatform-359.1.2.tar.gz"],
+)
+
+http_archive(
+    name = "apple_dyld",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "9696c72b4800da6941adc51f26cc40629ccb9f965e78c1324bebaf219c43be75",
+    strip_prefix = "dyld-dyld-1323.3",
+    urls = ["https://github.com/apple-oss-distributions/dyld/archive/refs/tags/dyld-1323.3.tar.gz"],
+)
+
+http_archive(
+    name = "apple_libc",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "e5cb194a8017db90ee43e303e87bf7fe9b34245d0a94d0245cfedfa3ba012a3e",
+    strip_prefix = "Libc-Libc-1725.0.11",
+    urls = ["https://github.com/apple-oss-distributions/Libc/archive/refs/tags/Libc-1725.0.11.tar.gz"],
+)
+
+http_archive(
+    name = "apple_libmalloc",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "6c6673a8736eedf558803bde87c9972ee90c9da3359fa87c3af8ea29175c55f8",
+    strip_prefix = "libmalloc-libmalloc-792.1.1",
+    urls = ["https://github.com/apple-oss-distributions/libmalloc/archive/refs/tags/libmalloc-792.1.1.tar.gz"],
 )
 
 # Apple's HFS+ (hfs-704.0.3.0.2, the macOS 26.0 release; APSL): the hfs and

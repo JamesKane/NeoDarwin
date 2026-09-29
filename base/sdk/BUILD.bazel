@@ -1,0 +1,14 @@
+# NeoDarwin's stand-ins for headers from Apple's internal SDK (docs/base/libsystem.md).
+load("//rules:cc.bzl", "lang_audit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "headers",
+    srcs = glob(["usr/**"]),
+)
+
+lang_audit_test(
+    name = "sdk_lang_audit",
+    srcs = glob(["usr/**/*.h"]),
+)

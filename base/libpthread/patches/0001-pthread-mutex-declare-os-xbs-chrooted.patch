@@ -1,0 +1,24 @@
+From: NeoDarwin
+Subject: [PATCH] pthread_mutex: declare _os_xbs_chrooted
+
+pthread_mutex.c reads _os_xbs_chrooted, which libsystem_kernel defines in
+wrappers/_libkernel_init.c, but no published header declares it: Apple's
+build takes the declaration from an internal header. Declare it where it is
+used.
+
+Rebase-risk: low (one declaration).
+---
+diff --git a/src/pthread_mutex.c b/src/pthread_mutex.c
+--- a/src/pthread_mutex.c
++++ b/src/pthread_mutex.c
+@@ -53,6 +53,10 @@
+ #include "resolver.h"
+ #include "internal.h"
+ #include "kern/kern_trace.h"
++
++// Set by libsystem_kernel (_libkernel_init.c) when running chrooted in a build
++// environment; Apple declares it in an unpublished header.
++extern bool _os_xbs_chrooted;
+ 
+ #ifndef BUILDING_VARIANT /* [ */
+ 

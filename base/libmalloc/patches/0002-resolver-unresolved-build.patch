@@ -1,0 +1,28 @@
+From: NeoDarwin
+Subject: [PATCH] resolver: define the variant selectors for an unresolved build
+
+nanov2_malloc.c splits its code with OS_VARIANT_NOTRESOLVED (definitions
+compiled once: policy globals, statistics) and OS_VARIANT_RESOLVED (the hot
+paths compiled per resolved variant). The published resolver_internal.h
+defines neither, so nano v2 compiled to nothing. macOS builds one variant
+with no resolvers (the resolved targets are iOS, tvOS and watchOS only), and
+that build needs both halves, so both are 1.
+
+Rebase-risk: low (two definitions).
+---
+diff --git a/resolver/resolver_internal.h b/resolver/resolver_internal.h
+--- a/resolver/resolver_internal.h
++++ b/resolver/resolver_internal.h
+@@ -23,4 +23,12 @@
+ 
+ #define OS_RESOLVED_VARIANT_ADDR(s) (void *)(&s)
+ 
++// NeoDarwin: one unresolved build carries both halves of resolver-split code.
++#ifndef OS_VARIANT_RESOLVED
++#define OS_VARIANT_RESOLVED 1
++#endif
++#ifndef OS_VARIANT_NOTRESOLVED
++#define OS_VARIANT_NOTRESOLVED 1
++#endif
++
+ #endif // __MALLOC_RESOLVER_INTERNAL_H__

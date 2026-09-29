@@ -1,0 +1,9 @@
+package(default_visibility = ["//visibility:public"])
+
+exports_files(glob(["*.sh"]))
+
+# The helpers the base build scripts source or call.
+filegroup(
+    name = "scripts",
+    srcs = ["cc_one.sh", "common.sh"],
+)
