@@ -7,6 +7,7 @@ package(default_visibility = ["//visibility:public"])
 
 SRCS = [
     "NeoDarwinGICv3.cpp",
+    "NeoDarwinGICv3ITS.cpp",
     "NeoDarwinPSCI.cpp",
     "NeoDarwinPlatform.h",
     "NeoDarwinPlatformExpert.cpp",

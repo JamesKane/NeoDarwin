@@ -15,6 +15,9 @@
 #                     and the GIC's two security states (DS=0), as on SBSA
 #                     boards; RAM defaults to 1G, since TF-A loads BL33 at
 #                     0x60000000 (docs/kernel/qemu-secure.md)
+#   --machine-opt OPT append OPT to -M (repeatable), e.g. iommu=smmuv3: an
+#                     SMMUv3 between PCIe and memory, which the IORT then
+#                     names on the requester IDs' way to the ITS
 #   --firmware FILE   virt: EDK2 code flash to use instead of QEMU's;
 #                     virt-secure: the secure flash image (BL1 + FIP), required
 #   --until-lines     pass as soon as every expected line has appeared, then stop
@@ -51,7 +54,7 @@
 #   ND_QEMU_DEBUG=DIR keep serial.log there and add QEMU's exception trace (-d int)
 set -euo pipefail
 esp_files=(); mem=""; smp=1; cpu=cortex-a76; until_lines=0; sends=(); machine=virt; firmware=""
-devices=(); drives=(); screendump=""; screen_font=""; screen_lines=(); until_screen=0; absent=()
+devices=(); drives=(); screendump=""; screen_font=""; screen_lines=(); until_screen=0; absent=(); mopts=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--esp) esp_files+=("$2"); shift 2 ;;
@@ -59,6 +62,7 @@ while [ $# -gt 0 ]; do
 		--smp) smp="$2"; shift 2 ;;
 		--cpu) cpu="$2"; shift 2 ;;
 		--machine) machine="$2"; shift 2 ;;
+		--machine-opt) mopts="$mopts,$2"; shift 2 ;;
 		--firmware) firmware="$2"; shift 2 ;;
 		--until-lines) until_lines=1; shift ;;
 		--send-after) sends+=("$2" "$3"); shift 3 ;;
@@ -90,7 +94,7 @@ virt)
 		done
 	fi
 	[ -n "$fw" ] || { echo "EDK2 firmware edk2-aarch64-code.fd not found next to QEMU"; exit 1; }
-	machine_args=(-M virt,gic-version=3 -drive if=pflash,format=raw,readonly=on,file="$fw")
+	machine_args=(-M "virt,gic-version=3$mopts" -drive if=pflash,format=raw,readonly=on,file="$fw")
 	: "${mem:=512M}"
 	;;
 virt-secure)
@@ -98,7 +102,7 @@ virt-secure)
 	# BL33 (EDK2) from the FIP after it. No virtualization=on: BL31 enters
 	# EDK2 at Non-secure EL1, as on plain virt.
 	[ -n "$firmware" ] && [ -f "$firmware" ] || { echo "--machine virt-secure needs --firmware FILE (the TF-A secure flash image)"; exit 1; }
-	machine_args=(-M virt,secure=on,gic-version=3 -bios "$firmware")
+	machine_args=(-M "virt,secure=on,gic-version=3$mopts" -bios "$firmware")
 	: "${mem:=1G}"
 	;;
 *) echo "unknown --machine $machine (virt, virt-secure)"; exit 1 ;;

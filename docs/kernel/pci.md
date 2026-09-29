@@ -3,7 +3,7 @@
 
 **P1-09, checkpoint 2.** The SBSA kernel enumerates PCI Express with Apple's open **IOPCIFamily** on each ACPI PCI host bridge that checkpoint 1 publishes (`acpi.md`). A NeoDarwin host bridge reaches configuration space through ECAM, gives IOPCIFamily the bus range and windows from `_CRS`, and negotiates `_OSC`. The ACPI nub routes legacy interrupts through `_PRT`, and the GIC configures each SPI as it is registered. Every `IOPCIDevice` is logged with its IDs, BARs and INTx GSIV, and QEMU's `edu` device proves that INTx reaches a handler.
 
-Checkpoint 3 adds MSI and MSI-X through the GIC ITS; P1-10 adds the virtio-blk and NVMe drivers that match these nubs. What each needs is at the end.
+Checkpoint 3 adds MSI and MSI-X through the GIC ITS (`gic-its.md`); P1-10 adds the virtio-blk and NVMe drivers that match these nubs. What they need is at the end and in `gic-its.md`.
 
 ## Pieces
 
@@ -12,12 +12,14 @@ Checkpoint 3 adds MSI and MSI-X through the GIC ITS; P1-10 adds the virtio-blk a
 | `@apple_iopcifamily` (`MODULE.bazel`) | IOPCIFamily **726.0.5**, from the macOS 26.0 release set (distribution-macOS `macos-260`), pinned by SHA-256 (`kernel/upstream.lock`). APSL 2.0 (`THIRD_PARTY_NOTICES.md`). The seven sources that build for arm64 and the `IOKit/pci` headers |
 | `kernel/neodarwin/pci/nd_pci.h`, `nd_pci_ecam.c` | the ECAM registry and configuration access, by segment; C, shared by ACPICA's OS layer and the host bridge |
 | `kernel/neodarwin/pci/NeoDarwinPCIHostBridge.{h,cpp}` | the `IOPCIHostBridge` for PNP0A08/PNP0A03 nubs |
-| `kernel/neodarwin/pci/NeoDarwinPCIEduTest.cpp` | a driver for QEMU's `edu` device (1234:11e8) that raises INTA and waits for its handler |
+| `kernel/neodarwin/pci/NeoDarwinPCIEduTest.cpp` | a driver for QEMU's `edu` device (1234:11e8) that raises INTA and waits for its handler, then the same through its MSI (checkpoint 3) |
+| `kernel/neodarwin/pci/NeoDarwinPCIMSI.{h,cpp}`, `nd_iort.{h,c}`, `NeoDarwinPCINVMeTest.cpp` | checkpoint 3: the ITS-backed messaged interrupt controller, the MADT/IORT parser, and an NVMe MSI-X proof (`gic-its.md`) |
 | `kernel/neodarwin/pci/compat` | `os/availability.h` and `IOKit/dart/IODARTKeys.h`, which the kext gets from the SDK and from Apple's closed DART driver |
 | `kernel/neodarwin/acpi` | MCFG into the ECAM registry, AML configuration access (`nd_acpi_osl.c`), `_PRT` routing (`IOACPIPlatformDevice::callPlatformFunction`) |
 | `kernel/neodarwin/platform/NeoDarwinGICv3.cpp` | SPI group, priority, trigger and routing; shared level SPIs |
 | `kernel/patches/0022-iokit-build-iopcifamily-and-pci-host-bridge.patch` | lists IOPCIFamily and NeoDarwin's PCI files in `iokit/conf/files.arm64`, their search paths, and the built-in personalities |
 | `kernel/patches/0023-iopcifamily-arm64-fixes-and-64-bit-bars.patch` | two compile errors in IOPCIFamily, and 64-bit BARs above 4 GiB on arm64 |
+| `kernel/patches/0024-iokit-build-gic-its-and-pci-msi.patch` | checkpoint 3's files and the NVMe test's personality |
 
 `kernel/BUILD.bazel` overlays NeoDarwin's files at `iokit/ndpci` and IOPCIFamily at `iokit/ndpci/IOPCIFamily`. As with ACPICA and HFS+, everything is compiled into the kernel, because `kcgen` links no kexts until M5.
 
@@ -30,13 +32,13 @@ IOPCIFamily is a kext, and only its generic half is open. Its platform half is c
 | `IOPCIBridge.cpp`: `IOPCIBridge`, `IOPCI2PCIBridge`, `IOPCIHostBridge`, `IOPCIHostBridgeData`, `IOPCIEventSource` | built. `IOPCI2PCIBridge` drives root ports and switches (personality: `IOPCIClassMatch` 0x0604) |
 | `IOPCIConfigurator.cpp` | built: enumeration, bus numbers, BAR and window allocation, one configurator per host bridge |
 | `IOPCIDevice.cpp`, `IOPCIDeviceMappedIO.cpp` | built: the nub drivers use; `IOPCIDeviceMappedIO` is the memory-mapped I/O-space path non-Intel machines use |
-| `IOPCIMessagedInterruptController.cpp` | built; unused until checkpoint 3 |
+| `IOPCIMessagedInterruptController.cpp` | built; subclassed by `NeoDarwinPCIMessagedInterruptController` (checkpoint 3) |
 | `IOPCIRange.cpp`, `IOPCITraceEventBuffer.cpp` | built |
 | `AppleVTD.cpp`, `IOPCIDeviceI386.cpp`, `IOPCIBridgeLegacy.cpp` | not built: Intel-only (VT-d, port instructions, the shared x86 host bridge data) |
 | `PCIDriverKit/*.iig`, `IOPCIDevice.iig` | not built: DriverKit's user-space interface, absent until there is a DriverKit |
 | `AppleACPIPCI` (closed) | **`NeoDarwinPCIHostBridge`** |
 | ACPI `_PRT` routing, the "ResolvePCIInterrupt" and "SetDeviceInterrupts" platform functions (closed `AppleACPIPlatform` on Intel) | **`IOACPIPlatformDevice::callPlatformFunction`** |
-| MSI controller (closed on both) | checkpoint 3 |
+| MSI controller (closed on both) | **`NeoDarwinPCIMessagedInterruptController`** over the GIC ITS (`gic-its.md`) |
 
 The kext's Info.plist personalities become entries in `gIOKernelConfigTables` (patch 0022): `NeoDarwinPCIHostBridge` on `IOACPIPlatformDevice` with `IONameMatch` PNP0A08 or PNP0A03; `IOPCI2PCIBridge` on `IOPCIDevice` with `IOPCIClassMatch` `0x06040000&0xffff0000`; `NeoDarwinPCIEduTest` with `IOPCIMatch` `0x11e81234`.
 
@@ -55,7 +57,7 @@ What IOPCIFamily needed to compile in the kernel (patches 0022 and 0023):
 
 - **Segment and buses.** `_SEG` (default 0), `_BBN`, and the bus range from `_CRS`'s producer bus-number descriptor (`acpi-bus-range`); a range past 255 is clamped (the Q8B's descriptor has a length of 512).
 - **ECAM.** `_CBA` if the bridge has one, else the MCFG allocation for its segment and `_BBN`, whose bus range then bounds the bridge's. Both give the address of bus 0 of the segment. ECAM above 4 GiB is the normal case (QEMU: 0x40_1000_0000; the Q8B: 0x4_0000_0000 to 0x7_0000_0000).
-- **`_OSC`** (PCI Firmware 3.3 §4.5): a query, then a request for what the query granted, as Linux and FreeBSD do. Support: extended configuration space, ASPM, clock PM, segments (no MSI until checkpoint 3). Control requested: native hot plug, PME, AER, PCIe capability structure, LTR. A missing or failing `_OSC` grants nothing. IOPCIFamily reads its flags (`gIOPCIFlags`) when the configurator is created, and they are global: AER stays enabled only if every host bridge granted it. The grant is `acpi-osc-control` on the nub. QEMU grants 0x1d (everything but LTR).
+- **`_OSC`** (PCI Firmware 3.3 §4.5): a query, then a request for what the query granted, as Linux and FreeBSD do. Support: extended configuration space, ASPM, clock PM, segments, and MSI when the ITS is up (checkpoint 3; the host bridge sets up the MSI controller first, and the log line says `with MSI`). Control requested: native hot plug, PME, AER, PCIe capability structure, LTR. A missing or failing `_OSC` grants nothing. IOPCIFamily reads its flags (`gIOPCIFlags`) when the configurator is created, and they are global: AER stays enabled only if every host bridge granted it. The grant is `acpi-osc-control` on the nub. QEMU grants 0x1d (everything but LTR).
 
 Then `start` adds the windows from `acpi-windows` and hands the bridge to IOPCIFamily (`IOPCIBridge::start` → configurator → `probeBus`):
 
@@ -74,11 +76,11 @@ Then `start` adds the windows from `acpi-windows` and hands the bridge to IOPCIF
 
 ## Legacy interrupts (INTx)
 
-IOPCIFamily resolves a device's INTx lazily, when something first reads its `IOInterruptSpecifiers` (a driver's `registerInterrupt`, or the host bridge's log). `IOPCIBridge::resolveLegacyInterrupts` sends "ResolvePCIInterrupt" (the bridge's provider, the device number, the pin) up the provider chain; for every device it arrives at the host bridge's ACPI nub:
+IOPCIFamily resolves a device's INTx lazily, when something first reads its `IOInterruptSpecifiers` (a driver's `registerInterrupt` or `getInterruptType`). The host bridge's log no longer does (checkpoint 3): it asks `_PRT` the same way for the GSIV it prints, so that a driver can still choose its MSI-X vectors (`gic-its.md`). `IOPCIBridge::resolveLegacyInterrupts` sends "ResolvePCIInterrupt" (the bridge's provider, the device number, the pin) up the provider chain; for every device it arrives at the host bridge's ACPI nub:
 
 1. **Swizzle.** When the request started at a PCI-to-PCI bridge's `IOPCIDevice` (a root port), the pin becomes (pin + device) mod 4 and the device the bridge's own (from its `reg`), up to the root bus (PCI-to-PCI Bridge 1.2 §9.1). `_PRT` on bridges is not consulted; neither QEMU nor the Q8B has one.
 2. **`_PRT`** (ACPI 6.5 §6.2.13): the entry for (device, pin). A source of 0 means the index is the GSIV (the Q8B: 0x241–0x244); a source path is a link device (QEMU: `\_SB.L000`–`L003`, PNP0C0F), whose nub's `interrupts` (its `_CRS`) holds the GSIV. Link devices are not reprogrammed (`_SRS`): hardware-reduced Arm firmware fixes them.
-3. **"SetDeviceInterrupts"** makes the GSIV the device's specifier 0 on the GIC: `{GSIV, flags}` with the shared bit, level-triggered, as PCI INTx is. MSI vectors (checkpoint 3) follow it at index 1 and up, as IOPCIFamily expects.
+3. **"SetDeviceInterrupts"** makes the GSIV the device's specifier 0 on the GIC: `{GSIV, flags}` with the shared bit, level-triggered, as PCI INTx is. MSI or MSI-X vectors follow it at index 1 and up (checkpoint 3), as IOPCIFamily expects.
 
 **The GIC.** `NeoDarwinGICv3` used to leave SPIs as reset: Group 0 on a GIC with one security state (DS = 1), which is this kernel's FIQ, the timer's, and never programmed trigger, priority or routing. Now `initVector`, on an SPI's first registration, disables it, waits for `GICD_CTLR.RWP`, and sets:
 
@@ -91,7 +93,7 @@ IOPCIFamily resolves a device's INTx lazily, when something first reads its `IOI
 
 It reads them back into the log (`NeoDarwinGICv3: SPI 35: Group 1, priority 0x80, level, routed to 0x0`; with DS = 0 the group reads as zero, and the line says the Secure firmware set it). The SPI stays disabled until the driver enables it. Level SPIs can be shared (`vectorCanBeShared`): QEMU's four INTx lines serve every slot, and a root port shares its line with the device below it; IOInterruptController puts an `IOSharedInterruptController` on the vector at the second registration. ACPI interrupt specifiers now carry two cells, `{GSIV, flags}`, on every nub (`acpi.md`), so edge interrupts such as the GED's will be configured as edge.
 
-**Proof.** `NeoDarwinPCIEduTest` matches QEMU's `edu` device, registers a handler on INTA (source 0), enables it, writes the device's interrupt-raise register and waits up to a second: the handler acknowledges in the device and counts. INTA → `_PRT` → `L000` → GSIV 35 → SPI 35 → IRQ → handler, in 4–7 µs of TCG time:
+**Proof.** `NeoDarwinPCIEduTest` matches QEMU's `edu` device, registers a handler on INTA (source 0), enables it, writes the device's interrupt-raise register and waits up to a second: the handler acknowledges in the device and counts. INTA → `_PRT` → `L000` → GSIV 35 → SPI 35 → IRQ → handler. Since checkpoint 3 the time is measured from the raise to the handler (tens of µs of TCG time), and the same test follows through the device's MSI (`gic-its.md`):
 
 ```
 NeoDarwinGICv3: SPI 35: Group 1, priority 0x80, level, routed to 0x0
@@ -110,7 +112,7 @@ With `virtio-blk-pci`, `nvme` and `edu` on the root bus, a `pcie-root-port` with
 
 ```
 NeoDarwinPCIHostBridge: \_SB.PCI0: segment 0, buses 0-255, ECAM 0x4010000000 (_CBA); mem 0x10000000+0x2eff0000, io 0x1000+0xf000 at 0x3eff1000, mem 0x8000000000+0x8000000000
-NeoDarwinPCIHostBridge: \_SB.PCI0: _OSC control 0x1d of 0x3d; DMA coherent (_CCA, 64 address bits); requester IDs to ITS group
+NeoDarwinPCIHostBridge: \_SB.PCI0: _OSC control 0x1d of 0x3d with MSI; DMA coherent (_CCA, 64 address bits); requester IDs to ITS group
 [ PCI configuration begin ]
 [ PCI configuration end, bridges 3, devices 8 ]
 NeoDarwinPCIHostBridge: 0000:00:00.0 1b36:0008 class 060000
@@ -129,8 +131,10 @@ NeoDarwinPCIHostBridge: 0000:02:00.0 1234:11e8 class 00ff00 bar0 mem 0x10000000+
 NeoDarwinGICv3: SPI 37: shared for pci1234,11e8
 NeoDarwinPCIEduTest: 02:00.0: edu 0x010000ed: INTA on GSIV 37 (level) reached its handler in 0 us: status 0x4e440000, 1 interrupt
 NeoDarwinGICv3: SPI 36: Group 1, priority 0x80, level, routed to 0x0
-NeoDarwinPCIHostBridge: \_SB.PCI0: segment 0: 10 devices (2 PCI-to-PCI bridges) on buses 0-2, 9 with INTx
+NeoDarwinPCIHostBridge: \_SB.PCI0: segment 0: 10 devices (2 PCI-to-PCI bridges) on buses 0-2, 9 with INTx, 9 capable of MSI or MSI-X
 ```
+
+That was checkpoint 2's log. Since checkpoint 3 each device line also names its MSI and MSI-X capabilities (`INTA gsiv 38 msi-x 65`, `INTA gsiv 35 msi 1`), and the MSI lines are in `gic-its.md`.
 
 The second `edu` is behind the root port in slot 6: its INTA swizzles to the port's INTA, `L002`, GSIV 37, which the port's own driver (`IOPCI2PCIBridge`, for AER and hot plug) registered first, so the vector becomes shared. 64-bit BARs stay where EDK2 put them, above 4 GiB (patch 0023); I/O BARs below port 0x1000 were moved.
 
@@ -147,28 +151,27 @@ Bus-0 devices that match an `_ADR`-only child of the bridge in IOACPIPlane (QEMU
 | `//kernel:sbsa_pci_boot_test` | `virt` (GIC DS = 1), `neoverse-n2` | the two host bridge lines; 1af4:1001 with its I/O BAR as MMIO and 1b36:0010 with its 64-bit BAR above 4 GiB on the root bus; both root ports and their bus numbers; 1af4:1042 on bus 1; SPI 35's configuration; both edu interrupts, the second on a shared SPI; the summary; PID 1 |
 | `//kernel:sbsa_secure_pci_boot_test` | `virt,secure=on` with TF-A (DS = 0) | the same, with the DS = 0 line for SPI 35 |
 
+Checkpoint 3 adds MSI lines to both and three more targets (`gic-its.md`, "Tests").
+
 Both use the harness's new `--drive ID=SIZE|FILE` option (a blank sparse image or a copy of a file, as a raw block backend for `--device …,drive=ID`). `//kernel:sbsa_boot_test` and the rest still pass: QEMU's default NIC and the ESP disk are enumerated on every boot.
 
 ## Open
 
-- **`sbsa-ref`.** P1-09's exit names it. It needs TF-A `qemu_sbsa` and edk2-platforms' SbsaQemu, and RAM at 1 TiB, which neoboot and the kernel haven't been tried on (`qemu-secure.md`). P1-09 stays open for it and for checkpoint 3.
+- **`sbsa-ref`.** P1-09's exit names it. It needs TF-A `qemu_sbsa` and edk2-platforms' SbsaQemu, and RAM at 1 TiB, which neoboot and the kernel haven't been tried on (`qemu-secure.md`). P1-09 stays open for it.
 - **More than one host bridge per segment** (QEMU's `pxb-pcie`) is expected to work, since each bridge has its own configurator and bus range, but isn't tested.
 - **Memory windows with a translation offset** are not used.
-- **Hot plug, AER, PME.** IOPCIFamily's root-port driver enables AER when `_OSC` grants it (QEMU does) and handles native hot plug on slots marked hot-pluggable; neither has been exercised, and both want MSIs.
+- **Hot plug, AER, PME.** IOPCIFamily's root-port driver enables AER when `_OSC` grants it (QEMU does) and handles native hot plug on slots marked hot-pluggable; neither has been exercised. A root port gets an MSI only when it is a hot-plug port without an INTx line, so QEMU's stay on INTx.
 - **Power management.** IOPCIFamily's D-state and ASPM code runs as on a Mac; there is no system sleep yet.
 - **A PCI framebuffer.** On Intel, IOPCIFamily moves the console with a relocated framebuffer BAR; on arm64 it doesn't. A GOP framebuffer in a BAR (virtio-gpu, bochs-display) that the configurator moves would lose the console. The Q8B's display isn't on PCIe, and QEMU's tests use `ramfb`.
 
-## For checkpoint 3 (MSI and MSI-X through the ITS)
+## Checkpoint 3 (MSI and MSI-X through the ITS)
 
-- IOPCIFamily asks for a messaged interrupt controller with the platform function "GetMessagedInterruptController" (`IOPCIBridge::resolveMSIInterrupts`), sent up the same chain as INTx: the host bridge's ACPI nub should answer with an `IOPCIMessagedInterruptController` (built already) whose vectors are ITS LPIs, and the bridge's `_OSC` should then claim MSI support.
-- The ITS: MADT GIC ITS entries (base, ID), which neither neoboot nor the kernel reads yet; LPIs need the redistributors' property and pending tables (`GICR_PROPBASER`, `PENDBASER`), and `NeoDarwinGICv3` handles INTIDs below 1020 only.
-- Device IDs: the IORT root complex node's ID mappings from requester ID to the ITS (QEMU) or through the SMMUv3 (the Q8B, whose SMMU maps them on to the ITS). The host bridge already finds the node for its segment.
-- IOPCIFamily's embedded builds define `SUPPORT_MULTIPLE_MSI`; the macOS build, which this is, allocates one MSI vector per device unless MSI-X.
+Done: `gic-its.md`. The host bridge answers "GetMessagedInterruptController" with an ITS-backed `IOPCIMessagedInterruptController`; the ITS comes from the MADT, LPIs are set up in `NeoDarwinGICv3`, DeviceIDs follow the IORT (through the Q8B's SMMUv3), and `_OSC` claims MSI.
 
 ## For P1-10 (virtio-blk and NVMe)
 
 - Match `IOPCIDevice` by `IOPCIMatch` (virtio 0x10011af4 and 0x10421af4; NVMe by `IOPCIClassMatch` 0x01080200). Map BARs with `mapDeviceMemoryWithRegister`; an I/O BAR (transitional virtio) maps as MMIO too.
-- Interrupts: source 0 is INTx, level and possibly shared: use an `IOFilterInterruptEventSource` whose filter checks the device's own status. MSI-X arrives with checkpoint 3.
+- Interrupts: ask for MSI-X vectors with `configureInterrupts(kIOInterruptTypePCIMessagedX, …)` before anything else touches the device's interrupts (`gic-its.md`, "For P1-10"). Without MSIs (`nd_pci_msi=0`, no ITS) source 0 is INTx, level and possibly shared: use an `IOFilterInterruptEventSource` whose filter checks the device's own status.
 - Honour `dma-coherent` and `dma-address-bits` (above).
 - Disks behind root ports are on bus 1 and up; the host bridge's summary counts them.
 
@@ -180,6 +183,7 @@ What its tables (`boot/neoboot/testdata/radxa-dragon-q8b.acpidump`) mean for thi
 - **Windows only above 4 GiB**: `PCI0` decodes memory at 0x7_1000_0000 (256 MiB) and prefetchable memory at 0x7_2000_0000 (512 MiB), no I/O. Patch 0023 is what makes these usable; a 32-bit-only BAR cannot be placed.
 - **`_CCA` 1** on the host bridges (the USB controllers' 0 doesn't concern PCIe), IORT CCA 1, 36 address bits, requester IDs to an SMMUv3.
 - **`_PRT`**: direct GSIVs 0x241–0x244 on `PCI0`.
-- **`_OSC`**: it reads a 12-byte capabilities buffer, which NeoDarwin passes (FreeBSD's `AE_AML_BUFFER_LIMIT` suggests a shorter one there). It never grants AER or LTR (control is masked with 0x15), and without MSI, clock PM and ASPM in the support field (0x16, MSI coming with checkpoint 3) not hot plug either: expect 0x14 (PME, PCIe capability structure), so IOPCIFamily leaves AER off.
+- **`_OSC`**: it reads a 12-byte capabilities buffer, which NeoDarwin passes (FreeBSD's `AE_AML_BUFFER_LIMIT` suggests a shorter one there). It never grants AER or LTR (control is masked with 0x15), and without MSI, clock PM and ASPM in the support field (0x16) not hot plug either. NeoDarwin claims all three since checkpoint 3 (support 0x1f), so its AML grants 0x15 of the 0x3d requested (hot plug, PME, PCIe capability structure); IOPCIFamily leaves AER off.
+- **MSIs**: GIC-600's ITS at 0x17a40000, DeviceIDs through the SMMUv3 (`gic-its.md`, "What the Radxa Dragon Q8B will stress").
 - **`_STA`** depends on `PRP0`, and each bridge has `_DEP` on the PEP device. Nothing orders devices by `_DEP` yet; if a bridge reports absent, it isn't published.
 - **Risk:** the controllers are Synopsys DesignWare. If the firmware leaves a link down, an ECAM read of an absent device may raise an SError instead of reading all ones; FreeBSD's port is the reference for what the board needs.

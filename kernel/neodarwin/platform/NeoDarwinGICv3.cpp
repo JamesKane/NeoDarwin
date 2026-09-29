@@ -31,18 +31,36 @@
 // tree specifier is level), routed to the boot CPU (GICD_IROUTER,
 // IRM = 0). Level SPIs can be shared (PCI INTx): IOInterruptController
 // then puts an IOSharedInterruptController on the vector.
+//
+// LPIs (INTIDs 8192 and up: PCI MSIs through an ITS, docs/kernel/gic-its.md)
+// need memory the redistributors read: a configuration table shared by all
+// of them (a priority and enable byte per LPI, GICR_PROPBASER) and a pending
+// table per CPU (GICR_PENDBASER). initLPIs allocates both the first time an
+// ITS is set up, points every redistributor at them and sets
+// GICR_CTLR.EnableLPIs; a CPU that comes up later does the same for itself
+// in initCurrentCPU. The tables are requested Inner Shareable, write-back
+// cacheable; a GIC whose shareability field reads back 0 accesses them
+// non-cacheably, so they are then marked non-cacheable and every CPU write
+// to them is cleaned to the point of coherency. LPIs are Group 1
+// Non-secure by definition, with or without Secure firmware (DS = 0). The
+// IRQ loop hands an LPI to the one handler registered for them, and writes
+// ICC_EOIR1 for the priority drop; LPIs have no active state.
 
 #include "NeoDarwinPlatform.h"
+#include <IOKit/IOBufferMemoryDescriptor.h>
 #include <IOKit/IODeviceTreeSupport.h>
 #include <IOKit/IOLib.h>
 #include <kern/cpu_number.h>
 #include <machine/machine_routines.h>
 #include <pexpert/arm64/board_config.h>
 #include <pexpert/device_tree.h>
+#include <pexpert/pexpert.h>
 
 // Declared in osfmk-private headers IOKit does not see.
 extern "C" vm_offset_t pe_arm_get_soc_base_phys(void);
 extern "C" vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
+// osfmk/arm/caches_internal.h: DC CIVAC over a range, then DSB SY.
+extern "C" void FlushPoC_DcacheRegion(vm_offset_t va, size_t length);
 
 // The virtual timer's INTID and group, from /arm-io/gic timer-ppi and
 // timer-group (pexpert/arm/pe_fiq.c, patch 0016). On Group 1 it arrives here
@@ -84,7 +102,99 @@ OSDefineMetaClassAndStructors(NeoDarwinGICv3, IOInterruptController);
 #define ND_SGI_IPI                0
 #define ND_SGI_DEFERRED_IPI       1
 
+// LPIs (Arm IHI 0069 5.1, 12.9-12.11).
+#define ND_GIC_FIRST_LPI          8192
+#define ND_GICD_TYPER             0x0004
+#define ND_GICD_TYPER_LPIS        (1u << 17)
+#define ND_GICD_TYPER_IDBITS(t)   ((((t) >> 19) & 0x1f) + 1)
+#define ND_GICD_TYPER_NUMLPIS(t)  (((t) >> 11) & 0x1f)
+#define ND_GICR_CTLR              0x0000
+#define ND_GICR_CTLR_ENABLE_LPIS  0x1
+#define ND_GICR_TYPER_PLPIS       0x1
+#define ND_GICR_PROPBASER         0x0070
+#define ND_GICR_PENDBASER         0x0078
+#define ND_GICR_PENDBASER_PTZ     (1ULL << 62)
+// GICR_PROPBASER and GICR_PENDBASER (and the ITS's BASER/CBASER) share
+// these fields.
+#define ND_GIC_BASER_SHARE_SHIFT  10          // [11:10]: 0 none, 1 inner, 2 outer
+#define ND_GIC_BASER_SHARE_MASK   (3ULL << 10)
+#define ND_GIC_BASER_INNER_SHIFT  7           // [9:7] in the GICR registers
+#define ND_GIC_BASER_INNER_MASK   (7ULL << 7)
+#define ND_GIC_CACHE_NC           1ULL        // Normal, Inner Non-cacheable
+#define ND_GIC_CACHE_RAWAWB       7ULL        // Normal, Read/Write-allocate write-back
+#define ND_GIC_SHARE_INNER        1ULL
+#define ND_GIC_PA_MASK            0x000ffffffffff000ULL   // [51:12]
+// Our tables cover LPI INTIDs below 2^14: 8192 LPIs, an 8 KiB
+// configuration table and 2 KiB pending tables (the first KiB, for the
+// INTIDs below 8192, must be zero).
+#define ND_LPI_ID_BITS_MAX        14
+#define ND_LPI_PRIORITY           ND_GIC_PRIORITY_DEFAULT
+#define ND_LPI_PROP_RES1          0x2         // bit 1: RES1 in GICv3
+#define ND_LPI_PROP_ENABLE        0x1
+#define ND_PEND_ALIGN             0x10000     // pending tables: 64 KiB aligned
+
 static NeoDarwinGICv3 *gNeoDarwinGIC;
+
+NeoDarwinGICv3 *
+NeoDarwinGICv3::instance(void)
+{
+	return __atomic_load_n(&gNeoDarwinGIC, __ATOMIC_ACQUIRE);
+}
+
+// ------------------------------------------------------------------------
+// Memory for the GIC and its ITSs
+
+bool
+ndGICTableAlloc(NDGICTable *table, size_t size, size_t align)
+{
+	bzero(table, sizeof(*table));
+	if (align < 4096) {
+		align = 4096;
+	}
+	size = (size + 4095) & ~(size_t)4095;
+	// The mask gives the alignment (its low zero bits) and the highest
+	// address: the GIC's address fields end at bit 51, and every SBSA
+	// machine we know has its RAM well below 2^48.
+	mach_vm_address_t mask = 0x0000ffffffffffffULL & ~(mach_vm_address_t)(align - 1);
+	IOBufferMemoryDescriptor *md = IOBufferMemoryDescriptor::inTaskWithPhysicalMask(kernel_task,
+	    kIODirectionInOut | kIOMemoryHostPhysicallyContiguous | kIOMemoryMapperNone, size, mask);
+	if (md == NULL) {
+		return false;
+	}
+	if (md->prepare() != kIOReturnSuccess) {
+		md->release();
+		return false;
+	}
+	table->md = md;
+	table->va = (uint8_t *)md->getBytesNoCopy();
+	table->pa = md->getPhysicalSegment(0, NULL, kIOMemoryMapperNone);
+	table->size = size;
+	bzero(table->va, size);
+	// Zero as far as the GIC can see, whatever attributes it reads with.
+	ndGICFlush(table->va, size);
+	if ((table->pa & (align - 1)) != 0) {
+		IOLog("NeoDarwinGICv3: a %zu-byte table at 0x%llx is not %zu-byte aligned\n", size, table->pa, align);
+		ndGICTableFree(table);
+		return false;
+	}
+	return true;
+}
+
+void
+ndGICTableFree(NDGICTable *table)
+{
+	if (table->md != NULL) {
+		table->md->complete();
+		table->md->release();
+	}
+	bzero(table, sizeof(*table));
+}
+
+void
+ndGICFlush(const void *va, size_t size)
+{
+	FlushPoC_DcacheRegion((vm_offset_t)va, size);
+}
 
 static inline uint32_t
 rd32(vm_offset_t a)
@@ -145,6 +255,7 @@ NeoDarwinGICv3::initWithNode(IORegistryEntry *gicNode)
 	gicrSize = r[3] < (vm_size_t)MAX_CPUS * GICR_PE_SIZE ? r[3] : (vm_size_t)MAX_CPUS * GICR_PE_SIZE;
 	gicd = ml_io_map(soc + r[0], r[1]);
 	gicr = ml_io_map(soc + r[2], gicrSize);
+	gicrPhys = soc + r[2];
 	if (gicd == 0 || gicr == 0) {
 		return false;
 	}
@@ -181,6 +292,12 @@ NeoDarwinGICv3::initWithNode(IORegistryEntry *gicNode)
 	}
 	uint64_t boot = topology->boot_cpu != NULL ? topology->boot_cpu->phys_id : topology->cpus[0].phys_id;
 	spiRoute = boot & 0xff00ffffffULL;
+	bootCPUNumber = topology->boot_cpu != NULL ? topology->boot_cpu->cpu_id : topology->cpus[0].cpu_id;
+	lpiInitLock = IOLockAlloc();
+	lpiRDLock = IOSimpleLockAlloc();
+	if (lpiInitLock == NULL || lpiRDLock == NULL) {
+		return false;
+	}
 
 	// Affinity routing and Group 1, alongside the Group 0 pe_fiq.c enabled.
 	wr32(gicd + GICD_CTLR, rd32(gicd + GICD_CTLR) | ND_GICD_CTLR_ARE | ND_GICD_CTLR_ENABLEGRP1);
@@ -260,6 +377,11 @@ NeoDarwinGICv3::initCurrentCPU(void)
 		}
 		__builtin_arm_dsb(ND_DSB_ISHST);
 		wr32(rd + GICR_ISENABLER0, enabled);
+		// LPIs, if the tables exist already (a CPU that comes up after the
+		// first ITS was set up, or whose redistributor PSCI reset).
+		if (__atomic_load_n(&lpiReady, __ATOMIC_ACQUIRE)) {
+			enableLPIsOn(cpu);
+		}
 	}
 	initCPUInterface();
 }
@@ -501,6 +623,18 @@ NeoDarwinGICv3::handleInterrupt(void *refCon, IOService *nub, int source)
 	for (;;) {
 		uint64_t iar = __builtin_arm_rsr64("ICC_IAR1_EL1");
 		uint32_t intid = (uint32_t)(iar & 0xffffff);
+		if (intid >= ND_GIC_FIRST_LPI) {
+			// An LPI: edge, no active state; EOIR1 drops the priority.
+			NDLPIHandler handler = __atomic_load_n(&lpiHandler, __ATOMIC_ACQUIRE);
+			if (handler != NULL) {
+				handler(lpiTarget, intid);
+			} else {
+				lpiSpurious++;
+			}
+			__builtin_arm_wsr64("ICC_EOIR1_EL1", iar);
+			__builtin_arm_isb(ND_ISB_SY);
+			continue;
+		}
 		if (intid >= ND_GIC_NUM_INTIDS) {
 			break;  // 1023: nothing pending
 		}
@@ -645,4 +779,177 @@ void
 NeoDarwinGICv3::cancelDeferredIPI(unsigned int cpu_id)
 {
 	(void)cpu_id;
+}
+
+// ------------------------------------------------------------------------
+// LPIs
+
+// Points redistributor `cpu` at the tables and enables its LPIs, unless it
+// has them already. Any CPU may do this for any redistributor; a CPU coming
+// up does it for its own with interrupts disabled, hence the spin lock.
+bool
+NeoDarwinGICv3::enableLPIsOn(unsigned int cpu)
+{
+	if (cpu >= bankedCount || banked[cpu].rd == 0 || lpiPend == NULL || lpiPend[cpu].va == NULL) {
+		return false;
+	}
+	vm_offset_t rd = banked[cpu].rd;
+	if ((rd64(rd + GICR_TYPER) & ND_GICR_TYPER_PLPIS) == 0) {
+		return false;
+	}
+	bool ok = true;
+	IOSimpleLockLock(lpiRDLock);
+	if ((rd32(rd + ND_GICR_CTLR) & ND_GICR_CTLR_ENABLE_LPIS) == 0) {
+		wr64(rd + ND_GICR_PROPBASER, lpiPropBaser);
+		uint64_t pend = (lpiPend[cpu].pa & 0x000fffffffff0000ULL) | ND_GICR_PENDBASER_PTZ |
+		    ND_GIC_SHARE_INNER << ND_GIC_BASER_SHARE_SHIFT |
+		    (lpiPendNonCacheable ? ND_GIC_CACHE_NC : ND_GIC_CACHE_RAWAWB) << ND_GIC_BASER_INNER_SHIFT;
+		wr64(rd + ND_GICR_PENDBASER, pend);
+		uint64_t back = rd64(rd + ND_GICR_PENDBASER);
+		if (((back & ND_GIC_BASER_SHARE_MASK) == 0 || lpiForceNC) && !lpiPendNonCacheable) {
+			// Non-shareable: the redistributor won't snoop, so no
+			// cacheable attributes either. Written by the GIC only, and
+			// zeroed and cleaned already.
+			pend = (pend & ~(ND_GIC_BASER_SHARE_MASK | ND_GIC_BASER_INNER_MASK)) | ND_GIC_CACHE_NC << ND_GIC_BASER_INNER_SHIFT;
+			wr64(rd + ND_GICR_PENDBASER, pend);
+		}
+		__builtin_arm_dsb(ND_DSB_ISHST);
+		wr32(rd + ND_GICR_CTLR, rd32(rd + ND_GICR_CTLR) | ND_GICR_CTLR_ENABLE_LPIS);
+		__builtin_arm_dsb(ND_DSB_ISHST);
+		ok = (rd32(rd + ND_GICR_CTLR) & ND_GICR_CTLR_ENABLE_LPIS) != 0;
+	}
+	IOSimpleLockUnlock(lpiRDLock);
+	return ok;
+}
+
+bool
+NeoDarwinGICv3::initLPIs(char *why, size_t whyLength)
+{
+	if (__atomic_load_n(&lpiReady, __ATOMIC_ACQUIRE)) {
+		return true;
+	}
+	IOLockLock(lpiInitLock);
+	bool ok = false;
+	do {
+		if (lpiReady) {
+			ok = true;
+			break;
+		}
+		uint32_t forceNC = 0;
+		lpiForceNC = PE_parse_boot_argn("nd_gic_lpi_nc", &forceNC, sizeof(forceNC)) && forceNC != 0;
+		uint32_t typer = rd32(gicd + ND_GICD_TYPER);
+		if ((typer & ND_GICD_TYPER_LPIS) == 0) {
+			snprintf(why, whyLength, "the distributor has no LPIs (GICD_TYPER 0x%x)", typer);
+			break;
+		}
+		uint32_t idBits = ND_GICD_TYPER_IDBITS(typer);
+		if (idBits < 14) {
+			snprintf(why, whyLength, "GICD_TYPER.IDbits gives %u INTID bits, too few for LPIs", idBits);
+			break;
+		}
+		lpiIDBits = idBits < ND_LPI_ID_BITS_MAX ? (uint8_t)idBits : ND_LPI_ID_BITS_MAX;
+		lpiNum = (1u << lpiIDBits) - ND_GIC_FIRST_LPI;
+		uint32_t numLPIs = ND_GICD_TYPER_NUMLPIS(typer);
+		if (numLPIs != 0 && (1u << (numLPIs + 1)) < lpiNum) {
+			lpiNum = 1u << (numLPIs + 1);     // an implementation with fewer LPIs than INTID bits
+		}
+
+		// The configuration table: a byte per LPI, 4 KiB aligned.
+		if (!ndGICTableAlloc(&lpiProp, (1u << lpiIDBits) - ND_GIC_FIRST_LPI, 4096)) {
+			snprintf(why, whyLength, "no memory for the LPI configuration table");
+			break;
+		}
+		// Every LPI disabled, at our priority; configureLPI enables them.
+		memset(lpiProp.va, ND_LPI_PRIORITY | ND_LPI_PROP_RES1, lpiProp.size);
+		ndGICFlush(lpiProp.va, lpiProp.size);
+
+		lpiPend = IONewZero(NDGICTable, bankedCount);
+		if (lpiPend == NULL) {
+			snprintf(why, whyLength, "no memory");
+			break;
+		}
+		bool allocated = true;
+		for (unsigned int cpu = 0; cpu < bankedCount && allocated; cpu++) {
+			if (banked[cpu].rd != 0) {
+				allocated = ndGICTableAlloc(&lpiPend[cpu], (1u << lpiIDBits) / 8, ND_PEND_ALIGN);
+			}
+		}
+		if (!allocated) {
+			snprintf(why, whyLength, "no memory for the LPI pending tables");
+			break;
+		}
+
+		// GICR_PROPBASER: request Inner Shareable, write-back; read back
+		// what this GIC keeps, on the boot CPU's redistributor (the tables
+		// are the same for all). A redistributor with LPIs enabled already
+		// (by firmware) keeps its registers: that is an error here.
+		vm_offset_t rd = banked[bootCPUNumber].rd;
+		if (rd32(rd + ND_GICR_CTLR) & ND_GICR_CTLR_ENABLE_LPIS) {
+			snprintf(why, whyLength, "LPIs are enabled already on the boot CPU's redistributor (firmware left them on)");
+			break;
+		}
+		uint64_t prop = (lpiProp.pa & ND_GIC_PA_MASK) | (uint64_t)(lpiIDBits - 1) |
+		    ND_GIC_SHARE_INNER << ND_GIC_BASER_SHARE_SHIFT | ND_GIC_CACHE_RAWAWB << ND_GIC_BASER_INNER_SHIFT;
+		wr64(rd + ND_GICR_PROPBASER, prop);
+		uint64_t back = rd64(rd + ND_GICR_PROPBASER);
+		if ((back & ND_GIC_BASER_SHARE_MASK) == 0 || lpiForceNC) {
+			prop = (prop & ~(ND_GIC_BASER_SHARE_MASK | ND_GIC_BASER_INNER_MASK)) | ND_GIC_CACHE_NC << ND_GIC_BASER_INNER_SHIFT;
+			wr64(rd + ND_GICR_PROPBASER, prop);
+			back = rd64(rd + ND_GICR_PROPBASER);
+			lpiPropFlush = true;
+		}
+		lpiPropBaser = back;
+		// Pending tables follow the configuration table's outcome.
+		lpiPendNonCacheable = lpiPropFlush;
+		snprintf(lpiAttrs, sizeof(lpiAttrs), "%u LPIs, configuration table at 0x%llx %s",
+		    lpiNum, lpiProp.pa, lpiPropFlush ? "non-shareable, non-cacheable (cleaned to PoC)" : "inner shareable, write-back");
+
+		__atomic_store_n(&lpiReady, true, __ATOMIC_RELEASE);
+		ok = true;
+		unsigned int enabled = 0, cpus = 0;
+		for (unsigned int cpu = 0; cpu < bankedCount; cpu++) {
+			if (banked[cpu].rd != 0) {
+				cpus++;
+				enabled += enableLPIsOn(cpu) ? 1 : 0;
+			}
+		}
+		IOLog("NeoDarwinGICv3: LPIs: %s; enabled on %u of %u redistributors\n", lpiAttrs, enabled, cpus);
+	} while (false);
+	IOLockUnlock(lpiInitLock);
+	return ok;
+}
+
+void
+NeoDarwinGICv3::configureLPI(uint32_t intid, bool enable)
+{
+	if (!lpiReady || intid < ND_GIC_FIRST_LPI || intid - ND_GIC_FIRST_LPI >= lpiNum) {
+		return;
+	}
+	uint8_t *p = lpiProp.va + (intid - ND_GIC_FIRST_LPI);
+	*(volatile uint8_t *)p = ND_LPI_PRIORITY | ND_LPI_PROP_RES1 | (enable ? ND_LPI_PROP_ENABLE : 0);
+	if (lpiPropFlush) {
+		ndGICFlush(p, 1);
+	} else {
+		__builtin_arm_dsb(ND_DSB_ISHST);
+	}
+}
+
+void
+NeoDarwinGICv3::setLPIHandler(NDLPIHandler handler, void *target)
+{
+	lpiTarget = target;
+	__atomic_store_n(&lpiHandler, handler, __ATOMIC_RELEASE);
+}
+
+uint64_t
+NeoDarwinGICv3::collectionTarget(unsigned int cpu, bool pta)
+{
+	if (cpu >= bankedCount || banked[cpu].rd == 0) {
+		return ~0ULL;
+	}
+	if (pta) {
+		return gicrPhys + (banked[cpu].rd - gicr);
+	}
+	// GICR_TYPER.Processor_Number [23:8], placed at bit 16.
+	return ((rd64(banked[cpu].rd + GICR_TYPER) >> 8) & 0xffff) << 16;
 }

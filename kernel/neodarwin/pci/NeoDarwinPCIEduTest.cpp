@@ -13,8 +13,17 @@
 //   INTA -> _PRT -> link device L00x -> GSIV -> NeoDarwinGICv3 SPI
 //   (Group 1 Non-secure, level, routed to the boot CPU) -> IRQ -> handler
 //
-// The result is one log line. Compiled into the kernel with the host bridge
-// (patch 0022), matched by a built-in personality (IOPCIMatch 0x11e81234).
+// Then, if IOPCIFamily gave the device an MSI (edu has a one-vector MSI
+// capability; checkpoint 3, docs/kernel/gic-its.md), the same through it:
+//
+//   MSI write of EventID 0 to GITS_TRANSLATER -> ITS (DeviceID from the
+//   IORT, MAPTI) -> LPI on the boot CPU's redistributor -> IRQ -> handler
+//
+// Registering the MSI source makes IOPCIFamily enable MSI in the capability
+// and disable INTx (command register); unregistering it undoes both.
+// Each result is one log line, with the time from the raise to the handler.
+// Compiled into the kernel with the host bridge (patch 0022), matched by a
+// built-in personality (IOPCIMatch 0x11e81234).
 
 #include <IOKit/IOService.h>
 #include <IOKit/IOLib.h>
@@ -29,11 +38,17 @@ public:
 
 private:
 	static void interrupt(OSObject *target, void *refCon, IOService *nub, int source);
+	// Raises the interrupt and waits up to a second for the handler of
+	// `source`; the nanoseconds from the raise to the handler, or 0.
+	uint64_t raise(IOPCIDevice *pci, int source);
+	void testMSI(IOPCIDevice *pci, const char *where, UInt32 ident);
 
 	IOMemoryMap *map;
 	volatile UInt32 *regs;
 	UInt32 count;
 	UInt32 status;
+	uint64_t raisedAt;
+	uint64_t handledAt;
 };
 
 #define super IOService
@@ -58,7 +73,64 @@ NeoDarwinPCIEduTest::interrupt(OSObject *target, void *refCon, IOService *nub, i
 	UInt32 s = self->regs[kEduInterruptStatus];
 	self->regs[kEduInterruptAck] = s;
 	__atomic_store_n(&self->status, s, __ATOMIC_RELAXED);
+	if (__atomic_load_n(&self->count, __ATOMIC_RELAXED) == 0) {
+		self->handledAt = mach_absolute_time();
+	}
 	__atomic_add_fetch(&self->count, 1, __ATOMIC_RELEASE);
+}
+
+uint64_t
+NeoDarwinPCIEduTest::raise(IOPCIDevice *pci, int source)
+{
+	__atomic_store_n(&count, 0, __ATOMIC_RELEASE);
+	pci->enableInterrupt(source);
+	raisedAt = mach_absolute_time();
+	regs[kEduInterruptRaise] = kEduRaiseValue;
+	for (int i = 0; i < 1000 && __atomic_load_n(&count, __ATOMIC_ACQUIRE) == 0; i++) {
+		IOSleep(1);
+	}
+	uint64_t ns = 0;
+	if (__atomic_load_n(&count, __ATOMIC_ACQUIRE) != 0) {
+		absolutetime_to_nanoseconds(handledAt - raisedAt, &ns);
+		ns = ns != 0 ? ns : 1;
+	}
+	pci->disableInterrupt(source);
+	return ns;
+}
+
+// The first source IOPCIFamily typed as messaged (MSI vectors follow INTx).
+void
+NeoDarwinPCIEduTest::testMSI(IOPCIDevice *pci, const char *where, UInt32 ident)
+{
+	int source = -1, type = 0;
+	for (int i = 0; source < 0 && pci->getInterruptType(i, &type) == kIOReturnSuccess; i++) {
+		if (type & kIOInterruptTypePCIMessaged) {
+			source = i;
+		}
+	}
+	if (source < 0) {
+		IOLog("NeoDarwinPCIEduTest: %s: edu 0x%08x: no MSI (INTx only)\n", where, ident);
+		return;
+	}
+	OSNumber *lpi = OSDynamicCast(OSNumber, pci->getProperty("msi-lpi-base"));
+	OSNumber *dev = OSDynamicCast(OSNumber, pci->getProperty("msi-device-id"));
+	IOReturn ret = pci->registerInterrupt(source, this, &NeoDarwinPCIEduTest::interrupt, NULL);
+	if (ret != kIOReturnSuccess) {
+		IOLog("NeoDarwinPCIEduTest: %s: edu 0x%08x: MSI (source %d) not registered (0x%x)\n", where, ident, source, ret);
+		return;
+	}
+	uint64_t ns = raise(pci, source);
+	UInt32 n = __atomic_load_n(&count, __ATOMIC_ACQUIRE);
+	UInt16 command = pci->configRead16(kIOPCIConfigCommand);
+	pci->unregisterInterrupt(source);
+	if (n != 0) {
+		IOLog("NeoDarwinPCIEduTest: %s: edu 0x%08x: MSI on LPI %u (DeviceID 0x%x, EventID 0) reached its handler in %llu us: status 0x%x, %u interrupt%s, INTx %s\n",
+		    where, ident, lpi ? lpi->unsigned32BitValue() : 0, dev ? dev->unsigned32BitValue() : 0, ns / 1000, status, n,
+		    n == 1 ? "" : "s", (command & kIOPCICommandInterruptDisable) ? "disabled" : "enabled");
+	} else {
+		IOLog("NeoDarwinPCIEduTest: %s: edu 0x%08x: MSI on LPI %u: no interrupt within 1 s (status 0x%x)\n",
+		    where, ident, lpi ? lpi->unsigned32BitValue() : 0, regs[kEduInterruptStatus]);
+	}
 }
 
 bool
@@ -91,19 +163,11 @@ NeoDarwinPCIEduTest::start(IOService *provider)
 	}
 	if (ret != kIOReturnSuccess) {
 		IOLog("NeoDarwinPCIEduTest: %s: edu 0x%08x: INTA not registered (0x%x)\n", where, ident, ret);
+		testMSI(pci, where, ident);
 		return true;
 	}
-	pci->enableInterrupt(0);
-
-	regs[kEduInterruptRaise] = kEduRaiseValue;
-	uint64_t started = mach_absolute_time();
-	for (int i = 0; i < 1000 && __atomic_load_n(&count, __ATOMIC_ACQUIRE) == 0; i++) {
-		IOSleep(1);
-	}
-	uint64_t ns;
-	absolutetime_to_nanoseconds(mach_absolute_time() - started, &ns);
+	uint64_t ns = raise(pci, 0);
 	UInt32 n = __atomic_load_n(&count, __ATOMIC_ACQUIRE);
-	pci->disableInterrupt(0);
 	pci->unregisterInterrupt(0);
 	if (n != 0) {
 		IOLog("NeoDarwinPCIEduTest: %s: edu 0x%08x: INTA on GSIV %u (%s) reached its handler in %llu us: status 0x%x, %u interrupt%s\n",
@@ -113,5 +177,6 @@ NeoDarwinPCIEduTest::start(IOService *provider)
 		IOLog("NeoDarwinPCIEduTest: %s: edu 0x%08x: INTA on GSIV %u: no interrupt within 1 s (status 0x%x)\n",
 		    where, ident, gsiv, regs[kEduInterruptStatus]);
 	}
+	testMSI(pci, where, ident);
 	return true;
 }

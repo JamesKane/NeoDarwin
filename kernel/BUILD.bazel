@@ -103,6 +103,7 @@ SBSA_PATCHES = [
     "patches/0021-generic-arm64-framebuffer-console.patch",
     "patches/0022-iokit-build-iopcifamily-and-pci-host-bridge.patch",
     "patches/0023-iopcifamily-arm64-fixes-and-64-bit-bars.patch",
+    "patches/0024-iokit-build-gic-its-and-pci-msi.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -321,12 +322,14 @@ PCI_DEVICES = [
 
 PCI_LINES = [
     "'NeoDarwinPCIHostBridge: \\_SB.PCI0: segment 0, buses 0-255, ECAM 0x4010000000 (_CBA); mem 0x10000000+0x2eff0000, io 0x1000+0xf000 at 0x3eff1000, mem 0x8000000000+0x8000000000'",
-    "'NeoDarwinPCIHostBridge: \\_SB.PCI0: _OSC control 0x1d of 0x3d; DMA coherent (_CCA, 64 address bits); requester IDs to ITS group'",
     # virtio-blk, transitional on the root bus: its I/O BAR is MMIO in the
     # host bridge's I/O window at 0x3eff0000.
     "'1af4:1001 class 010000 bar0 io 0x3eff1'",
     # NVMe: EDK2 put its 64-bit BAR above 4 GiB, and it stays there.
     "'0000:00:03.0 1b36:0010 class 010802 bar0 mem 0x80'",
+    # Each device's MSI or MSI-X capability: NVMe's table has 65 entries.
+    "' INTA gsiv 38 msi-x 65'",
+    "'1234:11e8 class 00ff00 bar0 mem 0x10400000+0x100000 INTA gsiv 35 msi 1'",
     "'0000:00:05.0 1b36:000c class 060400 bridge to buses 1-1'",
     # virtio-blk, modern behind the root port: INTA swizzled to the port's.
     "'0000:01:00.0 1af4:1042 class 010000'",
@@ -336,7 +339,34 @@ PCI_LINES = [
     "'0000:00:06.0 1b36:000c class 060400 bridge to buses 2-2'",
     "'NeoDarwinGICv3: SPI 37: shared for '",
     "'NeoDarwinPCIEduTest: 02:00.0: edu 0x010000ed: INTA on GSIV 37 (level) reached its handler in '",
-    "'NeoDarwinPCIHostBridge: \\_SB.PCI0: segment 0: 10 devices (2 PCI-to-PCI bridges) on buses 0-2, 9 with INTx'",
+    "'NeoDarwinPCIHostBridge: \\_SB.PCI0: segment 0: 10 devices (2 PCI-to-PCI bridges) on buses 0-2, 9 with INTx, 9 capable of MSI or MSI-X'",
+]
+
+# P1-09 checkpoint 3 (docs/kernel/gic-its.md): MSI and MSI-X through the
+# GIC ITS. The ITS from the MADT, its tables and collections; LPIs on the
+# redistributors; each device's requester ID through the IORT to a DeviceID.
+# edu's MSI (after its INTA) and two MSI-X vectors of the NVMe controller,
+# each with an LPI of its own (admin queue on vector 0, an I/O queue on
+# vector 1), reach their handlers. The LPI numbers depend on the order
+# drivers start, so the lines match around them.
+MSI_LINES = [
+    "'NeoDarwinPCIMSI: ITS 0 at 0x8080000 (IIDR 0x0000043b): 16 DeviceID bits, 16 EventID bits, ITT entries 12 bytes, '",
+    "'NeoDarwinPCIMSI: MSI and MSI-X on LPIs 8192-10239 through 1 ITS; 8192 LPIs, configuration table at 0x'",
+    "'NeoDarwinPCIMSI: 0000:00:04.0: MSI 1 vector -> LPI '",
+    "'NeoDarwinPCIMSI: 0000:00:03.0: MSI-X 2 of 65 vectors -> LPIs '",
+    "'NeoDarwinPCIMSI: 0000:02:00.0: MSI 1 vector -> LPI '",
+    "'(DeviceID 0x20, EventID 0) reached its handler in '",
+    "'(DeviceID 0x200, EventID 0) reached its handler in '",
+    "'NeoDarwinPCINVMeTest: 00:03.0: NVMe 1.4: MSI-X 2 of 65 vectors on LPIs '",
+    "'(DeviceID 0x18): vector 0 (admin) in '",
+    "' us, vector 1 (I/O queue 1) in '",
+]
+
+# The ITS as QEMU virt has it: a two-level device table (the flat one would
+# be 512 KiB), coherent tables, collections by processor number.
+MSI_QEMU_LINES = [
+    "'NeoDarwinGICv3ITS: ITS 0: GITS_BASER0: device table, 8-byte entries, two-level, 1 x 64 KiB pages at 0x'",
+    "' inner shareable, write-back; enabled on '",
 ]
 
 sh_test(
@@ -355,7 +385,10 @@ sh_test(
         # One security state (DS = 1): the SPI is moved to Group 1 here.
         "'NeoDarwinGICv3: SPI 35: Group 1, priority 0x80, level, routed to 0x0'",
         "'pid1: all checks passed'",
-    ] + PCI_LINES,
+        "'NeoDarwinPCIHostBridge: \\_SB.PCI0: _OSC control 0x1d of 0x3d with MSI; DMA coherent (_CCA, 64 address bits); requester IDs to ITS group'",
+        "'enabled on 1 of 1 redistributors'",
+        "'two-level device table; 1 collection by processor number'",
+    ] + PCI_LINES + MSI_LINES + MSI_QEMU_LINES,
     data = [
         ":sbsa_kc",
         "//boot/neoboot",
@@ -366,7 +399,8 @@ sh_test(
 
 # The same on virt,secure=on with TF-A (GICD_CTLR.DS == 0): TF-A makes SPIs
 # Group 1 Non-secure, and Non-secure software can neither change nor read
-# their group; the edu interrupt still arrives as an IRQ.
+# their group; the edu interrupt still arrives as an IRQ. LPIs are Group 1
+# Non-secure by definition: the ITS needs nothing from the Secure side.
 sh_test(
     name = "sbsa_secure_pci_boot_test",
     size = "medium",
@@ -385,12 +419,116 @@ sh_test(
         "'DS=0 (two security states; Group 0 is Secure); timer PPI 27 on Group 1 (IRQ)'",
         "'NeoDarwinGICv3: SPI 35: Group 1 Non-secure as the Secure firmware set it (DS=0), priority 0x80, level, routed to 0x0'",
         "'pid1: all checks passed'",
-    ] + PCI_LINES,
+        "'NeoDarwinPCIHostBridge: \\_SB.PCI0: _OSC control 0x1d of 0x3d with MSI; DMA coherent (_CCA, 64 address bits); requester IDs to ITS group'",
+        "'enabled on 1 of 1 redistributors'",
+    ] + PCI_LINES + MSI_LINES + MSI_QEMU_LINES,
     data = [
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:pid1_root",
         "//third_party/qemu_firmware:virt_secure_flash",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# MSIs with four CPUs: every redistributor gets the LPI tables, the ITS a
+# collection per CPU (MAPC), and MSIs go to the boot CPU's collection.
+sh_test(
+    name = "sbsa_smp_pci_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--smp 4",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+    ] + PCI_DEVICES + [
+        "--until-lines",
+        "$(rootpath //boot/neoboot)",
+        "180",
+        "'NeoDarwinPlatformExpert: 4 of 4 CPUs online'",
+        "'pid1: all checks passed'",
+        "'enabled on 4 of 4 redistributors'",
+        "'two-level device table; 4 collections by processor number'",
+    ] + PCI_LINES + MSI_LINES + MSI_QEMU_LINES,
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pid1_root",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# PCIe behind an SMMUv3, as on the Q8B (virt,iommu=smmuv3): the IORT sends
+# the root complex's requester IDs to the SMMU and the SMMU's stream IDs to
+# the ITS; the SMMU is left in bypass, as QEMU resets it. boot.cfg also
+# forces the paths a GIC that is not coherent would take (nd_gic_lpi_nc=1:
+# non-cacheable tables and command queue, every write cleaned to PoC) and a
+# flat device table (nd_its_flat=1).
+sh_test(
+    name = "sbsa_pci_smmu_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--machine-opt iommu=smmuv3",
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+        "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/pci-its-nc-flat.cfg)",
+    ] + PCI_DEVICES + [
+        "--until-lines",
+        "$(rootpath //boot/neoboot)",
+        "150",
+        "'pid1: all checks passed'",
+        "'NeoDarwinPCIHostBridge: \\_SB.PCI0: _OSC control 0x1d of 0x3d with MSI; DMA coherent (_CCA, 64 address bits); requester IDs to SMMUv3'",
+        "'NeoDarwinGICv3: LPIs: 8192 LPIs, configuration table at 0x'",
+        "' non-shareable, non-cacheable (cleaned to PoC); enabled on 1 of 1 redistributors'",
+        "'NeoDarwinGICv3ITS: ITS 0: GITS_BASER0: device table, 8-byte entries, 8 x 64 KiB pages at 0x'",
+        "'flat device table; 1 collection by processor number; non-cacheable command queue'",
+        "'DeviceID 0x20 on ITS 0 via SMMUv3 at 0x9050000 as stream 0x20 (bypass)'",
+        "'DeviceID 0x18 on ITS 0 via SMMUv3 at 0x9050000 as stream 0x18 (bypass)'",
+    ] + PCI_LINES + MSI_LINES,
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//boot/neoboot:testdata/pci-its-nc-flat.cfg",
+        "//images:pid1_root",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# MSIs off (boot-arg nd_pci_msi=0): no ITS is touched, _OSC claims no MSI,
+# and every device keeps INTx; edu's still reaches its handler.
+sh_test(
+    name = "sbsa_pci_nomsi_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+        "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/pci-msi-off.cfg)",
+        "--absent 'NeoDarwinPCIMSI: 0000:'",
+        "--absent 'NeoDarwinGICv3: LPIs:'",
+    ] + PCI_DEVICES + [
+        "--until-lines",
+        "$(rootpath //boot/neoboot)",
+        "150",
+        "'pid1: all checks passed'",
+        "'NeoDarwinPCIMSI: no MSIs: disabled by nd_pci_msi=0; PCI devices use INTx'",
+        "'NeoDarwinPCIHostBridge: \\_SB.PCI0: _OSC control 0x1d of 0x3d; DMA coherent (_CCA, 64 address bits); requester IDs to ITS group'",
+        "'NeoDarwinPCIEduTest: 00:04.0: edu 0x010000ed: no MSI (INTx only)'",
+        "'NeoDarwinPCIEduTest: 02:00.0: edu 0x010000ed: no MSI (INTx only)'",
+        "'NeoDarwinPCINVMeTest: 00:03.0: no two MSI-X vectors'",
+    ] + PCI_LINES,
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//boot/neoboot:testdata/pci-msi-off.cfg",
+        "//images:pid1_root",
     ],
     tags = ["manual", "kernel", "qemu"],
 )

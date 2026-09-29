@@ -17,8 +17,8 @@ OSDefineMetaClassAndStructors(NeoDarwinPCIHostBridge, IOPCIHostBridge);
 static const UInt8 kPCIOSCUUID[16] = {
 	0x5b, 0x4d, 0xdb, 0x33, 0xf7, 0x1f, 0x1c, 0x40, 0x96, 0x57, 0x74, 0x41, 0xc0, 0x3d, 0xd7, 0x66,
 };
-// Support field: extended configuration space, ASPM, clock PM, segments.
-// No MSI yet (checkpoint 3 adds it with the ITS).
+// Support field: extended configuration space, ASPM, clock PM, segments,
+// and MSI when the ITS is up (NeoDarwinPCIMSI.h).
 enum {
 	kOSCSupportExtConfig = 0x01,
 	kOSCSupportASPM      = 0x02,
@@ -172,7 +172,8 @@ osc_call(IOACPIPlatformDevice *nub, bool query, UInt32 support, UInt32 *control,
 void
 NeoDarwinPCIHostBridge::negotiateOSC(IOACPIPlatformDevice *nub)
 {
-	const UInt32 support = kOSCSupportExtConfig | kOSCSupportASPM | kOSCSupportClockPM | kOSCSupportSegments;
+	const UInt32 support = kOSCSupportExtConfig | kOSCSupportASPM | kOSCSupportClockPM | kOSCSupportSegments |
+	    (msi != NULL ? kOSCSupportMSI : 0);
 	oscRequested = kOSCControlHotplug | kOSCControlPME | kOSCControlAER | kOSCControlPCIeCap | kOSCControlLTR;
 	oscGranted = 0;
 	if (nub->validateObject("_OSC") != kIOReturnSuccess) {
@@ -202,6 +203,7 @@ NeoDarwinPCIHostBridge::negotiateOSC(IOACPIPlatformDevice *nub)
 		gIOPCIFlags &= ~kIOPCIConfiguratorAER;
 	}
 	nub->setProperty("acpi-osc-control", oscGranted, 32);
+	nub->setProperty("acpi-osc-support", support, 32);
 }
 
 // DMA coherence (docs/kernel/pci.md): _CCA on the bridge, else the IORT
@@ -266,7 +268,9 @@ NeoDarwinPCIHostBridge::probe(IOService *provider, SInt32 *score)
 	if (acpi == NULL || !readHostBridge(acpi)) {
 		return NULL;
 	}
-	// Before IOPCIHostBridge::probe creates the configurator with the flags.
+	// MSIs (the ITS) first, so that _OSC can claim them; then _OSC, before
+	// IOPCIHostBridge::probe creates the configurator with the flags.
+	msi = NeoDarwinPCIMessagedInterruptController::shared(acpi);
 	negotiateOSC(acpi);
 	// IOPCIFamily's log domain.
 	UInt32 domain = segment;
@@ -355,8 +359,9 @@ NeoDarwinPCIHostBridge::start(IOService *provider)
 	// Two lines: the kernel's log truncates long ones.
 	IOLog("NeoDarwinPCIHostBridge: %s: segment %u, buses %u-%u, ECAM 0x%llx (%s); %s\n",
 	    path, segment, busFirst, busLast, ecam, ecamSource, windows[0] ? windows : "no windows");
-	IOLog("NeoDarwinPCIHostBridge: %s: %s control 0x%x of 0x%x; DMA %scoherent (%s%s); requester IDs to %s\n",
-	    path, oscResult, oscGranted, oscRequested, coherent ? "" : "not ", coherenceSource, dma, iortOutput);
+	IOLog("NeoDarwinPCIHostBridge: %s: %s control 0x%x of 0x%x%s; DMA %scoherent (%s%s); requester IDs to %s\n",
+	    path, oscResult, oscGranted, oscRequested, msi != NULL ? " with MSI" : "", coherent ? "" : "not ", coherenceSource, dma,
+	    iortOutput);
 
 	// Every IOPCIDevice, as IOPCIFamily publishes it; only this bridge's
 	// are logged. Installed first, so that bus 0's are seen too.
@@ -400,8 +405,8 @@ NeoDarwinPCIHostBridge::logSummary(void)
 {
 	waitQuiet(10ULL * 1000 * 1000 * 1000);
 	IOLockLock(logLock);
-	IOLog("NeoDarwinPCIHostBridge: %s: segment %u: %u devices (%u PCI-to-PCI bridges) on buses %u-%u, %u with INTx\n",
-	    path, segment, devices, bridges, busFirst, busMaxSeen, intx);
+	IOLog("NeoDarwinPCIHostBridge: %s: segment %u: %u devices (%u PCI-to-PCI bridges) on buses %u-%u, %u with INTx, %u capable of MSI or MSI-X\n",
+	    path, segment, devices, bridges, busFirst, busMaxSeen, intx, msiDevices);
 	IOLockUnlock(logLock);
 }
 
@@ -486,6 +491,53 @@ NeoDarwinPCIHostBridge::configWrite8(IOPCIAddressSpace space, UInt8 offset, UInt
 }
 
 // ------------------------------------------------------------------------
+// MSIs
+
+void
+NeoDarwinPCIHostBridge::msiRoute(IOPCIDevice *device, NDMSIRoute *route)
+{
+	UInt32 rid = (UInt32)device->getBusNumber() << 8 | (UInt32)device->getDeviceNumber() << 3 | device->getFunctionNumber();
+	bzero(route, sizeof(*route));
+	const OSData *iort = acpi->getACPITableData("IORT", 0);
+	route->status = iort != NULL ? nd_iort_msi_route((const uint8_t *)iort->getBytesNoCopy(), iort->getLength(), segment, rid, &route->iort)
+	    : ND_IORT_BAD_TABLE;
+	if (route->status == ND_IORT_OK) {
+		route->deviceID = route->iort.device_id;
+		route->itsID = route->iort.its_id;
+	} else {
+		// No IORT (or none that says): the requester ID, on the first ITS
+		// of the MADT, as Linux assumes.
+		const OSData *madt = acpi->getACPITableData("APIC", 0);
+		struct nd_madt_its first;
+		route->deviceID = rid;
+		route->itsID = madt != NULL && nd_madt_its((const uint8_t *)madt->getBytesNoCopy(), madt->getLength(), &first, 1) != 0 ? first.id : 0;
+	}
+}
+
+IOReturn
+NeoDarwinPCIHostBridge::callPlatformFunction(const OSSymbol *functionName, bool waitForFunction,
+    void *param1, void *param2, void *param3, void *param4)
+{
+	// IOPCIBridge::resolveMSIInterrupts: (provider, &controller).
+	if (functionName == gIOPlatformGetMessagedInterruptControllerKey) {
+		if (msi == NULL || param2 == NULL) {
+			return kIOReturnUnsupported;
+		}
+		*(IOPCIMessagedInterruptController **)param2 = msi;
+		return kIOReturnSuccess;
+	}
+	// IOPCIMessagedInterruptController::allocateDeviceInterrupts:
+	// (device, options, first vector, message[3]).
+	if (functionName == gIOPlatformGetMessagedInterruptAddressKey) {
+		if (msi == NULL || param4 == NULL) {
+			return kIOReturnUnsupported;
+		}
+		return msi->messageFor((IOService *)param1, (uint32_t)(uintptr_t)param3, (uint32_t *)param4);
+	}
+	return super::callPlatformFunction(functionName, waitForFunction, param1, param2, param3, param4);
+}
+
+// ------------------------------------------------------------------------
 // The log
 
 // Whether `service` is an IOPCIDevice of this bridge's hierarchy: its
@@ -565,7 +617,7 @@ NeoDarwinPCIHostBridge::devicePublished(void *refCon, IOService *service, IONoti
 	}
 	pairWithACPI(device);
 
-	char where[16], line[256], bars[256] = "", irq[32] = "";
+	char where[16], line[256], bars[256] = "", irq[64] = "";
 	snprintf(where, sizeof(where), "%04x:%02x:%02x.%x", segment, device->getBusNumber(), device->getDeviceNumber(),
 	    device->getFunctionNumber());
 	snprintf(line, sizeof(line), "NeoDarwinPCIHostBridge: %s %04x:%04x class %06x", where, id & 0xffff, id >> 16, classRev >> 8);
@@ -601,18 +653,38 @@ NeoDarwinPCIHostBridge::devicePublished(void *refCon, IOService *service, IONoti
 		}
 	}
 
-	// INTx: reading the specifiers makes IOPCIFamily resolve them, through
-	// the ACPI nub's _PRT (IOACPIPlatformDevice::callPlatformFunction).
+	// INTx, asked of the ACPI nub's _PRT as IOPCIFamily will ask it
+	// (IOPCIBridge::resolveLegacyInterrupts: the provider of the device's
+	// bridge, the device number, the zero-based pin). The specifiers
+	// themselves are not read here: that would make IOPCIFamily resolve the
+	// device's interrupts now, before its driver can choose how many MSI or
+	// MSI-X vectors it wants (IOPCIDevice::configureInterrupts).
 	bool routed = false;
 	if (pin >= 1 && pin <= 4) {
-		OSArray *specs = OSDynamicCast(OSArray, device->getProperty(gIOInterruptSpecifiersKey));
-		OSData *spec = specs != NULL && specs->getCount() != 0 ? OSDynamicCast(OSData, specs->getObject(0)) : NULL;
-		if (spec != NULL && spec->getLength() >= sizeof(UInt32)) {
-			snprintf(irq, sizeof(irq), " INT%c gsiv %u", 'A' + pin - 1, *(const UInt32 *)spec->getBytesNoCopy());
+		IOService *owner = device->getProvider();
+		IOService *provider = owner != NULL ? owner->getProvider() : NULL;
+		UInt32 gsiv = 0;
+		if (provider != NULL && provider->callPlatformFunction("ResolvePCIInterrupt", false, provider,
+		    (void *)(uintptr_t)device->getDeviceNumber(), (void *)(uintptr_t)(pin - 1), &gsiv) == kIOReturnSuccess) {
+			snprintf(irq, sizeof(irq), " INT%c gsiv %u", 'A' + pin - 1, gsiv);
 			routed = true;
 		} else {
 			snprintf(irq, sizeof(irq), " INT%c unrouted", 'A' + pin - 1);
 		}
+	}
+	// MSI and MSI-X capabilities: vectors the device offers (MSI's multiple
+	// message capable; MSI-X's table size). IOPCIFamily prefers MSI when
+	// there are both.
+	IOByteCount cap = 0;
+	bool messaged = false;
+	if (device->extendedFindPCICapability(kIOPCIMSICapability, &cap)) {
+		append(irq, sizeof(irq), " msi %u", 1u << ((device->configRead16(cap + 2) >> 1) & 7));
+		messaged = true;
+	}
+	cap = 0;
+	if (device->extendedFindPCICapability(kIOPCIMSIXCapability, &cap)) {
+		append(irq, sizeof(irq), " msi-x %u", (device->configRead16(cap + 2) & 0x7ff) + 1u);
+		messaged = true;
 	}
 
 	IOLockLock(logLock);
@@ -626,6 +698,9 @@ NeoDarwinPCIHostBridge::devicePublished(void *refCon, IOService *service, IONoti
 	}
 	if (routed) {
 		intx++;
+	}
+	if (messaged) {
+		msiDevices++;
 	}
 	// The kernel's log truncates lines near 256 bytes: a device with many
 	// BARs gets them on a line of their own.

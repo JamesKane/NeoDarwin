@@ -3,7 +3,7 @@
 
 **P1-09, checkpoint 1.** The SBSA kernel runs ACPICA over the tables neoboot hands it and publishes an `IOACPIPlatformDevice` nub for each device in the ACPI namespace. This is Tier 2 of `arm64-sbsa-bringup.md` §2.2: Tier 1 is neoboot's device tree, which carries only what early boot needs (GIC, timer, UART, CPUs). The DSDT and SSDTs describe everything else: the PCI host bridge, virtio-mmio slots, the GED, the RTC, GPIO blocks, a real board's peripherals.
 
-Checkpoint 2, IOPCIFamily over ECAM (MCFG, `_CBA`) with `_CRS` windows and `_PRT` routing, is done: `pci.md`. Checkpoint 3 is MSIs through the GIC ITS; P1-10 then adds drivers that match the PCI nubs. What checkpoint 2 took from this one is at the end.
+Checkpoint 2, IOPCIFamily over ECAM (MCFG, `_CBA`) with `_CRS` windows and `_PRT` routing, is done: `pci.md`. Checkpoint 3, MSIs through the GIC ITS (the MADT's GIC ITS structures, the IORT's ID mappings), is done too: `gic-its.md`. P1-10 then adds drivers that match the PCI nubs. What checkpoint 2 took from this one is at the end.
 
 ## Pieces
 
@@ -139,12 +139,12 @@ QEMU's `virt` DSDT has no PL031 RTC (`ARMH0031`) or PL061 GPIO (`ARMH0061`) devi
 
 ## For checkpoint 2 (IOPCIFamily over ECAM)
 
-Done (`pci.md`): each point below is implemented there, except `_PRT` on bridges and MSI, which is checkpoint 3.
+Done (`pci.md`, `gic-its.md`): each point below is implemented there, except `_PRT` on bridges.
 
 - **Host bridge nub.** Match `IONameMatch` `PNP0A08` (and `PNP0A03`) on `IOACPIPlatformDevice`. The nub carries `acpi-bus-range` and `acpi-windows`, and `describeHostBridge` shows how to read `_SEG`, `_BBN`, `_CBA` and MCFG through it. Real boards (the SC8280XP bring-up board has seven MCFG segments, ECAM above 4 GiB) need `_SEG` matched to MCFG entries; `_CBA` is optional (QEMU has it, many firmwares don't).
 - **Config space for AML.** `AcpiOsReadPciConfiguration`/`Write…` return `AE_SUPPORT`; with ECAM mapped they should do real accesses (segment, bus, device, function, register), since `_OSC`, `_DSM` and `PCI_Config` regions may touch config space. Implement them in `nd_acpi_osl.c` against the ECAM mapping checkpoint 2 creates.
 - **`_OSC`.** Evaluate `\_SB.PCI0._OSC` (PCIe native hot-plug, AER, PME, LTR control) before taking over those features.
 - **Interrupt routing.** `evaluateObject("_PRT")` returns an `OSArray` of `{address, pin, source, source-index}`; the source is a link device's path (`\_SB.L000`), whose nub's `interrupts` holds the GSIV (QEMU: INTA–INTD on 35–38, swizzled by slot). A zero source means the index is the GSIV. The GIC driver must honour `acpi-interrupt-flags` (edge vs level) before edge interrupts like the GED's are enabled.
 - **Slots in IOACPIPlane.** The `_ADR`-only children of the bridge (`S00`, `S08`, `S10`) are waiting in IOACPIPlane: `_ADR` is (device << 16) | function. Pairing each `IOPCIDevice` with its ACPI node gives it `_DSM`, `_PRW` and `_SUN`.
-- **MSI.** IORT maps the root complex's requester IDs to the ITS (`getACPITableData("IORT")`); the ITS itself comes from the MADT's GIC ITS entries, which neither neoboot nor the kernel reads yet.
+- **MSI.** IORT maps the root complex's requester IDs to the ITS (`getACPITableData("IORT")`); the ITS itself comes from the MADT's GIC ITS entries, which the kernel reads the same way (`gic-its.md`; neoboot and the device tree don't carry them).
 - **Port I/O.** The bridge's I/O window is MMIO at CPU address 0x3eff0000 on QEMU (translation offset): IOPCIFamily must map I/O BARs through it rather than use port instructions.

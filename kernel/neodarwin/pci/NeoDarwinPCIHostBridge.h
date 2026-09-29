@@ -19,10 +19,15 @@
 // _OSC. The configurator keeps the BARs, bus numbers and bridge windows the
 // firmware assigned when they fit the windows, and assigns the rest.
 // Legacy interrupts are routed by the ACPI nub (_PRT, IOACPIPlatformDevice),
-// which IOPCIFamily asks through callPlatformFunction.
+// which IOPCIFamily asks through callPlatformFunction. MSIs: the bridge
+// answers IOPCIFamily's "GetMessagedInterruptController" and
+// "GetMessagedInterruptAddress" with the kernel's ITS-backed controller
+// (NeoDarwinPCIMSI.h), and gives it each device's DeviceID from the IORT.
 //
 // Every IOPCIDevice under the bridge is logged as it is published: address,
-// IDs, class, BARs and INTx GSIV; then a summary once the bus is quiet.
+// IDs, class, BARs, INTx GSIV and MSI/MSI-X capabilities (without resolving
+// its interrupts, which is left to its driver); then a summary once the bus
+// is quiet.
 
 #ifndef _NEODARWIN_PCI_HOST_BRIDGE_H
 #define _NEODARWIN_PCI_HOST_BRIDGE_H
@@ -30,6 +35,7 @@
 #include <IOKit/pci/IOPCIBridge.h>
 #include <IOKit/pci/IOPCIPrivate.h>
 #include <IOKit/acpi/IOACPIPlatformDevice.h>
+#include "NeoDarwinPCIMSI.h"
 
 class NeoDarwinPCIHostBridge : public IOPCIHostBridge
 {
@@ -52,6 +58,15 @@ public:
 	virtual UInt8 configRead8(IOPCIAddressSpace space, UInt8 offset) APPLE_KEXT_OVERRIDE;
 	virtual void configWrite8(IOPCIAddressSpace space, UInt8 offset, UInt8 data) APPLE_KEXT_OVERRIDE;
 
+	virtual IOReturn callPlatformFunction(const OSSymbol *functionName, bool waitForFunction,
+	    void *param1, void *param2, void *param3, void *param4) APPLE_KEXT_OVERRIDE;
+
+	UInt16 getSegment(void) const { return segment; }
+	// Where `device`'s MSI writes go: the IORT's DeviceID and ITS for its
+	// requester ID (bus << 8 | device << 3 | function), else the requester
+	// ID itself and the first ITS, with route->status saying why.
+	void msiRoute(IOPCIDevice *device, NDMSIRoute *route);
+
 	// A published IOPCIDevice (gIOPublishNotification); logs it if it is below this bridge.
 	bool devicePublished(void *refCon, IOService *service, IONotifier *notifier);
 	// Once the bus is quiet: the summary line.
@@ -67,6 +82,7 @@ private:
 	UInt32 registerOf(IOPCIAddressSpace space, UInt8 offset);
 
 	IOACPIPlatformDevice *acpi;
+	NeoDarwinPCIMessagedInterruptController *msi;
 	IODeviceMemory *ioMemory;
 	IONotifier *publishNotifier;
 	IOLock *logLock;
@@ -82,7 +98,7 @@ private:
 	const char *iortOutput;
 	UInt16 segment;
 	UInt8 busFirst, busLast, busMaxSeen;
-	UInt32 devices, bridges, intx;
+	UInt32 devices, bridges, intx, msiDevices;
 	UInt32 dmaBits;                 // IORT Memory Size Limit, or 0
 	bool coherent;
 	bool hasIO;

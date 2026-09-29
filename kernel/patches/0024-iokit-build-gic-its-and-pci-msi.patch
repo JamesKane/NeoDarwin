@@ -1,0 +1,78 @@
+From: NeoDarwin
+Subject: [PATCH] iokit: build the GIC ITS and PCI MSI controller
+
+P1-09 checkpoint 3 gives PCI devices MSI and MSI-X through the GICv3
+Interrupt Translation Service (docs/kernel/gic-its.md). IOPCIFamily does
+the PCI half, and asks the platform for a messaged interrupt controller;
+on Intel and Apple silicon Macs that half is closed. NeoDarwin's:
+
+ - NeoDarwinGICv3ITS (kernel/neodarwin/platform, at iokit/ndplatform):
+   the ITS's device and collection tables, its command queue and the
+   commands (MAPD, MAPC, MAPTI, INV, INVALL, SYNC, DISCARD);
+ - nd_iort.c (kernel/neodarwin/pci, at iokit/ndpci): the MADT's GIC ITS
+   structures and the IORT's ID mappings from a requester ID to an ITS
+   DeviceID, through an SMMU if there is one;
+ - NeoDarwinPCIMSI.cpp: an IOPCIMessagedInterruptController whose vectors
+   are LPIs, which the host bridge hands to IOPCIFamily;
+ - NeoDarwinPCINVMeTest.cpp: a test driver that makes an NVMe
+   controller's MSI-X vector 0 fire (probe score 0, so a real NVMe driver
+   wins; it drives only QEMU's NVMe unless nd_pci_nvme_test=1, and
+   nd_pci_nvme_test=0 turns it off).
+
+This patch lists the four files, gives the new PCI objects the search
+paths of patch 0022 (the controller also the platform header), and adds
+the NVMe test driver's personality (IOPCIClassMatch 0x010802).
+
+Rebase-risk: low (appended entries; applies after 0022).
+---
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -61,6 +61,12 @@
+     "     'IOPCIMatch'      = '0x11e81234';"
+     "   },"
+     "   {"
++    "     'IOClass'         = NeoDarwinPCINVMeTest;"
++    "     'IOProviderClass' = IOPCIDevice;"
++    "     'IOPCIClassMatch' = '0x01080200&0xffffff00';"
++    "     'IOProbeScore'    = 0:32;"
++    "   },"
++    "   {"
+     "     'IOClass'         = IOExclaveProxy;"
+     "     'IOProviderClass' = IOService;"
+     "     'IOExclaveProxy'  = 1:32;"
+--- a/iokit/conf/Makefile.template
++++ b/iokit/conf/Makefile.template
+@@ -90,6 +90,13 @@
+ 	IOACPIPlatformDevice.cpo,$(eval $(o)_CFLAGS_ADD += -I$(ND_PCI) -I$(ND_IOPCI) -I$(ND_PCI)/compat \
+ 	-I$(SRCROOT)/libkern/ndpthread/compat -I$(ND_ACPI)/include -Wno-deprecated-declarations))
+ 
++# MSIs through the GIC ITS (patch 0024): the MADT/IORT parser, the messaged
++# interrupt controller and the NVMe MSI-X test see the same headers; the
++# controller also NeoDarwin's platform header, for the GIC and its ITS.
++$(foreach o,nd_iort.o NeoDarwinPCIMSI.cpo NeoDarwinPCINVMeTest.cpo,$(eval $(o)_CFLAGS_ADD += -I$(ND_PCI) -I$(ND_IOPCI) \
++	-I$(ND_PCI)/compat -I$(SRCROOT)/libkern/ndpthread/compat -I$(ND_ACPI)/include -Wno-deprecated-declarations))
++NeoDarwinPCIMSI.cpo_CFLAGS_ADD += -I$(SRCROOT)/iokit/ndplatform
++
+ #
+ # Diagnostic opt-outs.  We need to make this list empty.
+ #
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -9,6 +9,7 @@
+ # NeoDarwin generic Arm platform: expert, GICv3, PSCI (kernel/neodarwin/platform)
+ iokit/ndplatform/NeoDarwinPlatformExpert.cpp	optional iokitcpp
+ iokit/ndplatform/NeoDarwinGICv3.cpp	optional iokitcpp
++iokit/ndplatform/NeoDarwinGICv3ITS.cpp	optional iokitcpp
+ iokit/ndplatform/NeoDarwinPSCI.cpp	optional iokitcpp
+ 
+ # NeoDarwin ACPI platform (kernel/neodarwin/acpi): the ACPI platform driver,
+@@ -188,6 +189,9 @@
+ iokit/ndpci/nd_pci_ecam.c	standard
+ iokit/ndpci/NeoDarwinPCIHostBridge.cpp	optional iokitcpp
+ iokit/ndpci/NeoDarwinPCIEduTest.cpp	optional iokitcpp
++iokit/ndpci/nd_iort.c	standard
++iokit/ndpci/NeoDarwinPCIMSI.cpp	optional iokitcpp
++iokit/ndpci/NeoDarwinPCINVMeTest.cpp	optional iokitcpp
+ iokit/ndpci/IOPCIFamily/IOPCIBridge.cpp	optional iokitcpp
+ iokit/ndpci/IOPCIFamily/IOPCIConfigurator.cpp	optional iokitcpp
+ iokit/ndpci/IOPCIFamily/IOPCIDevice.cpp	optional iokitcpp

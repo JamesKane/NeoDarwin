@@ -1,8 +1,10 @@
 # NeoDarwin's PCI: the ECAM host bridge for ACPI PCI host bridges, ECAM
-# configuration access, and the compat headers Apple's IOPCIFamily
-# (@apple_iopcifamily, APSL) needs to build into the SBSA kernel (patches
-# 0022 and 0023, docs/kernel/pci.md). Kernel-only C and IOKit C++.
-load("//rules:cc.bzl", "lang_audit_test")
+# configuration access, MSIs through the GIC ITS, and the compat headers
+# Apple's IOPCIFamily (@apple_iopcifamily, APSL) needs to build into the
+# SBSA kernel (patches 0022-0024, docs/kernel/pci.md, docs/kernel/gic-its.md).
+# Kernel-only C and IOKit C++; the MADT/IORT parser also builds on the host
+# for its test.
+load("//rules:cc.bzl", "lang_audit_test", "nd_cc_library", "nd_cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -10,8 +12,13 @@ SRCS = [
     "NeoDarwinPCIEduTest.cpp",
     "NeoDarwinPCIHostBridge.cpp",
     "NeoDarwinPCIHostBridge.h",
+    "NeoDarwinPCIMSI.cpp",
+    "NeoDarwinPCIMSI.h",
+    "NeoDarwinPCINVMeTest.cpp",
     "compat/IOKit/dart/IODARTKeys.h",
     "compat/os/availability.h",
+    "nd_iort.c",
+    "nd_iort.h",
     "nd_pci.h",
     "nd_pci_ecam.c",
 ]
@@ -26,4 +33,30 @@ filegroup(
 lang_audit_test(
     name = "pci_lang_audit",
     srcs = SRCS,
+)
+
+# The MADT GIC ITS and IORT parser on the host.
+nd_cc_library(
+    name = "iort_host",
+    testonly = True,
+    srcs = ["nd_iort.c"],
+    hdrs = ["nd_iort.h"],
+    includes = ["."],
+)
+
+# Against QEMU virt's tables and the Radxa Dragon Q8B's (requester IDs
+# through its SMMUv3 to the ITS).
+nd_cc_test(
+    name = "iort_test",
+    size = "small",
+    srcs = ["test/iort_test.c"],
+    args = [
+        "$(rootpath //boot/neoboot:testdata/qemu-virt-smp4.acpidump)",
+        "$(rootpath //boot/neoboot:testdata/radxa-dragon-q8b.acpidump)",
+    ],
+    data = [
+        "//boot/neoboot:testdata/qemu-virt-smp4.acpidump",
+        "//boot/neoboot:testdata/radxa-dragon-q8b.acpidump",
+    ],
+    deps = [":iort_host"],
 )
