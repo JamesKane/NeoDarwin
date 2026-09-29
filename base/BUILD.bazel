@@ -9,6 +9,7 @@ base_sysroot(
     name = "sysroot",
     availability = "@apple_availability_versions//:all",
     dyld = "@apple_dyld//:all",
+    launchd = "@apple_launchd//:all",
     libc = "@apple_libc//:all",
     dispatch_headers_script = "libdispatch/install_headers.sh",
     libclosure = "@apple_libclosure//:all",
@@ -124,7 +125,7 @@ base_library(
     name = "libsystem_info",
     data = glob(["libinfo/**"]),
     deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c", ":libsystem_blocks",
-            ":llvm_runtimes", ":libdispatch_dylib", ":libsystem_dnssd", ":libsystem_notify", ":libsystem_darwin", ":standin_libs"],
+            ":llvm_runtimes", ":libdispatch_dylib", ":libsystem_dnssd", ":libsystem_notify", ":libsystem_darwin", ":standin_libs", ":libxpc"],
     script = "libinfo/build.sh",
     srcs = "@apple_libinfo//:all",
     sysroot = ":sysroot",
@@ -159,7 +160,7 @@ base_library(
     name = "libsystem_darwin",
     data = glob(["libdarwin/**"]),
     deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c",
-            ":libsystem_blocks", ":libdispatch_dylib", ":libmacho", ":libsystem_m", ":llvm_runtimes", ":standin_libs"],
+            ":libsystem_blocks", ":libdispatch_dylib", ":libmacho", ":libsystem_m", ":llvm_runtimes", ":standin_libs", ":libxpc"],
     script = "libdarwin/build.sh",
     srcs = "@apple_libc//:all",
     sysroot = ":sysroot",
@@ -178,7 +179,7 @@ base_library(
     name = "libcopyfile",
     data = glob(["copyfile/**"]),
     deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_malloc", ":libsystem_c", ":libsystem_blocks",
-            ":libsystem_asl", ":libsystem_info", ":libdispatch_dylib", ":llvm_runtimes", ":standin_libs"],
+            ":libsystem_asl", ":libsystem_info", ":libdispatch_dylib", ":llvm_runtimes", ":standin_libs", ":libxpc"],
     script = "copyfile/build.sh",
     srcs = "@apple_copyfile//:all",
     sysroot = ":sysroot",
@@ -222,7 +223,7 @@ base_library(
     name = "dyld_images",
     data = glob(["dyld/**"]) + ["//kernel/neodarwin/crypto:kernel_srcs", "@apple_xnu//:all", "@freebsd_crypto//:all"],
     deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c",
-            ":libsystem_blocks", ":libdispatch_dylib", ":llvm_runtimes", ":standin_libs"],
+            ":libsystem_blocks", ":libdispatch_dylib", ":llvm_runtimes", ":standin_libs", ":libxpc"],
     script = "dyld/build.sh",
     srcs = "@apple_dyld//:all",
     sysroot = ":sysroot",
@@ -234,7 +235,7 @@ base_library(
     deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c",
             ":libsystem_blocks", ":libdispatch_dylib", ":libmacho", ":libsystem_asl", ":libsystem_notify", ":libsystem_info",
             ":libsystem_m", ":libsystem_darwin", ":libsystem_collections", ":libcopyfile", ":libremovefile",
-            ":libsystem_dnssd", ":llvm_runtimes", ":standin_libs", ":dyld_images"],
+            ":libsystem_dnssd", ":llvm_runtimes", ":standin_libs", ":libxpc", ":dyld_images"],
     script = "libsystem/build.sh",
     srcs = "@apple_libsystem//:all",
     sysroot = ":sysroot",
@@ -246,6 +247,27 @@ sh_test(
     srcs = ["libsystem/reexports_test.sh"],
     args = ["$(rootpath :libsystem_b)", "usr/lib/libSystem.B.dylib", "$(rootpath libsystem/reexports.txt)"],
     data = [":libsystem_b", "libsystem/reexports.txt"],
+)
+
+# launchd-842 (docs/base/session.md): liblaunch inside the libxpc stand-in,
+# and the daemon, PID 1.
+base_library(
+    name = "libxpc",
+    data = glob(["launchd/**"]) + ["//base/standins:srcs"],
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc",
+            ":libsystem_c", ":libsystem_blocks", ":libdispatch_dylib", ":llvm_runtimes"],
+    script = "launchd/build_libxpc.sh",
+    srcs = "@apple_launchd//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "launchd_daemon",
+    data = glob(["launchd/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "launchd/build.sh",
+    srcs = "@apple_launchd//:all",
+    sysroot = ":sysroot",
 )
 
 # The runtime root: every library above at its install path, for the HFS+
@@ -274,6 +296,7 @@ base_root(
         ":libremovefile",
         ":libsystem_dnssd",
         ":standin_libs",
+        ":libxpc",
         ":libsystem_b",
         ":dyld_images",
     ],
@@ -418,6 +441,7 @@ base_root(
     ("libdyld", ":dyld_images", "usr/lib/system/libdyld.dylib", "dyld/exports.txt"),
     ("libutil", ":libutil_dylib", "usr/lib/libutil.dylib", "libutil/exports.txt"),
     ("libxo", ":libxo_dylib", "usr/lib/libxo.dylib", "libxo/exports.txt"),
+    ("libxpc", ":libxpc", "usr/lib/system/libxpc.dylib", "launchd/exports.txt"),
     ("libsystem", ":libsystem_b", "usr/lib/libSystem.B.dylib", "libsystem/exports.txt"),
     ("libcompiler_rt", ":llvm_runtimes", "usr/lib/system/libcompiler_rt.dylib", "llvm/exports/libcompiler_rt.txt"),
     ("libunwind", ":llvm_runtimes", "usr/lib/system/libunwind.dylib", "llvm/exports/libunwind.txt"),
@@ -449,6 +473,8 @@ lang_audit_test(
         "llvm/src/nd_typed_new_delete.cpp",
     ] + glob([
         "dyld/src/*.c",
+        "launchd/include/*.h",
+        "launchd/src/*.c",
         "dyld/sdk/*.h",
         "libdispatch/sdk/**/*.h",
         "libinfo/include/**/*.h",

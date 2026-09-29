@@ -263,17 +263,48 @@ sh_test(
     tags = ["manual", "kernel", "qemu"],
 )
 
-# P1-08: an interactive session over serial. getty runs on the console,
-# the test logs in as root (empty password) and types shell commands.
+# P1-08's exit: launchd-842 is PID 1 and starts getty from its LaunchDaemon
+# plist; the test logs in over serial and runs commands.
 sh_test(
-    name = "sbsa_shell_boot_test",
+    name = "sbsa_session_boot_test",
     size = "medium",
     srcs = ["//tools/efi:qemu_efi_test.sh"],
     args = [
         "--cpu neoverse-n2",
         "--mem 2G",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
-        "--esp NeoDarwin/ramdisk=$(rootpath //images:shell_root)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after '# ' 'echo hi-$$((6*7))\\n'",
+        "--send-after '# ' 'uname -sm; ls /usr/libexec; tty; launchctl list\\n'",
+        "$(rootpath //boot/neoboot)",
+        "180",
+        "'hfs: mounted NeoDarwin on device'",
+        "'hi-42'",
+        "'Darwin arm64'",
+        "'/dev/console'",
+        "'com.apple.getty'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:session_root",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P1-08: an interactive session over serial with a test-only PID 1 that
+# runs getty. The test logs in as root (empty password) and types commands.
+sh_test(
+    name = "sbsa_getty_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:getty_root)",
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
         "--send-after '# ' 'echo hi-$$((6*7))\\n'",
@@ -289,7 +320,7 @@ sh_test(
     data = [
         ":sbsa_kc",
         "//boot/neoboot",
-        "//images:shell_root",
+        "//images:getty_root",
     ],
     tags = ["manual", "kernel", "qemu"],
 )

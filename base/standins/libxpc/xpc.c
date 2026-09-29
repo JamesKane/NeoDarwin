@@ -1,21 +1,18 @@
 // SPDX-License-Identifier: BSD-2-Clause
 // NeoDarwin-Language: portability: a stand-in with the C interface of a closed Apple library.
 //
-// Stand-in for libxpc.dylib, which Apple does not publish; it also carries
-// launchd's client library (bootstrap_*). What the open libraries use
-// (base/sdk/usr/local/include/xpc/private.h and bootstrap_priv.h declare the
+// Stand-in for libxpc.dylib's XPC objects; Apple does not publish libxpc.
+// The library also carries launchd's client library (launch_*, vproc_*,
+// bootstrap_*), built from launchd-842 alongside this file
+// (base/launchd/build_libxpc.sh), as Apple's libxpc has carried it since
+// OS X 10.8. What the open libraries use here (xpc/private.h declares the
 // private calls):
 //  - XPC objects: null, bool, int64, uint64, string, date, uuid, array and
 //    dictionary, reference counted, with the type objects callers compare
 //    xpc_get_type() against. They are plain C objects: none of NeoDarwin's
 //    callers is Objective-C, which would treat them as NSObjects;
-//  - bootstrap_parent(), bootstrap_look_up2() and bootstrap_strerror(), and
-//    launchd's vproc_swap_integer(), which libdyld calls to ask whether
-//    launchd manages the process. NeoDarwin has one bootstrap
-//    namespace and no launchd until launchd-842 lands (P1-08), so every
-//    bootstrap port is its own parent, as the root of the tree is, and no
-//    service can be looked up;
-//  - service connections and pipes, which therefore never reach a peer:
+//  - service connections and pipes, which never reach a peer: launchd-842
+//    serves no XPC (base/launchd), so there is no XPC service to reach:
 //    xpc_pipe_create() returns NULL, as it does for a missing service; a
 //    connection's messages are answered with XPC_ERROR_CONNECTION_INVALID
 //    (its event handler is kept but never called);
@@ -24,10 +21,10 @@
 //    profile plist is parsed (xpc_create_from_plist() answers NULL, which
 //    Libinfo takes as no profile);
 //  - libSystem's initializer and fork hooks (_libxpc_initializer(),
-//    xpc_atfork_prepare/parent/child()). Apple's initializer caches the
-//    bootstrap port and the process's launchd context; the stand-in has no
-//    connection or cache to set up, and holds no lock a fork must take, so
-//    all four do nothing.
+//    xpc_atfork_prepare/parent/child()). As Apple's do, the initializer and
+//    the child's hook look up the task's bootstrap port for liblaunch
+//    (bootstrap_init(): libsystem_kernel defines bootstrap_port but leaves
+//    it null). The XPC objects hold no lock a fork must take.
 // More of libxpc is added as NeoDarwin libraries come to need it
 // (docs/base/libsystem.md).
 
@@ -35,12 +32,9 @@
 #include <bootstrap_priv.h>
 #include <errno.h>
 #include <mach/mach.h>
-#include <mach/mach_error.h>
-#include <servers/bootstrap.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
-#include <vproc_priv.h>
 #include <xpc/private.h>
 #include <xpc/xpc.h>
 
@@ -481,41 +475,6 @@ xpc_create_from_plist(const void *data, size_t len)
 	return NULL;
 }
 
-#pragma mark - Bootstrap
-
-kern_return_t
-bootstrap_parent(mach_port_t bp, mach_port_t *parent_port)
-{
-	*parent_port = bp;   // declared nonnull in <servers/bootstrap.h>
-	return KERN_SUCCESS;
-}
-
-kern_return_t
-bootstrap_look_up2(mach_port_t bp, const name_t service_name, mach_port_t *sp, pid_t target_pid, uint64_t flags)
-{
-	(void)bp;
-	(void)service_name;
-	(void)target_pid;
-	(void)flags;
-	*sp = MACH_PORT_NULL;
-	return BOOTSTRAP_UNKNOWN_SERVICE;
-}
-
-const char *
-bootstrap_strerror(kern_return_t r)
-{
-	switch (r) {
-	case BOOTSTRAP_SUCCESS: return "Success";
-	case BOOTSTRAP_NOT_PRIVILEGED: return "Permission denied";
-	case BOOTSTRAP_NAME_IN_USE: return "Service name already exists";
-	case BOOTSTRAP_UNKNOWN_SERVICE: return "Unknown service name";
-	case BOOTSTRAP_SERVICE_ACTIVE: return "Service already active";
-	case BOOTSTRAP_BAD_COUNT: return "Too many lookups were requested in one request";
-	case BOOTSTRAP_NO_MEMORY: return "Out of memory";
-	default: return mach_error_string(r);
-	}
-}
-
 #pragma mark - libSystem's initializer and fork hooks
 
 // Declared by Libsystem's init.c, which calls them; no header publishes them.
@@ -527,6 +486,7 @@ void xpc_atfork_child(void);
 void
 _libxpc_initializer(void)
 {
+	bootstrap_init();
 }
 
 void
@@ -542,20 +502,5 @@ xpc_atfork_parent(void)
 void
 xpc_atfork_child(void)
 {
-}
-
-#pragma mark - launchd's vproc interface
-
-// libdyld asks whether launchd manages the process (VPROC_GSK_IS_MANAGED).
-// With no launchd, no key has a value: every call fails, as launchd-842
-// answers for a process it doesn't know, by returning the function's own
-// address as the error token.
-vproc_err_t
-vproc_swap_integer(vproc_t vp, vproc_gsk_t key, int64_t *inval, int64_t *outval)
-{
-	(void)vp;
-	(void)key;
-	(void)inval;
-	(void)outval;
-	return (vproc_err_t)vproc_swap_integer;
+	bootstrap_init();   // the child's port names differ from the parent's
 }

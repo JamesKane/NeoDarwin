@@ -19,7 +19,8 @@ def _sysroot_impl(ctx):
     repos = [ctx.attr.xnu, ctx.attr.libplatform, ctx.attr.libpthread, ctx.attr.libmalloc,
              ctx.attr.availability, ctx.attr.dyld, ctx.attr.libc, ctx.attr.libinfo, ctx.attr.libclosure,
              ctx.attr.libdispatch, ctx.attr.objc4, ctx.attr.llvm]
-    inputs = ctx.files.xnu_headers + ctx.files.shims + ctx.files.mdns_patches + ctx.attr.mdnsresponder.files.to_list() + [
+    inputs = ctx.files.xnu_headers + ctx.files.shims + ctx.files.mdns_patches + ctx.attr.mdnsresponder.files.to_list() + \
+             ctx.attr.launchd.files.to_list() + [
         ctx.file.dispatch_headers_script,
         ctx.file.llvm_headers_script,
         ctx.file.mdns_headers_script,
@@ -30,7 +31,7 @@ def _sysroot_impl(ctx):
         executable = ctx.file._script,
         arguments = [out.path, ctx.files.xnu_headers[0].path] + [_root(r) for r in repos] +
                     [ctx.file.dispatch_headers_script.path, ctx.file.llvm_headers_script.path, ctx.attr.shims_root,
-                     _root(ctx.attr.mdnsresponder), ctx.file.mdns_headers_script.path],
+                     _root(ctx.attr.mdnsresponder), ctx.file.mdns_headers_script.path, _root(ctx.attr.launchd)],
         inputs = inputs,
         outputs = [out],
         tools = ctx.files._tools,
@@ -62,6 +63,7 @@ base_sysroot = rule(
                                           doc = "base/llvm/install_headers.sh."),
         "dispatch_headers_script": attr.label(mandatory = True, allow_single_file = True,
                                               doc = "base/libdispatch/install_headers.sh."),
+        "launchd": attr.label(mandatory = True, doc = "@apple_launchd (liblaunch's private headers)."),
         "mdnsresponder": attr.label(mandatory = True, doc = "@apple_mdnsresponder (libsystem_dnssd's headers)."),
         "mdns_headers_script": attr.label(mandatory = True, allow_single_file = True,
                                           doc = "base/mdnsresponder/install_headers.sh."),

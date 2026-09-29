@@ -198,7 +198,7 @@ Debugging: QEMU's gdbstub (`-s`) with `lldb`, loading `kernel.release.sbsa.unstr
 A launch failure is visible: dyld's error goes into the exit reason, which the "initproc failed to start" panic prints ("Symbol not found: ..."). That panic then takes a nested kernel data abort (FAR 0xc) inside the panic path. It doesn't affect a successful boot, but it hides the backtrace.
 
 **Open threads (parked 2026-09-28).** In order of the boot path:
-- **P1-08, the next userland step** (`docs/base/session.md`). launchd-842, getty and a shell on the P1-08b base (§2.1.5). Checkpoint 1 is done: `//kernel:sbsa_shell_boot_test` logs in over serial and runs commands, with a test-only PID 1 running getty. launchd replaces that PID 1 and the libxpc stand-in's "no service" answers with a real bootstrap namespace. Patch 0013's static-PID-1 allowance stays for init shims.
+- **P1-08 is done** (`docs/base/session.md`). launchd-842 is PID 1 and starts getty from its plist, and `//kernel:sbsa_session_boot_test` logs in over serial. Next on the userland side: zsh or bash with ncurses, OpenPAM, diskdev_cmds' `mount` and fsck, and replacing more of the libxpc stand-in.
 - **The nested panic on a failed PID 1 launch** (§2.1.5): a data abort at FAR 0xc in the panic path after "initproc failed to start".
 - **P1-06, SMP half (status `doing`).** The boot CPU is done. Still to do: bringing up secondaries through `NeoDarwinPSCI` (`CPU_ON`), per-CPU GIC redistributor init and IPI measurement. The exit is `hw.ncpu` equal to the MADT count.
   - **PSCI conduit:** QEMU `virt` without EL3 firmware uses `hvc`, but `sbsa_isa_audit` forbids `hvc` in the kernel, so the conduit choice (take it from the FADT/DT, and how the audit treats it) comes first.

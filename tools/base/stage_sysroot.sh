@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Stage the header sysroot the userland base builds against (docs/base/libsystem.md §2).
 #   stage_sysroot.sh OUT XNU_HEADERS XNU_SRC LIBPLATFORM LIBPTHREAD LIBMALLOC AVAILABILITY DYLD LIBC LIBINFO LIBCLOSURE LIBDISPATCH OBJC4 LLVM
-#                     DISPATCH_HEADERS_SH LLVM_HEADERS_SH SHIMS MDNSRESPONDER MDNS_HEADERS_SH
+#                     DISPATCH_HEADERS_SH LLVM_HEADERS_SH SHIMS MDNSRESPONDER MDNS_HEADERS_SH LAUNCHD
 # Each project's headers go where its Xcode headers phase installs them:
 # Public to usr/include, Private to usr/local/include. The projects include
 # each other's private headers, so this runs before any library builds.
@@ -15,6 +15,7 @@ OUT="$(abspath "$1")"; XH="$(abspath "$2")"; XNU="$(abspath "$3")"; PLAT="$(absp
 PTH="$(abspath "$5")"; MAL="$(abspath "$6")"; AV="$(abspath "$7")"; DYLD="$(abspath "$8")"; LIBC="$(abspath "$9")"; LIBINFO="$(abspath "${10}")"; LIBCLOSURE="$(abspath "${11}")"; LIBDISPATCH="$(abspath "${12}")"
 OBJC4="$(abspath "${13}")"; LLVM="$(abspath "${14}")"; DISPATCH_HEADERS_SH="$(abspath "${15}")"
 LLVM_HEADERS_SH="$(abspath "${16}")"; SHIMS="$(abspath "${17}")"; MDNS="$(abspath "${18}")"; MDNS_HEADERS_SH="$(abspath "${19}")"
+LAUNCHD="$(abspath "${20}")"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 rm -rf "$OUT"; mkdir -p "$OUT"
 PUB="$OUT/usr/include"; PRIV="$OUT/usr/local/include"
@@ -143,6 +144,11 @@ mkdir -p "$OUT/usr/local/frameworks"; ln -sfn ../../../System/Library/Frameworks
 # mDNSResponder (libsystem_dnssd's headers phase), by base/mdnsresponder/install_headers.sh.
 bash "$MDNS_HEADERS_SH" "$MDNS" "$work/mdns" > "$work/mdns.log" 2>&1 || { tail -20 "$work/mdns.log" >&2; exit 1; }
 cp -R "$work/mdns/." "$OUT/"; chmod -R u+w "$OUT"
+
+# launchd-842's liblaunch (its headers phase): the private headers. The public
+# ones (launch.h, vproc.h, servers/bootstrap.h) stay the host SDK's, which
+# declare the same interface (plus launch_activate_socket, which 842 lacks).
+for h in bootstrap_priv.h launch_priv.h reboot2.h vproc_priv.h; do put "$LAUNCHD/liblaunch/$h" "$PRIV"; done
 
 # NeoDarwin's internal-SDK shims (base/sdk).
 cp -RL "$SHIMS/." "$OUT/"

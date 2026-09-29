@@ -163,7 +163,7 @@ epics:
     title: "launchd-842 + getty + shell on the HFS+ root"
     phase: 1
     owner: userland
-    status: doing
+    status: done
     depends: [P1-08b]
     exit: "interactive shell over serial"
     doc: docs/base/session.md

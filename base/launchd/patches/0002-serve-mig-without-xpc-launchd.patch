@@ -1,0 +1,141 @@
+From: NeoDarwin
+Subject: [PATCH] serve MIG without libxpc's launchd interface
+
+launchd-842 receives requests through libxpc: xpc_pipe_try_receive() hands
+MIG messages to launchd_mig_demux() and XPC pipe messages to the XPC event
+and process routines, and the job subsystem falls back to the XPC domain
+subsystem (xpc/domain.defs). libxpc, <xpc/launchd.h> and its .defs are not
+published, and the XPC clients (xpcproxy, xpcd, UserEventAgent) are closed.
+
+Without HAVE_XPC_LAUNCHD, launchd_runtime2() receives MIG messages with
+mach_msg_server_once(), which requests the audit trailer
+launchd_mig_demux() reads the caller from, sends the reply, honours
+MIG_NO_REPLY and destroys failed requests; the domain fallback is left out;
+core.c's XPC domain, event and process routines are compiled out; and
+<xpc/launchd.h> is replaced by the build's nd_xpc_launchd.h, which declares
+what the rest of core.c names (its types, constants and four calls).
+
+Rebase-risk: medium (the receive loop and a 1,350-line #if in core.c).
+---
+diff --git a/src/core.c b/src/core.c
+index 4130842..a1b620c 100644
+--- a/src/core.c
++++ b/src/core.c
+@@ -83,7 +83,11 @@
+ #include <time.h>
+ #include <libinfo.h>
+ #include <os/assumes.h>
++#if HAVE_XPC_LAUNCHD
+ #include <xpc/launchd.h>
++#else
++#include "nd_xpc_launchd.h"
++#endif
+ #include <asl.h>
+ #include <_simple.h>
+ 
+@@ -10063,6 +10067,7 @@ job_mig_subset(job_t j, mach_port_t requestorport, mach_port_t *subsetportp)
+ 	return BOOTSTRAP_SUCCESS;
+ }
+ 
++#if HAVE_XPC_LAUNCHD
+ job_t
+ _xpc_domain_import_service(jobmgr_t jm, launch_data_t pload)
+ {
+@@ -11413,6 +11418,7 @@ xpc_process_demux(mach_port_t p, xpc_object_t request, xpc_object_t *reply)
+ 
+ 	return true;
+ }
++#endif // HAVE_XPC_LAUNCHD
+ 
+ kern_return_t
+ job_mig_kickstart(job_t j, name_t targetlabel, pid_t *out_pid, unsigned int flags)
+diff --git a/src/runtime.c b/src/runtime.c
+index 026f0eb..5600dea 100644
+--- a/src/runtime.c
++++ b/src/runtime.c
+@@ -77,7 +77,9 @@
+ #include "jobServer.h"
+ #include "job_reply.h"
+ 
++#if HAVE_XPC_LAUNCHD
+ #include <xpc/launchd.h>
++#endif
+ 
+ static mach_port_t ipc_port_set;
+ static mach_port_t demand_port_set;
+@@ -164,10 +166,12 @@ union internal_max_sz {
+ 	union __ReplyUnion__internal_subsystem rep;
+ };
+ 
++#if HAVE_XPC_LAUNCHD
+ union xpc_domain_max_sz {
+ 	union __RequestUnion__xpc_domain_xpc_domain_subsystem req;
+ 	union __ReplyUnion__xpc_domain_xpc_domain_subsystem rep;
+ };
++#endif
+ 
+ union mach_exc_max_sz {
+ 	union __RequestUnion__catch_mach_exc_subsystem req;
+@@ -194,9 +198,11 @@ launchd_runtime_init(void)
+ 	os_assert_zero(launchd_mport_make_send(launchd_internal_port));
+ 
+ 	max_msg_size = sizeof(union vproc_mig_max_sz);
++#if HAVE_XPC_LAUNCHD
+ 	if (sizeof(union xpc_domain_max_sz) > max_msg_size) {
+ 		max_msg_size = sizeof(union xpc_domain_max_sz);
+ 	}
++#endif
+ 
+ 	os_assert_zero(runtime_add_mport(launchd_internal_port, launchd_internal_demux));
+ 	os_assert_zero(pthread_create(&kqueue_demand_thread, NULL, kqueue_demand_loop, NULL));
+@@ -1005,9 +1011,11 @@ launchd_mig_demux(mach_msg_header_t *request, mach_msg_header_t *reply)
+ 		if (request->msgh_id == MACH_NOTIFY_NO_SENDERS) {
+ 			launchd_syslog(LOG_DEBUG, "MACH_NOTIFY_NO_SENDERS");
+ 			result = notify_server(request, reply);
++#if HAVE_XPC_LAUNCHD
+ 		} else if (the_demux == job_server) {
+ 			launchd_syslog(LOG_DEBUG, "Trying domain subsystem...");
+ 			result = xpc_domain_server(request, reply);
++#endif
+ 		} else {
+ 			launchd_syslog(LOG_ERR, "Cannot handle MIG request with ID: 0x%x", request->msgh_id);
+ 		}
+@@ -1018,6 +1026,7 @@ launchd_mig_demux(mach_msg_header_t *request, mach_msg_header_t *reply)
+ 	return result;
+ }
+ 
++#if HAVE_XPC_LAUNCHD
+ void
+ launchd_runtime2(mach_msg_size_t msg_size)
+ {
+@@ -1066,6 +1075,30 @@ launchd_runtime2(mach_msg_size_t msg_size)
+ 		}
+ 	}
+ }
++#else
++/* Without XPC pipes, requests are MIG messages only: receive one with its
++ * audit trailer (launchd_mig_demux() reads the caller's credentials from it),
++ * demultiplex it and send the reply, as xpc_pipe_try_receive() does for a MIG
++ * message. mach_msg_server_once() also honours MIG_NO_REPLY (replies launchd
++ * sends later through job_reply.defs) and destroys a failed request.
++ */
++void
++launchd_runtime2(mach_msg_size_t msg_size)
++{
++	const mach_msg_options_t options = MACH_RCV_LARGE
++		| MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT)
++		| MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0);
++
++	for (;;) {
++		launchd_log_push();
++
++		mach_msg_return_t mr = mach_msg_server_once(launchd_mig_demux, msg_size, ipc_port_set, options);
++		if (mr != MACH_MSG_SUCCESS && mr != MACH_SEND_INVALID_DEST && mr != MACH_SEND_TIMED_OUT) {
++			launchd_syslog(LOG_ERR, "Could not receive or answer a request: 0x%x", mr);
++		}
++	}
++}
++#endif
+ 
+ int
+ runtime_close(int fd)

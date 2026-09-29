@@ -3,6 +3,8 @@
 # NeoDarwin's stand-ins for closed Apple libraries that the open ones link
 # (docs/base/libsystem.md §1): each subdirectory is one dylib with Apple's
 # install name and only the interfaces NeoDarwin's libraries use.
+# libxpc/ is built with launchd-842's client library, by
+# base/launchd/build_libxpc.sh (//base:libxpc), not here.
 #   build.sh OUT STANDINS_DIR SYSROOT DEPROOT...   (DEPROOT: kernel, platform, c, ...)
 # OUT receives usr/lib/system/<library>.dylib for each.
 source "$(dirname "$0")/../../tools/base/common.sh"
@@ -20,7 +22,6 @@ standin() {  # standin LIBRARY LINK-FLAGS...
 		$(dep_libdirs "${DEPS[@]}") "$@" -o "$OUT/usr/lib/system/$lib.dylib"
 }
 standin libcorecrypto -lsystem_kernel
-standin libxpc -lsystem_kernel -lsystem_malloc -lsystem_c -lsystem_blocks
 standin libsystem_trace -lsystem_kernel -lsystem_malloc -lsystem_c
 standin libsystem_sandbox
 standin libsystem_sanitizers

@@ -1,0 +1,21 @@
+load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:darwin_executable.bzl", "swift_embedded_executable")
+
+package(default_visibility = ["//visibility:public"])
+
+# NeoDarwin's launchctl (P1-08, docs/base/session.md): first-party Embedded
+# Swift over launchd-842's launch_msg interface, replacing launchctl-842.
+swift_embedded_executable(
+    name = "launchctl",
+    srcs = glob(["Sources/*.swift"]),
+    hdrs = [
+        "Launch/launch_shim.h",
+        "Launch/module.modulemap",
+    ],
+    root = "//base:root",
+)
+
+lang_audit_test(
+    name = "launchctl_lang_audit",
+    srcs = ["Launch/launch_shim.h"],
+)

@@ -14,10 +14,10 @@
 
 | # | Deliverable | Check | Status |
 |---|---|---|---|
-| 1 | Commands and `/etc` from Apple source; `//base:system_root`; the image's macOS layout; a test-only PID 1 that runs getty | `//kernel:sbsa_shell_boot_test`: log in as root and run commands | done |
-| 2 | liblaunch in the libxpc stand-in | NeoDarwin's libraries' bootstrap and vproc imports resolve to launchd-842's client code | todo |
-| 3 | launchd-842 as PID 1 | it boots and serves `job.defs` | todo |
-| 4 | The Swift launchctl; `com.apple.getty.plist` loaded by `launchctl bootstrap` | `sbsa_shell_boot_test` with launchd as PID 1 | todo |
+| 1 | Commands and `/etc` from Apple source; `//base:system_root`; the image's macOS layout; a test-only PID 1 that runs getty | `//kernel:sbsa_getty_boot_test`: log in as root and run commands | done |
+| 2 | liblaunch in the libxpc stand-in | NeoDarwin's libraries' bootstrap and vproc imports resolve to launchd-842's client code | done |
+| 3 | launchd-842 as PID 1 | it boots and serves `job.defs` | done |
+| 4 | The Swift launchctl; `com.apple.getty.plist` loaded by `launchctl bootstrap` | `//kernel:sbsa_session_boot_test`: launchd as PID 1, login over serial, `launchctl list` | done |
 
 ## 3. Findings
 
@@ -39,7 +39,7 @@ Commands link against the runtime root with `-syslibroot` (`base/commands.sh`), 
 - `/var/root` and `/var/run` are directories;
 - `master.passwd` is 0600, `/tmp` 1777, and `login` setuid.
 
-`tests/qemu/getty_init` stands in for launchd until checkpoint 3. It's a test-only Embedded Swift PID 1 that runs `getty std.9600 console` and restarts it whenever it exits, as `com.apple.getty.plist` does under launchd.
+`tests/qemu/getty_init` stood in for launchd until checkpoint 3, and still boots as `//images:getty_root`, a check of the session that doesn't depend on launchd. It's a test-only Embedded Swift PID 1 that runs `getty std.9600 console` and restarts it whenever it exits, as `com.apple.getty.plist` does under launchd.
 
 | Finding | Resolution |
 |---|---|
@@ -53,3 +53,34 @@ Commands link against the runtime root with `-syslibroot` (`base/commands.sh`), 
 | launchd-842 doesn't read `/etc/ttys`; login only checks its console entry's `secure` flag | `ttys` is installed unmodified; getty runs from `com.apple.getty.plist` (system_cmds), installed enabled |
 
 Still to check on the kernel: `ps` (`KERN_PROC`, `proc_pidinfo`, `task_read_for_pid`), file ownership on the image (hdiutil records the build user's uid), and `/usr/bin/false` (the shell of `daemon` and `nobody`), which isn't built yet.
+
+### Checkpoints 2 and 3: launchd-842 and liblaunch
+
+`//base:launchd_daemon` builds `/sbin/launchd` from launchd-842.92.1, and `//base:libxpc` builds `/usr/lib/system/libxpc.dylib` from 842's liblaunch (`liblaunch.c`, `libvproc.c`, `libbootstrap.c`) plus the stand-in's XPC objects. Apple has shipped liblaunch inside libxpc since 10.8. So `launch_msg`, `bootstrap_*` and `vproc_*` now reach a real launchd over `job.defs`, for every library that calls them. The sysroot stages 842's private headers (`bootstrap_priv.h`, `vproc_priv.h`, `launch_priv.h`, `reboot2.h`) in place of base/sdk's shims.
+
+| Finding | Resolution |
+|---|---|
+| base/sdk's `bootstrap_priv.h` claimed 842's flag values but had `BOOTSTRAP_PRIVILEGED_SERVER` wrong (1<<1 is 842's `ALLOW_LOOKUP`) | 842's own headers are staged and the shims deleted |
+| libSystem-1356 calls `_libxpc_initializer`, not liblaunch's `bootstrap_init`, and libsystem_kernel never sets `bootstrap_port` | the libxpc stand-in's initializer and child fork hook call `bootstrap_init()` |
+| launchd receives through libxpc-300's `xpc_pipe_try_receive`, falling back to `xpc_domain_server`; the XPC domain `.defs` and `<xpc/launchd.h>` aren't published | launchd patch 0002: a `mach_msg_server_once()` loop with the audit trailer, and core.c's XPC domain, event and process code compiled out (its only clients, xpcproxy and xpcd, are closed). LaunchEvents are logged and not imported |
+| The SDK's `<sandbox.h>` turns `HAVE_SANDBOX` on; libauditd, quarantine and systemstats are closed | patch 0001 lets the build set every `HAVE_*` switch, all 0 |
+| libbsm is linked only for `audit_token_to_au32` | `base/launchd/src/nd_audit_token.c` reads xnu's token layout |
+| 842 knows only 32-bit arm; `TASK_SEATBELT_PORT` is gone; current clang rejects `__typeof__` on bit-fields | patches 0003 and 0004 |
+| launchd as PID 1 calls `setaudit_addr` and takes children's task ports | nothing to change: `config/MASTER.arm64.MacOSX` has `config_audit`, no MAC policy makes control ports immovable, and developer mode is on under xnu's code-signing monitor. A future AMFI/MAC policy must keep both working |
+
+### Checkpoint 4: launchctl and the session
+
+`base/launchctl` is NeoDarwin's launchctl: Embedded Swift with a Foundation-free XML plist parser (`Plist.swift`). It builds `launch_data` and speaks `launch_msg`. It implements `bootstrap -S System`, `load [-w]`, `unload`, `start`, `stop` and `list`. On the host it parses 424 of macOS's 425 LaunchDaemon plists (as XML); the other is a properties file with no Label. `//images:session_root` puts it at `/bin/launchctl`, with launchd at `/sbin/launchd`. `//kernel:sbsa_session_boot_test` boots it:
+- launchd-842 starts as PID 1 and runs `launchctl bootstrap -S System`, which loads `com.apple.getty.plist`;
+- launchd spawns getty on the console;
+- the test logs in as root, runs commands, and `launchctl list` shows getty as a launchd job.
+
+| Finding | Resolution |
+|---|---|
+| The kernel mounts the root read-only. PID 1 launchd creates its socket under `/var/tmp/launchd` only when launchctl first asks for it, and `EROFS` there fails silently, so `launch_msg` answered `ENOTCONN` | `launchctl bootstrap` remounts `/` read-write first, as launchctl-842 does with `mount -uw /`. The image has `/private/var/tmp` (1777), as macOS does |
+| The kernel names the root's device `root_device` (`vfs_rootmountalloc`), which no path reaches, and an update mount looks its device path up | launchctl finds the `/dev` block device whose device number is the root's (`/dev/md0`) and passes HFS's mount arguments (`hfs_mount.h`, not in the SDK, declared in `launch_shim.h`) |
+| macOS's `<launch.h>` marks launch_msg deprecated, and it's part of the SDK's Darwin module, so the marking can't be undone for one import | `launch_shim.h` declares the calls as 842's own `launch.h` does |
+| Embedded Swift has no `CommandLine`; String comparison needs the Unicode tables | a `@_cdecl("main")` entry; `rules/darwin_executable.bzl` links the Embedded stdlib's `libswiftUnicodeDataTables.a`, which dead-stripping trims to what's used |
+
+Not in NeoDarwin's launchctl yet: binary plists, the overrides database (`load -w` doesn't persist), fsck, `/etc/rc.*`, loopback setup and `sysctl.conf`. Of the other session pieces, zsh and bash (ncurses, libedit), line editing in `/bin/sh`, PAM and the `mount`/fsck tools (diskdev_cmds) come later.
+

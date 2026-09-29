@@ -1,0 +1,45 @@
+From: NeoDarwin
+Subject: [PATCH] core: build for arm64 against current xnu headers
+
+job_set_exception_port() picks the thread-state flavour for the exception
+ports it sets and stops with #error on an architecture it doesn't know;
+842 knew 32-bit arm only. arm64 takes ARM_THREAD_STATE64. xnu no longer
+defines TASK_SEATBELT_PORT, which chose a log level only. core.c calls
+fileport_makefd() and fileport_makeport() and took their declarations from
+an internal header that no longer includes <sys/fileport.h>; include it.
+
+Rebase-risk: low.
+---
+diff --git a/src/core.c b/src/core.c
+index a1b620c..0609122 100644
+--- a/src/core.c
++++ b/src/core.c
+@@ -94,6 +94,7 @@
+ #include <libproc.h>
+ #include <libproc_internal.h>
+ #include <System/sys/proc_info.h>
++#include <System/sys/fileport.h>
+ #include <malloc/malloc.h>
+ #include <pthread.h>
+ #if HAVE_SANDBOX
+@@ -6454,6 +6455,8 @@ job_setup_exception_port(job_t j, task_t target_task)
+ 	f = x86_THREAD_STATE;
+ #elif defined(__arm__)
+ 	f = ARM_THREAD_STATE;
++#elif defined(__arm64__)
++	f = ARM_THREAD_STATE64;
+ #else
+ #error "unknown architecture"
+ #endif
+@@ -8519,9 +8522,11 @@ job_mig_post_fork_ping(job_t j, task_t child_task, mach_port_t *asport)
+ 
+ 				desired_log_level = LOG_WARNING;
+ 
++#ifdef TASK_SEATBELT_PORT
+ 				if (ms->special_port_num == TASK_SEATBELT_PORT) {
+ 					desired_log_level = LOG_DEBUG;
+ 				}
++#endif
+ 			}
+ 
+ 			job_log(j, desired_log_level, "Could not setup Mach task special port %u: %s", ms->special_port_num, mach_error_string(errno));

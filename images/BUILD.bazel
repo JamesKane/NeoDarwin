@@ -22,29 +22,53 @@ hfs_ramdisk(
     trees = ["//base:root"],
 )
 
-# The HFS+ root of P1-08: the system root (runtime libraries, commands and
-# /etc) with its macOS layout, and PID 1 as /sbin/launchd; for now the
-# test-only getty_init. Booted by //kernel:sbsa_shell_boot_test.
+# The HFS+ roots of P1-08 (docs/base/session.md): the system root (runtime
+# libraries, commands and /etc) with macOS's layout.
+_SYSTEM_DIRS = [
+    "dev",
+    "private/tmp",
+    "private/var/db/launchd.db/com.apple.launchd",
+    "private/var/empty",
+    "private/var/log/com.apple.launchd",
+    "private/var/root",
+    "private/var/run",
+    "private/var/tmp",
+]
+
+_SYSTEM_LINKS = {
+    "etc": "private/etc",
+    "tmp": "private/tmp",
+    "var": "private/var",
+}
+
+_SYSTEM_MODES = {
+    "private/etc/master.passwd": "0600",
+    "private/tmp": "1777",
+    "private/var/tmp": "1777",
+    "usr/bin/login": "4555",
+}
+
+# launchd-842 as PID 1. It runs /bin/launchctl bootstrap -S System, which
+# loads com.apple.getty.plist. Booted by //kernel:sbsa_session_boot_test.
 hfs_ramdisk(
-    name = "shell_root",
-    dirs = [
-        "dev",
-        "private/tmp",
-        "private/var/empty",
-        "private/var/root",
-        "private/var/run",
-        "private/var/log",
+    name = "session_root",
+    dirs = _SYSTEM_DIRS,
+    files = {"//base/launchctl": "bin/launchctl"},
+    links = _SYSTEM_LINKS,
+    tree_modes = _SYSTEM_MODES,
+    trees = [
+        "//base:system_root",
+        "//base:launchd_daemon",
     ],
+)
+
+# The same system with a test-only PID 1 that runs getty itself, without
+# launchd. Booted by //kernel:sbsa_getty_boot_test.
+hfs_ramdisk(
+    name = "getty_root",
+    dirs = _SYSTEM_DIRS,
     files = {"//tests/qemu/getty_init": "sbin/launchd"},
-    links = {
-        "etc": "private/etc",
-        "tmp": "private/tmp",
-        "var": "private/var",
-    },
-    tree_modes = {
-        "private/etc/master.passwd": "0600",
-        "private/tmp": "1777",
-        "usr/bin/login": "4555",
-    },
+    links = _SYSTEM_LINKS,
+    tree_modes = _SYSTEM_MODES,
     trees = ["//base:system_root"],
 )

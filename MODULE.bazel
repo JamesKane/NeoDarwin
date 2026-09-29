@@ -163,6 +163,16 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/Libsystem/archive/refs/tags/Libsystem-1356.tar.gz"],
 )
 
+# The last published launchd (outside the release set): PID 1 and liblaunch
+# (docs/base/session.md).
+http_archive(
+    name = "apple_launchd",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "76657450aee11bdc2f4ebf85e19e3b9c215771564257e710e3a59b1340c1b49b",
+    strip_prefix = "launchd-launchd-842.92.1",
+    urls = ["https://github.com/apple-oss-distributions/launchd/archive/refs/tags/launchd-842.92.1.tar.gz"],
+)
+
 http_archive(
     name = "apple_system_cmds",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",

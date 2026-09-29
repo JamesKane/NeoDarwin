@@ -1,0 +1,40 @@
+From: NeoDarwin
+Subject: [PATCH] core: test bit-fields in job_assumes() as truth values
+
+os_assumes_ctx() declares its temporary with __typeof__(e), which current
+clang rejects for a bit-field. Three job_assumes() calls pass one; compare
+it with zero instead, which keeps the assertion's meaning.
+
+Rebase-risk: low.
+---
+diff --git a/src/core.c b/src/core.c
+index 0609122..fac6af7 100644
+--- a/src/core.c
++++ b/src/core.c
+@@ -8100,7 +8100,7 @@ job_mig_log_forward(job_t j, vm_offset_t inval, mach_msg_type_number_t invalCnt)
+ 		return BOOTSTRAP_NO_MEMORY;
+ 	}
+ 
+-	if (!job_assumes(j, j->per_user)) {
++	if (!job_assumes(j, j->per_user != 0)) {
+ 		return BOOTSTRAP_NOT_PRIVILEGED;
+ 	}
+ 
+@@ -8403,7 +8403,7 @@ job_mig_swap_integer(job_t j, vproc_gsk_t inkey, vproc_gsk_t outkey, int64_t inv
+ 		/* No-op. */
+ 		break;
+ 	case VPROC_GSK_WEIRD_BOOTSTRAP:
+-		if (job_assumes(j, j->weird_bootstrap)) {
++		if (job_assumes(j, j->weird_bootstrap != 0)) {
+ 			job_log(j, LOG_DEBUG, "Unsetting weird bootstrap.");
+ 
+ 			mach_msg_size_t mxmsgsz = (typeof(mxmsgsz)) sizeof(union __RequestUnion__job_mig_job_subsystem);
+@@ -8564,7 +8564,7 @@ job_mig_get_listener_port_rights(job_t j, mach_port_array_t *sports, mach_msg_ty
+ 	size_t cnt = 0;
+ 	struct machservice *msi = NULL;
+ 	SLIST_FOREACH(msi, &j->machservices, sle) {
+-		if (msi->upfront && job_assumes(j, msi->recv)) {
++		if (msi->upfront && job_assumes(j, msi->recv != 0)) {
+ 			cnt++;
+ 		}
+ 	}

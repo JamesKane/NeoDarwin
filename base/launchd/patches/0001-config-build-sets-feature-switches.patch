@@ -1,0 +1,73 @@
+From: NeoDarwin
+Subject: [PATCH] config: let the build set each feature switch
+
+config.h turns quarantine, responsibility, sandbox and systemstats on when
+their headers are present, and libauditd on for every macOS build. The
+public SDK ships <sandbox.h> without sandbox_check(), and NeoDarwin builds
+none of these closed libraries, so each switch gets an #ifndef the build
+can override (-DHAVE_...=0). A new switch, HAVE_XPC_LAUNCHD, records
+whether libxpc's launchd interface (<xpc/launchd.h>) is available;
+patch 0002 uses it.
+
+Rebase-risk: low (config.h only).
+---
+diff --git a/src/config.h b/src/config.h
+index 3084872..1260373 100644
+--- a/src/config.h
++++ b/src/config.h
+@@ -3,30 +3,55 @@
+ 
+ #include <TargetConditionals.h>
+ 
++/* Each feature may also be set by the build (-DHAVE_...=0), for a system
++ * whose SDK publishes a header without the library behind it.
++ */
++#ifndef HAVE_QUARANTINE
+ #if __has_include(<quarantine.h>)
+ #define HAVE_QUARANTINE 1
+ #else
+ #define HAVE_QUARANTINE 0
+ #endif
++#endif
+ 
++#ifndef HAVE_RESPONSIBILITY
+ #if __has_include(<responsibility.h>)
+ #define HAVE_RESPONSIBILITY 1
+ #else
+ #define HAVE_RESPONSIBILITY 0
+ #endif
++#endif
+ 
++#ifndef HAVE_SANDBOX
+ #if __has_include(<sandbox.h>)
+ #define HAVE_SANDBOX 1
+ #else
+ #define HAVE_SANDBOX 0
+ #endif
++#endif
+ 
++#ifndef HAVE_LIBAUDITD
+ #define HAVE_LIBAUDITD !TARGET_OS_EMBEDDED
++#endif
+ 
++#ifndef HAVE_SYSTEMSTATS
+ #if !TARGET_OS_EMBEDDED && __has_include(<systemstats/systemstats.h>)
+ #define HAVE_SYSTEMSTATS 1
+ #else
+ #define HAVE_SYSTEMSTATS 0
+ #endif
++#endif
++
++/* libxpc's launchd interface: XPC pipes, domains, events and process calls
++ * (xpc/launchd.h, xpc/domain.defs, xpc/init.defs). Without it, launchd
++ * serves its MIG subsystems alone.
++ */
++#ifndef HAVE_XPC_LAUNCHD
++#if __has_include(<xpc/launchd.h>)
++#define HAVE_XPC_LAUNCHD 1
++#else
++#define HAVE_XPC_LAUNCHD 0
++#endif
++#endif
+ 
+ #endif /* __CONFIG_H__ */
