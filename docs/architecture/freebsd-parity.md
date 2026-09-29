@@ -54,7 +54,7 @@ Every administration command that reports state takes `--libxo json` (the FreeBS
 
 ## 4. The workflow suite (exit test of P4-27)
 
-These tasks are adapted from the FreeBSD Handbook. They run as scripts against a QEMU image in CI, and on the CD8180 before a release:
+These tasks are adapted from the FreeBSD Handbook. They run as scripts against a QEMU image in CI, and on the Radxa Dragon Q8B before a release:
 
 1. Install a port as a binary package and from source; upgrade it; remove it.
 2. Add a user and a group, set a password, add the user to `wheel`, log in on the console and over ssh, and `su` to root.

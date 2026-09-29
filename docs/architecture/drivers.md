@@ -51,4 +51,4 @@ Dexts are the default for anything new after the base storage and display path e
 
 ## 5. Testing
 
-Every family has: a QEMU model test (virtio, NVMe, XHCI, e1000, AHCI, SDHCI all exist in QEMU), a fault-injection harness (dexts can be killed and must recover), and a hardware-in-the-loop entry for the CD8180 board. Drivers publish counters as registry properties; tests assert on them rather than on logs.
+Every family has: a QEMU model test (virtio, NVMe, XHCI, e1000, AHCI, SDHCI all exist in QEMU), a fault-injection harness (dexts can be killed and must recover), and a hardware-in-the-loop entry for the Radxa Dragon Q8B. Drivers publish counters as registry properties; tests assert on them rather than on logs.

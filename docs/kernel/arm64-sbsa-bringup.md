@@ -132,7 +132,7 @@ What the first boot established:
 
 | Finding | Consequence |
 |---|---|
-| The kernel executes `TLBI RVALE1IS` (FEAT_TLBIRANGE, part of Armv8.4). QEMU's `cortex-a76` (v8.2) and `neoverse-v1` models don't advertise it, so the instruction is undefined there | test on `neoverse-n2` (Armv9.0); real targets such as the CD8180 (Armv9.2) have it |
+| The kernel executes `TLBI RVALE1IS` (FEAT_TLBIRANGE, part of Armv8.4). QEMU's `cortex-a76` (v8.2) and `neoverse-v1` models don't advertise it, so the instruction is undefined there | test on `neoverse-n2` (Armv9.0). **The Q8B's Cortex-X1C/A78C are Armv8.2 and lack it**: P1-17 makes the kernel run on Armv8.2, tested on QEMU `cortex-a76` |
 | kalloc_type's zone policy gave the 48-byte class 15 + 17 zones; with the shared zone that overran a 32-entry stack array, which upstream only asserts on | patch 0007 enforces the limit |
 | With no framebuffer, `PE_init_iokit`'s progress-bar centring loop never ends | `-noprogress` in neoboot's default command line until GOP video is passed |
 | Data abort in `kmem_crypto_init`: nothing had called `register_crypto_functions()`, which Apple's corecrypto kext does. Apple's full corecrypto source is evaluation-only, so it can't be used | P1-13, done: ndcrypto, compiled into the kernel from xnu's own corecrypto subset and FreeBSD's kernel crypto (`crypto-provider.md`) |
@@ -226,12 +226,24 @@ What P1-06's SMP half found:
 | `ICC_SGI1R_EL1` was written without `RS`, so a CPU with Aff0 ≥ 16 would get another CPU's IPI | `RS` = Aff0 / 16 |
 | The measurement thread ran wherever the scheduler put it (cpu 3 in the first boot) | it binds itself to the boot CPU (`thread_bind`, which IOKit sees only through its own declaration) |
 
-**For real hardware (P1-11, CD8180):**
-- GIC-700 is probably GICv4.1, which neoboot refuses: 256 KiB redistributor frames need the stride in the tree and in both `redistributorFor` and `pe_fiq.c`'s `find_gicr_pe_base`, plus `GICR_VPENDBASER` left alone.
-- DynamIQ MPIDRs number cores in Aff1 (Aff0 = 0). The reset vector matches only MPIDR & 0xFF without `HAS_CLUSTER` (`start.s`), and `ml_get_cpu_number` and `find_gicr_pe_base` mask to Aff1:Aff0: every core would look like CPU 0 to the first. That needs a `GENERIC_ARM64_PLATFORM` mask of Aff2:Aff1:Aff0 in `start.s`, and `HAS_CLUSTER`-style cluster IDs from the MPIDR or the PPTT.
-- With EL2 present, TF-A starts a secondary at EL2 (`CPU_ON` enters at the highest Non-secure EL), while `start.s` assumes EL1. The kernel needs an EL2 → EL1 stub at the entry point (what `nd_enter_kernel` does for the boot CPU), or neoboot must leave a resident one.
+**For real hardware (P1-11, the Radxa Dragon Q8B).** Since 2026-09-29 the bring-up board is the Radxa Dragon Q8B, Qualcomm SC8280XP (8cx Gen 3), in parallel with FreeBSD's port of the same board (`../freebsd-src`, branch `radxa-dragon-q8b`, which boots it fully under ACPI). Its tables, read with neoboot's parser and `dtdump`, say:
+
+| Area | Q8B | NeoDarwin |
+|---|---|---|
+| CPUs | 8 (4 Cortex-X1C + 4 Cortex-A78C, **Armv8.2**), MPIDR 0x000–0x700: DynamIQ, cores in Aff1 | the kernel is built for Armv8.4 and executes `TLBI RVALE1IS` (FEAT_TLBIRANGE); the reset vector matches MPIDR & 0xFF without `HAS_CLUSTER` (`start.s`), and `ml_get_cpu_number` and `find_gicr_pe_base` mask to Aff1:Aff0, so every core would look like CPU 0. Both are P1-17, testable on QEMU `cortex-a76` |
+| GIC | GICv3, GICD 0x17a00000, one GICR range of 8 × 128 KiB frames at 0x17a60000, ITS at 0x17a40000 | supported as is |
+| Timer | virtual timer PPI 27, level | supported |
+| PSCI | FADT: compliant, SMC | supported (P1-06) |
+| Console | SPCR type 0x13, Qualcomm QUPv3 GENI UART at 0x884000 (the SPCR IRQ is wrong; the DSDT's `UARD` QCOM0616 has GSIV 615). The header pads are 1.8 V | neoboot refuses it; P1-12 adds a GENI pexpert driver. FreeBSD's `uart_dev_qcom_geni` is a BSD reference |
+| PCIe | MCFG: 7 segments, ECAM above 4 GiB (0x400000000–0x700000000); NVMe on segment 2, the TC956x Ethernet on 4; IORT routes through a firmware-reserved SMMUv3 at 0x14f80000 | P1-09 and P1-10 |
+| DMA | the firmware reports `_CCA` 0 for the USB controllers | drivers must not assume coherent DMA (see the risk table) |
+| Firmware | Qualcomm UEFI BOOT.MXF.1.1, ACPI and a DTB; RSDP 0xffffd000; no RTC (`GetTime` fails) | neoboot omits `neodarwin,utc-seconds`; the clock needs NTP |
+
+Also still open from P1-06:
+- With EL2 present, `CPU_ON` enters a secondary at the highest Non-secure EL, while `start.s` assumes EL1. On the Q8B, Qualcomm's hypervisor normally owns EL2 and the OS runs at EL1; check which EL neoboot starts in.
 - Caches are real: `ResetHandlerData`, `CpuDataEntries` and the reset vector are read with the MMU off. `cpu_start` cleans the per-CPU entries; the rest is cleaned at boot only by neoboot's image clean. QEMU TCG can't catch a miss.
-- The board's FADT should say SMC; the EL3 fallback is for QEMU. IPI latencies there are the first real numbers.
+
+The Q8B's ACPI tables, as captured by the FreeBSD work, reconstructed into `acpidump` format, reproduce these findings in `dtdump`.
 
 ### 2.2 ACPI → kernel: the two-tier strategy
 
@@ -314,10 +326,10 @@ Each agent owns a directory, a test, and a written contract. Dependencies flow d
 | A1 | **UEFI Loader (neoboot)** | §2.1 rules, DT-ABI table, ACPI spec 6.5 (MADT/GTDT/SPCR/MCFG/IORT), Mach-O fileset + chained-fixups format, Embedded Swift UEFI target from A0 | `BOOTAA64.EFI` (Embedded Swift, C shim); `dt-abi.md` (generated from code); `dtdump` host tool that prints the synthesised DT | A0 (kernel image, Embedded Swift target) | kernel reaches `arm_init` and prints `iBoot version:` line on QEMU virt |
 | A2 | **Kernel Platform Bridge** | §2.3 table, grep lists | `SBSA.h`, `generic_arm64_common.h`, `proc_reg.h` branch, `APPLEVIRTUALPLATFORM` audit, 16550 serial driver, Group 1 timer option (§5.2), `pe_fiq.c` reads PPI number from `/arm-io/gic` `timer-ppi` | A0 | single-CPU boot to `kernel_bootstrap` complete, timer interrupts counting |
 | A3 | **IOKit Platform (in-kernel)** | §2.3 class table, IOKit headers | `iokit/Kernel/arm/NeoDarwin*.cpp`: platform expert, GICv3 controller, PSCI IOPMGR, PSCI halt/restart | A2 | all CPUs online (`cpus=N` boot-arg respected), IPIs measured, SPI test device (virtio console) interrupts |
-| A4 | **ACPI Runtime (ACPICA kext)** | ACPICA source, `IOACPIPlatformDevice.h` SDK header, IORT/MCFG | `NeoDarwinACPIPlatform.kext`, `IOPCIFamily` open build wired to ECAM, MSI via GIC ITS | A3, A0 (`kcgen`) | `ioreg` shows PCI bus with virtio-pci / NVMe nubs on QEMU and on CD8180 |
+| A4 | **ACPI Runtime (ACPICA kext)** | ACPICA source, `IOACPIPlatformDevice.h` SDK header, IORT/MCFG | `NeoDarwinACPIPlatform.kext`, `IOPCIFamily` open build wired to ECAM, MSI via GIC ITS | A3, A0 (`kcgen`) | `ioreg` shows PCI bus with virtio-pci / NVMe nubs on QEMU and on the Q8B |
 | A5 | **Storage & Root FS** | HFS+ source, IOStorageFamily, virtio spec, NVMe spec | `hfs.kext` build, HFS+ ramdisk builder, `virtio-blk` and open `NVMe` IOKit drivers | A3 (ramdisk), A4 (PCIe) | M4: root on HFS+ ramdisk; M5: root on NVMe volume by `boot-uuid` |
 | A6 | **BSD / Userland Glue** | PureDarwin/Darling recipes, launchd-842, xnu headers | cross toolchain SDK; `ramdisk.img` builder; `/sbin/launchd`, `/etc/rc`, getty on `/dev/console`, `sh`, coreutils; ad-hoc signing policy | A0 (headers) — independent of kernel until M3 | `login:` prompt on serial, shell commands run, `uname -a` correct |
-| A7 | **Verification & CI** | all of the above | QEMU virt + sbsa-ref matrix (16K/4K, 1/4/8 CPUs, with/without secure firmware via TF-A `QEMU_EFI` built with `ARM_TRUSTZONE`), hardware-in-the-loop runner for OrangePi 6 Plus (serial + power relay), boot-time budget, regression corpus of DT dumps | A0 | every merge boots both QEMU machines; nightly hardware run |
+| A7 | **Verification & CI** | all of the above | QEMU virt + sbsa-ref matrix (16K/4K, 1/4/8 CPUs, with/without secure firmware via TF-A `QEMU_EFI` built with `ARM_TRUSTZONE`), hardware-in-the-loop runner for the Radxa Dragon Q8B (serial at 1.8 V + power relay), boot-time budget, regression corpus of DT dumps | A0 | every merge boots both QEMU machines; nightly hardware run |
 | A8 | **Documentation & DT-ABI Keeper** | code reads | keeps `dt-abi.md` and this blueprint in sync with the tree; reviews every PR that touches `pexpert/`, `boot.h`, or the loader for ABI drift | — | no undocumented property read by the kernel |
 
 Agent messaging discipline: the DT-ABI table is the interface between A1 and A2/A3; it is a versioned document and both sides test against `dtdump` output, so the loader and the kernel can be developed and tested independently (the kernel under QEMU with a hand-written DT blob until neoboot lands).
@@ -334,7 +346,7 @@ Agent messaging discipline: the DT-ABI table is the interface between A1 and A2/
 | **M3 PID 1** | mockfs runs a static `hello` init; syscalls, VM, Mach IPC exercised by a test binary | A3, A6 | test binary prints from userland |
 | **M4 Terminal OS** | HFS+ ramdisk root, launchd, getty, shell, coreutils; `boot-uuid` plumbing | A5, A6 | interactive shell over serial; reboot/halt via PSCI |
 | **M5 ACPI runtime + storage** | ACPICA kext, IOPCIFamily, virtio-blk/NVMe, root from disk, `kcgen` kernelcache with real kexts | A4, A5, A0 | boot from NVMe on QEMU sbsa-ref |
-| **M6 Hardware** | OrangePi 6 Plus (CIX CD8180, GIC-700, PL011, UEFI+ACPI) boots to shell | A7 + all | HIL nightly green |
+| **M6 Hardware** | Radxa Dragon Q8B (Qualcomm SC8280XP, GICv3, GENI UART, UEFI+ACPI) boots to shell | A7 + all | HIL nightly green |
 | **M7 Graphics groundwork** | GOP framebuffer via `Boot_Video` → `IOFramebuffer` stub; input over USB (open IOUSBHostFamily build); the framebuffer console (`docs/architecture/console.md`) | new agents | pixels on HDMI from userland |
 
 ---
@@ -390,7 +402,7 @@ The categories overlap (some pmap symbols are also exported). The authoritative 
 | 16 KiB granule unsupported on target core | `ID_AA64MMFR0_EL1.TGran16 == 0` | loader refuses 16K kernel and picks the 4K build from the ESP |
 | BTI / PAC assumptions | `XNU_BUILT_WITH_BTI` default on (`MakeInc.def:57-66`); arm64e ABI | build `arm64`, `BTI_BUILD=0` for v8.4 targets; enable per-board when v8.5 |
 | SME/SVE feature flags in `VMAPPLE.h` | illegal-instruction on cores without SME | drop `HAS_ARM_FEAT_SME*`; gate on `ID_AA64PFR1_EL1` |
-| Non-coherent DMA on cheaper SoCs | data corruption in virtio/NVMe | `__ARM_COHERENT_IO__` off for those boards; IODMACommand cache ops in the drivers (CD8180 PCIe is coherent through the CCI) |
+| Non-coherent DMA on cheaper SoCs | data corruption in virtio/NVMe | `__ARM_COHERENT_IO__` off for those boards; IODMACommand cache ops in the drivers (the Q8B's firmware reports `_CCA` 0 for USB; check each device's `_CCA` and the IORT) |
 | PSCI/SMC from EL1 trapped by a hypervisor | `SMC` UNDEF | loader verifies `CurrentEL` and `HCR_EL2.TSC = 0`; the conduit comes from the firmware: `/chosen` `psci-conduit` (P1-06); HVC is refused when neoboot itself runs at EL2 |
 | `hvc` probes left in | UNDEF at `arm64_hypercall.c:62` | A2 audit; CI runs on QEMU with `-cpu` lacking EL2 |
 | Legacy `interrupt-controller`/`timer` node lookup | `ml_init_timebase` skipped → no `rtclock_timebase_func` | loader emits both stub nodes; A2 removes the requirement later |

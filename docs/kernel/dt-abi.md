@@ -230,5 +230,5 @@ Adding an optional property is backwards compatible and keeps v1, with a row her
 - P1-05 (added): `/arm-io/gic` `timer-ppi` and `timer-group`, from the GTDT and `GICD_CTLR`.
 - P1-06 (added): `/chosen` `psci-conduit`, from FADT `ARM_BOOT_ARCH` and the CPU's EL3. neoboot caps the kernel at one CPU only when there is no conduit.
 - P1-10 and the Tier 2 kext: `/arm-io/pcie@N`, from MCFG and IORT.
-- P1-11 (CD8180): GICv4 redistributors, whose 256 KiB frames need the kernel's frame stride from the tree.
+- P1-12 and P1-11 (Radxa Dragon Q8B): SPCR type 0x13, the Qualcomm GENI UART, needs a `/arm-io` UART node the kernel has a driver for. Its GIC is v3 with 128 KiB frames, so no stride change is needed there; GICv4 boards would need the stride in the tree.
 - P1-12: a 16550 serial node.
