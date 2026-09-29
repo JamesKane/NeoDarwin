@@ -23,7 +23,8 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-This licence covers NeoDarwin's own code. Apple-derived code remains under the
-Apple Public Source License 2.0, OpenZFS under CDDL-1.0, and FreeBSD-derived
-code under its original BSD licence; see each component's upstream.lock and
-PROVENANCE.md.
+This licence covers NeoDarwin's own code. Third-party code keeps its own
+licence: Apple-derived code the Apple Public Source License 2.0 (or Apache 2.0
+where Apple publishes it so), FreeBSD-derived code its BSD licence, ACPICA
+BSD-3-Clause, LLVM's runtimes Apache 2.0 with the LLVM exception, and OpenZFS
+CDDL-1.0. See THIRD_PARTY_NOTICES.md and each component's upstream.lock.
