@@ -1,0 +1,233 @@
+From: NeoDarwin
+Subject: [PATCH] pe_fiq, sleh: the GICv3 timer on Group 1 as an IRQ on generic Arm
+
+pe_fiq.c routes the EL1 virtual timer, INTID 27, as a Group 0 FIQ and
+enables it with ICC_IGRPEN0_EL1; sleh_fiq acknowledges it with
+ICC_IAR0_EL1 (patch 0014). That works under Apple's hypervisor and on QEMU
+virt without EL3, where the GIC has one security state (GICD_CTLR.DS == 1).
+On a board with TrustZone firmware (DS == 0) Group 0 is Secure: the
+Non-secure kernel cannot configure it, the FIQ goes to EL3, and the ICC
+Group 0 registers trap there (docs/kernel/arm64-sbsa-bringup.md §5.2).
+
+For GENERIC_ARM64_PLATFORM, pe_init_fiq() now reads two optional
+properties of /arm-io/gic (DT-ABI v1, docs/kernel/dt-abi.md):
+- timer-ppi (u32, 16-31, default 27): the timer's INTID, from the GTDT;
+- timer-group (u32, default 0): the timer's group, chosen by neoboot.
+Group 0 keeps Apple's sequence exactly. Group 1 touches no Group 0
+register: it sets the timer's GICR_IGROUPR0 bit (which only matters when
+DS == 1; with DS == 0 the register is Secure and the firmware has made
+the timer Non-secure Group 1), its priority and enable, SRE, BPR1, PMR,
+EOImode 0, GICD_CTLR ARE and EnableGrp1(A), and ICC_IGRPEN1_EL1.
+
+The timer then arrives as an IRQ. Before NeoDarwinGICv3 attaches to
+AppleARMSMP's PassthruInterruptController, PE_handle_ext_interrupt() has no
+child to call, so sleh_irq acknowledges Group 1 itself (ICC_IAR1_EL1 and
+ICC_EOIR1_EL1) and runs sleh_fiq's timer branch for the timer INTID.
+Afterwards NeoDarwinGICv3's IRQ loop recognises the timer INTID and calls
+sleh_gic_timer_interrupt(), the same branch. SGIs and device interrupts
+are dispatched as before. sleh_gic_timer_irqs counts the Group 1 timer
+interrupts; NeoDarwinGICv3 logs it when it attaches.
+
+Rebase-risk: low (pe_init_fiq's tail, and one branch in sleh_irq).
+---
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -2549,6 +2549,63 @@ handle_simd_trap(arm_saved_state_t *state, uint64_t esr)
+ 	__builtin_unreachable();
+ }
+ 
++#if GENERIC_ARM64_PLATFORM
++/*
++ * The GICv3 virtual timer on Group 1 (P1-05): pexpert/arm/pe_fiq.c routes it
++ * as an IRQ when the device tree says timer-group 1, which neoboot chooses
++ * when the GIC has two security states and Group 0 belongs to EL3. The
++ * handler is sleh_fiq's timer branch. NeoDarwinGICv3's IRQ loop calls
++ * sleh_gic_timer_interrupt() between its ICC_IAR1_EL1 acknowledge and
++ * ICC_EOIR1_EL1; until that controller has attached to AppleARMSMP's
++ * PassthruInterruptController (PE_handle_ext_interrupt() needs it), sleh_irq
++ * acknowledges the timer itself, since it is the only Group 1 interrupt
++ * enabled that early.
++ */
++extern uint32_t pe_gic_timer_intid;
++extern uint32_t pe_gic_timer_group;
++/* Set by NeoDarwinGICv3 once PE_handle_ext_interrupt() reaches it. */
++extern bool sleh_gic_irq_controller_attached;
++bool sleh_gic_irq_controller_attached;
++/* Group 1 timer interrupts taken, on every CPU (NeoDarwinGICv3 logs it). */
++extern uint64_t sleh_gic_timer_irqs;
++uint64_t sleh_gic_timer_irqs;
++
++void sleh_gic_timer_interrupt(void);
++
++void
++sleh_gic_timer_interrupt(void)
++{
++	cpu_data_t *cdp = getCpuDatap();
++
++	os_atomic_inc(&sleh_gic_timer_irqs, relaxed);
++	cdp->cpu_decrementer = -1; /* Large */
++	ml_interrupt_masked_debug_start(rtclock_intr, DBG_INTR_TYPE_TIMER);
++	rtclock_intr(TRUE);
++	ml_interrupt_masked_debug_end();
++}
++
++static void
++sleh_gic_irq_before_controller(void)
++{
++	for (;;) {
++		uint64_t iar = __builtin_arm_rsr64("ICC_IAR1_EL1");
++		uint32_t intid = (uint32_t)(iar & 0xffffff);
++		if (intid >= 1020) {
++			break;  /* 1023: nothing pending */
++		}
++		if (intid == pe_gic_timer_intid) {
++			sleh_gic_timer_interrupt();
++		}
++		/*
++		 * Nothing else is enabled on Group 1 before the controller is: a
++		 * stray interrupt is completed unhandled (a level one pends again).
++		 */
++		__builtin_arm_wsr64("ICC_EOIR1_EL1", iar);
++		__builtin_arm_isb(ISB_SY);
++	}
++}
++#endif /* GENERIC_ARM64_PLATFORM */
++
+ void
+ sleh_irq(arm_saved_state_t *state)
+ {
+@@ -2561,6 +2618,11 @@ sleh_irq(arm_saved_state_t *state)
+ 	sleh_interrupt_handler_prologue(state, DBG_INTR_TYPE_OTHER);
+ 
+ #if USE_APPLEARMSMP
++#if GENERIC_ARM64_PLATFORM
++	if (pe_gic_timer_group == 1 && !os_atomic_load(&sleh_gic_irq_controller_attached, acquire)) {
++		sleh_gic_irq_before_controller();
++	} else
++#endif
+ 	PE_handle_ext_interrupt();
+ #else
+ 	/* Run the registered interrupt handler. */
+diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
+--- a/pexpert/arm/pe_fiq.c
++++ b/pexpert/arm/pe_fiq.c
+@@ -20,6 +20,52 @@ static vm_offset_t gicd_base;
+ static vm_offset_t gicr_base;
+ static vm_offset_t gicr_size;
+ 
++#if GENERIC_ARM64_PLATFORM
++/*
++ * The EL1 virtual timer's INTID and GIC group, from /arm-io/gic "timer-ppi"
++ * and "timer-group" (DT-ABI v1, docs/kernel/dt-abi.md). Group 0 is Apple's
++ * FIQ path below. Group 1 makes the timer an IRQ, which sleh_irq() and
++ * NeoDarwinGICv3 hand to rtclock_intr(). neoboot chooses Group 1 when the
++ * GIC has two security states (GICD_CTLR.DS == 0): Group 0 is then Secure,
++ * and its interrupts and ICC_*0_EL1 registers belong to EL3.
++ */
++extern uint32_t pe_gic_timer_intid;
++extern uint32_t pe_gic_timer_group;
++uint32_t pe_gic_timer_intid = 27;
++uint32_t pe_gic_timer_group = 0;
++#define PE_GIC_TIMER_INTID pe_gic_timer_intid
++
++#define ND_GICD_CTLR_ENABLEGRP1   0x2     // EnableGrp1NS; EnableGrp1A in the Non-secure view
++#define ND_GICD_CTLR_ARE          0x10    // ARE_NS in the Non-secure view
++#define ND_GICD_CTLR_RWP          0x80000000u
++#define ND_GICR_IPRIORITYR0       0x10400 // SGI_base + 0x400, a byte per INTID
++#define ND_GIC_PRIORITY_DEFAULT   0x80    // below PMR (0xff) whichever security view writes it
++
++static void
++pe_gic_timer_properties(DTEntry entry)
++{
++	void const *prop;
++	unsigned int prop_size;
++
++	if (SecureDTGetProperty(entry, "timer-ppi", &prop, &prop_size) == kSuccess) {
++		uint32_t ppi = (prop_size == sizeof(uint32_t)) ? *(uint32_t const *)prop : 0;
++		if (ppi < 16 || ppi > 31) {
++			panic("%s: /arm-io/gic timer-ppi is not a PPI (INTID 16-31)", __func__);
++		}
++		pe_gic_timer_intid = ppi;
++	}
++	if (SecureDTGetProperty(entry, "timer-group", &prop, &prop_size) == kSuccess) {
++		uint32_t group = (prop_size == sizeof(uint32_t)) ? *(uint32_t const *)prop : 2;
++		if (group > 1) {
++			panic("%s: /arm-io/gic timer-group is neither 0 nor 1", __func__);
++		}
++		pe_gic_timer_group = group;
++	}
++}
++#else
++#define PE_GIC_TIMER_INTID 27
++#endif
++
+ static uint32_t
+ _gic_read32(vm_offset_t addr)
+ {
+@@ -118,6 +164,9 @@ pe_init_fiq()
+ 		}
+ 
+ 		gicr_size = gicr_size_prop;
++#if GENERIC_ARM64_PLATFORM
++		pe_gic_timer_properties(entry);
++#endif
+ 	}
+ 
+ 	// Find the redistributor for this processor
+@@ -141,11 +190,52 @@ pe_init_fiq()
+ 		}
+ 	}
+ 
++#if GENERIC_ARM64_PLATFORM
++	if (pe_gic_timer_group == 1) {
++		/*
++		 * The timer on Group 1, as an IRQ. No Group 0 register is touched:
++		 * with GICD_CTLR.DS == 0 they are Secure (ICC_*0_EL1 trap to EL3
++		 * when SCR_EL3.FIQ is set). GICR_IGROUPR0 is RAZ/WI to Non-secure
++		 * accesses then too; the firmware has already made the timer
++		 * Non-secure Group 1, and the write matters only with DS == 1.
++		 * GICR_IGRPMODR0 is left alone: Secure-only with DS == 0, RES0
++		 * with DS == 1.
++		 */
++		gicr_write32(GICR_IGROUPR0, 0x81FFFFFF | (1u << pe_gic_timer_intid));
++		*(volatile uint8_t *)(gicr_pe_base + ND_GICR_IPRIORITYR0 + pe_gic_timer_intid) = ND_GIC_PRIORITY_DEFAULT;
++		gicr_write32(GICR_ISENABLER0, (1u << pe_gic_timer_intid));
++
++		uint64_t icc_sre = __builtin_arm_rsr64("ICC_SRE_EL1");
++		icc_sre |= ICC_SRE_SRE;
++		__builtin_arm_wsr64("ICC_SRE_EL1", icc_sre);
++		__builtin_arm_isb(ISB_SY);
++
++		__builtin_arm_wsr64("ICC_BPR1_EL1", 0);
++		__builtin_arm_wsr64("ICC_PMR_EL1", 0xFF);
++
++		uint64_t icc_ctlr = __builtin_arm_rsr64("ICC_CTLR_EL1");
++		icc_ctlr &= ~ICC_CTLR_EOIMODE;
++		__builtin_arm_wsr64("ICC_CTLR_EL1", icc_ctlr);
++
++		// Affinity routing and Group 1 at the distributor (the bits have
++		// the same positions in the Non-secure view: ARE_NS, EnableGrp1A).
++		uint32_t gicd_ctlr = gicd_read32(GICD_CTLR);
++		if ((gicd_ctlr & (ND_GICD_CTLR_ARE | ND_GICD_CTLR_ENABLEGRP1)) != (ND_GICD_CTLR_ARE | ND_GICD_CTLR_ENABLEGRP1)) {
++			gicd_write32(GICD_CTLR, gicd_ctlr | ND_GICD_CTLR_ARE | ND_GICD_CTLR_ENABLEGRP1);
++			while (gicd_read32(GICD_CTLR) & ND_GICD_CTLR_RWP) {
++			}
++		}
++		__builtin_arm_wsr64("ICC_IGRPEN1_EL1", 1);
++		__builtin_arm_isb(ISB_SY);
++		return;
++	}
++#endif
++
+ 	// Configure timers and legacy FIQ to be group 0
+-	gicr_write32(GICR_IGROUPR0, 0x81FFFFFF);
++	gicr_write32(GICR_IGROUPR0, 0x81FFFFFF & ~(1u << PE_GIC_TIMER_INTID));
+ 
+-	// Enable PPI 27
+-	gicr_write32(GICR_ISENABLER0, (1 << 27));
++	// Enable the timer PPI (27 unless /arm-io/gic timer-ppi says otherwise)
++	gicr_write32(GICR_ISENABLER0, (1u << PE_GIC_TIMER_INTID));
+ 
+ 	// Enable system register access
+ 	uint64_t icc_sre = __builtin_arm_rsr64("ICC_SRE_EL1");

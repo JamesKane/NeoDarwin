@@ -113,13 +113,15 @@ typedef struct {
 	uint64_t NumberOfTableEntries; EFI_CONFIGURATION_TABLE *ConfigurationTable;
 } EFI_SYSTEM_TABLE;
 
-// AArch64 operations Swift cannot express: system registers, cache
-// maintenance and the exception-level switch (runtime/arm64.c).
+// AArch64 operations Swift cannot express: system registers, device
+// register reads, cache maintenance and the exception-level switch
+// (runtime/arm64.c).
 uint64_t nd_current_el(void);
 uint64_t nd_cntfrq(void);
 uint64_t nd_cntpct(void);
 uint64_t nd_cntvct(void);
 uint64_t nd_mpidr(void);
+uint32_t nd_mmio_read32(uint64_t address);
 void nd_dcache_clean_poc(uint64_t start, uint64_t length);
 [[noreturn]] void nd_enter_kernel(uint64_t entry, uint64_t boot_args);
 #endif

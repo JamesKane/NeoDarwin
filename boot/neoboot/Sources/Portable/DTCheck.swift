@@ -220,6 +220,7 @@ enum DTCheck {
         // /arm-io and its devices
         var socSize: UInt64 = 0
         var gicPhandle: UInt32? = nil
+        var timerPPI: UInt32 = 27  // pe_fiq.c's default without timer-ppi
         var gicdOffset: UInt64? = nil, gicrSize: UInt64 = 0
         if let io = root.child(named: "arm-io") {
             if !io.string("device_type", is: "soc") { r.violation("/arm-io device_type is not \"soc\"") }
@@ -246,6 +247,17 @@ enum DTCheck {
                 if gic.property("interrupt-controller") == nil { r.violation("/arm-io/gic has no interrupt-controller") }
                 if gic.u32("#interrupt-cells") != 1 { r.violation("/arm-io/gic #interrupt-cells is not 1") }
                 gicPhandle = gic.u32("AAPL,phandle")
+                // P1-05, optional: pe_fiq.c defaults to PPI 27 on Group 0.
+                if gic.property("timer-ppi") != nil {
+                    if let ppi = gic.u32("timer-ppi"), ppi >= 16, ppi < 32 {
+                        timerPPI = ppi
+                    } else {
+                        r.violation("/arm-io/gic timer-ppi is not a u32 PPI, 16 to 31 (pe_fiq.c panics)")
+                    }
+                }
+                if gic.property("timer-group") != nil, (gic.u32("timer-group") ?? 2) > 1 {
+                    r.violation("/arm-io/gic timer-group is not a u32 0 or 1 (pe_fiq.c panics)")
+                }
                 if gic.property("reg")?.count == 32 {
                     gicdOffset = gic.u64("reg", 0)
                     if (gic.u64("reg", 1) ?? 0) < 0x1_0000 { r.violation("/arm-io/gic GICD size is under 64 KiB") }
@@ -311,6 +323,7 @@ enum DTCheck {
                     let deferred = irq.loadUnaligned(fromByteOffset: 8, as: UInt32.self)
                     if ipi >= 16 || deferred >= 16 || ipi == deferred { r.violation("cpu interrupts 0 and 2 are not two distinct SGIs; reg", UInt64(reg)) }
                     if pmi < 16 || pmi >= 32 { r.violation("cpu interrupt 1 (PMI) is not a PPI; reg", UInt64(reg)) }
+                    if pmi == timerPPI { r.violation("cpu interrupt 1 (PMI) is the timer PPI; reg", UInt64(reg)) }
                 } else {
                     r.violation("a cpu interrupts is not three one-cell specifiers (AppleARMSMP's IPI form); reg", UInt64(reg))
                 }

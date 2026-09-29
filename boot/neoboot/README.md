@@ -5,6 +5,7 @@ The UEFI loader (`BOOTAA64.EFI`), in Embedded Swift (language policy T3). Design
 
 **Current stage (P1-04):** the loader boots the kernel on a machine it knows only from ACPI. `efi_main` (`Sources/Main.swift`) does the following:
 - finds the RSDP in the UEFI configuration table and reads the MADT, GTDT, SPCR and FADT, printing the CPUs, GIC, timer and UART it found. It stops with a reason if the tables are missing, broken, or describe something the kernel can't run on;
+- reads `GICD_CTLR` to choose the timer's GIC group (P1-05): Group 1, an IRQ, when the GIC has two security states (`DS` = 0) and Group 0 is Secure; Group 0, a FIQ, otherwise. `timer-group=1` in `boot.cfg` forces Group 1;
 - reads `\NeoDarwin\kernelcache` from the ESP, plus the command line from `\NeoDarwin\boot.cfg` and the ramdisk from `\NeoDarwin\ramdisk` if present. With `dump-acpi` in `boot.cfg` it first prints every ACPI table in Linux `acpidump` format;
 - reads the time of day from UEFI's `GetTime()`, for the kernel's clock (`/chosen/neodarwin,utc-seconds`);
 - takes the largest hole-free run of RAM the kernel may own, and places the flat collection at the lowest free address congruent to its link address modulo 32 MiB (slide 0);
@@ -28,7 +29,7 @@ It applies no fixups; the kernel does. Design: `docs/kernel/arm64-sbsa-bringup.m
 | Target | What it does |
 |---|---|
 | `bazel build //boot/neoboot` | `bazel-bin/boot/neoboot/BOOTAA64.EFI`, a PE32+ AArch64 EFI application |
-| `bazel test //boot/neoboot:neoboot_qemu_test` | boots it on QEMU `virt` with EDK2 and an ESP with no kernel, and checks what it read from ACPI and that it reports the missing kernel; needs `brew install qemu`. `neoboot_smp4_qemu_test` does the same with four CPUs, and `neoboot_dump_acpi_qemu_test` checks `dump-acpi` |
+| `bazel test //boot/neoboot:neoboot_qemu_test` | boots it on QEMU `virt` with EDK2 and an ESP with no kernel, and checks what it read from ACPI and that it reports the missing kernel; needs `brew install qemu`. `neoboot_smp4_qemu_test` does the same with four CPUs, `neoboot_dump_acpi_qemu_test` checks `dump-acpi`, and `neoboot_timer_group1_qemu_test` checks `timer-group=1` |
 | `bazel test //tools/dtdump:all` | the same parser and synthesis on the host, against the captured tables |
 | `bazel test //kernel:sbsa_boot_test` | boots the real kernel collection with the PID 1 ramdisk to userland (kernel CI job) |
 

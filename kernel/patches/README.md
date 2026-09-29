@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
 # XNU patch series
 
-Ordered patches applied to the pristine `xnu-12377.1.9` archive inside the build sandbox (`docs/repository.md` §3). A target lists the patches it applies in its `patches` attribute; nothing here edits a checkout. Applying 0001 to 0015 in order to the pristine archive must reproduce the tree the SBSA kernel is built from; each patch carries a rationale and a `Rebase-risk:` line.
+Ordered patches applied to the pristine `xnu-12377.1.9` archive inside the build sandbox (`docs/repository.md` §3). A target lists the patches it applies in its `patches` attribute; nothing here edits a checkout. Applying 0001 to 0016 in order to the pristine archive must reproduce the tree the SBSA kernel is built from; each patch carries a rationale and a `Rebase-risk:` line.
 
 | Patch | What it does | Used by |
 |---|---|---|
@@ -20,3 +20,4 @@ Ordered patches applied to the pristine `xnu-12377.1.9` archive inside the build
 | `0013-mach-loader-static-pid1-on-sbsa.patch` | for `GENERIC_ARM64_PLATFORM`, process 1 may be a static executable, which RELEASE kernels otherwise refuse; the first PID 1 runs before the system has dyld (P1-07) | `sbsa_release` |
 | `0014-sleh-ack-group0-on-generic-gicv3.patch` | `sleh_fiq` acknowledges (`ICC_IAR0_EL1`) and completes (`ICC_EOIR0_EL1`) the Group 0 timer FIQ on `GENERIC_ARM64_PLATFORM` as on `APPLEVIRTUALPLATFORM`; SBSA handled it without touching the GIC | `sbsa_release` |
 | `0015-libkern-build-hfs.patch` | builds Apple's hfs-704 (the hfs and HFSEncodings kexts, APSL) into libkern with the kexts' prefix header and search paths, no `CONFIG_PROTECT`/`CONFIG_MACF`, and a compat AppleKeyStore header; `bsd_init()` calls `nd_hfs_start()` (`kernel/neodarwin/hfs`) before `vfs_mountroot()` | `sbsa_release` |
+| `0016-gicv3-timer-on-group1.patch` | `pe_init_fiq` takes the timer's INTID and GIC group from `/arm-io/gic` `timer-ppi` and `timer-group` (defaults 27 and 0; Group 0 unchanged). On Group 1 it touches no Group 0 register and the timer arrives as an IRQ: `sleh_irq` takes it through `ICC_IAR1`/`EOIR1` until `NeoDarwinGICv3` attaches, then the controller's IRQ loop does; both run `sleh_fiq`'s `rtclock_intr` branch (P1-05, TrustZone boards) | `sbsa_release` |

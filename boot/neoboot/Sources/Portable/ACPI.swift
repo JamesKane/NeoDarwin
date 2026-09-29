@@ -84,7 +84,7 @@ struct ACPIFacts {
     var cpuEntries = 0                   // GICC structures recorded (at most 64)
     var gicCount = 0                     // GICC structures in the table, recorded or not
 
-    // GTDT: the EL1 virtual timer.
+    // GTDT: the EL1 virtual timer. The tree's /arm-io/gic timer-ppi.
     var timerGSIV: UInt32 = 0
     var timerFlags: UInt32 = 0           // bit 0 edge-triggered, bit 1 active-low
 
@@ -363,9 +363,14 @@ enum ACPI {
             throw ACPIError("GIC version is not 3; the kernel walks 128 KiB GICv3 redistributor frames. Version", madt, UInt64(f.gicVersion))
         }
         guard f.enabledCPUs > 0 else { throw ACPIError("no enabled CPU in the MADT") }
-        // pe_fiq.c routes the timer as PPI 27 (INTID 27) and nothing else.
-        guard f.timerGSIV == Platform.timerPPI else {
-            throw ACPIError("GTDT virtual timer is not PPI 27 (INTID), which pe_fiq.c hardcodes; GSIV", gtdt, UInt64(f.timerGSIV))
+        // pe_fiq.c programs the timer through the redistributor's PPI
+        // registers (/arm-io/gic timer-ppi), and re-arming it by writing
+        // CNTV_CVAL must drop the interrupt: a level-sensitive PPI.
+        guard f.timerGSIV >= 16 && f.timerGSIV < 32 else {
+            throw ACPIError("GTDT virtual timer is not a PPI (INTID 16-31); GSIV", gtdt, UInt64(f.timerGSIV))
+        }
+        guard f.timerFlags & 1 == 0 else {
+            throw ACPIError("GTDT virtual timer is edge-triggered; the Arm generic timer's interrupt is level-sensitive. Flags", gtdt, UInt64(f.timerFlags))
         }
         for i in 0..<f.cpuEntries where f.cpus[i].enabled {
             let pmu = f.cpus[i].pmuGSIV

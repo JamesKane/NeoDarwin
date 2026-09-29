@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: BSD-2-Clause
+# Build the TrustZone firmware for QEMU virt,secure=on (docs/kernel/qemu-secure.md):
+# TF-A (BL1, BL2, BL31 at EL3, PLAT=qemu, GICv3) with EDK2's ArmVirtQemuKernel
+# as BL33, packed as bl1.bin at 0 and fip.bin at 256 KiB of the secure flash.
+#   build_secure_firmware.sh TOOLCHAIN TFA_SRC EDK2_SRC OPENSSL_SRC BROTLI_SRC LIBFDT_SRC OUT
+# TOOLCHAIN is the swift.org toolchain (clang, ld.lld, llvm-ar, llvm-objcopy)
+# that also builds neoboot. The source trees are pristine upstream archives;
+# the three submodules are the ones EDK2 compiles for this platform.
+# Host tools: GNU make >= 4.3 and GNU sed (TF-A), iasl (EDK2's ASL), python3
+# (EDK2's build), OpenSSL 3 headers (TF-A's fiptool), the host cc.
+#   brew install make gnu-sed acpica openssl@3
+set -euo pipefail
+# Physical paths: Bazel passes external/<repo>, a symbolic link.
+abs() { (cd "$1" && pwd -P); }
+tc="$(abs "$1")"; tfa="$(abs "$2")"; edk2="$(abs "$3")"; openssl_src="$(abs "$4")"
+brotli="$(abs "$5")"; libfdt="$(abs "$6")"; out="$7"
+case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
+tcbin="$tc/usr/bin"
+[ -x "$tcbin/clang" ] && [ -x "$tcbin/ld.lld" ] || { echo "no clang/ld.lld in $tcbin"; exit 1; }
+
+# Bazel's PATH is minimal; GNU make and sed go first as `make` and `sed`.
+# EDK2's images record the absolute path of each module's .dll in their debug
+# entry, so the build runs at a fixed path to be reproducible. A build that
+# is still running owns it; one that was killed left it behind.
+work=/tmp/neodarwin-qemu-secure-fw
+if [ -d "$work" ]; then
+	owner="$(cat "$work/pid" 2>/dev/null || true)"
+	if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then echo "$work: build $owner is running"; exit 1; fi
+	chmod -R u+w "$work"; rm -rf /tmp/neodarwin-qemu-secure-fw
+fi
+mkdir "$work"; echo $$ > "$work/pid"
+tools="$work/bin"; mkdir "$tools"
+trap 'chmod -R u+w "$work" 2>/dev/null; rm -rf /tmp/neodarwin-qemu-secure-fw' EXIT
+trap 'exit 1' INT TERM
+find_tool() {
+	for p in "$@"; do [ -x "$p" ] && { echo "$p"; return; }; done
+	command -v "$1" 2>/dev/null || true
+}
+gmake="$(find_tool gmake /opt/homebrew/bin/gmake /usr/local/bin/gmake)"
+gsed="$(find_tool gsed /opt/homebrew/bin/gsed /usr/local/bin/gsed)"
+iasl="$(find_tool iasl /opt/homebrew/bin/iasl /usr/local/bin/iasl)"
+python="$(find_tool python3 /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3)"
+ossl=""
+for d in "${ND_OPENSSL_DIR:-}" /opt/homebrew/opt/openssl@3 /usr/local/opt/openssl@3 /usr; do
+	[ -n "$d" ] && [ -f "$d/include/openssl/sha.h" ] && { ossl="$d"; break; }
+done
+[ -n "$gmake" ] && [ -n "$gsed" ] && [ -n "$iasl" ] && [ -n "$python" ] && [ -n "$ossl" ] || {
+	echo "missing host tools (make=$gmake sed=$gsed iasl=$iasl python3=$python openssl=$ossl): brew install make gnu-sed acpica openssl@3"
+	exit 1
+}
+ln -s "$gmake" "$tools/make"; ln -s "$gsed" "$tools/sed"; ln -s "$iasl" "$tools/iasl"; ln -s "$python" "$tools/python3"
+export PATH="$tools:/usr/bin:/bin:/usr/sbin:/sbin"
+# Fixed dates, so the image is the same bit for bit on every build.
+export SOURCE_DATE_EPOCH=1767225600 # 2026-01-01T00:00:00Z
+export ZERO_AR_DATE=1
+
+# EDK2: copy the tree (the build writes into it), drop the submodules in,
+# and create the include directories of submodules this platform never
+# compiles (the .dec files name them and the parser requires them to exist).
+e="$work/edk2"; mkdir "$e"; cp -R "$edk2/." "$e/"
+sub() { mkdir -p "$e/$2"; cp -R "$1/." "$e/$2/"; }
+sub "$openssl_src" CryptoPkg/Library/OpensslLib/openssl
+sub "$brotli" BaseTools/Source/C/BrotliCompress/brotli
+sub "$brotli" MdeModulePkg/Library/BrotliCustomDecompressLib/brotli
+sub "$libfdt" MdePkg/Library/BaseFdtLib/libfdt
+chmod -R u+w "$e"
+mkdir -p "$e/SecurityPkg/DeviceSecurity/SpdmLib/libspdm/include" \
+	"$e/CryptoPkg/Library/MbedTlsLib/mbedtls/include/mbedtls" \
+	"$e/CryptoPkg/Library/MbedTlsLib/mbedtls/library" \
+	"$e/MdePkg/Library/MipiSysTLib/mipisyst/library/include"
+make -C "$e/BaseTools/Source/C" -j8 > "$work/basetools.log" 2>&1 ||
+	{ tail -40 "$work/basetools.log"; exit 1; }
+(
+	cd "$e"
+	export WORKSPACE="$e" EDK_TOOLS_PATH="$e/BaseTools" PYTHON_COMMAND=python3
+	export CLANGDWARF_BIN="$tcbin/"
+	set +u; set --; . ./edksetup.sh > /dev/null; set -u
+	# EDK2 draws each build's stack-cookie table from `secrets` and indexes it
+	# with Python's per-process hash(); a fixed table and hash seed make the
+	# cookies, and so the image, the same on every build. (Test firmware: a
+	# known cookie is no loss here.)
+	export PYTHONHASHSEED=0
+	mkdir -p Build/ArmVirtQemuKernel-AArch64/RELEASE_CLANGDWARF
+	python3 -c '
+import hashlib, json, sys
+for bits in (32, 64):
+    vals = [int.from_bytes(hashlib.sha256(b"neodarwin-%d-%d" % (bits, i)).digest()[:bits // 8], "little") for i in range(100)]
+    json.dump(vals, open("Build/ArmVirtQemuKernel-AArch64/RELEASE_CLANGDWARF/StackCookieValues%d.json" % bits, "w"))
+'
+	build -a AARCH64 -t CLANGDWARF -b RELEASE -p ArmVirtPkg/ArmVirtQemuKernel.dsc -n 8 -q \
+		> "$work/edk2.log" 2>&1 || { grep -B20 -m1 -i "error" "$work/edk2.log" | tail -40; exit 1; }
+)
+bl33="$e/Build/ArmVirtQemuKernel-AArch64/RELEASE_CLANGDWARF/FV/QEMU_EFI.fd"
+
+# TF-A: PLAT=qemu with the GICv3 driver (the default is GICv2).
+mkdir "$work/tfa"; cp -R "$tfa/." "$work/tfa/"; chmod -R u+w "$work/tfa"
+make -C "$work/tfa" -j8 PLAT=qemu QEMU_USE_GIC_DRIVER=QEMU_GICV3 \
+	CC="$tcbin/clang" LD="$tcbin/ld.lld" AR="$tcbin/llvm-ar" OC="$tcbin/llvm-objcopy" OD="$tcbin/llvm-objdump" \
+	HOSTCC=/usr/bin/cc OPENSSL_DIR="$ossl" \
+	BUILD_MESSAGE_TIMESTAMP='"(NeoDarwin pinned build)"' \
+	BL33="$bl33" all fip > "$work/tfa.log" 2>&1 || { tail -40 "$work/tfa.log"; exit 1; }
+rel="$work/tfa/build/qemu/release"
+
+rm -f "$out"
+dd if="$rel/bl1.bin" of="$out" bs=4096 conv=notrunc status=none
+dd if="$rel/fip.bin" of="$out" bs=4096 seek=64 conv=notrunc status=none
+# ND_SECURE_FW_KEEP=DIR keeps the build trees for comparing two builds.
+if [ -n "${ND_SECURE_FW_KEEP:-}" ]; then mkdir -p "$ND_SECURE_FW_KEEP"; cp -R "$e/Build" "$rel" "$ND_SECURE_FW_KEEP/"; fi

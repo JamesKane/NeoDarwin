@@ -7,8 +7,9 @@ acpi: MADT: GICC uid 2 MPIDR 0x2 flags 0x1 PMU GSIV 23
 acpi: MADT: GICC uid 3 MPIDR 0x3 flags 0x1 PMU GSIV 23
 acpi: GTDT: virtual timer GSIV 27 flags 0x0
 acpi: SPCR: interface type 0x3 at 0x9000000
+gic: GICD_CTLR 0x40 (DS=1): timer on Group 0
 acpi: relocated copy: 6960 bytes at 0x42000000
-device tree: 3720 bytes
+device tree: 3800 bytes
 /
     compatible = "NeoDarwin,sbsa"
     model = "BOCHS,BXPC"
@@ -76,6 +77,8 @@ device tree: 3720 bytes
     interrupt-controller = "gic"
     #interrupt-cells = <0x1>
     #address-cells = <0x0>
+    timer-ppi = <0x1b>
+    timer-group = <0x0>
     AAPL,phandle = <0x5>
 /arm-io/interrupt-controller
     interrupt-controller = "master"

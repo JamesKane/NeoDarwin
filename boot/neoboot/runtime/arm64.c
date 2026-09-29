@@ -38,6 +38,13 @@ uint64_t nd_mpidr(void) {
 	return v;
 }
 
+// One 32-bit access to a device register (Swift has no volatile loads).
+uint32_t nd_mmio_read32(uint64_t address) {
+	uint32_t v = *(volatile uint32_t *)(uintptr_t)address;
+	__asm__ volatile("dsb ld" : : : "memory");
+	return v;
+}
+
 void nd_dcache_clean_poc(uint64_t start, uint64_t length) {
 	uint64_t ctr;
 	__asm__ volatile("mrs %0, ctr_el0" : "=r"(ctr));

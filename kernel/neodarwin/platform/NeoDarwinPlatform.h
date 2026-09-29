@@ -10,8 +10,9 @@
 //    also the RTC: it keeps the time of day neoboot read from UEFI and
 //    publishes IORTC, which bsd_init waits for.
 //  - NeoDarwinGICv3 is the IRQ interrupt controller: Group 1 interrupts
-//    through ICC_IAR1/EOIR1, IPIs as SGIs. XNU's pe_fiq.c keeps the timer on
-//    Group 0 (FIQ).
+//    through ICC_IAR1/EOIR1, IPIs as SGIs. XNU's pe_fiq.c puts the timer on
+//    Group 0 (FIQ), or on Group 1 when /arm-io/gic timer-group is 1; this
+//    controller then hands it to the kernel's timer handler.
 //  - NeoDarwinPSCI is the IOPMGR: CPU on and off through PSCI.
 
 #ifndef _NEODARWIN_PLATFORM_H

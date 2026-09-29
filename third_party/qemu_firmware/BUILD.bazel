@@ -1,0 +1,43 @@
+# TrustZone firmware for QEMU virt,secure=on (docs/kernel/qemu-secure.md).
+load("@nd_embedded_swift//:toolchain.bzl", "EMBEDDED_TOOLCHAIN")
+
+package(default_visibility = ["//visibility:public"])
+
+# The secure flash image: TF-A v2.15.0 BL1 at 0 and its FIP (BL2, BL31 and
+# EDK2 edk2-stable202608 ArmVirtQemuKernel as BL33) at 256 KiB, for QEMU's
+# -bios. Built from the pinned sources in MODULE.bazel with the swift.org
+# toolchain's clang and ld.lld; the image is the same bit for bit on every
+# build. Needs brew install make gnu-sed acpica openssl@3. Unsandboxed: it
+# copies the trees (about 18,000 files) and builds at a fixed /tmp path.
+genrule(
+    name = "virt_secure_flash",
+    srcs = [
+        "@arm_tf_a//:all",
+        "@arm_tf_a//:Makefile",
+        "@tianocore_edk2//:all",
+        "@tianocore_edk2//:edksetup.sh",
+        "@edk2_openssl//:all",
+        "@edk2_openssl//:README.md",
+        "@edk2_brotli//:all",
+        "@edk2_brotli//:README.md",
+        "@edk2_libfdt//:all",
+        "@edk2_libfdt//:README",
+    ],
+    outs = ["qemu_virt_secure_flash.bin"],
+    cmd = " ".join([
+        "$(location //tools/efi:build_secure_firmware.sh)",
+        "'%s'" % EMBEDDED_TOOLCHAIN,
+        "$$(dirname $(location @arm_tf_a//:Makefile))",
+        "$$(dirname $(location @tianocore_edk2//:edksetup.sh))",
+        "$$(dirname $(location @edk2_openssl//:README.md))",
+        "$$(dirname $(location @edk2_brotli//:README.md))",
+        "$$(dirname $(location @edk2_libfdt//:README))",
+        "$@",
+    ]),
+    tags = [
+        "no-remote",
+        "no-sandbox",
+        "requires-darwin",
+    ],
+    tools = ["//tools/efi:build_secure_firmware.sh"],
+)

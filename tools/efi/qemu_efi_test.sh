@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
-# Boot an EFI application as \EFI\BOOT\BOOTAA64.EFI on QEMU virt with EDK2 and
-# check the serial log.
+# Boot an EFI application as \EFI\BOOT\BOOTAA64.EFI on QEMU virt with EDK2 (and,
+# with --machine virt-secure, TF-A at EL3) and check the serial log.
 #   qemu_efi_test.sh [OPTIONS] EFI_FILE TIMEOUT_SECONDS EXPECTED_LINE...
 # Options:
 #   --esp PATH=FILE   also place FILE on the ESP at PATH (e.g. NeoDarwin/kernelcache=...)
-#   --mem SIZE        guest RAM (default 512M)
+#   --mem SIZE        guest RAM (default 512M; 1G for virt-secure)
 #   --smp N           CPUs (default 1)
 #   --cpu MODEL       QEMU CPU (default cortex-a76; the SBSA kernel needs Armv8.4, e.g. neoverse-v1)
+#   --machine KIND    virt (default): QEMU virt without EL3, EDK2 from QEMU's
+#                     share/qemu, one GIC security state (GICD_CTLR.DS=1).
+#                     virt-secure: virt,secure=on with TrustZone firmware at
+#                     EL3 (--firmware, //third_party/qemu_firmware:virt_secure_flash)
+#                     and the GIC's two security states (DS=0), as on SBSA
+#                     boards; RAM defaults to 1G, since TF-A loads BL33 at
+#                     0x60000000 (docs/kernel/qemu-secure.md)
+#   --firmware FILE   virt: EDK2 code flash to use instead of QEMU's;
+#                     virt-secure: the secure flash image (BL1 + FIP), required
 #   --until-lines     pass as soon as every expected line has appeared, then stop
 #                     QEMU (for a kernel, which never powers off); default is to
 #                     require QEMU to exit by itself within the timeout
@@ -21,13 +30,15 @@
 #   ND_QEMU           qemu-system-aarch64 to use
 #   ND_QEMU_DEBUG=DIR keep serial.log there and add QEMU's exception trace (-d int)
 set -euo pipefail
-esp_files=(); mem=512M; smp=1; cpu=cortex-a76; until_lines=0; sends=()
+esp_files=(); mem=""; smp=1; cpu=cortex-a76; until_lines=0; sends=(); machine=virt; firmware=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--esp) esp_files+=("$2"); shift 2 ;;
 		--mem) mem="$2"; shift 2 ;;
 		--smp) smp="$2"; shift 2 ;;
 		--cpu) cpu="$2"; shift 2 ;;
+		--machine) machine="$2"; shift 2 ;;
+		--firmware) firmware="$2"; shift 2 ;;
 		--until-lines) until_lines=1; shift ;;
 		--send-after) sends+=("$2" "$3"); shift 3 ;;
 		*) break ;;
@@ -42,11 +53,28 @@ if [ -z "$qemu" ]; then
 	done
 fi
 [ -n "$qemu" ] || { echo "qemu-system-aarch64 not found (brew install qemu, or set ND_QEMU)"; exit 1; }
-fw=""
-for d in "$(dirname "$qemu")/../share/qemu" /opt/homebrew/share/qemu /usr/local/share/qemu /usr/share/qemu; do
-	[ -f "$d/edk2-aarch64-code.fd" ] && { fw="$d/edk2-aarch64-code.fd"; break; }
-done
-[ -n "$fw" ] || { echo "EDK2 firmware edk2-aarch64-code.fd not found next to QEMU"; exit 1; }
+case "$machine" in
+virt)
+	fw="$firmware"
+	if [ -z "$fw" ]; then
+		for d in "$(dirname "$qemu")/../share/qemu" /opt/homebrew/share/qemu /usr/local/share/qemu /usr/share/qemu; do
+			[ -f "$d/edk2-aarch64-code.fd" ] && { fw="$d/edk2-aarch64-code.fd"; break; }
+		done
+	fi
+	[ -n "$fw" ] || { echo "EDK2 firmware edk2-aarch64-code.fd not found next to QEMU"; exit 1; }
+	machine_args=(-M virt,gic-version=3 -drive if=pflash,format=raw,readonly=on,file="$fw")
+	: "${mem:=512M}"
+	;;
+virt-secure)
+	# BL1 runs from the secure flash that -bios fills; BL2 loads BL31 and
+	# BL33 (EDK2) from the FIP after it. No virtualization=on: BL31 enters
+	# EDK2 at Non-secure EL1, as on plain virt.
+	[ -n "$firmware" ] && [ -f "$firmware" ] || { echo "--machine virt-secure needs --firmware FILE (the TF-A secure flash image)"; exit 1; }
+	machine_args=(-M virt,secure=on,gic-version=3 -bios "$firmware")
+	: "${mem:=1G}"
+	;;
+*) echo "unknown --machine $machine (virt, virt-secure)"; exit 1 ;;
+esac
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/esp/EFI/BOOT"; cp "$efi" "$work/esp/EFI/BOOT/BOOTAA64.EFI"
 for spec in ${esp_files[@]+"${esp_files[@]}"}; do
@@ -94,9 +122,8 @@ perl -e '
 		if (time >= $deadline) { kill 9, $pid; waitpid($pid, 0); exit 124 }
 		select(undef, undef, undef, 0.2);
 	}
-' "$timeout" "$until_lines" "$log" "$patterns" "$steps" "$work/ser" "$qemu" -M virt,gic-version=3 -cpu "$cpu" -smp "$smp" -m "$mem" \
+' "$timeout" "$until_lines" "$log" "$patterns" "$steps" "$work/ser" "$qemu" "${machine_args[@]}" -cpu "$cpu" -smp "$smp" -m "$mem" \
 	-nographic -no-reboot \
-	-drive if=pflash,format=raw,readonly=on,file="$fw" \
 	-drive format=raw,file=fat:rw:"$work/esp" -chardev pipe,id=ser,path="$work/ser" -serial chardev:ser -monitor none \
 	${debug[@]+"${debug[@]}"} || status=$?
 # The log as a terminal shows it: escape sequences dropped, backspaces

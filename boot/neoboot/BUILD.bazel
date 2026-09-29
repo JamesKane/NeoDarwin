@@ -43,9 +43,63 @@ sh_test(
         "'neoboot: ACPI: 1 CPUs enabled of 1 GICCs; boot CPU MPIDR 0x0'",
         "'neoboot: ACPI: GICv3 GICD 0x8000000, GICR 0x80a0000 (1 frames in a GICR range)'",
         "'neoboot: ACPI: timer PPI 27 level, UART PL011 at 0x9000000, PSCI HVC'",
+        # QEMU virt without EL3 has one security state: the timer stays a FIQ.
+        "'DS=1 (Group 0 open to Non-secure); timer PPI 27 on Group 0 (FIQ)'",
         "'neoboot: no \\NeoDarwin\\kernelcache on the boot volume'",
     ],
     data = [":neoboot"],
+    tags = ["qemu"],
+)
+
+# boot.cfg's timer-group=1 puts the timer on Group 1 (an IRQ) although the
+# GIC would allow Group 0: the path TrustZone boards take, on plain QEMU
+# (P1-05). //kernel:sbsa_timer_group1_boot_test boots the kernel this way.
+sh_test(
+    name = "neoboot_timer_group1_qemu_test",
+    size = "small",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--esp NeoDarwin/boot.cfg=$(rootpath testdata/timer-group1.cfg)",
+        "--until-lines",
+        "$(rootpath :neoboot)",
+        "45",
+        "'timer PPI 27 on Group 1 (IRQ), forced by timer-group=1'",
+        "'neoboot: no \\NeoDarwin\\kernelcache on the boot volume'",
+    ],
+    data = [
+        ":neoboot",
+        "testdata/timer-group1.cfg",
+    ],
+    tags = ["qemu"],
+)
+
+# QEMU virt with a Secure world: TF-A at EL3 (BL1, BL2, BL31) hands over to
+# EDK2 at Non-secure EL1, and the GIC has two security states, as on SBSA
+# boards (docs/kernel/qemu-secure.md). neoboot reads GICD_CTLR.DS as 0 and
+# puts the timer on Group 1. QEMU's FADT reports no PSCI when firmware owns
+# EL3, although TF-A implements it (SMC).
+sh_test(
+    name = "neoboot_secure_qemu_test",
+    size = "small",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--machine virt-secure",
+        "--firmware $(rootpath //third_party/qemu_firmware:virt_secure_flash)",
+        "--until-lines",
+        "$(rootpath :neoboot)",
+        "60",
+        "'NOTICE:  BL31: v2.15.0(release)'",
+        "'neoboot 0.1: loading NeoDarwin'",
+        "'neoboot: ACPI: 1 CPUs enabled of 1 GICCs; boot CPU MPIDR 0x0'",
+        "'neoboot: ACPI: GICv3 GICD 0x8000000, GICR 0x80a0000 (1 frames in a GICR range)'",
+        "'neoboot: ACPI: timer PPI 27 level, UART PL011 at 0x9000000, PSCI absent'",
+        "'DS=0 (two security states; Group 0 is Secure); timer PPI 27 on Group 1 (IRQ)'",
+        "'neoboot: no \\NeoDarwin\\kernelcache on the boot volume'",
+    ],
+    data = [
+        ":neoboot",
+        "//third_party/qemu_firmware:virt_secure_flash",
+    ],
     tags = ["qemu"],
 )
 

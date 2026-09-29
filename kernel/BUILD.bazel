@@ -95,6 +95,7 @@ SBSA_PATCHES = [
     "patches/0013-mach-loader-static-pid1-on-sbsa.patch",
     "patches/0014-sleh-ack-group0-on-generic-gicv3.patch",
     "patches/0015-libkern-build-hfs.patch",
+    "patches/0016-gicv3-timer-on-group1.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -231,6 +232,44 @@ sh_test(
     tags = ["manual", "kernel", "qemu"],
 )
 
+# P1-05's exit: the session boot on QEMU virt with a Secure world, TF-A at
+# EL3 and the GIC's two security states (GICD_CTLR.DS == 0), as on SBSA
+# boards (docs/kernel/qemu-secure.md). Group 0 is Secure there: Non-secure
+# writes to its group and enable bits are ignored, so the timer ticks only on
+# Group 1, as an IRQ. neoboot chooses Group 1 itself from GICD_CTLR (no
+# boot.cfg), and a timed 1 s sleep in zsh proves the ticks.
+sh_test(
+    name = "sbsa_secure_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--machine virt-secure",
+        "--firmware $(rootpath //third_party/qemu_firmware:virt_secure_flash)",
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'zmodload zsh/datetime && t=$$EPOCHREALTIME && sleep 1 && echo slept-$$(( EPOCHREALTIME - t >= 1 ))\\n'",
+        "$(rootpath //boot/neoboot)",
+        "180",
+        "'NOTICE:  BL31: v2.15.0(release)'",
+        "'DS=0 (two security states; Group 0 is Secure); timer PPI 27 on Group 1 (IRQ)'",
+        "'NeoDarwinGICv3: timer PPI 27 on Group 1 (IRQ); '",
+        "'hfs: mounted NeoDarwin on device'",
+        "'com.apple.launchd'",
+        "'slept-1'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:session_root",
+        "//third_party/qemu_firmware:virt_secure_flash",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
 # P1-08b: the same boot with the userland base on the HFS+ root. PID 1 is a
 # dynamically linked program that dyld starts with NeoDarwin's libSystem.
 sh_test(
@@ -296,6 +335,43 @@ sh_test(
     data = [
         ":sbsa_kc",
         "//boot/neoboot",
+        "//images:session_root",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P1-05: the session boot with the timer on GIC Group 1, as an IRQ, which
+# TrustZone boards need (GICD_CTLR.DS == 0 makes Group 0 Secure). QEMU virt
+# without EL3 would allow Group 0, so boot.cfg forces timer-group=1; it
+# replaces neoboot's default command line, so it repeats it. When it
+# attaches, NeoDarwinGICv3 logs the timer's group and how many timer IRQs
+# sleh_irq has taken before it; later ticks go through the controller, and a
+# 1 s sleep from zsh must wake up with at least a second on the calendar.
+sh_test(
+    name = "sbsa_timer_group1_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/timer-group1.cfg)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'zmodload zsh/datetime && t=$$EPOCHREALTIME && sleep 1 && echo slept-$$(( EPOCHREALTIME - t >= 1 ))\\n'",
+        "$(rootpath //boot/neoboot)",
+        "180",
+        "'timer PPI 27 on Group 1 (IRQ), forced by timer-group=1'",
+        "'NeoDarwinGICv3: timer PPI 27 on Group 1 (IRQ); '",
+        "'hfs: mounted NeoDarwin on device'",
+        "'com.apple.launchd'",
+        "'slept-1'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//boot/neoboot:testdata/timer-group1.cfg",
         "//images:session_root",
     ],
     tags = ["manual", "kernel", "qemu"],

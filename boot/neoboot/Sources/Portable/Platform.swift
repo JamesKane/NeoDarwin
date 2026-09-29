@@ -18,8 +18,11 @@ enum Platform {
     static let uartSize: UInt64 = 0x1000
     /// /arm-io ranges granularity.
     static let socAlignment: UInt64 = 0x1_0000
-    /// The virtual timer interrupt pe_fiq.c routes (PPI 27 is INTID 27).
-    static let timerPPI: UInt32 = 27
+    /// GICD_CTLR.DS (Disable Security). It reads as 1 when the GIC has one
+    /// security state, or when firmware has disabled the second. With two
+    /// (DS == 0) a Non-secure read sees 0 there, Group 0 is Secure, and its
+    /// interrupts go to EL3.
+    static let gicdCTLRDS: UInt32 = 1 << 6
     // GIC INTIDs the CPU nodes name, in AppleARMSMP.cpp's three-entry order:
     // IPI, PMI, deferred IPI. The IPIs are SGIs. The PMI is the MADT's
     // performance interrupt, or SBSA's PPI 7 (INTID 23) when the MADT gives
@@ -46,6 +49,17 @@ enum Platform {
         var utcCounter: UInt64 = 0   // CNTVCT when utcSeconds was read
         var acpiBase: UInt64 = 0     // the relocated tables; the RSDP is first
         var acpiLength: UInt64 = 0
+        var timerGroup: UInt32 = 0   // /arm-io/gic timer-group (Platform.timerGroup)
+    }
+
+    /// The timer's GIC group, /arm-io/gic timer-group: Group 0 (a FIQ, the
+    /// kernel's original path) when the GIC lets the Non-secure world use
+    /// it, i.e. GICD_CTLR.DS reads 1; Group 1 (an IRQ) when it has two
+    /// security states and Group 0 belongs to EL3. `forced` is the
+    /// command line's timer-group=, which overrides that.
+    static func timerGroup(gicdCTLR: UInt32, forced: UInt32?) -> UInt32 {
+        if let forced { return forced }
+        return gicdCTLR & gicdCTLRDS != 0 ? 0 : 1
     }
 
     /// Where the devices go in the tree, from the ACPI facts.
@@ -178,6 +192,8 @@ enum Platform {
         w.property("interrupt-controller", string: "gic")  // IODTMapOneInterrupt stops here
         w.property("#interrupt-cells", u32: 1)  // one cell: the INTID (NeoDarwinGICv3)
         w.property("#address-cells", u32: 0)
+        w.property("timer-ppi", u32: a.timerGSIV)  // pe_fiq.c: the GTDT's virtual timer
+        w.property("timer-group", u32: f.timerGroup)  // pe_fiq.c: 0 FIQ, 1 IRQ
         w.property("AAPL,phandle", u32: gicPhandle)
         w.end()
 

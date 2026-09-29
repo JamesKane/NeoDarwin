@@ -124,7 +124,7 @@ epics:
     title: "GICv3 timer on Group 1 (timer-group/timer-ppi DT props) and IRQ dispatch to rtclock_intr"
     phase: 1
     owner: kernel-bridge
-    status: todo
+    status: done
     depends: [P1-02, P1-04]
     exit: "timer ticks on QEMU with TrustZone firmware (DS=0) and without"
     doc: docs/kernel/arm64-sbsa-bringup.md

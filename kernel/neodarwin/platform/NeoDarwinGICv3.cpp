@@ -19,6 +19,16 @@
 extern "C" vm_offset_t pe_arm_get_soc_base_phys(void);
 extern "C" vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
 
+// The virtual timer's INTID and group, from /arm-io/gic timer-ppi and
+// timer-group (pexpert/arm/pe_fiq.c, patch 0016). On Group 1 it arrives here
+// as an IRQ and goes to the kernel's timer handler (osfmk/arm64/sleh.c),
+// which also takes it until this controller is attached.
+extern "C" uint32_t pe_gic_timer_intid;
+extern "C" uint32_t pe_gic_timer_group;
+extern "C" bool sleh_gic_irq_controller_attached;
+extern "C" uint64_t sleh_gic_timer_irqs;
+extern "C" void sleh_gic_timer_interrupt(void);
+
 // Barrier domains (Arm ARM C6.2): ISB SY and DSB ISHST.
 #define ND_ISB_SY    0xf
 #define ND_DSB_ISHST 0xa
@@ -120,7 +130,8 @@ NeoDarwinGICv3::redistributorForCurrentCPU(void)
 }
 
 // Group 1 on this CPU: pe_fiq.c has already woken the redistributor, put the
-// timer on Group 0, SGIs and other PPIs on Group 1, and set PMR.
+// timer on the group the device tree names (Group 0 by default), SGIs and
+// other PPIs on Group 1, and set PMR.
 void
 NeoDarwinGICv3::initCPUInterface(void)
 {
@@ -137,6 +148,14 @@ NeoDarwinGICv3::attachToCPUController(void)
 		(OSSymbol *)gPlatformInterruptControllerName);
 	cpuController->registerInterrupt(this, 0, this,
 	    (IOInterruptHandler)getInterruptHandlerAddress(), NULL);
+	// sleh_irq may now reach handleInterrupt through PE_handle_ext_interrupt().
+	__atomic_store_n(&sleh_gic_irq_controller_attached, true, __ATOMIC_RELEASE);
+	if (pe_gic_timer_group == 1) {
+		IOLog("NeoDarwinGICv3: timer PPI %u on Group 1 (IRQ); %llu timer interrupts taken as IRQs so far\n",
+		    pe_gic_timer_intid, __atomic_load_n(&sleh_gic_timer_irqs, __ATOMIC_RELAXED));
+	} else {
+		IOLog("NeoDarwinGICv3: timer PPI %u on Group 0 (FIQ)\n", pe_gic_timer_intid);
+	}
 }
 
 IOReturn
@@ -166,12 +185,16 @@ NeoDarwinGICv3::handleInterrupt(void *refCon, IOService *nub, int source)
 		if (intid >= ND_GIC_NUM_INTIDS) {
 			break;  // 1023: nothing pending
 		}
-		IOInterruptVector *vector = &vectors[intid];
-		vector->interruptActive = 1;
-		if (vector->interruptRegistered && !vector->interruptDisabledHard) {
-			vector->handler(vector->target, vector->refCon, vector->nub, vector->source);
+		if (intid == pe_gic_timer_intid && pe_gic_timer_group == 1) {
+			sleh_gic_timer_interrupt();
+		} else {
+			IOInterruptVector *vector = &vectors[intid];
+			vector->interruptActive = 1;
+			if (vector->interruptRegistered && !vector->interruptDisabledHard) {
+				vector->handler(vector->target, vector->refCon, vector->nub, vector->source);
+			}
+			vector->interruptActive = 0;
 		}
-		vector->interruptActive = 0;
 		__builtin_arm_wsr64("ICC_EOIR1_EL1", iar);
 		__builtin_arm_isb(ND_ISB_SY);
 	}

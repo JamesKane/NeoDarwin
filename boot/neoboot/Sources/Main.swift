@@ -35,6 +35,14 @@ let uniprocessorCap: StaticString = " cpus=1"
 /// A loader option in boot.cfg: list every ACPI table on the console in
 /// acpidump's format before booting (for dtdump fixtures from any board).
 let dumpACPIOption: StaticString = "dump-acpi"
+/// Loader options in boot.cfg that choose the timer's GIC group
+/// (/arm-io/gic timer-group) instead of GICD_CTLR.DS: Group 1 makes the
+/// timer an IRQ on a GIC that would allow Group 0, which is how QEMU without
+/// EL3 tests the path TrustZone boards need.
+let timerGroup0Option: StaticString = "timer-group=0"
+let timerGroup1Option: StaticString = "timer-group=1"
+/// GICD_CTLR, at offset 0 of the distributor.
+let gicdCTLROffset: UInt64 = 0
 
 let kernelPage: UInt64 = 0x4000
 /// start.s maps the kernel with 16 KiB-granule L2 blocks, so the collection's
@@ -74,6 +82,41 @@ func mentions(_ line: UnsafeMutableRawPointer, _ length: Int, _ prefix: StaticSt
         i += 1
     }
     return false
+}
+
+/// Whether `word` is one whole space-separated argument in the line.
+func hasArgument(_ line: UnsafeMutableRawPointer, _ length: Int, _ word: StaticString) -> Bool {
+    let p = word.utf8Start, n = word.utf8CodeUnitCount
+    var i = 0
+    while i + n <= length {
+        if (i == 0 || line.load(fromByteOffset: i - 1, as: UInt8.self) == 32)
+            && (i + n == length || line.load(fromByteOffset: i + n, as: UInt8.self) == 32) {
+            var j = 0
+            while j < n && line.load(fromByteOffset: i + j, as: UInt8.self) == p[j] { j += 1 }
+            if j == n { return true }
+        }
+        i += 1
+    }
+    return false
+}
+
+/// The timer's GIC group from the distributor's security state and
+/// boot.cfg (Platform.timerGroup), reported on the console.
+func chooseTimerGroup(_ a: ACPIFacts, _ config: UnsafeMutableRawPointer, _ configLength: Int) -> UInt32 {
+    let ctlr = nd_mmio_read32(a.gicdBase + gicdCTLROffset)
+    var forced: UInt32? = nil
+    if hasArgument(config, configLength, timerGroup0Option) { forced = 0 }
+    if hasArgument(config, configLength, timerGroup1Option) { forced = 1 }
+    let group = Platform.timerGroup(gicdCTLR: ctlr, forced: forced)
+    put("neoboot: GIC: GICD_CTLR ")
+    putHex(UInt64(ctlr))
+    put(ctlr & Platform.gicdCTLRDS != 0 ? ", DS=1 (Group 0 open to Non-secure)" : ", DS=0 (two security states; Group 0 is Secure)")
+    put("; timer PPI ")
+    putDec(UInt64(a.timerGSIV))
+    put(group == 0 ? " on Group 0 (FIQ)" : " on Group 1 (IRQ)")
+    if forced != nil { put(group == 0 ? ", forced by timer-group=0" : ", forced by timer-group=1") }
+    put("\n")
+    return group
 }
 
 /// \NeoDarwin\boot.cfg with whitespace runs made single spaces, into `line`
@@ -119,6 +162,7 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
         return report(error)
     }
     reportACPI(acpi, layout)
+    let timerGroup = chooseTimerGroup(acpi, config, configLength)
 
     guard let file = EFIFile(root: root, path: kernelcachePath) else { return fail("no \\NeoDarwin\\kernelcache on the boot volume") }
     let fileSize = file.size
@@ -204,7 +248,8 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     var tree = DeviceTreeWriter(base: image + Int(dtOffset), capacity: Int(treeCapacity))
     let facts = Platform.Facts(dramBase: base, dramSize: memSize, timebase: nd_cntfrq(), bootMPIDR: nd_mpidr(), seed: nd_cntpct(),
                                ramdiskBase: ramdiskSize == 0 ? 0 : base + ramdiskOffset, ramdiskSize: ramdiskSize,
-                               utcSeconds: utc, utcCounter: utcCounter, acpiBase: acpiBase, acpiLength: UInt64(acpiLength))
+                               utcSeconds: utc, utcCounter: utcCounter, acpiBase: acpiBase, acpiLength: UInt64(acpiLength),
+                               timerGroup: timerGroup)
     guard let treeLength = Platform.deviceTree(into: &tree, facts, acpi, layout) else { return fail("the device tree does not fit") }
     var violations = ConsoleReport()
     guard DTCheck.check(image + Int(dtOffset), length: treeLength, &violations) == 0 else {
