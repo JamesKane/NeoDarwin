@@ -101,6 +101,8 @@ SBSA_PATCHES = [
     "patches/0019-sbsa-armv8.2-baseline.patch",
     "patches/0020-generic-arm64-cpu-id-from-full-mpidr.patch",
     "patches/0021-generic-arm64-framebuffer-console.patch",
+    "patches/0022-iokit-build-iopcifamily-and-pci-host-bridge.patch",
+    "patches/0023-iopcifamily-arm64-fixes-and-64-bit-bars.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -110,6 +112,8 @@ SBSA_OVERLAYS = {
     "//kernel/neodarwin/amfi:kernel_srcs": "bsd/ndamfi",
     "//kernel/neodarwin/crypto:kernel_srcs": "libkern/ndcrypto",
     "//kernel/neodarwin/hfs:kernel_srcs": "libkern/ndhfs",
+    "//kernel/neodarwin/pci:kernel_srcs": "iokit/ndpci",
+    "@apple_iopcifamily//:kernel_srcs": "iokit/ndpci/IOPCIFamily",
     "@apple_hfs//:kernel_srcs": "libkern/ndhfs/hfs",
     "//kernel/neodarwin/platform:kernel_srcs": "iokit/ndplatform",
     "//kernel/neodarwin/pthread:kernel_srcs": "libkern/ndpthread",
@@ -289,6 +293,103 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:session_root",
+        "//third_party/qemu_firmware:virt_secure_flash",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P1-09 checkpoint 2 (docs/kernel/pci.md): IOPCIFamily enumerates QEMU virt's
+# PCIe through NeoDarwinPCIHostBridge (ECAM, _CRS windows, _OSC, firmware BARs
+# kept, 64-bit ones above 4 GiB too) with a transitional virtio-blk and an
+# NVMe controller on the root bus, a PCIe root port with a modern virtio-blk
+# behind it on bus 1, and another with a second edu device on bus 2. INTx:
+# _PRT and link devices give each device its GSIV. QEMU's edu device raises
+# INTA, which reaches its handler through the GIC SPI NeoDarwinGICv3
+# configured; behind the second root port it shares the port's own line.
+PCI_DEVICES = [
+    "--drive disk0=16M",
+    "--device virtio-blk-pci,drive=disk0",
+    "--drive nvm0=16M",
+    "--device nvme,serial=nd0,drive=nvm0",
+    "--device edu",
+    "--device pcie-root-port,id=rp0,chassis=1",
+    "--drive disk1=16M",
+    "--device virtio-blk-pci,drive=disk1,bus=rp0",
+    "--device pcie-root-port,id=rp1,chassis=2",
+    "--device edu,bus=rp1",
+]
+
+PCI_LINES = [
+    "'NeoDarwinPCIHostBridge: \\_SB.PCI0: segment 0, buses 0-255, ECAM 0x4010000000 (_CBA); mem 0x10000000+0x2eff0000, io 0x1000+0xf000 at 0x3eff1000, mem 0x8000000000+0x8000000000'",
+    "'NeoDarwinPCIHostBridge: \\_SB.PCI0: _OSC control 0x1d of 0x3d; DMA coherent (_CCA, 64 address bits); requester IDs to ITS group'",
+    # virtio-blk, transitional on the root bus: its I/O BAR is MMIO in the
+    # host bridge's I/O window at 0x3eff0000.
+    "'1af4:1001 class 010000 bar0 io 0x3eff1'",
+    # NVMe: EDK2 put its 64-bit BAR above 4 GiB, and it stays there.
+    "'0000:00:03.0 1b36:0010 class 010802 bar0 mem 0x80'",
+    "'0000:00:05.0 1b36:000c class 060400 bridge to buses 1-1'",
+    # virtio-blk, modern behind the root port: INTA swizzled to the port's.
+    "'0000:01:00.0 1af4:1042 class 010000'",
+    "'NeoDarwinPCIEduTest: 00:04.0: edu 0x010000ed: INTA on GSIV 35 (level) reached its handler in '",
+    # Behind the second root port, INTA swizzles to the port's INTA (slot 6,
+    # L002, GSIV 37), which the port's own driver registers too.
+    "'0000:00:06.0 1b36:000c class 060400 bridge to buses 2-2'",
+    "'NeoDarwinGICv3: SPI 37: shared for '",
+    "'NeoDarwinPCIEduTest: 02:00.0: edu 0x010000ed: INTA on GSIV 37 (level) reached its handler in '",
+    "'NeoDarwinPCIHostBridge: \\_SB.PCI0: segment 0: 10 devices (2 PCI-to-PCI bridges) on buses 0-2, 9 with INTx'",
+]
+
+sh_test(
+    name = "sbsa_pci_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+    ] + PCI_DEVICES + [
+        "--until-lines",
+        "$(rootpath //boot/neoboot)",
+        "150",
+        # One security state (DS = 1): the SPI is moved to Group 1 here.
+        "'NeoDarwinGICv3: SPI 35: Group 1, priority 0x80, level, routed to 0x0'",
+        "'pid1: all checks passed'",
+    ] + PCI_LINES,
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pid1_root",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# The same on virt,secure=on with TF-A (GICD_CTLR.DS == 0): TF-A makes SPIs
+# Group 1 Non-secure, and Non-secure software can neither change nor read
+# their group; the edu interrupt still arrives as an IRQ.
+sh_test(
+    name = "sbsa_secure_pci_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--machine virt-secure",
+        "--firmware $(rootpath //third_party/qemu_firmware:virt_secure_flash)",
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+    ] + PCI_DEVICES + [
+        "--until-lines",
+        "$(rootpath //boot/neoboot)",
+        "200",
+        "'DS=0 (two security states; Group 0 is Secure); timer PPI 27 on Group 1 (IRQ)'",
+        "'NeoDarwinGICv3: SPI 35: Group 1 Non-secure as the Secure firmware set it (DS=0), priority 0x80, level, routed to 0x0'",
+        "'pid1: all checks passed'",
+    ] + PCI_LINES,
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pid1_root",
         "//third_party/qemu_firmware:virt_secure_flash",
     ],
     tags = ["manual", "kernel", "qemu"],

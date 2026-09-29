@@ -10,6 +10,7 @@ NeoDarwin's own code is under the BSD 2-Clause licence (`LICENSE`). NeoDarwin al
 | xnu | xnu-12377.1.9 | APSL-2.0 (BSD-derived parts keep their BSD notices) | the kernel |
 | hfs | hfs-704.0.3.0.2 | APSL-2.0 | HFS+, built into the kernel |
 | libpthread `kern/` | libpthread-539 | APSL-2.0 | built into the kernel |
+| IOPCIFamily | IOPCIFamily-726.0.5 | APSL-2.0 (the archive's `APPLE_LICENSE`; some file headers name APSL 1.1, whose versions clause lets it be used under any later version) | PCI enumeration, built into the kernel (`kernel/neodarwin/pci`) |
 | ACPICA | 20260408 | Intel dual licence; **used under BSD-3-Clause** (notice below) | ACPI in the kernel (`kernel/neodarwin/acpi`) |
 | FreeBSD crypto and `msun`, `libxo` | FreeBSD `freebsd-src` at the commits in the locks | BSD-2-Clause / BSD-3-Clause, per file | the kernel's crypto provider, `libsystem_m`, `libxo` |
 | dyld, Libc, libplatform, libpthread, libmalloc, Libinfo, libclosure, Libnotify, syslog, copyfile, removefile, Libsystem, objc4, cctools (libmacho), AvailabilityVersions | per `base/upstream.lock` | APSL-2.0 (BSD-derived parts keep their BSD notices) | the userland base (libSystem and the libraries under it) |

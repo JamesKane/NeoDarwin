@@ -1,0 +1,29 @@
+# NeoDarwin's PCI: the ECAM host bridge for ACPI PCI host bridges, ECAM
+# configuration access, and the compat headers Apple's IOPCIFamily
+# (@apple_iopcifamily, APSL) needs to build into the SBSA kernel (patches
+# 0022 and 0023, docs/kernel/pci.md). Kernel-only C and IOKit C++.
+load("//rules:cc.bzl", "lang_audit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+SRCS = [
+    "NeoDarwinPCIEduTest.cpp",
+    "NeoDarwinPCIHostBridge.cpp",
+    "NeoDarwinPCIHostBridge.h",
+    "compat/IOKit/dart/IODARTKeys.h",
+    "compat/os/availability.h",
+    "nd_pci.h",
+    "nd_pci_ecam.c",
+]
+
+# Overlaid at iokit/ndpci (kernel/BUILD.bazel); IOPCIFamily itself at
+# iokit/ndpci/IOPCIFamily.
+filegroup(
+    name = "kernel_srcs",
+    srcs = SRCS,
+)
+
+lang_audit_test(
+    name = "pci_lang_audit",
+    srcs = SRCS,
+)

@@ -1,0 +1,104 @@
+From: NeoDarwin
+Subject: [PATCH] iokit: build IOPCIFamily and NeoDarwin's PCI host bridge
+
+P1-09 checkpoint 2 enumerates PCIe with Apple's open IOPCIFamily
+(IOPCIFamily-726.0.5, the macOS 26.0 release, APSL; overlaid at
+iokit/ndpci/IOPCIFamily) on the ACPI host bridges that NeoDarwin's ACPI
+platform publishes (patch 0018). IOPCIFamily is a kext, and its platform
+half is not open: Intel Macs had AppleACPIPCI and Apple silicon Macs have
+their SoC's PCIe driver. NeoDarwin's (kernel/neodarwin/pci, overlaid at
+iokit/ndpci) is an IOPCIHostBridge over ECAM. Like the rest of the
+platform they are compiled into the kernel, since kcgen links no kexts
+until M5 (docs/kernel/pci.md).
+
+This patch lists for arm64 the seven IOPCIFamily sources that build there
+(IOPCIBridge, IOPCIConfigurator, IOPCIDevice, IOPCIDeviceMappedIO,
+IOPCIMessagedInterruptController, IOPCIRange, IOPCITraceEventBuffer;
+AppleVTD, IOPCIDeviceI386 and IOPCIBridgeLegacy are Intel-only) and
+NeoDarwin's three (the ECAM registry, the host bridge, and a driver for
+QEMU's edu test device that proves INTx delivery), with their search
+paths: IOPCIFamily's own headers, the compat TargetConditionals.h of
+patch 0010, and compat os/availability.h and IOKit/dart/IODARTKeys.h.
+The ACPI platform's objects see nd_pci.h too: it registers MCFG's ECAM
+windows and routes INTx through _PRT. The built-in personalities match
+the host bridge to PNP0A08/PNP0A03 nubs, IOPCIFamily's IOPCI2PCIBridge to
+PCI-to-PCI bridges (the kext's Info.plist personality, IOPCIClassMatch
+0x0604), and the edu driver to 1234:11e8.
+
+Rebase-risk: low (appended entries; applies after 0018).
+---
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -180,5 +180,21 @@
+ iokit/ndacpi/acpica/source/components/utilities/utxfinit.c	standard
+ iokit/ndacpi/acpica/source/components/utilities/utxfmutex.c	standard
+ 
++# NeoDarwin PCI (kernel/neodarwin/pci, overlaid at iokit/ndpci): the ECAM
++# host bridge and configuration access, and Apple's IOPCIFamily-726.0.5
++# (@apple_iopcifamily, APSL, at iokit/ndpci/IOPCIFamily): the sources of its
++# kext that compile for arm64; AppleVTD, IOPCIDeviceI386 and
++# IOPCIBridgeLegacy are Intel-only
++iokit/ndpci/nd_pci_ecam.c	standard
++iokit/ndpci/NeoDarwinPCIHostBridge.cpp	optional iokitcpp
++iokit/ndpci/NeoDarwinPCIEduTest.cpp	optional iokitcpp
++iokit/ndpci/IOPCIFamily/IOPCIBridge.cpp	optional iokitcpp
++iokit/ndpci/IOPCIFamily/IOPCIConfigurator.cpp	optional iokitcpp
++iokit/ndpci/IOPCIFamily/IOPCIDevice.cpp	optional iokitcpp
++iokit/ndpci/IOPCIFamily/IOPCIDeviceMappedIO.cpp	optional iokitcpp
++iokit/ndpci/IOPCIFamily/IOPCIMessagedInterruptController.cpp	optional iokitcpp
++iokit/ndpci/IOPCIFamily/IOPCIRange.cpp	optional iokitcpp
++iokit/ndpci/IOPCIFamily/IOPCITraceEventBuffer.cpp	optional iokitcpp
++
+ # tightbeamc generated implementation files
+ ./Exclaves/IOService.tightbeam.c		optional iokitcpp config_exclaves
+--- a/iokit/conf/Makefile.template
++++ b/iokit/conf/Makefile.template
+@@ -71,6 +71,24 @@
+ $(foreach o,$(ND_ACPICA_OBJS),$(eval $(o)_CFLAGS_ADD += -DND_ACPICA_CORE -include $(ND_ACPI)/acnd.h -I$(ND_ACPICA)/include -w))
+ $(foreach o,nd_acpi_osl.o NeoDarwinACPIPlatform.cpo IOACPIPlatformDevice.cpo,$(eval $(o)_CFLAGS_ADD += \
+ 	-I$(ND_ACPI) -I$(ND_ACPI)/include -I$(ND_ACPICA)/include))
++
++# NeoDarwin's PCI (patch 0022). IOPCIFamily is kext code: it finds its own
++# headers (IOKit/pci, PCIDriverKit) at its root, the compat TargetConditionals.h
++# (libpthread's, patch 0010), and NeoDarwin's compat os/availability.h and
++# IOKit/dart/IODARTKeys.h, which the kext gets from the SDK and the closed
++# DART driver. -w: upstream warnings are not NeoDarwin's to fix here.
++# NeoDarwin's PCI files and the ACPI platform, which routes INTx and passes
++# AML's configuration accesses to ECAM, see nd_pci.h and the IOPCIFamily and
++# IOKit/acpi headers; IOPCIFamily's classes are marked deprecated for kexts.
++ND_PCI = $(SRCROOT)/iokit/ndpci
++ND_IOPCI = $(ND_PCI)/IOPCIFamily
++ND_IOPCI_OBJS = IOPCIBridge.cpo IOPCIConfigurator.cpo IOPCIDevice.cpo IOPCIDeviceMappedIO.cpo \
++	IOPCIMessagedInterruptController.cpo IOPCIRange.cpo IOPCITraceEventBuffer.cpo
++$(foreach o,$(ND_IOPCI_OBJS),$(eval $(o)_CFLAGS_ADD += -I$(ND_IOPCI) -I$(ND_PCI)/compat \
++	-I$(SRCROOT)/libkern/ndpthread/compat -w))
++$(foreach o,NeoDarwinPCIHostBridge.cpo NeoDarwinPCIEduTest.cpo nd_pci_ecam.o nd_acpi_osl.o NeoDarwinACPIPlatform.cpo \
++	IOACPIPlatformDevice.cpo,$(eval $(o)_CFLAGS_ADD += -I$(ND_PCI) -I$(ND_IOPCI) -I$(ND_PCI)/compat \
++	-I$(SRCROOT)/libkern/ndpthread/compat -I$(ND_ACPI)/include -Wno-deprecated-declarations))
+ 
+ #
+ # Diagnostic opt-outs.  We need to make this list empty.
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -46,6 +46,21 @@
+     "     'IOProbeScore'    = 1000:32;"
+     "   },"
+     "   {"
++    "     'IOClass'         = NeoDarwinPCIHostBridge;"
++    "     'IOProviderClass' = IOACPIPlatformDevice;"
++    "     'IONameMatch'     = ('PNP0A08', 'PNP0A03');"
++    "   },"
++    "   {"
++    "     'IOClass'         = IOPCI2PCIBridge;"
++    "     'IOProviderClass' = IOPCIDevice;"
++    "     'IOPCIClassMatch' = '0x06040000&0xffff0000';"
++    "   },"
++    "   {"
++    "     'IOClass'         = NeoDarwinPCIEduTest;"
++    "     'IOProviderClass' = IOPCIDevice;"
++    "     'IOPCIMatch'      = '0x11e81234';"
++    "   },"
++    "   {"
+     "     'IOClass'         = IOExclaveProxy;"
+     "     'IOProviderClass' = IOService;"
+     "     'IOExclaveProxy'  = 1:32;"

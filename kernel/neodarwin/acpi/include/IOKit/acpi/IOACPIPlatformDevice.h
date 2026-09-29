@@ -81,6 +81,22 @@ public:
 	 * hold it, so these succeed at once, with a token of 0. */
 	virtual IOReturn acquireGlobalLock(UInt32 *lockToken, const mach_timespec_t *timeout = NULL);
 	virtual void releaseGlobalLock(UInt32 lockToken);
+
+	/* On a PCI host bridge (one with _PRT), the platform functions
+	 * IOPCIFamily sends up the provider chain to route legacy interrupts
+	 * (NeoDarwin; docs/kernel/pci.md): "ResolvePCIInterrupt" (requesting
+	 * bridge's provider, device number, pin 0-3, UInt32 *gsiv) swizzles the
+	 * pin across PCI-to-PCI bridges and looks it up in _PRT, directly or
+	 * through a link device's _CRS; "SetDeviceInterrupts" (IOPCIDevice,
+	 * UInt32 *gsivs, count) makes them the device's interrupt specifiers
+	 * on the GIC, level-triggered and shareable. Anything else goes up. */
+	using IOPlatformDevice::callPlatformFunction;
+	virtual IOReturn callPlatformFunction(const OSSymbol *functionName, bool waitForFunction,
+	    void *param1, void *param2, void *param3, void *param4) APPLE_KEXT_OVERRIDE;
+
+protected:
+	IOReturn resolvePCIInterrupt(IOService *requester, UInt32 device, UInt32 pin, UInt32 *gsiv);
+	IOReturn setPCIDeviceInterrupts(IOService *device, const UInt32 *gsivs, UInt32 count);
 };
 
 #endif /* _IOKIT_IOACPIPLATFORMDEVICE_H */

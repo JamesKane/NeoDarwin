@@ -18,9 +18,10 @@
 //   _HID, _CID, _UID, _ADR, _STA, acpi-path
 //   IODeviceMemory    memory descriptors of _CRS, as CPU physical addresses
 //   interrupts        u32 INTIDs of _CRS Interrupt() descriptors: on the GIC,
-//                     a GSIV is the INTID, one cell each (NeoDarwinGICv3's
-//                     specifier format). Also as IOInterruptSpecifiers and
-//                     IOInterruptControllers, so registerInterrupt works.
+//                     a GSIV is the INTID. As IOInterruptSpecifiers (two
+//                     cells: the INTID and the flags below, NeoDarwinGICv3's
+//                     specifier format) and IOInterruptControllers, so
+//                     registerInterrupt works.
 //   interrupt-parent  u32: the GIC's phandle
 //   acpi-interrupt-flags  u32 per interrupt: bit 0 edge, bit 1 active low,
 //                     bit 2 shared, bit 3 wake-capable
@@ -29,6 +30,7 @@
 
 #include "NeoDarwinACPIPlatform.h"
 #include "nd_acpica.h"
+#include "nd_pci.h"
 #include <IOKit/IODeviceMemory.h>
 #include <IOKit/IODeviceTreeSupport.h>
 #include <IOKit/IOLib.h>
@@ -45,12 +47,6 @@ const OSSymbol *gIOACPIAddressKey;
 const OSSymbol *gIOACPIDeviceStatusKey;
 
 static NeoDarwinACPIPlatform *gACPIPlatform;
-
-// Interrupt flags recorded per specifier.
-#define ND_ACPI_IRQ_EDGE       0x1
-#define ND_ACPI_IRQ_ACTIVE_LOW 0x2
-#define ND_ACPI_IRQ_SHARED     0x4
-#define ND_ACPI_IRQ_WAKE       0x8
 
 // ------------------------------------------------------------------------
 // Start-up
@@ -112,6 +108,9 @@ NeoDarwinACPIPlatform::initACPICA(void)
 		IOLog("NeoDarwinACPIPlatform: AcpiLoadTables: %s\n", acpi_error(status));
 		return false;
 	}
+	// Before any AML runs (_INI, _REG): PCI_Config operation regions reach
+	// configuration space through ECAM.
+	registerECAM();
 	// Hardware-reduced: no ACPI mode switch, SCI, fixed events or GPEs.
 	status = AcpiEnableSubsystem(ACPI_FULL_INITIALIZATION);
 	if (ACPI_FAILURE(status)) {
@@ -450,6 +449,39 @@ NeoDarwinACPIPlatform::publish(void *handle, UInt32 status)
 	nub->release();     // the registry holds it
 }
 
+// Every MCFG allocation (PCI Firmware 3.3 §4.1.2), into the ECAM registry
+// (nd_pci.h): a 44-byte header, then 16-byte entries {u64 base (of bus 0),
+// u16 segment, u8 first bus, u8 last bus, u32 reserved}.
+void
+NeoDarwinACPIPlatform::registerECAM(void)
+{
+	ACPI_TABLE_HEADER *header;
+	if (AcpiGetTable((char *)ACPI_SIG_MCFG, 1, &header) != AE_OK) {
+		return;
+	}
+	const UInt8 *p = (const UInt8 *)header;
+	for (UInt32 off = 44; off + 16 <= header->Length; off += 16) {
+		UInt64 base;
+		UInt16 segment;
+		memcpy(&base, p + off, sizeof(base));
+		memcpy(&segment, p + off + 8, sizeof(segment));
+		nd_pci_ecam_add(segment, p[off + 10], p[off + 11], base);
+	}
+	AcpiPutTable(header);
+}
+
+IOACPIPlatformDevice *
+NeoDarwinACPIPlatform::nubForPath(const char *path)
+{
+	ACPI_HANDLE handle;
+	void *data;
+	if (path == NULL || AcpiGetHandle(NULL, (char *)path, &handle) != AE_OK ||
+	    AcpiGetData(handle, acpi_nub_data_handler, &data) != AE_OK) {
+		return NULL;
+	}
+	return static_cast<IOACPIPlatformDevice *>(data);
+}
+
 // What a PCI host bridge's driver will need (P1-09 checkpoint 2), read
 // through the nub's own interface: the segment and bus from _SEG and _BBN,
 // the ECAM base from _CBA (or MCFG), the interrupt routing from _PRT.
@@ -543,7 +575,8 @@ add_interrupt(ResourceContext *c, UInt32 gsiv, UInt8 triggering, UInt8 polarity,
 	c->interrupts->appendBytes(&gsiv, sizeof(gsiv));
 	c->flags->appendBytes(&f, sizeof(f));
 	if (c->gic != NULL) {
-		OSData *spec = OSData::withBytes(&gsiv, sizeof(gsiv));
+		UInt32 cells[2] = { gsiv, f };
+		OSData *spec = OSData::withBytes(cells, sizeof(cells));
 		if (spec != NULL) {
 			c->specifiers->setObject(spec);
 			c->controllers->setObject(c->gic);

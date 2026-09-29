@@ -298,6 +298,30 @@ http_archive(
     urls = ["https://github.com/acpica/acpica/archive/refs/tags/20260408.tar.gz"],
 )
 
+# Apple's IOPCIFamily (IOPCIFamily-726.0.5, the macOS 26.0 release; APSL
+# 2.0): the PCI family kext's arm64 sources, built into the SBSA kernel with
+# NeoDarwin's ECAM host bridge (kernel/neodarwin/pci, docs/kernel/pci.md).
+http_archive(
+    name = "apple_iopcifamily",
+    build_file_content = """filegroup(
+    name = "kernel_srcs",
+    srcs = [
+        "IOPCIBridge.cpp",
+        "IOPCIConfigurator.cpp",
+        "IOPCIDevice.cpp",
+        "IOPCIDeviceMappedIO.cpp",
+        "IOPCIMessagedInterruptController.cpp",
+        "IOPCIRange.cpp",
+        "IOPCITraceEventBuffer.cpp",
+        "PCIDriverKit/PCIDriverKitPrivate.h",
+    ] + glob(["IOKit/pci/*.h"]),
+    visibility = ["//visibility:public"],
+)""",
+    sha256 = "671e3692756f337dfa365834def7aaf8855a8db4433b22c22ddb103f141ab6d5",
+    strip_prefix = "IOPCIFamily-IOPCIFamily-726.0.5",
+    urls = ["https://github.com/apple-oss-distributions/IOPCIFamily/archive/refs/tags/IOPCIFamily-726.0.5.tar.gz"],
+)
+
 # xnu's corecrypto subset and headers, for ndcrypto's host tests: the same
 # archive as apple_xnu (the repository cache serves it once), with its own
 # BUILD file so the kernel's inputs are untouched.

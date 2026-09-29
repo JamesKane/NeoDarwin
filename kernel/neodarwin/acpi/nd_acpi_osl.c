@@ -14,12 +14,13 @@
  *  - Deferred work (notify handlers) runs on a kernel thread per call.
  *  - Output goes to the kernel log one line at a time, formatted by
  *    ACPICA's own vsnprintf (its format strings rely on precision).
- *  - Not on arm64 or not yet: port I/O (no such space), PCI configuration
- *    space (ECAM comes with IOPCIFamily, P1-09 checkpoint 2), interrupt
- *    handlers (hardware-reduced ACPI has no SCI).
+ *  - PCI configuration space is ECAM (nd_pci.h), by segment, from MCFG.
+ *  - Not on arm64: port I/O (no such space), interrupt handlers
+ *    (hardware-reduced ACPI has no SCI).
  */
 
 #include "nd_acpica.h"
+#include "nd_pci.h"
 
 #include <IOKit/IOLib.h>
 #include <IOKit/IOLocks.h>
@@ -317,20 +318,78 @@ AcpiOsWritePort(ACPI_IO_ADDRESS Address, UINT32 Value, UINT32 Width)
 	return AE_SUPPORT;
 }
 
-/* PCI configuration space comes with ECAM (MCFG) in P1-09 checkpoint 2. */
+/* PCI configuration space through ECAM (nd_pci.h, docs/kernel/pci.md): the
+ * ACPI platform registers MCFG's windows before any AML runs. ACPICA's
+ * PCI_Config handler passes the register and the field's access width.
+ * ECAM performs naturally aligned accesses of 1, 2 or 4 bytes; a 64-bit
+ * access is two 32-bit ones, low first. A misaligned read is assembled from
+ * the aligned bytes it covers; a misaligned write is refused, since
+ * configuration registers may have side effects on access. */
+static UINT32
+nd_pci_read_bytes(ACPI_PCI_ID *id, UINT32 reg, UINT32 bytes, UINT64 *value, int *ok)
+{
+	uint32_t v;
+	if ((reg & (bytes - 1)) == 0) {
+		*ok &= nd_pci_config_read(id->Segment, (uint8_t)id->Bus, (uint8_t)id->Device, (uint8_t)id->Function, reg, bytes, &v);
+		*value = v;
+		return bytes;
+	}
+	*value = 0;
+	for (UINT32 i = 0; i < bytes; i++) {
+		*ok &= nd_pci_config_read(id->Segment, (uint8_t)id->Bus, (uint8_t)id->Device, (uint8_t)id->Function, reg + i, 1, &v);
+		*value |= (UINT64)(v & 0xff) << (8 * i);
+	}
+	return bytes;
+}
+
 ACPI_STATUS
 AcpiOsReadPciConfiguration(ACPI_PCI_ID *PciId, UINT32 Reg, UINT64 *Value, UINT32 Width)
 {
-	(void)PciId; (void)Reg; (void)Width;
-	*Value = 0;
-	return AE_SUPPORT;
+	int ok = 1;
+	UINT64 lo, hi;
+	switch (Width) {
+	case 8:
+	case 16:
+	case 32:
+		nd_pci_read_bytes(PciId, Reg, Width / 8, Value, &ok);
+		break;
+	case 64:
+		nd_pci_read_bytes(PciId, Reg, 4, &lo, &ok);
+		nd_pci_read_bytes(PciId, Reg + 4, 4, &hi, &ok);
+		*Value = lo | hi << 32;
+		break;
+	default:
+		*Value = 0;
+		return AE_BAD_PARAMETER;
+	}
+	return ok ? AE_OK : AE_NOT_EXIST;
 }
 
 ACPI_STATUS
 AcpiOsWritePciConfiguration(ACPI_PCI_ID *PciId, UINT32 Reg, UINT64 Value, UINT32 Width)
 {
-	(void)PciId; (void)Reg; (void)Value; (void)Width;
-	return AE_SUPPORT;
+	uint8_t bus = (uint8_t)PciId->Bus, dev = (uint8_t)PciId->Device, fn = (uint8_t)PciId->Function;
+	int ok;
+	switch (Width) {
+	case 8:
+	case 16:
+	case 32:
+		if ((Reg & (Width / 8 - 1)) != 0) {
+			return AE_BAD_PARAMETER;
+		}
+		ok = nd_pci_config_write(PciId->Segment, bus, dev, fn, Reg, Width / 8, (uint32_t)Value);
+		break;
+	case 64:
+		if ((Reg & 3) != 0) {
+			return AE_BAD_PARAMETER;
+		}
+		ok = nd_pci_config_write(PciId->Segment, bus, dev, fn, Reg, 4, (uint32_t)Value) &&
+		    nd_pci_config_write(PciId->Segment, bus, dev, fn, Reg + 4, 4, (uint32_t)(Value >> 32));
+		break;
+	default:
+		return AE_BAD_PARAMETER;
+	}
+	return ok ? AE_OK : AE_NOT_EXIST;
 }
 
 /* ------------------------------------------------------------------------

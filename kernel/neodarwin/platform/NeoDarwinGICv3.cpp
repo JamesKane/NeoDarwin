@@ -20,6 +20,17 @@
 // comes up (initCurrentCPU, from pe_init_fiq through patch 0017's hook).
 // The second matters with TrustZone firmware: TF-A resets the SGI and PPI
 // configuration of a redistributor when PSCI CPU_ON powers its CPU.
+//
+// SPIs (INTIDs 32-1019: devices, INTx of PCI) are configured in the
+// distributor when first registered (initVector): disabled, Group 1
+// (GICD_IGROUPR; firmware leaves them in Group 0 on a GIC with one security
+// state, DS == 1, where Group 0 is this kernel's FIQ and the timer's, and on
+// DS == 0 Non-secure writes to the group are ignored and TF-A has made every
+// SPI Group 1 Non-secure already), priority 0x80, level or edge as the
+// specifier's second cell says (ACPI flags, bit 0 edge; a one-cell device
+// tree specifier is level), routed to the boot CPU (GICD_IROUTER,
+// IRM = 0). Level SPIs can be shared (PCI INTx): IOInterruptController
+// then puts an IOSharedInterruptController on the vector.
 
 #include "NeoDarwinPlatform.h"
 #include <IOKit/IODeviceTreeSupport.h>
@@ -55,8 +66,16 @@ OSDefineMetaClassAndStructors(NeoDarwinGICv3, IOInterruptController);
 // Distributor and redistributor registers beyond those SBSA.h defines.
 #define ND_GICD_CTLR_ENABLEGRP1   0x2
 #define ND_GICD_CTLR_ARE          0x10
+#define ND_GICD_CTLR_DS           0x40      // reads 0 in the Non-secure view of two security states
+#define ND_GICD_CTLR_RWP          0x80000000u
+#define ND_GICD_IGROUPR           0x080
 #define ND_GICD_ISENABLER         0x100
 #define ND_GICD_ICENABLER         0x180
+#define ND_GICD_IPRIORITYR        0x400     // a byte per INTID
+#define ND_GICD_ICFGR             0xc00     // two bits per INTID; bit 1 set: edge
+#define ND_GICD_IROUTER           0x6000    // 64 bits per INTID: Aff3.Aff2.Aff1.Aff0, IRM
+#define ND_GIC_FIRST_SPI          32
+#define ND_SPEC_EDGE              0x1       // specifier cell 2: ACPI flags (acpi.md)
 #define ND_GICR_ICENABLER0        0x10180
 #define ND_GICR_IPRIORITYR0       0x10400   // SGI_base + 0x400, a byte per INTID
 #define ND_GIC_PRIORITY_DEFAULT   0x80      // below PMR (0xff) in either security view
@@ -89,6 +108,18 @@ static inline void
 wr8(vm_offset_t a, uint8_t v)
 {
 	*(volatile uint8_t *)a = v;
+}
+
+static inline uint8_t
+rd8(vm_offset_t a)
+{
+	return *(volatile uint8_t *)a;
+}
+
+static inline void
+wr64(vm_offset_t a, uint64_t v)
+{
+	*(volatile uint64_t *)a = v;
 }
 
 extern "C" void
@@ -142,6 +173,14 @@ NeoDarwinGICv3::initWithNode(IORegistryEntry *gicNode)
 		const ml_topology_cpu_t *cpu = &topology->cpus[i];
 		banked[cpu->cpu_id].rd = redistributorFor(cpu->phys_id);
 	}
+	// SPIs go to the boot CPU: GICD_IROUTER has the MPIDR's affinity
+	// fields where the MPIDR has them (Aff3 in bits 39:32), IRM clear.
+	spiLock = IOLockAlloc();
+	if (spiLock == NULL) {
+		return false;
+	}
+	uint64_t boot = topology->boot_cpu != NULL ? topology->boot_cpu->phys_id : topology->cpus[0].phys_id;
+	spiRoute = boot & 0xff00ffffffULL;
 
 	// Affinity routing and Group 1, alongside the Group 0 pe_fiq.c enabled.
 	wr32(gicd + GICD_CTLR, rd32(gicd + GICD_CTLR) | ND_GICD_CTLR_ARE | ND_GICD_CTLR_ENABLEGRP1);
@@ -275,7 +314,25 @@ NeoDarwinGICv3::registerInterrupt(IOService *nub, int source, void *target,
 	IOInterruptVectorNumber intid;
 	IOInterruptVector *vector = bankedVector(nub, source, &cpu, &intid);
 	if (vector == NULL) {
-		return super::registerInterrupt(nub, source, target, handler, refCon);
+		// An SPI's trigger, for initVector, vectorCanBeShared and
+		// getVectorType, which see only the INTID.
+		bool edge = specifierEdge(nub, source, &intid);
+		bool shared = false;
+		if (intid >= ND_GIC_FIRST_SPI && intid < ND_GIC_NUM_INTIDS) {
+			uint32_t bit = 1u << (intid % 32);
+			if (edge) {
+				__atomic_or_fetch(&spiEdge[intid / 32], bit, __ATOMIC_RELAXED);
+			} else {
+				__atomic_and_fetch(&spiEdge[intid / 32], ~bit, __ATOMIC_RELAXED);
+			}
+			shared = vectors[intid].interruptRegistered != 0;
+		}
+		IOReturn ret = super::registerInterrupt(nub, source, target, handler, refCon);
+		if (shared) {
+			IOLog("NeoDarwinGICv3: SPI %d: %s for %s\n", (int)intid,
+			    ret == kIOReturnSuccess ? "shared" : "already registered, not shared", nub->getName());
+		}
+		return ret;
 	}
 	IOLockLock(bankedLock);
 	if (vector->interruptRegistered) {
@@ -375,14 +432,31 @@ NeoDarwinGICv3::disableInterrupt(IOService *nub, int source)
 	return kIOReturnSuccess;
 }
 
+// Bit 0 of a specifier's second cell (ACPI flags); level without one.
+bool
+NeoDarwinGICv3::specifierEdge(IOService *nub, int source, IOInterruptVectorNumber *intid)
+{
+	OSData *vectorData = nub->_interruptSources[source].vectorData;
+	const uint32_t *cells = (const uint32_t *)vectorData->getBytesNoCopy();
+	*intid = (IOInterruptVectorNumber)cells[0];
+	return vectorData->getLength() >= 2 * sizeof(uint32_t) && (cells[1] & ND_SPEC_EDGE) != 0;
+}
+
+bool
+NeoDarwinGICv3::spiIsEdge(IOInterruptVectorNumber intid)
+{
+	return intid >= ND_GIC_FIRST_SPI && intid < ND_GIC_NUM_INTIDS &&
+	       (__atomic_load_n(&spiEdge[intid / 32], __ATOMIC_RELAXED) & (1u << (intid % 32))) != 0;
+}
+
 IOReturn
 NeoDarwinGICv3::getInterruptType(IOService *nub, int source, int *interruptType)
 {
-	(void)nub; (void)source;
-	if (interruptType == NULL) {
+	if (interruptType == NULL || nub == NULL || nub->_interruptSources == NULL) {
 		return kIOReturnBadArgument;
 	}
-	*interruptType = kIOInterruptTypeLevel;
+	IOInterruptVectorNumber intid;
+	*interruptType = specifierEdge(nub, source, &intid) ? kIOInterruptTypeEdge : kIOInterruptTypeLevel;
 	return kIOReturnSuccess;
 }
 
@@ -444,24 +518,74 @@ NeoDarwinGICv3::handleInterrupt(void *refCon, IOService *nub, int source)
 	return kIOReturnSuccess;
 }
 
+// Level SPIs may be shared (PCI INTx lines are); nothing else.
 bool
 NeoDarwinGICv3::vectorCanBeShared(IOInterruptVectorNumber vectorNumber, IOInterruptVector *vector)
 {
-	(void)vectorNumber; (void)vector;
-	return false;
+	(void)vector;
+	return vectorNumber >= ND_GIC_FIRST_SPI && vectorNumber < ND_GIC_NUM_INTIDS && !spiIsEdge(vectorNumber);
 }
 
+// First registration of a vector: SPIs are configured in the distributor.
 void
 NeoDarwinGICv3::initVector(IOInterruptVectorNumber vectorNumber, IOInterruptVector *vector)
 {
-	(void)vectorNumber; (void)vector;
+	(void)vector;
+	if (vectorNumber >= ND_GIC_FIRST_SPI && vectorNumber < ND_GIC_NUM_INTIDS) {
+		configureSPI(vectorNumber);
+	}
 }
 
 int
 NeoDarwinGICv3::getVectorType(IOInterruptVectorNumber vectorNumber, IOInterruptVector *vector)
 {
-	(void)vectorNumber; (void)vector;
-	return kIOInterruptTypeLevel;
+	(void)vector;
+	return spiIsEdge(vectorNumber) ? kIOInterruptTypeEdge : kIOInterruptTypeLevel;
+}
+
+// GICD_CTLR.RWP: the effect of an earlier ICENABLER write (and of CTLR's
+// own) is visible once it reads 0 (Arm IHI 0069 12.9.4).
+void
+NeoDarwinGICv3::waitForRWP(void)
+{
+	for (int i = 0; i < 1000000 && (rd32(gicd + GICD_CTLR) & ND_GICD_CTLR_RWP); i++) {
+	}
+}
+
+// Disabled while it is changed (changing ICFGR of an enabled SPI is
+// UNPREDICTABLE), then left disabled: enableVector enables it. The values
+// read back are logged, so the boot log shows what the distributor holds.
+void
+NeoDarwinGICv3::configureSPI(IOInterruptVectorNumber intid)
+{
+	uint32_t word = 4 * ((uint32_t)intid / 32), bit = 1u << (intid % 32);
+	vm_offset_t cfg = gicd + ND_GICD_ICFGR + 4 * ((uint32_t)intid / 16);
+	uint32_t cfgBit = 2u << (2 * (intid % 16));
+	bool edge = spiIsEdge(intid);
+
+	IOLockLock(spiLock);
+	wr32(gicd + ND_GICD_ICENABLER + word, bit);
+	waitForRWP();
+	wr32(gicd + ND_GICD_IGROUPR + word, rd32(gicd + ND_GICD_IGROUPR + word) | bit);
+	wr8(gicd + ND_GICD_IPRIORITYR + intid, ND_GIC_PRIORITY_DEFAULT);
+	uint32_t c = rd32(cfg);
+	wr32(cfg, edge ? (c | cfgBit) : (c & ~cfgBit));
+	wr64(gicd + ND_GICD_IROUTER + 8 * (uint32_t)intid, spiRoute);
+	__builtin_arm_dsb(ND_DSB_ISHST);
+
+	// With two security states (DS == 0) GICD_IGROUPR is RAZ/WI to
+	// Non-secure accesses: the group is the Secure firmware's to set.
+	bool ds = (rd32(gicd + GICD_CTLR) & ND_GICD_CTLR_DS) != 0;
+	bool group1 = (rd32(gicd + ND_GICD_IGROUPR + word) & bit) != 0;
+	uint8_t priority = rd8(gicd + ND_GICD_IPRIORITYR + intid);
+	bool edgeNow = (rd32(cfg) & cfgBit) != 0;
+	uint64_t route = rd64(gicd + ND_GICD_IROUTER + 8 * (uint32_t)intid);
+	IOLockUnlock(spiLock);
+
+	IOLog("NeoDarwinGICv3: SPI %d: %s, priority 0x%02x, %s, routed to 0x%llx\n", (int)intid,
+	    !ds ? "Group 1 Non-secure as the Secure firmware set it (DS=0)" :
+	    group1 ? "Group 1" : "still Group 0: GICD_IGROUPR did not take the write",
+	    priority, edgeNow ? "edge" : "level", route);
 }
 
 // For the shared table: an SGI or PPI there is the current CPU's; SPIs are

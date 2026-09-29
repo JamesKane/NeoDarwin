@@ -11,7 +11,9 @@
 //    publishes IORTC, which bsd_init waits for. Once AppleARMSMP has started
 //    every CPU it measures IPI round trips.
 //  - NeoDarwinGICv3 is the IRQ interrupt controller: Group 1 interrupts
-//    through ICC_IAR1/EOIR1, IPIs as SGIs. XNU's pe_fiq.c puts the timer on
+//    through ICC_IAR1/EOIR1, IPIs as SGIs. It configures each SPI as it is
+//    registered: Group 1 Non-secure, a priority, the trigger its specifier
+//    names, routed to the boot CPU. XNU's pe_fiq.c puts the timer on
 //    Group 0 (FIQ), or on Group 1 when /arm-io/gic timer-group is 1; this
 //    controller then hands it to the kernel's timer handler. SGIs and PPIs
 //    are banked per CPU: each cpu nub's specifiers get vectors of their own.
@@ -99,6 +101,11 @@ private:
 
 	vm_offset_t gicd;
 	vm_offset_t gicr;
+	// SPIs: bit set for an edge-triggered INTID, from the second cell of
+	// its interrupt specifier (ACPI flags; one-cell specifiers are level).
+	uint32_t spiEdge[32];
+	IOLock *spiLock;                 // distributor read-modify-writes
+	uint64_t spiRoute;               // GICD_IROUTER value: the boot CPU
 	vm_size_t gicrSize;
 	IORegistryEntry *node;
 	BankedCPU *banked;               // indexed by logical CPU number
@@ -111,6 +118,10 @@ private:
 	IOInterruptVector *bankedVector(IOService *nub, int source, unsigned int *cpu, IOInterruptVectorNumber *intid);
 	void enableBanked(unsigned int cpu, IOInterruptVectorNumber intid);
 	void dispatch(IOInterruptVector *vector, IOInterruptVectorNumber intid, vm_offset_t rd);
+	bool specifierEdge(IOService *nub, int source, IOInterruptVectorNumber *intid);
+	bool spiIsEdge(IOInterruptVectorNumber intid);
+	void configureSPI(IOInterruptVectorNumber intid);
+	void waitForRWP(void);
 };
 
 class NeoDarwinPSCI : public IOPMGR

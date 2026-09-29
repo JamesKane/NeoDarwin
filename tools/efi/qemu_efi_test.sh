@@ -27,6 +27,11 @@
 #                     kernel drops input typed before the console is open, so
 #                     LINE should be a prompt
 #   --device DEV      add a QEMU device, e.g. ramfb (a GOP framebuffer under EDK2)
+#   --drive ID=IMAGE  add a raw block backend named ID for a --device to use
+#                     (drive=ID), e.g. --drive disk0=16M --device
+#                     virtio-blk-pci,drive=disk0. IMAGE is a size (a blank
+#                     sparse image of that many K, M or G bytes) or a file,
+#                     which is copied first: the guest writes to the copy
 #   --screendump NAME once the run has passed (or timed out), save the display
 #                     as a PPM through QEMU's monitor, as NAME in
 #                     $TEST_UNDECLARED_OUTPUTS_DIR (or ND_QEMU_DEBUG's directory)
@@ -46,7 +51,7 @@
 #   ND_QEMU_DEBUG=DIR keep serial.log there and add QEMU's exception trace (-d int)
 set -euo pipefail
 esp_files=(); mem=""; smp=1; cpu=cortex-a76; until_lines=0; sends=(); machine=virt; firmware=""
-devices=(); screendump=""; screen_font=""; screen_lines=(); until_screen=0; absent=()
+devices=(); drives=(); screendump=""; screen_font=""; screen_lines=(); until_screen=0; absent=()
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--esp) esp_files+=("$2"); shift 2 ;;
@@ -58,6 +63,7 @@ while [ $# -gt 0 ]; do
 		--until-lines) until_lines=1; shift ;;
 		--send-after) sends+=("$2" "$3"); shift 3 ;;
 		--device) devices+=(-device "$2"); shift 2 ;;
+		--drive) drives+=("$2"); shift 2 ;;
 		--screendump) screendump="$2"; shift 2 ;;
 		--screen-font) screen_font="$2"; shift 2 ;;
 		--screen-line) screen_lines+=("$2"); shift 2 ;;
@@ -138,6 +144,15 @@ SCREEN_PL
 mkdir -p "$work/esp/EFI/BOOT"; cp "$efi" "$work/esp/EFI/BOOT/BOOTAA64.EFI"
 for spec in ${esp_files[@]+"${esp_files[@]}"}; do
 	dest="$work/esp/${spec%%=*}"; mkdir -p "$(dirname "$dest")"; cp "${spec#*=}" "$dest"
+done
+for spec in ${drives[@]+"${drives[@]}"}; do
+	id="${spec%%=*}"; image="${spec#*=}"; file="$work/drive-$id.img"
+	case "$image" in
+	*[0-9][KMG]) perl -e 'my %u = (K => 1 << 10, M => 1 << 20, G => 1 << 30); $ARGV[0] =~ /^(\d+)([KMG])$/ or die;
+		open(my $f, ">", $ARGV[1]) or die; truncate($f, $1 * $u{$2}) or die' "$image" "$file" ;;
+	*) cp "$image" "$file"; chmod u+w "$file" ;;
+	esac
+	devices+=(-drive "if=none,id=$id,format=raw,file=$file")
 done
 logdir="$work"; debug=()
 if [ -n "${ND_QEMU_DEBUG:-}" ]; then

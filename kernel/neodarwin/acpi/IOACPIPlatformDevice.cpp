@@ -356,3 +356,143 @@ IOACPIPlatformDevice::releaseGlobalLock(UInt32 lockToken)
 {
 	(void)lockToken;
 }
+
+// ------------------------------------------------------------------------
+// PCI legacy interrupts (docs/kernel/pci.md)
+//
+// IOPCIFamily resolves a device's INTx by sending "ResolvePCIInterrupt" to
+// its bridge's provider, which passes it up the provider chain to the host
+// bridge's ACPI nub. The first parameter is the provider the request
+// started at: this nub for a device on the root bus, else the IOPCIDevice
+// of the PCI-to-PCI bridge (a root port) the device is behind. Across each
+// such bridge the pin is swizzled (PCI-to-PCI Bridge 1.2 §9.1: the
+// bridge's pin for its child's is (pin + device) mod 4) and the bridge's
+// own device number taken, up to the root bus, where _PRT maps (device,
+// pin) to either a GSIV (source 0) or a link device whose _CRS holds it.
+// _PRT on the bridges themselves (ACPI 6.5 §6.2.13) is not consulted:
+// neither QEMU nor the Q8B has one.
+
+#define ND_PCI_RESOLVE_INTERRUPT "ResolvePCIInterrupt"
+#define ND_PCI_SET_INTERRUPTS    "SetDeviceInterrupts"
+
+IOReturn
+IOACPIPlatformDevice::resolvePCIInterrupt(IOService *requester, UInt32 device, UInt32 pin, UInt32 *gsiv)
+{
+	IOService *p = requester;
+	for (int depth = 0; p != NULL && p != this && depth < 32; depth++) {
+		// A bridge's IOPCIDevice: "reg" starts with its address space
+		// (IOPCIAddressSpace: device number in bits 11-15).
+		OSData *reg = OSDynamicCast(OSData, p->getProperty("reg"));
+		if (reg == NULL || reg->getLength() < sizeof(UInt32)) {
+			return kIOReturnNotFound;
+		}
+		UInt32 space = *(const UInt32 *)reg->getBytesNoCopy();
+		pin = (pin + device) % 4;
+		device = (space >> 11) & 0x1f;
+		IOService *bridge = p->getProvider();     // the IOPCIBridge that published it
+		p = bridge != NULL ? bridge->getProvider() : NULL;
+	}
+	if (p != this) {
+		return kIOReturnNotFound;
+	}
+	OSObject *result = NULL;
+	IOReturn ret = evaluateObject("_PRT", &result);
+	OSArray *prt = OSDynamicCast(OSArray, result);
+	if (ret != kIOReturnSuccess || prt == NULL) {
+		OSSafeReleaseNULL(result);
+		return kIOReturnNotFound;
+	}
+	ret = kIOReturnNotFound;
+	for (unsigned int i = 0; i < prt->getCount(); i++) {
+		OSArray *e = OSDynamicCast(OSArray, prt->getObject(i));
+		OSNumber *address = e != NULL && e->getCount() == 4 ? OSDynamicCast(OSNumber, e->getObject(0)) : NULL;
+		OSNumber *entryPin = address != NULL ? OSDynamicCast(OSNumber, e->getObject(1)) : NULL;
+		OSNumber *index = address != NULL ? OSDynamicCast(OSNumber, e->getObject(3)) : NULL;
+		if (entryPin == NULL || index == NULL) {
+			continue;
+		}
+		// _ADR form: device in the high word; function 0xFFFF (any).
+		if ((address->unsigned64BitValue() >> 16) != device || entryPin->unsigned32BitValue() != pin) {
+			continue;
+		}
+		OSString *link = OSDynamicCast(OSString, e->getObject(2));
+		if (link == NULL) {
+			*gsiv = index->unsigned32BitValue();
+			ret = kIOReturnSuccess;
+		} else {
+			NeoDarwinACPIPlatform *platform = OSDynamicCast(NeoDarwinACPIPlatform, _platform);
+			IOACPIPlatformDevice *linkNub = platform != NULL ? platform->nubForPath(link->getCStringNoCopy()) : NULL;
+			OSData *ints = linkNub != NULL ? OSDynamicCast(OSData, linkNub->getProperty("interrupts")) : NULL;
+			UInt32 n = index->unsigned32BitValue();
+			if (ints != NULL && (n + 1) * sizeof(UInt32) <= ints->getLength()) {
+				*gsiv = ((const UInt32 *)ints->getBytesNoCopy())[n];
+				ret = kIOReturnSuccess;
+			}
+		}
+		break;
+	}
+	result->release();
+	return ret;
+}
+
+// The GSIVs as the device's first interrupt specifiers, on the GIC. PCI INTx
+// is level-sensitive and may be shared by several devices. IOPCIFamily has
+// already put empty specifier arrays on the device (IOPCIDevice::getProperty),
+// to which checkpoint 3's MSIs will be appended; INTx is source 0.
+IOReturn
+IOACPIPlatformDevice::setPCIDeviceInterrupts(IOService *device, const UInt32 *gsivs, UInt32 count)
+{
+	NeoDarwinACPIPlatform *platform = OSDynamicCast(NeoDarwinACPIPlatform, _platform);
+	const OSSymbol *gic = platform != NULL ? platform->getGICName() : NULL;
+	if (device == NULL || gsivs == NULL || gic == NULL) {
+		return kIOReturnBadArgument;
+	}
+	OSObject *oldSpecs = device->copyProperty(gIOInterruptSpecifiersKey);
+	OSObject *oldControllers = device->copyProperty(gIOInterruptControllersKey);
+	OSArray *specs = OSArray::withCapacity(count + 1);
+	OSArray *controllers = OSArray::withCapacity(count + 1);
+	IOReturn ret = kIOReturnNoMemory;
+	if (specs != NULL && controllers != NULL) {
+		ret = kIOReturnSuccess;
+		for (UInt32 i = 0; i < count && ret == kIOReturnSuccess; i++) {
+			UInt32 cells[2] = { gsivs[i], ND_ACPI_IRQ_SHARED };
+			OSData *spec = OSData::withBytes(cells, sizeof(cells));
+			if (spec == NULL || !specs->setObject(spec) || !controllers->setObject(gic)) {
+				ret = kIOReturnNoMemory;
+			}
+			OSSafeReleaseNULL(spec);
+		}
+		// Anything already there (none today) follows.
+		if (OSArray *a = OSDynamicCast(OSArray, oldSpecs)) {
+			specs->merge(a);
+		}
+		if (OSArray *a = OSDynamicCast(OSArray, oldControllers)) {
+			controllers->merge(a);
+		}
+		if (ret == kIOReturnSuccess) {
+			device->setProperty(gIOInterruptSpecifiersKey, specs);
+			device->setProperty(gIOInterruptControllersKey, controllers);
+		}
+	}
+	OSSafeReleaseNULL(specs);
+	OSSafeReleaseNULL(controllers);
+	OSSafeReleaseNULL(oldSpecs);
+	OSSafeReleaseNULL(oldControllers);
+	return ret;
+}
+
+IOReturn
+IOACPIPlatformDevice::callPlatformFunction(const OSSymbol *functionName, bool waitForFunction,
+    void *param1, void *param2, void *param3, void *param4)
+{
+	if (functionName != NULL && validateObject("_PRT") == kIOReturnSuccess) {
+		if (functionName->isEqualTo(ND_PCI_RESOLVE_INTERRUPT)) {
+			return param4 != NULL ? resolvePCIInterrupt((IOService *)param1, (UInt32)(uintptr_t)param2,
+			           (UInt32)(uintptr_t)param3, (UInt32 *)param4) : kIOReturnBadArgument;
+		}
+		if (functionName->isEqualTo(ND_PCI_SET_INTERRUPTS)) {
+			return setPCIDeviceInterrupts((IOService *)param1, (const UInt32 *)param2, (UInt32)(uintptr_t)param3);
+		}
+	}
+	return super::callPlatformFunction(functionName, waitForFunction, param1, param2, param3, param4);
+}

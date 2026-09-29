@@ -18,6 +18,13 @@
 #include <IOKit/IOLocks.h>
 #include <IOKit/acpi/IOACPIPlatformDevice.h>
 
+// Interrupt flags, per interrupt in acpi-interrupt-flags and as the second
+// cell of each IOInterruptSpecifiers entry (NeoDarwinGICv3 reads bit 0).
+#define ND_ACPI_IRQ_EDGE       0x1
+#define ND_ACPI_IRQ_ACTIVE_LOW 0x2
+#define ND_ACPI_IRQ_SHARED     0x4
+#define ND_ACPI_IRQ_WAKE       0x8
+
 class NeoDarwinACPIPlatform : public IOService
 {
 	OSDeclareDefaultStructors(NeoDarwinACPIPlatform);
@@ -36,8 +43,15 @@ public:
 	// The namespace walk's work for one present device (an ACPI_HANDLE).
 	void publish(void *handle, UInt32 status);
 
+	// The nub published for the device at an absolute namespace path
+	// (\_SB.L000), or NULL. The registry holds it.
+	IOACPIPlatformDevice *nubForPath(const char *path);
+	// The GIC's interrupt controller name, which interrupt specifiers name.
+	const OSSymbol *getGICName(void) const { return gicName; }
+
 private:
 	bool initACPICA(void);
+	void registerECAM(void);
 	void publishDevices(void);
 	void addResources(IOACPIPlatformDevice *nub, void *handle, bool bridge, char *summary, size_t summarySize);
 	void describeHostBridge(IOACPIPlatformDevice *nub);

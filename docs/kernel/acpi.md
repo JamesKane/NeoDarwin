@@ -3,7 +3,7 @@
 
 **P1-09, checkpoint 1.** The SBSA kernel runs ACPICA over the tables neoboot hands it and publishes an `IOACPIPlatformDevice` nub for each device in the ACPI namespace. This is Tier 2 of `arm64-sbsa-bringup.md` §2.2: Tier 1 is neoboot's device tree, which carries only what early boot needs (GIC, timer, UART, CPUs). The DSDT and SSDTs describe everything else: the PCI host bridge, virtio-mmio slots, the GED, the RTC, GPIO blocks, a real board's peripherals.
 
-Checkpoint 2 is IOPCIFamily over ECAM (MCFG, `_CBA`), with `_CRS` windows, `_PRT` routing and MSIs through the GIC ITS; P1-10 then adds drivers that match these nubs. What checkpoint 2 gets from this one is at the end.
+Checkpoint 2, IOPCIFamily over ECAM (MCFG, `_CBA`) with `_CRS` windows and `_PRT` routing, is done: `pci.md`. Checkpoint 3 is MSIs through the GIC ITS; P1-10 then adds drivers that match the PCI nubs. What checkpoint 2 took from this one is at the end.
 
 ## Pieces
 
@@ -48,7 +48,7 @@ ACPICA's objects build with `-w`: upstream warnings are not NeoDarwin's to fix (
 | `AcpiOsSleep`, `AcpiOsStall`, `AcpiOsGetTimer` | `IOSleep`, `IODelay`, `mach_absolute_time` in 100 ns units |
 | `AcpiOsPrintf`, `AcpiOsVprintf` | formatted by ACPICA's own `vsnprintf`, collected into whole lines, then the kernel's `printf` |
 | `AcpiOsReadPort` / `WritePort` | `AE_SUPPORT`: Arm has no I/O port space. An AML `SystemIO` access fails |
-| `AcpiOsReadPciConfiguration` / `Write…` | `AE_SUPPORT` until checkpoint 2 brings ECAM. An AML `PCI_Config` access fails |
+| `AcpiOsReadPciConfiguration` / `Write…` | ECAM (`nd_pci.h`, `pci.md`): the platform registers MCFG's windows after `AcpiLoadTables`, before any AML runs. 64-bit accesses are two 32-bit ones; a misaligned read is assembled from bytes, a misaligned write refused |
 | `AcpiOsInstallInterruptHandler` | `AE_SUPPORT`: there is no SCI. Device interrupts, the GED's among them, go through IOKit and the GIC |
 | `AcpiOsSignal` | a fatal AML `Fatal` op is logged; breakpoints are ignored |
 | table overrides, `AcpiOsEnterSleep`, `AcpiOsRedirectOutput` | none; `AE_OK` |
@@ -71,9 +71,9 @@ ACPICA's objects build with `-w`: upstream warnings are not NeoDarwin's to fix (
 | `acpi-path` | the full path, `\_SB.PCI0` |
 | `IODeviceMemory` | `_CRS` memory descriptors (Memory32, FixedMemory32, and Word/DWord/QWord/Extended address descriptors of memory type) as CPU physical addresses: minimum plus translation offset |
 | `interrupts` | u32 per `_CRS` `Interrupt()` descriptor whose resource source is empty, that is, on the GIC. A GSIV is the GIC INTID (SPIs are GSIVs 32 and up), which is the one-cell specifier `NeoDarwinGICv3` takes |
-| `IOInterruptSpecifiers`, `IOInterruptControllers` | the same INTIDs, each naming the GIC's controller (`IODTInterruptControllerName` of `/arm-io/gic`), so `registerInterrupt(index, …)` on the nub reaches the GIC |
+| `IOInterruptSpecifiers`, `IOInterruptControllers` | two cells per interrupt, the INTID and its `acpi-interrupt-flags` value, each naming the GIC's controller (`IODTInterruptControllerName` of `/arm-io/gic`), so `registerInterrupt(index, …)` on the nub reaches the GIC, which configures the SPI's trigger from the flags (`pci.md`) |
 | `interrupt-parent` | the GIC's `AAPL,phandle` |
-| `acpi-interrupt-flags` | u32 per interrupt: bit 0 edge-triggered, bit 1 active low, bit 2 shared, bit 3 wake-capable. `NeoDarwinGICv3` treats every interrupt as level-sensitive today; the GED's is edge |
+| `acpi-interrupt-flags` | u32 per interrupt: bit 0 edge-triggered, bit 1 active low, bit 2 shared, bit 3 wake-capable. `NeoDarwinGICv3` programs `GICD_ICFGR` from bit 0 (checkpoint 2); the GED's is edge |
 | `acpi-bus-range` | host bridges only: (u32 first, u32 last) from the producer bus-number descriptor |
 | `acpi-windows` | host bridges only: `{type = memory, prefetchable or io; base; length; translation}` for each producer address descriptor, bus-side base and the offset to CPU addresses |
 
@@ -83,7 +83,7 @@ A host bridge's producer descriptors are windows, not registers. Elsewhere the p
 
 ### The interface (`IOKit/acpi/IOACPIPlatformDevice.h`)
 
-Class name, method names and signatures are those of Apple's Intel-era header in Kernel.framework, so source written against it compiles. It is a subset, written from the published interface: `evaluateObject` and `evaluateInteger` (32- and 64-bit, by name or `OSSymbol`; arguments and results convert `OSNumber`/`OSBoolean` ↔ Integer, `OSString` ↔ String, `OSData` ↔ Buffer, `OSArray` ↔ Package, and a reference inside a package, such as a `_PRT` entry's link device, becomes its path as an `OSString`), `validateObject`, `getACPITableData` (a copy of the table, owned by the platform), `getDeviceHandle`, `getDeviceStatus`, `getDeviceType`/`setDeviceType`, and `acquireGlobalLock`/`releaseGlobalLock`, which succeed at once with a token of 0: hardware-reduced ACPI has no global lock, so nothing can contend for it. Power management, fixed events, GPEs, address-space handlers and the I/O-port helpers are not declared. The vtable is NeoDarwin's, so binary Intel kexts don't load. `gIOACPIPlane` and the `_HID`/`_UID`/`_ADR`/`_STA` key symbols are defined.
+Class name, method names and signatures are those of Apple's Intel-era header in Kernel.framework, so source written against it compiles. It is a subset, written from the published interface: `evaluateObject` and `evaluateInteger` (32- and 64-bit, by name or `OSSymbol`; arguments and results convert `OSNumber`/`OSBoolean` ↔ Integer, `OSString` ↔ String, `OSData` ↔ Buffer, `OSArray` ↔ Package, and a reference inside a package, such as a `_PRT` entry's link device, becomes its path as an `OSString`), `validateObject`, `getACPITableData` (a copy of the table, owned by the platform), `getDeviceHandle`, `getDeviceStatus`, `getDeviceType`/`setDeviceType`, and `acquireGlobalLock`/`releaseGlobalLock`, which succeed at once with a token of 0: hardware-reduced ACPI has no global lock, so nothing can contend for it. Power management, fixed events, GPEs, address-space handlers and the I/O-port helpers are not declared. The vtable is NeoDarwin's, so binary Intel kexts don't load. `gIOACPIPlane` and the `_HID`/`_UID`/`_ADR`/`_STA` key symbols are defined. On a host bridge (a nub with `_PRT`) it also answers the platform functions IOPCIFamily sends to route legacy interrupts, "ResolvePCIInterrupt" and "SetDeviceInterrupts" (checkpoint 2, `pci.md`), which Apple's closed ACPI platform answered on Intel.
 
 ## The boot log
 
@@ -138,6 +138,8 @@ QEMU's `virt` DSDT has no PL031 RTC (`ARMH0031`) or PL061 GPIO (`ARMH0061`) devi
 | `ACPI0007` processor devices are published, one per CPU | harmless; the CPUs themselves come from the device tree (MADT), and nothing matches `ACPI0007` |
 
 ## For checkpoint 2 (IOPCIFamily over ECAM)
+
+Done (`pci.md`): each point below is implemented there, except `_PRT` on bridges and MSI, which is checkpoint 3.
 
 - **Host bridge nub.** Match `IONameMatch` `PNP0A08` (and `PNP0A03`) on `IOACPIPlatformDevice`. The nub carries `acpi-bus-range` and `acpi-windows`, and `describeHostBridge` shows how to read `_SEG`, `_BBN`, `_CBA` and MCFG through it. Real boards (the SC8280XP bring-up board has seven MCFG segments, ECAM above 4 GiB) need `_SEG` matched to MCFG entries; `_CBA` is optional (QEMU has it, many firmwares don't).
 - **Config space for AML.** `AcpiOsReadPciConfiguration`/`Write…` return `AE_SUPPORT`; with ECAM mapped they should do real accesses (segment, bus, device, function, register), since `_OSC`, `_DSM` and `PCI_Config` regions may touch config space. Implement them in `nd_acpi_osl.c` against the ECAM mapping checkpoint 2 creates.
