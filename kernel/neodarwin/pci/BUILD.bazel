@@ -14,7 +14,6 @@ SRCS = [
     "NeoDarwinPCIHostBridge.h",
     "NeoDarwinPCIMSI.cpp",
     "NeoDarwinPCIMSI.h",
-    "NeoDarwinPCINVMeTest.cpp",
     "compat/IOKit/dart/IODARTKeys.h",
     "compat/os/availability.h",
     "nd_iort.c",

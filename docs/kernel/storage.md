@@ -1,7 +1,9 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
-# Storage: IOStorageFamily, virtio-blk and the root by boot-uuid (P1-10)
+# Storage: IOStorageFamily, virtio-blk, NVMe and the root by boot-uuid (P1-10)
 
-**P1-10, checkpoint 1.** The SBSA kernel has a block storage stack: Apple's open **IOStorageFamily**, the family every macOS disk driver publishes through, with a NeoDarwin **virtio-blk** driver under it. neoboot boots from a GPT disk and names the root by **boot-uuid**; Apple's open **AppleFileSystemDriver** finds that partition and the kernel roots on `/dev/disk0s2`. The launchd/zsh session of P1-08 now boots from a virtio-blk disk on QEMU `virt` (`//kernel:sbsa_disk_boot_test`), writes to it, and finds what it wrote after a reboot. The HFS+ ramdisk roots (md0) are unchanged. Checkpoint 2 adds an NVMe driver under the same stack (below, "For checkpoint 2"); `sbsa-ref`, P1-10's exit machine, has no firmware in the tree yet, so QEMU `virt` stands in.
+**P1-10, checkpoint 1.** The SBSA kernel has a block storage stack: Apple's open **IOStorageFamily**, the family every macOS disk driver publishes through, with a NeoDarwin **virtio-blk** driver under it. neoboot boots from a GPT disk and names the root by **boot-uuid**; Apple's open **AppleFileSystemDriver** finds that partition and the kernel roots on `/dev/disk0s2`. The launchd/zsh session of P1-08 now boots from a virtio-blk disk on QEMU `virt` (`//kernel:sbsa_disk_boot_test`), writes to it, and finds what it wrote after a reboot. The HFS+ ramdisk roots (md0) are unchanged.
+
+**P1-10, checkpoint 2.** A spec-driven **NVMe** driver under the same stack (below, "The NVMe driver"): the same session disk boots from QEMU's NVMe controller (`//kernel:sbsa_nvme_boot_test`), rooted on `disk0s2` by the same boot-uuid, with an I/O queue pair per CPU on its own MSI-X vector, or INTx. **On any controller that isn't QEMU's the driver is read-only unless the boot-arg `nd_nvme_rw=1` says otherwise** ("Real disks: the write policy"): the Radxa Dragon Q8B's only NVMe disk holds its other systems. `sbsa-ref`, P1-10's exit machine, has no firmware in the tree yet, so QEMU `virt` stands in: the exit, "boot from NVMe", is met there.
 
 ## Pieces
 
@@ -11,9 +13,11 @@
 | `@apple_filesystemdriver` | AppleFileSystemDriver **31**, same release set, APSL 2.0: turns `boot-uuid` into the `boot-uuid-media` resource `IOFindBSDRoot` waits for |
 | `kernel/neodarwin/storage/NeoDarwinVirtioBlock.cpp` | the virtio-blk driver, an `IOBlockStorageDevice` |
 | `kernel/neodarwin/storage/nd_virtio.h` | virtio 1.x PCI transport, split virtqueue and block device layouts |
+| `kernel/neodarwin/storage/NeoDarwinNVMeController.cpp`, `NeoDarwinNVMeNamespace.cpp`, `NeoDarwinNVMe.h` | the NVMe driver: the controller (an `IOService` on the `IOPCIDevice`) and one `IOBlockStorageDevice` per namespace |
+| `kernel/neodarwin/storage/nd_nvme.h` | NVMe 1.4 registers, queue entries, opcodes and Identify offsets |
 | `kernel/neodarwin/storage/NeoDarwinStorageDMA.h` | the DMA policy PCI storage drivers share: `dma-coherent`, `dma-address-bits`, queue memory, `IODMACommand` |
 | `kernel/neodarwin/storage/compat` | `APFS/APFSConstants.h`, `uuid/namespace.h`, `hfs/hfs_format.h` for AppleFileSystemDriver |
-| patches 0025–0028 | build lists, search paths and personalities (0025, 0027); IOBlockStorageDriver without DriverKit (0026); no sealed-root check on SBSA (0028). Patch 0012 is dropped |
+| patches 0025–0029 | build lists, search paths and personalities (0025, 0027, 0029: NVMe, retiring the NVMe MSI-X test driver of 0024); IOBlockStorageDriver without DriverKit (0026); no sealed-root check on SBSA (0028). Patch 0012 is dropped |
 | `boot/neoboot/Sources/BootDisk.swift`, `Portable/GPT.swift` | neoboot reads the boot disk's GPT and chooses the boot-uuid |
 | `tools/gptimage`, `rules/disk.bzl` | the GPT disk image writer and rule; `//images:session_disk` |
 | `tools/efi/qemu_efi_test.sh --disk`, `qemu_disk_reboot_test.sh` | booting a disk image as the only drive, twice |
@@ -31,6 +35,17 @@ IOPCIDevice 1af4:1042                     (IOPCIFamily, pci.md)
           IOMedia disk0s1  C12A7328-…     EFI System Partition
           IOMedia disk0s2  48465300-…     "NeoDarwin", UUID = the partition's unique GUID
         IOMediaBSDClient (on every IOMedia): /dev/disk0, /dev/rdisk0, /dev/disk0s1, …
+```
+
+On NVMe the top is two levels, a controller and its namespaces, as in Apple's (closed) IONVMeFamily; the rest is the same:
+
+```
+IOPCIDevice 1b36:0010 (class 010802)
+  NeoDarwinNVMeController                 IOService: queues, interrupts, recovery
+    NeoDarwinNVMeNamespace                IOBlockStorageDevice, one per active namespace
+      IOBlockStorageDriver
+        IOMedia disk0 (whole)             "NVMe QEMU NVMe Ctrl Media"
+          ...
 ```
 
 What IOStorageFamily builds, and what it doesn't:
@@ -94,6 +109,75 @@ The configuration is read until `config_generation` is stable. QEMU 11.1 offers,
 NeoDarwinVirtioBlock: 00:02.0: virtio-blk 1af4:1042: 464896 512-byte blocks (227 MiB); features 0x100000a44; queue 256, 8 slots of 30 segments; MSI-X 2 vectors (LPIs 8192-8193); write cache on; DMA coherent, 64 address bits
 ```
 
+## The NVMe driver
+
+Written from the NVM Express Base Specification 1.4c and the NVM command set (Read, Write, Flush); no Linux or BSD code. `NeoDarwinNVMeController` takes over the personality of P1-09's NVMe MSI-X test driver (`IOPCIClassMatch 0x01080200&0xffffff00`, probe score 1000, patch 0029), which is retired: the driver's own vectors are the MSI-X proof now.
+
+### Real disks: the write policy
+
+The Radxa Dragon Q8B's only NVMe disk (a Kingston SNV2S1000G) holds its FreeBSD and Ubuntu roots. NeoDarwin must never write to it by accident, so:
+
+| Controller | Default | Boot-arg |
+|---|---|---|
+| QEMU's model (PCI vendor 0x1b36) | read-write | `nd_nvme_rw=0` makes it read-only (the tests of the policy) |
+| any other | **read-only** | `nd_nvme_rw=1` makes every controller writable |
+| any | — | `nd_nvme=0`: the driver doesn't attach at all |
+
+Read-only means three locks. Each namespace reports itself **write-protected**, so its IOMedia is not writable: a file system mounts it read-only and a write open of `/dev/diskN…` fails (`EACCES`, IOMediaBSDClient). A write that still reaches the namespace is refused (`kIOReturnNotWritable`), and `issue()` refuses any opcode but Read on a read-only controller, whoever asks. `doSynchronize` sends nothing. What a read-only controller does receive: a **controller reset** (CC.EN = 0 then 1; every OS and firmware does this at boot, and it doesn't touch the media), **Identify** (controller, active namespace list, namespace), **Get Features** (Volatile Write Cache), **Set Features Number of Queues** and **Create I/O Completion/Submission Queue** (queue set-up, lost at the next reset), and **Read**. Never Write, Flush, Write Zeroes, Dataset Management, Format, Sanitize, firmware commands or any other Set Features. The log's second controller line names the policy and why (`read-only: not QEMU's controller; nd_nvme_rw=1 allows writes`). A later item can relax it, for example writable only when the boot-uuid's partition is on that controller.
+
+### Bring-up (§7.6.1)
+
+1. MSI-X, before anything resolves the device's interrupts (`gic-its.md`, "For P1-10"): `configureInterrupts(kIOInterruptTypePCIMessagedX, 1, 1 + n)`, n = the CPUs up to 8. The vectors granted are counted with `getInterruptType`; each gets an `IOInterruptEventSource`. With none (`nd_pci_msi=0`, no ITS), INTx on source 0 through a filter (below).
+2. BAR0 mapped; **CAP**: MQES (queue size), DSTRD (doorbell stride), TO (the ready timeout, 500 ms units), CSS (the NVM command set is required), MPSMIN (only 4 KiB pages: the driver uses CC.MPS = 0 whatever the kernel's 16 KiB page).
+3. **Reset**: CC.EN = 0 (after letting a controller that is still becoming ready finish), CSTS.RDY = 0 within CAP.TO.
+4. The **admin queue** (32 entries) in AQA/ASQ/ACQ; CC = NVM command set, 4 KiB pages, round robin, 64-byte SQ and 16-byte CQ entries, EN; CSTS.RDY = 1 within CAP.TO (CSTS.CFS fails at once).
+5. **Identify Controller**: model, serial, firmware (also IOKit properties on the controller and in the namespace's Device Characteristics), MDTS, VER, NN, VWC; SQES/CQES must allow 64 and 16 bytes. **Get Features VWC** if there is a volatile write cache.
+6. **Set Features Number of Queues**, then per pair **Create I/O Completion Queue** (physically contiguous, interrupts on, its vector) and **Create I/O Submission Queue**.
+7. **Identify** the active namespace list (NVMe 1.1 and later; else 1..NN), then each **namespace**: NSZE blocks, the LBA format FLBAS selects (LBADS 9 to 16: 512 to 64 KiB blocks; 512 and 4096 are the usual ones), NSATTR's write protection. A format with metadata is skipped with a log line. Each gets a `NeoDarwinNVMeNamespace`, attached and started; it `registerService`s and IOBlockStorageDriver takes it from there.
+
+Admin commands are one at a time, in the command gate: during start the calling thread sleeps until vector 0's handler has reaped the completion (10 s limit); during recovery (on the work loop) the admin completion queue is polled. If an admin completion is in its queue but its interrupt never came, start fails with a line saying interrupts are not being delivered: the symptom of an SMMU that isn't in bypass (below).
+
+### Queues, PRPs and requests
+
+- **I/O queue pairs**: one per CPU, at most 8 and at most the MSI-X vectors less one (the admin queue's); with one vector or INTx, one pair. 64 entries each (fewer if MQES is smaller) and **32 command slots**; the command ID is the slot. A request takes a free slot on the pair of the CPU submitting it (`cpu_number()`), else any pair's, else waits in a list that completions drain. Everything runs on one work loop, so more pairs spread submissions and interrupts, not locking.
+- **Transfers** up to MDTS, at most 512 KiB. IOBlockStorageDriver is told `IOMaximumByteCountRead/Write`, `IOMaximumSegmentCountRead/Write` (a page per segment, plus one), `IOMinimumSegmentAlignmentByteCount` 4 and `IOMaximumSegmentAddressableBitCount` (`dma-address-bits`).
+- **PRPs** (§4.3), 4 KiB granular: PRP1 is the first byte, then one entry per 4 KiB page; the second goes in PRP2, more in the slot's **preallocated PRP list** (a power of two of bytes, 2 KiB for 512 KiB, so no list crosses a page; no chaining is ever needed). Each slot's `IODMACommand` (`NDStorageDMA::newPRPCommand`) is specified so that segments fit PRPs: the first starts on a dword, every later one on a 4 KiB boundary, and IODMACommand cuts a segment at the boundary where the next one must start; what still doesn't fit (a segment before the last that ends inside a page, from a multi-range descriptor) goes through IODMACommand's page-aligned double buffer (`synchronize(kForceDoubleBuffer)`), cleaned to the point of coherency by physical address when the device isn't coherent. Buffers above `dma-address-bits` are bounced as for virtio-blk.
+- **Commands**: Read (0x02) and Write (0x01) with SLBA and NLB, FUA when IOStorageFamily asks (`kIOStorageOptionForceUnitAccess`); **Flush** (0x00) for `doSynchronize` when Identify reports a volatile write cache (VWC). The write cache state is Get Features' WCE; `setWriteCacheState` is unsupported (that would be a state-changing Set Features).
+- **Status**: success completes with the byte count; Namespace Write Protected becomes `kIOReturnNotWritable`, LBA out of range `kIOReturnBadArgument`, Invalid Namespace `kIOReturnNoDevice`, anything else `kIOReturnIOError`, with a log line (type, code, DNR).
+- **Ordering**: the entry is copied into the submission queue and cleaned (or `DMB OSHST` when coherent), `DSB SY`, the tail doorbell. On completion: the entry is invalidated (non-coherent), its phase tag read, `DMB OSHLD`, then the rest; the head doorbell once per batch.
+
+### Interrupts
+
+With MSI-X, **vector 0 is the admin queue** and **vector n is I/O queue n** (with one vector, everything on vector 0). Each I/O queue logs its first completion by interrupt once, which is the tests' proof that its vector works. Without MSIs, **INTx**: level and possibly shared, and NVMe has no interrupt status register, so the filter (primary interrupt context) looks at the entry at each completion queue's head for a flipped phase tag; if there is one it masks the controller's pin (INTMS) and claims the interrupt, and the work loop reaps and unmasks (INTMC).
+
+### Timeouts and recovery
+
+A timer runs every second while commands are in flight. **CSTS.CFS** (controller fatal status) resets the controller; a controller that **reads all ones** is gone and everything fails. A command older than **30 s** is first looked for in its completion queue (a lost interrupt is logged as such); if it is really stuck, the driver logs it and **resets the controller**: CC.EN = 0 stops its DMA, the commands that timed out fail (`kIOReturnTimeout`; a waiting flush is aborted), the others go back to the head of the waiting list, the queues are emptied and created again (admin commands polled, on the work loop), and the waiting requests restart. Three resets without a successful completion in between, or a controller that does not come back, fail everything and stop the driver. There is no Abort command: a reset is simpler and also covers a controller that no longer processes its admin queue.
+
+### DMA
+
+As for virtio-blk (`NeoDarwinStorageDMA.h`): queues, PRP lists and the Identify buffer physically contiguous and below `dma-address-bits`, cleaned after allocation when not coherent; data through the slots' `IODMACommand`s with the address limit and, when not coherent, `kNonCoherent` maintenance on prepare and complete.
+
+### The log
+
+```
+NeoDarwinNVMeController: 00:02.0: NVMe 1.4, 1b36:0010, model "QEMU NVMe Ctrl", serial "nd0", firmware "11.1.1"; NN 256; MQES 2047, DSTRD 0, TO 7500 ms, MDTS 512 KiB
+NeoDarwinNVMeController: 00:02.0: 1 I/O queue pair of 64 entries, 32 commands each, transfers up to 512 KiB; MSI-X 2 vectors (LPIs 8192-8193), admin queue on vector 0 (5 completions by interrupt)
+NeoDarwinNVMeController: 00:02.0: write cache on; DMA coherent, 64 address bits; read-write: QEMU's controller
+NeoDarwinNVMeNamespace: 00:02.0: namespace 1: 464896 512-byte blocks (227 MiB); read-write
+NeoDarwinNVMeController: 00:02.0: I/O queue 1: first completion by its interrupt (MSI-X vector 1, LPI 8193)
+```
+
+### What the Q8B will exercise
+
+QEMU's controller is coherent, 64-bit and behind no IOMMU; the Q8B's is none of those things, so its first boot is the real test. Boot it without `nd_nvme_rw` (read-only) and read the controller lines:
+
+- **Segment 2, bus 1** (`0002:01:00.0`), behind the **SMMUv3** at 0x14f80000 (stream 0x20100, ITS DeviceID 0xa0100, `gic-its.md`). NeoDarwin has no SMMU driver and assumes the firmware left it in **bypass**. If it didn't, DMA and MSIs are translated or aborted: the first admin command times out, or completes without its interrupt (the "interrupts are not being delivered" line). `nd_pci_msi=0` takes MSIs out of the picture (INTx); DMA through a non-bypass SMMU needs an SMMUv3 driver.
+- **36-bit DMA** (IORT): queues, PRP lists and Identify buffers are allocated below 64 GiB; data above it is bounced by IODMACommand. The log line must say `36 address bits`.
+- **Coherence**: `_CCA` 1 on the host bridges, so `DMA coherent`; if a board says otherwise, the non-coherent paths (cleaning, invalidating, `kNonCoherent` commands, the double buffer's clean) run for the first time there.
+- **Controller facts** to record: the Kingston's MQES, CAP.TO, DSTRD, MDTS (consumer controllers often have 128 or 256 KiB, below the 512 KiB cap), the MSI-X table size (hence the number of I/O queue pairs on 8 CPUs), VWC, and the LBA format (512-byte by default on the SNV2S, 4096 if it was reformatted). No Kingston quirks are known to the driver; it implements no quirk table.
+- **The partitions**: IOGUIDPartitionScheme should list the disk's GPT (the FreeBSD and Ubuntu partitions, and their ESP) as read-only IOMedia. Nothing mounts them: AppleFileSystemDriver only publishes the HFS+ partition whose UUID is the boot-uuid.
+
 ## The root by boot-uuid
 
 ```
@@ -146,23 +230,22 @@ The file system contents themselves are not byte-reproducible (hdiutil's timesta
 | `//kernel:sbsa_disk_boot_test` | `virt`, one `virtio-blk-pci,disable-legacy=on` drive: `//images:session_disk` | first boot: neoboot's boot-uuid line, `rooting via boot-uuid from /chosen`, the driver's line with two MSI-X vectors, `AppleFileSystemDriver: publishing boot-uuid-media=disk0s2`, `BSD root: disk0s2`, HFS mounted; after login `df /` shows `/dev/disk0s2`, a file is written and synced (zsh's `sync` builtin). Second boot of the same image: the file's contents |
 | `//kernel:sbsa_secure_disk_boot_test` | `virt,secure=on` with TF-A (DS = 0) | the first boot's lines and `df` |
 | `//kernel:sbsa_disk_intx_boot_test` | `virt`, `//images:session_disk_intx` (the same disk with `boot.cfg` `nd_pci_msi=0` on its ESP) | the disk on INTx; rooted on `disk0s2`; `df` |
-| `//kernel:sbsa_pci_boot_test` and the other PCI tests | `virt` | also both blank virtio-blk disks driven (1af4:1001 on the root bus, 1af4:1042 behind a root port) over MSI-X; with `nd_pci_msi=0`, over INTx |
+| `//kernel:sbsa_pci_boot_test` and the other PCI tests | `virt` | also both blank virtio-blk disks driven (1af4:1001 on the root bus, 1af4:1042 behind a root port) over MSI-X; with `nd_pci_msi=0`, over INTx. The blank NVMe disk (00:03.0): the controller and namespace lines, the admin queue on vector 0 and an I/O queue's first completion on its vector (the MSI-X proof the retired test driver gave); four pairs on five vectors in `sbsa_smp_pci_boot_test`; INTx with `nd_pci_msi=0` |
+| `//kernel:sbsa_nvme_boot_test` | `virt`, `//images:session_disk` on `nvme,serial=nd0` (1b36:0010) | the controller's lines (one I/O pair, two MSI-X vectors, read-write), namespace 1, I/O queue 1's first completion on vector 1, rooted on `disk0s2` by boot-uuid, `df /`, a file written and synced; the second boot reads it back |
+| `//kernel:sbsa_secure_nvme_boot_test` | `virt,secure=on` with TF-A | the same first boot, to `df` |
+| `//kernel:sbsa_smp_nvme_boot_test` | `virt`, four CPUs | four I/O queue pairs on five MSI-X vectors; three trees copied at once, then synced |
+| `//kernel:sbsa_nvme_intx_boot_test` | `virt`, `//images:session_disk_intx` on NVMe (`nd_pci_msi=0`) | one pair on INTx, its first completion by INTx, rooted on `disk0s2`; a file written, synced and read |
+| `//kernel:sbsa_nvme_readonly_test` | `virt`, the `session_root` ramdisk, `boot.cfg` `nd_nvme_rw=0`, `//images:session_disk` as a second disk on NVMe | the real-hardware policy on QEMU's controller: `read-only: nd_nvme_rw=0`, the namespace read-only; its partitions appear and read (the HFS+ signature `H+` at byte 1024 of `disk?s2`), and opening one for writing fails (permission denied) |
 | `//boot/neoboot:*`, `//tools/dtdump:*` | host and QEMU | unchanged; the ramdisk boots keep `rd=md0` and no boot-uuid |
 
 The harness's `--disk IMAGE` boots a raw image as the only drive (no vvfat ESP; EDK2 boots the image's ESP), `--disk-in-place` lets a run write to the image itself, `--disk-device` chooses the QEMU device; `qemu_disk_reboot_test.sh` runs the harness twice on one copy. `df` joined the base (`file_cmds`' `df`, with libutil and libxo); `mount` (diskdev_cmds) is not in the base yet, so the file system's type is shown by the kernel's HFS line rather than from the shell.
 
 ## Limits
 
-- One request queue; no multiqueue, indirect descriptors, event suppression, discard or write zeroes. Eight requests of up to 116 KiB in flight on QEMU.
+- virtio-blk: one request queue; no multiqueue, indirect descriptors, event suppression, discard or write zeroes. Eight requests of up to 116 KiB in flight on QEMU.
 - No legacy (pre-1.0) virtio interface.
 - No hot unplug handling beyond `stop` resetting the device.
 - The root must be HFS+ on GPT; boot-uuid by HFS+ volume UUID works through AppleFileSystemDriver but isn't tested.
 - The ESP is not mounted by the running system.
-
-## For checkpoint 2 (NVMe)
-
-- A second `IOBlockStorageDevice`, `NeoDarwinNVMe…`, matched by `IOPCIClassMatch 0x01080200&0xffffff00` with a probe score above `NeoDarwinPCINVMeTest`'s 0; likely a controller driver with one block storage nub per namespace, each registered for IOBlockStorageDriver, as Apple's NVMe family does.
-- The same `NDStorageDMA` for queues and PRP lists; PRPs (4 KiB pages) instead of virtio's free-form segments, so tell IOBlockStorageDriver `IOMinimumSegmentAlignmentByteCount` and page-sized segments, or build PRP lists per slot.
-- MSI-X: admin queue on vector 0, one I/O queue pair per vector (`NeoDarwinPCINVMeTest` shows the sequence), INTx fallback through a filter reading nothing (NVMe has no ISR; check the completion queue's phase bits).
-- Flush (`doSynchronize`) is NVMe Flush; `getWriteCacheState` from Identify Controller's VWC.
-- A test image on `-device nvme` (the same `session_disk`, `--disk-device nvme,serial=nd0`): the rest of the boot is unchanged, the root is `disk0s2` by the same boot-uuid. On the Q8B the NVMe disk holds the board's other systems: keep writes off it unless asked, as the test driver does.
+- NVMe: no Abort (a timeout resets the controller), no shutdown notification (CC.SHN) at power-off, no power management, no namespace attach/detach or hot plug, no metadata or end-to-end protection formats, no Dataset Management (TRIM) or Write Zeroes, no SGLs, no multiple work loops (the I/O queue pairs share one), no quirk table. Namespaces past 16 are ignored.
+- NVMe on anything but QEMU is read-only unless `nd_nvme_rw=1` (by design, above).

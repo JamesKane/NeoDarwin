@@ -111,6 +111,7 @@ SBSA_PATCHES = [
     "patches/0026-iostoragefamily-block-storage-driver-without-driverkit.patch",
     "patches/0027-iokit-build-virtio-blk.patch",
     "patches/0028-bsd-init-no-sealed-root-on-sbsa.patch",
+    "patches/0029-iokit-build-nvme-driver.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -355,26 +356,30 @@ PCI_LINES = [
     # disks, the transitional one through its modern interface.
     "'NeoDarwinVirtioBlock: 00:02.0: virtio-blk 1af4:1001: 32768 512-byte blocks (16 MiB); features 0x100000a44; queue 256, 8 slots of 30 segments; '",
     "'NeoDarwinVirtioBlock: 01:00.0: virtio-blk 1af4:1042: 32768 512-byte blocks (16 MiB); '",
+    # P1-10 checkpoint 2: NeoDarwinNVMeController drives the blank NVMe disk.
+    "'NeoDarwinNVMeController: 00:03.0: NVMe 1.4, 1b36:0010, model \"QEMU NVMe Ctrl\", serial \"nd0\", firmware '",
+    "'NeoDarwinNVMeNamespace: 00:03.0: namespace 1: 32768 512-byte blocks (16 MiB); read-write'",
 ]
 
 # P1-09 checkpoint 3 (docs/kernel/gic-its.md): MSI and MSI-X through the
 # GIC ITS. The ITS from the MADT, its tables and collections; LPIs on the
 # redistributors; each device's requester ID through the IORT to a DeviceID.
-# edu's MSI (after its INTA) and two MSI-X vectors of the NVMe controller,
-# each with an LPI of its own (admin queue on vector 0, an I/O queue on
-# vector 1), reach their handlers. The LPI numbers depend on the order
-# drivers start, so the lines match around them.
+# edu's MSI (after its INTA) and the NVMe controller's MSI-X vectors (P1-10's
+# NeoDarwinNVMeController: the admin queue on vector 0, an I/O queue per
+# CPU on the others, one LPI each) reach their handlers. The LPI numbers
+# depend on the order drivers start, so the lines match around them.
 MSI_LINES = [
     "'NeoDarwinPCIMSI: ITS 0 at 0x8080000 (IIDR 0x0000043b): 16 DeviceID bits, 16 EventID bits, ITT entries 12 bytes, '",
     "'NeoDarwinPCIMSI: MSI and MSI-X on LPIs 8192-10239 through 1 ITS; 8192 LPIs, configuration table at 0x'",
     "'NeoDarwinPCIMSI: 0000:00:04.0: MSI 1 vector -> LPI '",
-    "'NeoDarwinPCIMSI: 0000:00:03.0: MSI-X 2 of 65 vectors -> LPIs '",
+    "'NeoDarwinPCIMSI: 0000:00:03.0: MSI-X '",
+    "', DeviceID 0x18 on ITS 0'",
     "'NeoDarwinPCIMSI: 0000:02:00.0: MSI 1 vector -> LPI '",
     "'(DeviceID 0x20, EventID 0) reached its handler in '",
     "'(DeviceID 0x200, EventID 0) reached its handler in '",
-    "'NeoDarwinPCINVMeTest: 00:03.0: NVMe 1.4: MSI-X 2 of 65 vectors on LPIs '",
-    "'(DeviceID 0x18): vector 0 (admin) in '",
-    "' us, vector 1 (I/O queue 1) in '",
+    "'), admin queue on vector 0 ('",
+    "'NeoDarwinNVMeController: 00:03.0: I/O queue '",
+    "': first completion by its interrupt (MSI-X vector '",
     # The virtio-blk disks' configuration and queue vectors.
     "'8 slots of 30 segments; MSI-X 2 vectors (LPIs '",
 ]
@@ -468,6 +473,9 @@ sh_test(
         "'pid1: all checks passed'",
         "'enabled on 4 of 4 redistributors'",
         "'two-level device table; 4 collections by processor number'",
+        # An NVMe I/O queue pair per CPU, each on its own MSI-X vector.
+        "'NeoDarwinPCIMSI: 0000:00:03.0: MSI-X 5 of 65 vectors -> LPIs '",
+        "'NeoDarwinNVMeController: 00:03.0: 4 I/O queue pairs of 64 entries, 32 commands each, transfers up to 512 KiB; MSI-X 5 vectors (LPIs '",
     ] + PCI_LINES + MSI_LINES + MSI_QEMU_LINES,
     data = [
         ":sbsa_kc",
@@ -539,7 +547,8 @@ sh_test(
         "'NeoDarwinPCIHostBridge: \\_SB.PCI0: _OSC control 0x1d of 0x3d; DMA coherent (_CCA, 64 address bits); requester IDs to ITS group'",
         "'NeoDarwinPCIEduTest: 00:04.0: edu 0x010000ed: no MSI (INTx only)'",
         "'NeoDarwinPCIEduTest: 02:00.0: edu 0x010000ed: no MSI (INTx only)'",
-        "'NeoDarwinPCINVMeTest: 00:03.0: no two MSI-X vectors'",
+        "'NeoDarwinNVMeController: 00:03.0: 1 I/O queue pair of 64 entries, 32 commands each, transfers up to 512 KiB; INTx ('",
+        "'NeoDarwinNVMeController: 00:03.0: I/O queue 1: first completion by its interrupt (INTx)'",
         "'8 slots of 30 segments; INTx; write cache on'",
     ] + PCI_LINES,
     data = [
@@ -657,6 +666,205 @@ sh_test(
         "'/dev/disk0s2 '",
     ],
     data = ["//images:session_disk_intx"],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P1-10 checkpoint 2 (docs/kernel/storage.md, "NVMe"): the same session disk
+# on QEMU's NVMe controller (1b36:0010) instead of virtio-blk. EDK2 boots
+# neoboot from the image's ESP through its NVMe driver; NeoDarwinNVMeController
+# resets the controller, identifies it, creates its I/O queue pairs (MSI-X:
+# the admin queue on vector 0, each I/O queue on its own) and publishes
+# namespace 1 as an IOBlockStorageDevice; the rest of the boot is as on
+# virtio-blk, rooted on disk0s2 by boot-uuid. QEMU's controller is
+# read-write; the session writes a file, and a second boot reads it back.
+NVME_DISK = "--disk-device nvme,serial=nd0"
+
+NVME_BOOT_LINES = [
+    "'neoboot: root: HFS+ partition 2 of the boot disk, boot-uuid " + SESSION_DISK_ROOT_UUID + "'",
+    "'rooting via boot-uuid from /chosen: " + SESSION_DISK_ROOT_UUID + "'",
+    "'NeoDarwinNVMeController: 00:02.0: NVMe 1.4, 1b36:0010, model \"QEMU NVMe Ctrl\", serial \"nd0\", firmware '",
+    "'NeoDarwinNVMeNamespace: 00:02.0: namespace 1: '",
+    "' 512-byte blocks ('",
+    "'); read-write'",
+    "'NeoDarwinNVMeController: 00:02.0: I/O queue '",
+    "'AppleFileSystemDriver: publishing boot-uuid-media=disk0s2'",
+    "'BSD root: disk0s2, major'",
+    "'hfs: mounted NeoDarwin on device'",
+]
+
+sh_test(
+    name = "sbsa_nvme_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_disk_reboot_test.sh"],
+    args = [
+        "$(rootpath //images:session_disk)",
+        NVME_DISK,
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'df /\\n'",
+        "--send-after 'root@localhost ~ # ' 'echo persisted-$$((6*7)) > /var/root/nvme-test && zmodload -F zsh/files b:sync && sync && echo synced-$$((6*7))\\n'",
+        "-",
+        "180",
+    ] + NVME_BOOT_LINES + [
+        "'1 I/O queue pair of 64 entries, 32 commands each, transfers up to 512 KiB; MSI-X 2 vectors (LPIs '",
+        "'), admin queue on vector 0 ('",
+        "'NeoDarwinNVMeController: 00:02.0: write cache on; DMA coherent, 64 address bits; read-write: QEMU'",
+        "'I/O queue 1: first completion by its interrupt (MSI-X vector 1, LPI '",
+        "'/dev/disk0s2 '",
+        "'synced-42'",
+        "--reboot",
+        NVME_DISK,
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'cat /var/root/nvme-test\\n'",
+        "-",
+        "180",
+        "'BSD root: disk0s2, major'",
+        "'persisted-42'",
+    ],
+    data = [
+        "//images:session_disk",
+        "//tools/efi:qemu_efi_test.sh",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# The NVMe boot on virt,secure=on with TF-A (DS = 0): one boot, to root's
+# shell and df.
+sh_test(
+    name = "sbsa_secure_nvme_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--machine virt-secure",
+        "--firmware $(rootpath //third_party/qemu_firmware:virt_secure_flash)",
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--disk $(rootpath //images:session_disk)",
+        NVME_DISK,
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'df /\\n'",
+        "-",
+        "240",
+        "'NOTICE:  BL31: v2.15.0(release)'",
+    ] + NVME_BOOT_LINES + [
+        "'MSI-X 2 vectors (LPIs '",
+        "'/dev/disk0s2 '",
+    ],
+    data = [
+        "//images:session_disk",
+        "//third_party/qemu_firmware:virt_secure_flash",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# Four CPUs: an I/O queue pair per CPU, each completion queue on its own
+# MSI-X vector (five vectors with the admin queue's). The session copies
+# two trees at once, so requests come from several CPUs, and syncs.
+sh_test(
+    name = "sbsa_smp_nvme_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--smp 4",
+        "--disk $(rootpath //images:session_disk)",
+        NVME_DISK,
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'df /\\n'",
+        "--send-after 'root@localhost ~ # ' '{ cp -R /usr/lib /var/root/c1 & cp -R /usr/share /var/root/c2 & cp -R /bin /var/root/c3 & wait; } && zmodload -F zsh/files b:sync && sync && ls /var/root/c3/zsh && echo copied-$$((6*7))\\n'",
+        "-",
+        "240",
+        "'NeoDarwinPlatformExpert: 4 of 4 CPUs online'",
+    ] + NVME_BOOT_LINES + [
+        "'4 I/O queue pairs of 64 entries, 32 commands each, transfers up to 512 KiB; MSI-X 5 vectors (LPIs '",
+        "'/dev/disk0s2 '",
+        "'/var/root/c3/zsh'",
+        "'copied-42'",
+    ],
+    data = ["//images:session_disk"],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# The NVMe root without MSIs (boot.cfg nd_pci_msi=0 on the image's ESP):
+# completions through INTx, found by their phase tags, with the pin masked
+# (INTMS) until the work loop has reaped them.
+sh_test(
+    name = "sbsa_nvme_intx_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--disk $(rootpath //images:session_disk_intx)",
+        NVME_DISK,
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'df /\\n'",
+        "--send-after 'root@localhost ~ # ' 'echo intx-$$((6*7)) > /var/root/nvme-intx && zmodload -F zsh/files b:sync && sync && cat /var/root/nvme-intx\\n'",
+        "-",
+        "180",
+        "'NeoDarwinPCIMSI: no MSIs: disabled by nd_pci_msi=0; PCI devices use INTx'",
+        "'1 I/O queue pair of 64 entries, 32 commands each, transfers up to 512 KiB; INTx ('",
+        "'I/O queue 1: first completion by its interrupt (INTx)'",
+        "'AppleFileSystemDriver: publishing boot-uuid-media=disk0s2'",
+        "'BSD root: disk0s2, major'",
+        "'/dev/disk0s2 '",
+        "'intx-42'",
+    ],
+    data = ["//images:session_disk_intx"],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# The write policy for NVMe that isn't QEMU's (the Q8B's disk holds other
+# systems): nd_nvme_rw=0 applies it to QEMU's controller. The session boots
+# from its ramdisk with //images:data_disk (the session volume on a GPT
+# disk firmware can't boot) as a second disk on NVMe: the
+# namespace is published read-only (write-protected), its partitions still
+# appear and read (the HFS+ signature at byte 1024 of disk?s2), and opening
+# one for writing fails.
+sh_test(
+    name = "sbsa_nvme_readonly_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/nvme-ro.cfg)",
+        "--drive nvm0=$(rootpath //images:data_disk)",
+        "--device nvme,serial=nd1,drive=nvm0",
+        # Rooted on the ramdisk (md0), never on the NVMe disk.
+        "--absent 'BSD root: disk'",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'zmodload zsh/system; for d in /dev/disk*s2; do sysopen -r -u 3 $$d && sysseek -u 3 1024 && sysread -i 3 -s 2 sig && echo \"read $$d sig-$$sig\"; exec 3<&-; sysopen -w -u 4 $$d || echo write-refused-$$((6*7)); done\\n'",
+        "$(rootpath //boot/neoboot)",
+        "180",
+        "'hfs: mounted NeoDarwin on device'",
+        "'NeoDarwinNVMeController: 00:02.0: NVMe 1.4, 1b36:0010, model \"QEMU NVMe Ctrl\", serial \"nd1\", firmware '",
+        "'; read-only: nd_nvme_rw=0'",
+        "'NeoDarwinNVMeNamespace: 00:02.0: namespace 1: '",
+        "'); read-only'",
+        "'s2 sig-H+'",
+        "'permission denied'",
+        "'write-refused-42'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//boot/neoboot:testdata/nvme-ro.cfg",
+        "//images:data_disk",
+        "//images:session_root",
+    ],
     tags = ["manual", "kernel", "qemu"],
 )
 

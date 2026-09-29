@@ -1,0 +1,86 @@
+From: NeoDarwin
+Subject: [PATCH] iokit: build the NVMe driver, retire the NVMe MSI-X test
+
+P1-10 checkpoint 2: NeoDarwin's NVMe driver (kernel/neodarwin/storage,
+overlaid at iokit/ndstorage; docs/kernel/storage.md, "NVMe"), written
+from the NVM Express 1.4 specification. NeoDarwinNVMeController drives
+the controller (admin queue, one I/O queue pair per CPU up to the MSI-X
+vectors, PRP lists, MSI-X or INTx, timeouts and controller reset) and
+publishes a NeoDarwinNVMeNamespace, an IOBlockStorageDevice, per active
+namespace. Only QEMU's controller is writable by default; any other is
+attached read-only unless nd_nvme_rw=1.
+
+The driver takes over the NVMe test driver's personality (IOPCIClassMatch
+0x010802), with probe score 1000. The test driver of patch 0024
+(NeoDarwinPCINVMeTest, the first MSI-X proof) is retired: its file leaves
+the build list and the PCI objects' search paths, and its source is gone
+from kernel/neodarwin/pci; the driver's MSI-X vectors are the proof now.
+This patch lists the driver's two sources with the storage and PCI search
+paths.
+
+Rebase-risk: low (entries edited and appended; applies after 0028).
+---
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -61,10 +61,10 @@
+     "     'IOPCIMatch'      = '0x11e81234';"
+     "   },"
+     "   {"
+-    "     'IOClass'         = NeoDarwinPCINVMeTest;"
++    "     'IOClass'         = NeoDarwinNVMeController;"
+     "     'IOProviderClass' = IOPCIDevice;"
+     "     'IOPCIClassMatch' = '0x01080200&0xffffff00';"
+-    "     'IOProbeScore'    = 0:32;"
++    "     'IOProbeScore'    = 1000:32;"
+     "   },"
+     "   {"
+     "     'IOClass'         = NeoDarwinVirtioBlock;"
+--- a/iokit/conf/Makefile.template
++++ b/iokit/conf/Makefile.template
+@@ -90,10 +90,10 @@
+ 	IOACPIPlatformDevice.cpo,$(eval $(o)_CFLAGS_ADD += -I$(ND_PCI) -I$(ND_IOPCI) -I$(ND_PCI)/compat \
+ 	-I$(SRCROOT)/libkern/ndpthread/compat -I$(ND_ACPI)/include -Wno-deprecated-declarations))
+ 
+-# MSIs through the GIC ITS (patch 0024): the MADT/IORT parser, the messaged
+-# interrupt controller and the NVMe MSI-X test see the same headers; the
+-# controller also NeoDarwin's platform header, for the GIC and its ITS.
+-$(foreach o,nd_iort.o NeoDarwinPCIMSI.cpo NeoDarwinPCINVMeTest.cpo,$(eval $(o)_CFLAGS_ADD += -I$(ND_PCI) -I$(ND_IOPCI) \
++# MSIs through the GIC ITS (patch 0024): the MADT/IORT parser and the
++# messaged interrupt controller see the same headers; the controller also
++# NeoDarwin's platform header, for the GIC and its ITS.
++$(foreach o,nd_iort.o NeoDarwinPCIMSI.cpo,$(eval $(o)_CFLAGS_ADD += -I$(ND_PCI) -I$(ND_IOPCI) \
+ 	-I$(ND_PCI)/compat -I$(SRCROOT)/libkern/ndpthread/compat -I$(ND_ACPI)/include -Wno-deprecated-declarations))
+ NeoDarwinPCIMSI.cpo_CFLAGS_ADD += -I$(SRCROOT)/iokit/ndplatform
+ 
+@@ -120,6 +120,12 @@
+ NeoDarwinVirtioBlock.cpo_CFLAGS_ADD += -I$(ND_STORAGE) -I$(ND_STORAGE)/include -I$(ND_PCI) -I$(ND_IOPCI) \
+ 	-I$(ND_PCI)/compat -I$(SRCROOT)/libkern/ndpthread/compat -Wno-deprecated-declarations
+ 
++# NeoDarwin's NVMe driver (patch 0029): the controller on an IOPCIDevice and
++# its namespaces' IOBlockStorageDevices, with the same headers.
++$(foreach o,NeoDarwinNVMeController.cpo NeoDarwinNVMeNamespace.cpo,$(eval $(o)_CFLAGS_ADD += -I$(ND_STORAGE) \
++	-I$(ND_STORAGE)/include -I$(ND_PCI) -I$(ND_IOPCI) -I$(ND_PCI)/compat -I$(SRCROOT)/libkern/ndpthread/compat \
++	-Wno-deprecated-declarations))
++
+ #
+ # Diagnostic opt-outs.  We need to make this list empty.
+ #
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -191,7 +191,6 @@
+ iokit/ndpci/NeoDarwinPCIEduTest.cpp	optional iokitcpp
+ iokit/ndpci/nd_iort.c	standard
+ iokit/ndpci/NeoDarwinPCIMSI.cpp	optional iokitcpp
+-iokit/ndpci/NeoDarwinPCINVMeTest.cpp	optional iokitcpp
+ iokit/ndpci/IOPCIFamily/IOPCIBridge.cpp	optional iokitcpp
+ iokit/ndpci/IOPCIFamily/IOPCIConfigurator.cpp	optional iokitcpp
+ iokit/ndpci/IOPCIFamily/IOPCIDevice.cpp	optional iokitcpp
+@@ -218,6 +217,8 @@
+ iokit/ndstorage/IOStorageFamily/IOMediaBSDClient.cpp	optional iokitcpp
+ iokit/ndstorage/AppleFileSystemDriver/AppleFileSystemDriver.cpp	optional iokitcpp
+ iokit/ndstorage/NeoDarwinVirtioBlock.cpp	optional iokitcpp
++iokit/ndstorage/NeoDarwinNVMeController.cpp	optional iokitcpp
++iokit/ndstorage/NeoDarwinNVMeNamespace.cpp	optional iokitcpp
+ 
+ # tightbeamc generated implementation files
+ ./Exclaves/IOService.tightbeam.c		optional iokitcpp config_exclaves

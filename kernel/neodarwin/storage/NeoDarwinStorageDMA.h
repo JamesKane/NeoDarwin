@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 // NeoDarwin-Language: expressibility: IOKit C++ helpers for the kernel's storage drivers (IODMACommand, IOBufferMemoryDescriptor).
 //
-// How NeoDarwin's PCI storage drivers (virtio-blk now, NVMe next) reach
+// How NeoDarwin's PCI storage drivers (virtio-blk and NVMe) reach
 // memory, from what the host bridge put on their IOPCIDevice
 // (docs/kernel/pci.md, "DMA coherence and the IORT"):
 //
@@ -103,6 +103,27 @@ struct NDStorageDMA {
 	{
 		return IODMACommand::withSpecification(kIODMACommandOutputHost64, addressBits, maxSegmentBytes,
 		           coherent ? IODMACommand::kUnmapped : IODMACommand::kNonCoherent, maxTransferBytes, 1);
+	}
+
+	// The same for NVMe PRPs (NVMe 1.4 §4.3): the first segment starts on a
+	// dword, every later one on a 4 KiB boundary, and a segment that
+	// continues on a boundary it doesn't reach is cut there. A buffer that
+	// doesn't fit is copied through a page-aligned bounce buffer
+	// (IODMACommand's double buffer), with the cache maintenance.
+	IODMACommand *
+	newPRPCommand(uint64_t maxTransferBytes) const
+	{
+		IODMACommand::SegmentOptions options = {
+			.fStructSize = sizeof(options),
+			.fNumAddressBits = addressBits,
+			.fMaxSegmentSize = 0,           // no limit
+			.fMaxTransferSize = maxTransferBytes,
+			.fAlignment = 4,
+			.fAlignmentLength = 4,
+			.fAlignmentInternalSegments = 4096,
+		};
+		return IODMACommand::withSpecification(kIODMACommandOutputHost64, &options,
+		           coherent ? IODMACommand::kUnmapped : IODMACommand::kNonCoherent, NULL, NULL);
 	}
 };
 

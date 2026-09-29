@@ -12,8 +12,8 @@
 | `kernel/neodarwin/pci/nd_iort.{h,c}` | C, host-testable: the MADT's GIC ITS structures, and the IORT path from a requester ID to an ITS DeviceID, through SMMUs. `//kernel/neodarwin/pci:iort_test` runs it on QEMU's tables and the Q8B's |
 | `kernel/neodarwin/pci/NeoDarwinPCIMSI.{h,cpp}` | `NeoDarwinPCIMessagedInterruptController`, IOPCIFamily's `IOPCIMessagedInterruptController` with LPIs for vectors |
 | `kernel/neodarwin/pci/NeoDarwinPCIHostBridge.cpp` | answers "GetMessagedInterruptController" and "GetMessagedInterruptAddress", finds each device's DeviceID, and claims MSI in `_OSC` |
-| `kernel/neodarwin/pci/NeoDarwinPCIEduTest.cpp`, `NeoDarwinPCINVMeTest.cpp` | the proofs: edu's MSI; two MSI-X vectors of an NVMe controller |
-| `kernel/patches/0024-iokit-build-gic-its-and-pci-msi.patch` | adds the four new files to `files.arm64`, with their search paths and the NVMe test's personality |
+| `kernel/neodarwin/pci/NeoDarwinPCIEduTest.cpp` | the proof: edu's MSI. The NVMe proof, `NeoDarwinPCINVMeTest.cpp` (two MSI-X vectors of an NVMe controller), was retired in P1-10 checkpoint 2: the NVMe driver's vectors are the proof now (`storage.md`) |
+| `kernel/patches/0024-iokit-build-gic-its-and-pci-msi.patch` | adds the four new files to `files.arm64`, with their search paths and the NVMe test's personality (patch 0029 gives that personality to the NVMe driver and drops the test) |
 
 **Where the ITS comes from.** The kernel reads the MADT's GIC ITS structures (type 0xF: translation ID, base) through the ACPI platform's copy of the tables (`getACPITableData("APIC")`), on the first host bridge's probe. neoboot and the device tree are not involved: only PCI needs the ITS, PCI already depends on ACPI, and the IORT that names the ITS by ID is ACPI too. Passing the ITS in the tree would have extended DT-ABI, `dtdump` and the fixtures without any consumer outside ACPI's reach. When the MADT has no ITS (GICv2m platforms, or `virt,its=off`), MSIs are off and devices use INTx.
 
@@ -101,14 +101,15 @@ NeoDarwinPCIEduTest: 00:04.0: edu 0x010000ed: MSI on LPI 8192 (DeviceID 0x20, Ev
 NeoDarwinPCIMSI: 0000:00:03.0: MSI-X 2 of 65 vectors -> LPIs 8194-8195, DeviceID 0x18 on ITS 0
 NeoDarwinPCIMSI: 0000:02:00.0: MSI 1 vector -> LPI 8193, DeviceID 0x200 on ITS 0
 NeoDarwinPCIEduTest: 02:00.0: edu 0x010000ed: MSI on LPI 8193 (DeviceID 0x200, EventID 0) reached its handler in 24 us: status 0x4e440000, 1 interrupt, INTx disabled
-NeoDarwinPCINVMeTest: 00:03.0: NVMe 1.4: MSI-X 2 of 65 vectors on LPIs 8194-8195 (DeviceID 0x18): vector 0 (admin) in 64 us, vector 1 (I/O queue 1) in 163 us; queues 0x003f003f
+NeoDarwinNVMeController: 00:03.0: 1 I/O queue pair of 64 entries, 32 commands each, transfers up to 512 KiB; MSI-X 2 vectors (LPIs 8194-8195), admin queue on vector 0 (5 completions by interrupt)
+NeoDarwinNVMeController: 00:03.0: I/O queue 1: first completion by its interrupt (MSI-X vector 1, LPI 8195)
 NeoDarwinPCIHostBridge: \_SB.PCI0: segment 0: 10 devices (2 PCI-to-PCI bridges) on buses 0-2, 9 with INTx, 9 capable of MSI or MSI-X
 ```
 
 Times run from the device's doorbell to the handler's first instruction, under TCG: tens of microseconds, the same order as INTx. LPI numbers follow the order in which drivers start. Devices with no driver yet (virtio, the NIC) have no vectors allocated: IOPCIFamily allocates when a driver first asks.
 
 - **edu** (`NeoDarwinPCIEduTest`): after its INTA test it registers the MSI source, raises the interrupt and waits for the handler. It logs the LPI, the DeviceID and whether IOPCIFamily disabled INTx.
-- **NVMe** (`NeoDarwinPCINVMeTest`, probe score 0; it drives only QEMU's NVMe model, vendor 0x1b36, unless `nd_pci_nvme_test=1` allows any controller, and `nd_pci_nvme_test=0` turns it off): it asks for two MSI-X vectors before anything resolves the device, resets the controller and builds an admin queue pair (completions on vector 0). It sends Get Features (Number of Queues), whose completion raises vector 0. It then creates I/O completion queue 1 on vector 1 and I/O submission queue 1, and sends a Flush through them, whose completion raises vector 1. Two EventIDs, two LPIs, two handlers. Then it disables the controller again.
+- **NVMe** (since P1-10 checkpoint 2, the NVMe driver, `storage.md`: it asks for one vector for the admin queue and one per CPU's I/O queue pair, five with four CPUs; its admin commands complete on vector 0 and each I/O queue logs its first completion on its own vector). Until then, the test driver `NeoDarwinPCINVMeTest` (probe score 0; it drives only QEMU's NVMe model, vendor 0x1b36, unless `nd_pci_nvme_test=1` allows any controller, and `nd_pci_nvme_test=0` turns it off): it asks for two MSI-X vectors before anything resolves the device, resets the controller and builds an admin queue pair (completions on vector 0). It sends Get Features (Number of Queues), whose completion raises vector 0. It then creates I/O completion queue 1 on vector 1 and I/O submission queue 1, and sends a Flush through them, whose completion raises vector 1. Two EventIDs, two LPIs, two handlers. Then it disables the controller again.
 - **virtio-blk** is MSI-X capable (2 vectors, or 1 + one per CPU queue with `-smp`). It gets vectors when P1-10's driver asks.
 
 ## Tests
@@ -132,20 +133,20 @@ The harness grew `--machine-opt OPT` (appended to `-M`) for the SMMU test.
 - **Vectors.** 2048 LPIs are handed out, from tables that cover 8192. Multiple MSI (as opposed to MSI-X) is still one vector per device unless the driver sets `kIOPCIMSIFlagRespect`, as IOPCIFamily's macOS policy has it.
 - **SMMU.** Not programmed: MSIs and DMA depend on bypass. An SMMU that firmware leaves translating or aborting would drop MSI writes, and devices would need `nd_pci_msi=0` (INTx).
 - **Several ITSs** work in principle: each MADT ITS is set up, and a device goes to the one its IORT group names. Only one-ITS machines have been tried.
-- **Non-coherent devices.** The NVMe test cleans its submission entries when the device isn't `dma-coherent`, but doesn't invalidate completions before reading them. P1-10's drivers must do both.
+- **Non-coherent devices.** P1-10's drivers clean what they write and invalidate completions before reading them when the device isn't `dma-coherent`; no QEMU device exercises it (`nd_gic_lpi_nc=1` covers only the GIC's tables).
 
 ## What the Radxa Dragon Q8B will stress
 
 - **GIC-600's ITS at 0x17a40000** (MADT translation ID 0), 8 redistributors at 0x17a60000. Whether its tables are coherent is unknown: the shareability read-back decides, and the log says which way it went (`nd_gic_lpi_nc=1` has exercised the other path on QEMU). The tables are ordinary kernel memory below 2^48. The board has 40-bit physical addresses and its RAM is below them; the GIC reads the tables itself, not through PCIe, so the 36-bit PCIe DMA limit doesn't apply to them. `GITS_TYPER.PTA` decides how collections are addressed; both encodings are implemented, but only PTA 0 (QEMU) has run.
 - **DeviceIDs up to 0xeffff** (segments 0–6 through the SMMU at 0x80000 + (s << 16 | RID)): the ITS needs at least 20 DeviceID bits. A two-level device table keeps that to a level-1 page plus a 64 KiB page per 8192 DeviceIDs in use. If `Indirect` doesn't stick, the flat table is 8 MiB of contiguous memory, allocated at boot, which may fail. MAPD fails with a log line if the ITS has fewer DeviceID bits.
-- **The SMMUv3 at 0x14f80000**, which the firmware reserves. If it isn't in bypass, MSI writes are translated or aborted and the MSIs vanish, while INTx keeps working. On the first boot, the NVMe test's line shows which (a timeout on vector 0 after `NeoDarwinPCIMSI: 0002:01:00.0: MSI-X 2 of ... via SMMUv3 at 0x14f80000 as stream 0x20100 (bypass)`). `nd_pci_msi=0` is the fallback, and an SMMUv3 driver (at least a bypass STE configuration) the fix.
+- **The SMMUv3 at 0x14f80000**, which the firmware reserves. If it isn't in bypass, MSI writes are translated or aborted and the MSIs vanish, while INTx keeps working. On the first boot, the NVMe driver shows which (an admin command that completes without its interrupt, or times out, after `NeoDarwinPCIMSI: 0002:01:00.0: MSI-X 2 of ... via SMMUv3 at 0x14f80000 as stream 0x20100 (bypass)`). `nd_pci_msi=0` is the fallback, and an SMMUv3 driver (at least a bypass STE configuration) the fix.
 - **`_OSC`** now claims MSI in the support field, so the Q8B may grant hot plug too, which it held back without MSI (`pci.md`).
-- **NVMe on segment 2**: the NVMe test driver doesn't touch it by default, since that disk holds the board's other systems. Boot with `nd_pci_nvme_test=1` to run it there (read-only admin commands and a Flush on namespace 1); it is then the first MSI-X proof on the board.
+- **NVMe on segment 2**: the NVMe driver attaches it read-only by default, since that disk holds the board's other systems (`storage.md`, "Real disks: the write policy"); its admin queue on vector 0 is then the first MSI-X proof on the board.
 
 ## For P1-10 (virtio-blk and NVMe drivers)
 
 - Before reading anything interrupt-related, call `configureInterrupts(kIOInterruptTypePCIMessagedX, required, requested)` for one vector per queue. Without it, an MSI-X device gets one shared vector, and IOPCIFamily's dispatch for shared vectors reads the PBA, which is clear once a message has been sent. Nothing else in the kernel reads a device's specifiers before its driver does.
 - Sources: with `configureInterrupts`, the MSI-X vectors are sources 0 to n−1 and there is no INTx source. Otherwise INTx is source 0 and MSI or MSI-X follows. Look for `kIOInterruptTypePCIMessagedX` with `getInterruptType`.
 - `IOInterruptEventSource` (not a filter) is enough for MSI-X: vectors are edge-triggered and not shared.
-- Honour `dma-coherent` (cache maintenance both ways) and `dma-address-bits`, and allocate queues with `kIOMemoryHostPhysicallyContiguous | kIOMemoryMapperNone` within them, as the NVMe test does.
+- Honour `dma-coherent` (cache maintenance both ways) and `dma-address-bits`, and allocate queues with `kIOMemoryHostPhysicallyContiguous | kIOMemoryMapperNone` within them, as the storage drivers do (`NeoDarwinStorageDMA.h`).
 - Keep INTx working for `nd_pci_msi=0`: `configureInterrupts` then fails with `kIOReturnUnsupported`.

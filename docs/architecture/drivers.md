@@ -20,7 +20,7 @@ Dexts are the default for anything new after the base storage and display path e
 | PCIe (`IOPCIFamily`) | Apple open source | adopt; ECAM/MSI glue from `ndacpi` | `sys/dev/pci` | `drivers/pci` |
 | Storage stack (`IOStorageFamily`) | Apple open source | adopted in P1-10: IOStorageFamily-331 and AppleFileSystemDriver-31 built into the kernel (`docs/kernel/storage.md`) | — | — |
 | virtio (bus, blk, net, console, gpu, input, 9p) | new | P1-M5 (blk, console), P3 (net, gpu, input) | `sys/dev/virtio/*` (derive) | `drivers/virtio` |
-| NVMe | new | P1-M5 | `sys/dev/nvme` (derive) | `drivers/nvme` |
+| NVMe | new | P1-M5; P1-10 checkpoint 2: `NeoDarwinNVMeController` written from the NVMe 1.4 specification, built into the kernel, read-only on real controllers by default (`docs/kernel/storage.md`) | `sys/dev/nvme` (derive) | `drivers/nvme` |
 | AHCI/SATA | new | P3 | `sys/dev/ahci` (derive) | `drivers/ata` |
 | USB host (XHCI) + USB core | new (`NDUSBFamily`; modern IOUSBHostFamily is closed) | P3 | `sys/dev/usb/controller/xhci*.c`, `sys/dev/usb/usb_*.c` (derive) | `drivers/usb/host/xhci*` |
 | USB HID, mass storage | new dexts | P3/P4 | `sys/dev/usb/input`, `sys/dev/usb/storage` | `drivers/hid` |

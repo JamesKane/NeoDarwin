@@ -13,13 +13,13 @@ Checkpoint 3 adds MSI and MSI-X through the GIC ITS (`gic-its.md`); P1-10 adds t
 | `kernel/neodarwin/pci/nd_pci.h`, `nd_pci_ecam.c` | the ECAM registry and configuration access, by segment; C, shared by ACPICA's OS layer and the host bridge |
 | `kernel/neodarwin/pci/NeoDarwinPCIHostBridge.{h,cpp}` | the `IOPCIHostBridge` for PNP0A08/PNP0A03 nubs |
 | `kernel/neodarwin/pci/NeoDarwinPCIEduTest.cpp` | a driver for QEMU's `edu` device (1234:11e8) that raises INTA and waits for its handler, then the same through its MSI (checkpoint 3) |
-| `kernel/neodarwin/pci/NeoDarwinPCIMSI.{h,cpp}`, `nd_iort.{h,c}`, `NeoDarwinPCINVMeTest.cpp` | checkpoint 3: the ITS-backed messaged interrupt controller, the MADT/IORT parser, and an NVMe MSI-X proof (`gic-its.md`) |
+| `kernel/neodarwin/pci/NeoDarwinPCIMSI.{h,cpp}`, `nd_iort.{h,c}` | checkpoint 3: the ITS-backed messaged interrupt controller and the MADT/IORT parser (`gic-its.md`); its NVMe MSI-X proof, `NeoDarwinPCINVMeTest.cpp`, was retired in P1-10 for the NVMe driver (`storage.md`) |
 | `kernel/neodarwin/pci/compat` | `os/availability.h` and `IOKit/dart/IODARTKeys.h`, which the kext gets from the SDK and from Apple's closed DART driver |
 | `kernel/neodarwin/acpi` | MCFG into the ECAM registry, AML configuration access (`nd_acpi_osl.c`), `_PRT` routing (`IOACPIPlatformDevice::callPlatformFunction`) |
 | `kernel/neodarwin/platform/NeoDarwinGICv3.cpp` | SPI group, priority, trigger and routing; shared level SPIs |
 | `kernel/patches/0022-iokit-build-iopcifamily-and-pci-host-bridge.patch` | lists IOPCIFamily and NeoDarwin's PCI files in `iokit/conf/files.arm64`, their search paths, and the built-in personalities |
 | `kernel/patches/0023-iopcifamily-arm64-fixes-and-64-bit-bars.patch` | two compile errors in IOPCIFamily, and 64-bit BARs above 4 GiB on arm64 |
-| `kernel/patches/0024-iokit-build-gic-its-and-pci-msi.patch` | checkpoint 3's files and the NVMe test's personality |
+| `kernel/patches/0024-iokit-build-gic-its-and-pci-msi.patch` | checkpoint 3's files and the NVMe test's personality (the test driver retired by patch 0029) |
 
 `kernel/BUILD.bazel` overlays NeoDarwin's files at `iokit/ndpci` and IOPCIFamily at `iokit/ndpci/IOPCIFamily`. As with ACPICA and HFS+, everything is compiled into the kernel, because `kcgen` links no kexts until M5.
 
@@ -170,7 +170,7 @@ Done: `gic-its.md`. The host bridge answers "GetMessagedInterruptController" wit
 
 ## For P1-10 (virtio-blk and NVMe)
 
-Checkpoint 1's virtio-blk driver follows this list (`storage.md`); NVMe is next.
+Both drivers follow this list (`storage.md`): virtio-blk (checkpoint 1) and NVMe (checkpoint 2).
 
 - Match `IOPCIDevice` by `IOPCIMatch` (virtio 0x10011af4 and 0x10421af4; NVMe by `IOPCIClassMatch` 0x01080200). Map BARs with `mapDeviceMemoryWithRegister`; an I/O BAR (transitional virtio) maps as MMIO too.
 - Interrupts: ask for MSI-X vectors with `configureInterrupts(kIOInterruptTypePCIMessagedX, …)` before anything else touches the device's interrupts (`gic-its.md`, "For P1-10"). Without MSIs (`nd_pci_msi=0`, no ITS) source 0 is INTx, level and possibly shared: use an `IOFilterInterruptEventSource` whose filter checks the device's own status.
