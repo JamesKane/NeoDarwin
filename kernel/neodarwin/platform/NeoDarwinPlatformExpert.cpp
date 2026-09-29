@@ -23,6 +23,8 @@ extern "C" kern_return_t cpu_xcall(int cpu, void (*func)(void *), void *param);
 extern "C" uint32_t processor_avail_count;
 // osfmk/kern/sched_prim.h, visible only to MACH_KERNEL_PRIVATE.
 extern "C" processor_t thread_bind(processor_t processor);
+// kernel/neodarwin/acpi (patch 0018): ACPICA and the ACPI device nubs.
+extern void nd_acpi_platform_start(IOService *platformExpert);
 
 #define ND_ISB_SY 0xf
 
@@ -98,6 +100,10 @@ NeoDarwinPlatformExpert::start(IOService *provider)
 	thread_deallocate(thread);
 
 	registerService();
+
+	// P1-09: ACPICA over the loader's copy of the tables, publishing an
+	// IOACPIPlatformDevice per device. It runs on a thread of its own.
+	nd_acpi_platform_start(this);
 	return true;
 }
 

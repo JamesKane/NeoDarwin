@@ -7,7 +7,7 @@
 #   --esp PATH=FILE   also place FILE on the ESP at PATH (e.g. NeoDarwin/kernelcache=...)
 #   --mem SIZE        guest RAM (default 512M; 1G for virt-secure)
 #   --smp N           CPUs (default 1)
-#   --cpu MODEL       QEMU CPU (default cortex-a76; the SBSA kernel needs Armv8.4, e.g. neoverse-v1)
+#   --cpu MODEL       QEMU CPU (default cortex-a76, Armv8.2: the SBSA kernel's baseline)
 #   --machine KIND    virt (default): QEMU virt without EL3, EDK2 from QEMU's
 #                     share/qemu, one GIC security state (GICD_CTLR.DS=1).
 #                     virt-secure: virt,secure=on with TrustZone firmware at
@@ -26,11 +26,22 @@
 #                     would; "\n" in TEXT is Enter. Steps run in order. The
 #                     kernel drops input typed before the console is open, so
 #                     LINE should be a prompt
+#   --device DEV      add a QEMU device, e.g. ramfb (a GOP framebuffer under EDK2)
+#   --screendump NAME once the run has passed (or timed out), save the display
+#                     as a PPM through QEMU's monitor, as NAME in
+#                     $TEST_UNDECLARED_OUTPUTS_DIR (or ND_QEMU_DEBUG's directory)
+#   --screen-font FILE
+#                     xnu's osfmk/console/iso_font.c: read the screendump's
+#                     text back, cell by 8x16 cell, and print it
+#   --screen-line TEXT
+#                     require TEXT on one line of the screen (needs the two
+#                     options above); repeatable
 # Environment:
 #   ND_QEMU           qemu-system-aarch64 to use
 #   ND_QEMU_DEBUG=DIR keep serial.log there and add QEMU's exception trace (-d int)
 set -euo pipefail
 esp_files=(); mem=""; smp=1; cpu=cortex-a76; until_lines=0; sends=(); machine=virt; firmware=""
+devices=(); screendump=""; screen_font=""; screen_lines=()
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--esp) esp_files+=("$2"); shift 2 ;;
@@ -41,6 +52,10 @@ while [ $# -gt 0 ]; do
 		--firmware) firmware="$2"; shift 2 ;;
 		--until-lines) until_lines=1; shift ;;
 		--send-after) sends+=("$2" "$3"); shift 3 ;;
+		--device) devices+=(-device "$2"); shift 2 ;;
+		--screendump) screendump="$2"; shift 2 ;;
+		--screen-font) screen_font="$2"; shift 2 ;;
+		--screen-line) screen_lines+=("$2"); shift 2 ;;
 		*) break ;;
 	esac
 done
@@ -91,14 +106,23 @@ patterns="$work/expect"; printf '%s\n' "$@" > "$patterns"
 steps="$work/sends"; : > "$steps"
 i=0; while [ $i -lt ${#sends[@]} ]; do printf '%s\t%s\n' "${sends[$i]}" "${sends[$((i + 1))]}" >> "$steps"; i=$((i + 2)); done
 mkfifo "$work/ser.in" "$work/ser.out"
+# With a screendump, the monitor is a Unix socket the watchdog talks to.
+monitor=(-monitor none); dump=""
+if [ -n "$screendump" ]; then
+	dump="${TEST_UNDECLARED_OUTPUTS_DIR:-$logdir}/$screendump"; mkdir -p "$(dirname "$dump")"; rm -f "$dump"
+	# A short path: Unix socket names are limited to about 100 bytes, and
+	# Bazel's TMPDIR is long.
+	mon_dir="$(mktemp -d /tmp/ndmon.XXXXXX)"; trap 'rm -rf "$work" "$mon_dir"' EXIT
+	monitor=(-monitor unix:"$mon_dir/mon",server=on,wait=off)
+fi
 status=0
 # Watchdog in perl: QEMU ignores SIGALRM. It copies serial output to the log,
 # types each --send-after step once its line has appeared, and in
 # --until-lines mode stops QEMU once every expected line is there. QEMU
 # stalls if its output isn't drained, so the loop always reads it.
 perl -e '
-	use Fcntl; use Time::HiRes qw(time);
-	my ($t, $until, $log, $pat, $steps, $ser, @cmd) = @ARGV;
+	use Fcntl; use Time::HiRes qw(time); use IO::Socket::UNIX;
+	my ($t, $until, $log, $pat, $steps, $ser, $mon, $dump, @cmd) = @ARGV;
 	open(my $pf, "<", $pat) or die; my @want = grep { length } map { chomp; $_ } <$pf>;
 	open(my $sf, "<", $steps) or die; my @send = map { chomp; [split /\t/, $_, 2] } <$sf>;
 	sysopen(my $out, "$ser.out", O_RDWR | O_NONBLOCK) or die "ser.out: $!";
@@ -106,6 +130,20 @@ perl -e '
 	open(my $lf, ">>", $log) or die; $lf->autoflush(1);
 	my ($text, $pos, $due) = ("", 0, undef);
 	sub drain { my $buf; while (sysread($out, $buf, 65536)) { print $lf $buf; $buf =~ s/\r//g; $text .= $buf } }
+	# The display as a PPM, a second after the last expected line (the
+	# console draws as it prints), once QEMU has finished writing it.
+	sub screendump {
+		return unless length $dump;
+		my $until = time + 1; while (time < $until) { drain(); select(undef, undef, undef, 0.1) }
+		my $m = IO::Socket::UNIX->new(Type => SOCK_STREAM(), Peer => $mon) or return;
+		print $m "screendump $dump\n";
+		my ($last, $deadline) = (-1, time + 15);
+		while (time < $deadline) {
+			drain(); select(undef, undef, undef, 0.3);
+			my $size = -s $dump; last if defined $size && $size > 0 && $size == $last; $last = $size // -1;
+		}
+		close $m;
+	}
 	my $pid = fork(); if (!$pid) { exec @cmd or die "exec: $!" }
 	my $deadline = time + $t;
 	while (1) {
@@ -118,13 +156,14 @@ perl -e '
 			(my $keys = $send[0][1]) =~ s/\\n/\r/g;
 			syswrite($in, $keys); shift @send; undef $due;
 		}
-		if ($until && !@send && !grep { index($text, $_) < 0 } @want) { kill 9, $pid; waitpid($pid, 0); exit 0 }
-		if (time >= $deadline) { kill 9, $pid; waitpid($pid, 0); exit 124 }
+		if ($until && !@send && !grep { index($text, $_) < 0 } @want) { screendump(); kill 9, $pid; waitpid($pid, 0); exit 0 }
+		if (time >= $deadline) { screendump(); kill 9, $pid; waitpid($pid, 0); exit 124 }
 		select(undef, undef, undef, 0.2);
 	}
-' "$timeout" "$until_lines" "$log" "$patterns" "$steps" "$work/ser" "$qemu" "${machine_args[@]}" -cpu "$cpu" -smp "$smp" -m "$mem" \
-	-nographic -no-reboot \
-	-drive format=raw,file=fat:rw:"$work/esp" -chardev pipe,id=ser,path="$work/ser" -serial chardev:ser -monitor none \
+' "$timeout" "$until_lines" "$log" "$patterns" "$steps" "$work/ser" "${mon_dir:-}/mon" "$dump" \
+	"$qemu" "${machine_args[@]}" -cpu "$cpu" -smp "$smp" -m "$mem" \
+	-nographic -no-reboot ${devices[@]+"${devices[@]}"} \
+	-drive format=raw,file=fat:rw:"$work/esp" -chardev pipe,id=ser,path="$work/ser" -serial chardev:ser "${monitor[@]}" \
 	${debug[@]+"${debug[@]}"} || status=$?
 # The log as a terminal shows it: escape sequences dropped, backspaces
 # applied (line editors such as zsh's back up and redraw), lines split.
@@ -136,4 +175,44 @@ for want in "$@"; do
 	echo "$clean" | grep -aqF -- "$want" || { echo "FAIL: missing serial line: $want"; exit 1; }
 done
 [ "$status" -eq 0 ] || exit 1
-echo "PASS: $# expected line(s) on serial"
+if [ -n "$screendump" ]; then
+	[ -s "$dump" ] || { echo "FAIL: no screendump (is there a display device?)"; exit 1; }
+	echo "screendump: $dump"
+fi
+if [ -n "$screen_font" ]; then
+	# The screen's text: each 8x16 cell's foreground bits (anything but the
+	# commonest colour) looked up in the font video_console.c draws with,
+	# bit 0 leftmost (vc_render_char). Unknown cells, such as the cursor,
+	# read as "?".
+	screen="$(perl -e '
+		my ($ppm, $font) = @ARGV;
+		open(my $ff, "<", $font) or die "$font: $!"; my $src = do { local $/; <$ff> };
+		$src =~ /iso_font\[[^\]]*\]\s*=\s*\{(.*?)\};/s or die "no iso_font in $font";
+		my @b = map { hex } ($1 =~ /0x([0-9a-fA-F]{2})/g); @b == 4096 or die "iso_font has " . @b . " bytes";
+		my %glyph; for my $c (reverse 33 .. 126) { $glyph{join(",", @b[$c * 16 .. $c * 16 + 15])} = chr($c) }
+		open(my $pf, "<:raw", $ppm) or die "$ppm: $!"; my $d = do { local $/; <$pf> };
+		$d =~ s/\AP6\s+(?:#[^\n]*\n\s*)*(\d+)\s+(\d+)\s+(\d+)\s//s or die "$ppm is not a binary PPM";
+		my ($w, $h) = ($1, $2);
+		my %n; $n{substr($d, $_ * 3, 3)}++ for 0 .. $w * $h - 1;
+		my ($bg) = sort { $n{$b} <=> $n{$a} } keys %n;
+		for my $r (0 .. int($h / 16) - 1) {
+			my $line = "";
+			for my $c (0 .. int($w / 8) - 1) {
+				my @rows;
+				for my $y (0 .. 15) {
+					my $o = (($r * 16 + $y) * $w + $c * 8) * 3; my $v = 0;
+					for my $x (0 .. 7) { $v |= 1 << $x if substr($d, $o + $x * 3, 3) ne $bg }
+					push @rows, $v;
+				}
+				my $k = join(",", @rows);
+				$line .= $k eq "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0" ? " " : ($glyph{$k} // "?");
+			}
+			$line =~ s/\s+$//; print "$line\n";
+		}
+	' "$dump" "$screen_font")" || { echo "FAIL: cannot read the screendump's text"; exit 1; }
+	echo "--- screen ---"; echo "$screen" | grep -av '^$' | tail -n 30; echo "--------------"
+	for want in ${screen_lines[@]+"${screen_lines[@]}"}; do
+		echo "$screen" | grep -aqF -- "$want" || { echo "FAIL: missing screen line: $want"; exit 1; }
+	done
+fi
+echo "PASS: $# expected line(s) on serial${screen_lines[@]+, ${#screen_lines[@]} on screen}"

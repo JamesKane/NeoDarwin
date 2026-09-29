@@ -97,10 +97,16 @@ SBSA_PATCHES = [
     "patches/0015-libkern-build-hfs.patch",
     "patches/0016-gicv3-timer-on-group1.patch",
     "patches/0017-generic-arm64-smp-psci-cpu-on.patch",
+    "patches/0018-iokit-build-acpica-and-acpi-platform.patch",
+    "patches/0019-sbsa-armv8.2-baseline.patch",
+    "patches/0020-generic-arm64-cpu-id-from-full-mpidr.patch",
+    "patches/0021-generic-arm64-framebuffer-console.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
 SBSA_OVERLAYS = {
+    "//kernel/neodarwin/acpi:kernel_srcs": "iokit/ndacpi",
+    "@acpica//:kernel_srcs": "iokit/ndacpi/acpica",
     "//kernel/neodarwin/amfi:kernel_srcs": "bsd/ndamfi",
     "//kernel/neodarwin/crypto:kernel_srcs": "libkern/ndcrypto",
     "//kernel/neodarwin/hfs:kernel_srcs": "libkern/ndhfs",
@@ -147,15 +153,18 @@ sh_test(
     tags = ["manual", "kernel"],
 )
 
-# Apple-ISA audit: no implementation-defined system registers, HVC, AMX or GXF
-# in the SBSA kernel. The baseline holds one entry, NeoDarwinPSCI's HVC
-# conduit, which runs only when the firmware puts PSCI behind a hypervisor
-# (P1-06); nothing may be added to it.
+# ISA audit: no implementation-defined system registers, HVC, AMX or GXF in
+# the SBSA kernel, and no instruction past the Armv8.2 baseline (P1-17): the
+# ISA both the Q8B's Cortex-X1C/A78C and QEMU's cortex-a76 implement, v8.2
+# with RCpc, dot product, AES, SHA-1/SHA-2 and FP16. The baseline file lists
+# what is allowed by name, each entry guarded at run time; nothing may be
+# added to it.
 sh_test(
     name = "sbsa_isa_audit",
     size = "small",
     srcs = ["//tools/xnu:isa_audit.sh"],
     args = [
+        "--mattr +v8.2a,+rcpc,+dotprod,+aes,+sha2,+fullfp16",
         "$(rootpaths :sbsa_release)",
         "$(rootpath isa_audit/sbsa_release.txt)",
     ],
@@ -194,9 +203,8 @@ sh_test(
 )
 
 # P1-03: neoboot boots the collection on QEMU virt and the kernel reaches the
-# listed serial lines. The CPU must implement Armv8.4's range TLB
-# invalidation (the kernel is built for armv8.4-a); QEMU's cortex-a76 and
-# neoverse-v1 models do not, so this uses neoverse-n2.
+# listed serial lines, on neoverse-n2 (Armv9.0). The kernel's baseline is
+# Armv8.2 since P1-17; the sbsa_a76_* tests boot it on cortex-a76.
 sh_test(
     name = "sbsa_boot_test",
     size = "medium",
@@ -226,6 +234,16 @@ sh_test(
         "'pid1: hello from userland: PID 1 on /dev/console'",
         "'pid1: mach: message round trip through mach_msg2'",
         "'pid1: all checks passed'",
+        # ACPICA in the kernel, publishing IOACPIPlatformDevice nubs from
+        # QEMU's DSDT (P1-09, docs/kernel/acpi.md): the PCI host bridge with
+        # its windows, _CBA and _PRT read through the nub, the UART and the
+        # last virtio-mmio slot with their _CRS registers and GIC INTIDs.
+        "'NeoDarwinACPIPlatform: ACPICA 20260408; 9 tables (FACP DSDT APIC PPTT GTDT MCFG SPCR DBG2 IORT); 44 devices published, 3 more in IOACPIPlane'",
+        "'NeoDarwinACPIPlatform: \\_SB.PCI0 PNP0A08 (PNP0A03) uid 0 bus 0-255 memory 0x10000000+0x2eff0000 io 0x3eff0000+0x10000 memory 0x8000000000+0x8000000000'",
+        "'NeoDarwinACPIPlatform: \\_SB.PCI0: PCI segment 0, bus 0, ECAM 0x4010000000 (_CBA); _PRT 128 routes'",
+        "'NeoDarwinACPIPlatform: \\_SB.COM0 ARMH0011 uid 0 mem 0x9000000+0x1000 irq 33'",
+        "'NeoDarwinACPIPlatform: \\_SB.VR31 LNRO0005 uid 31 mem 0xa003e00+0x200 irq 79'",
+        "'NeoDarwinACPIPlatform: \\_SB.GED ACPI0013 uid GED irq 41 edge'",
     ],
     data = [
         ":sbsa_kc",
@@ -263,6 +281,9 @@ sh_test(
         "'hfs: mounted NeoDarwin on device'",
         "'com.apple.launchd'",
         "'slept-1'",
+        # ACPICA and the ACPI nubs under TF-A (P1-09): the same DSDT.
+        "'NeoDarwinACPIPlatform: ACPICA 20260408; 9 tables (FACP DSDT APIC PPTT GTDT MCFG SPCR DBG2 IORT); 44 devices published, 3 more in IOACPIPlane'",
+        "'NeoDarwinACPIPlatform: \\_SB.PCI0: PCI segment 0, bus 0, ECAM 0x4010000000 (_CBA); _PRT 128 routes'",
     ],
     data = [
         ":sbsa_kc",
@@ -411,6 +432,45 @@ sh_test(
     tags = ["manual", "kernel", "qemu"],
 )
 
+# The framebuffer console (arm64-sbsa-bringup.md §2.1.7): the getty session
+# with QEMU's ramfb, a GOP framebuffer under EDK2. neoboot passes it in
+# boot_args.Video and the kernel's video console shows the serial console's
+# output (patch 0021). The test reads the screen back from a screendump with
+# xnu's console font and looks for the shell's output on it.
+sh_test(
+    name = "sbsa_fb_console_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--device ramfb",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:getty_root)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after '# ' 'echo fb-$$((6*7)); uname -sm\\n'",
+        "--screendump screen.ppm",
+        "--screen-font $(rootpath @apple_xnu_corecrypto//:osfmk/console/iso_font.c)",
+        "--screen-line 'fb-42'",
+        "--screen-line 'Darwin arm64'",
+        "$(rootpath //boot/neoboot)",
+        "180",
+        "'neoboot: GOP: '",
+        "'video console: '",
+        "'getty_init: PID 1 on /dev/console; starting getty'",
+        "'fb-42'",
+        "'Darwin arm64'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:getty_root",
+        "@apple_xnu_corecrypto//:osfmk/console/iso_font.c",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
 # P1-07: the same boot with PID 1 itself as the ramdisk, rooted on mockfs
 # (patches 0011-0013).
 sh_test(
@@ -523,6 +583,113 @@ sh_test(
         "'NeoDarwinPlatformExpert: IPI round trip from cpu 0 to cpu 3: median '",
         "'ncpu-4-4'",
         "'slept-1'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:session_root",
+        "//third_party/qemu_firmware:virt_secure_flash",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P1-17's exit: the Armv8.2 kernel (patch 0019) on QEMU's cortex-a76, the
+# class of core the Radxa Dragon Q8B has (Cortex-X1C/A78C, no FEAT_TLBIRANGE,
+# no FEAT_DIT), with eight CPUs, booted to root's shell.
+sh_test(
+    name = "sbsa_a76_smp8_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu cortex-a76",
+        "--mem 2G",
+        "--smp 8",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'r=($$(/usr/sbin/sysctl -n hw.ncpu hw.activecpu)) && echo ncpu-$${r[1]}-$${r[2]}\\n'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'neoboot: ACPI: 8 CPUs enabled of 8 GICCs; boot CPU MPIDR 0x0'",
+        "'NeoDarwinPlatformExpert: 8 of 8 CPUs online'",
+        "'NeoDarwinPlatformExpert: IPI round trip from cpu 0 to cpu 7: median '",
+        "'hfs: mounted NeoDarwin on device'",
+        "'ncpu-8-8'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:session_root",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# CPUs numbered in MPIDR Aff1 (patch 0020). DynamIQ cores, like the Q8B's
+# (MPIDR 0x000-0x700), number themselves in Aff1 with Aff0 = 0. QEMU virt
+# can't do that: it gives 16 CPUs per Aff1 value whatever -smp's topology
+# (hw/arm/virt.c virt_cpu_mp_affinity), so 18 CPUs make cpu 16 and 17
+# MPIDR 0x100 and 0x101. 0x100 has Aff0 = 0, like the boot CPU: before 0020
+# start.s matched it to the boot CPU's cpu_data. Each must come up on its
+# own, take IPIs addressed through ICC_SGI1R_EL1's Aff1 field, and count.
+sh_test(
+    name = "sbsa_a76_aff1_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu cortex-a76",
+        "--mem 2G",
+        "--smp 18",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'r=($$(/usr/sbin/sysctl -n hw.ncpu hw.activecpu)) && echo ncpu-$${r[1]}-$${r[2]}\\n'",
+        "$(rootpath //boot/neoboot)",
+        "300",
+        "'neoboot: ACPI: 18 CPUs enabled of 18 GICCs; boot CPU MPIDR 0x0'",
+        "'NeoDarwinPSCI: CPU_ON cpu 16, MPIDR 0x100'",
+        "'NeoDarwinPSCI: CPU_ON cpu 17, MPIDR 0x101'",
+        "'NeoDarwinPlatformExpert: 18 of 18 CPUs online'",
+        "'NeoDarwinPlatformExpert: IPI round trip from cpu 0 to cpu 16: median '",
+        "'NeoDarwinPlatformExpert: IPI round trip from cpu 0 to cpu 17: median '",
+        "'hfs: mounted NeoDarwin on device'",
+        "'ncpu-18-18'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:session_root",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# The Armv8.2 kernel with eight cortex-a76 CPUs under TF-A (PSCI over SMC,
+# two GIC security states, the timer on Group 1), as on the Q8B. TF-A's
+# QEMU platform stops at eight cores.
+sh_test(
+    name = "sbsa_a76_secure_smp8_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--machine virt-secure",
+        "--firmware $(rootpath //third_party/qemu_firmware:virt_secure_flash)",
+        "--cpu cortex-a76",
+        "--mem 2G",
+        "--smp 8",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'r=($$(/usr/sbin/sysctl -n hw.ncpu hw.activecpu)) && echo ncpu-$${r[1]}-$${r[2]}\\n'",
+        "$(rootpath //boot/neoboot)",
+        "300",
+        "'NOTICE:  BL31: v2.15.0(release)'",
+        "'neoboot: PSCI conduit: SMC: the FADT reports none, but the CPU implements EL3'",
+        "'NeoDarwinPSCI: PSCI 1.1 over SMC'",
+        "'NeoDarwinGICv3: timer PPI 27 on Group 1 (IRQ); '",
+        "'NeoDarwinPlatformExpert: 8 of 8 CPUs online'",
+        "'ncpu-8-8'",
     ],
     data = [
         ":sbsa_kc",

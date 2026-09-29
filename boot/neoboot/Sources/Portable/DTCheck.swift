@@ -331,6 +331,9 @@ enum DTCheck {
                     r.violation("a cpu interrupts is not three one-cell specifiers (AppleARMSMP's IPI form); reg", UInt64(reg))
                 }
                 if c.u32("AAPL,phandle") == nil { r.violation("a cpu has no AAPL,phandle; reg", UInt64(reg)) }
+                if c.u32("die-cluster-id") != 0 { r.violation("a cpu die-cluster-id is not 0 (one cluster); reg", UInt64(reg)) }
+                if c.u32("cluster-core-id") != UInt32(n - 1) { r.violation("a cpu cluster-core-id is not its /cpus index; reg", UInt64(reg)) }
+                if reg & 0xff00_0000 != 0 { r.violation("a cpu reg has bits above MPIDR Aff2; reg", UInt64(reg)) }
             }
             if running != 1 { r.violation("not exactly one cpu is \"running\" (the boot CPU); running", UInt64(running)) }
             if n == 0 || n > Platform.maxCPUs { r.violation("the number of cpus is not 1 to MAX_CPUS (32)", UInt64(n)) }

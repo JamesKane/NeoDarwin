@@ -1,0 +1,223 @@
+From: NeoDarwin
+Subject: [PATCH] iokit: build ACPICA and NeoDarwin's ACPI platform
+
+SBSA machines describe their devices in ACPI: the DSDT and SSDTs name the
+PCI host bridge, the UART, virtio-mmio slots, the GED and the rest, with
+their registers and interrupts in AML (_CRS). XNU has no AML interpreter;
+on Intel Macs Apple's closed AppleACPIPlatform kext was one. P1-09 builds
+ACPICA (acpica/acpica 20260408, used under its BSD-3-Clause licence;
+overlaid at iokit/ndacpi/acpica) into the kernel with NeoDarwin's ACPI
+platform (kernel/neodarwin/acpi, overlaid at iokit/ndacpi): ACPICA's OS
+layer, the ACPI platform driver and IOACPIPlatformDevice. They are compiled
+in, as the platform expert is (patch 0009), because kcgen links no kexts
+until M5. NeoDarwinPlatformExpert starts the ACPI platform.
+
+This patch lists the files for arm64: ACPICA's core (dispatcher, events,
+executer, hardware, namespace, parser, resources, tables, utilities; no
+debugger, disassembler or tools) and NeoDarwin's three. ACPICA's objects
+are compiled with -include acnd.h, NeoDarwin's host configuration, which
+stands in for the platform header ACPICA would pick for __APPLE__, so
+ACPICA itself is not patched.
+
+Rebase-risk: low (appended entries; applies after 0009).
+---
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -11,5 +11,174 @@
+ iokit/ndplatform/NeoDarwinGICv3.cpp	optional iokitcpp
+ iokit/ndplatform/NeoDarwinPSCI.cpp	optional iokitcpp
+ 
++# NeoDarwin ACPI platform (kernel/neodarwin/acpi): the ACPI platform driver,
++# IOACPIPlatformDevice and ACPICA's OS layer, and ACPICA's core (@acpica)
++iokit/ndacpi/NeoDarwinACPIPlatform.cpp	optional iokitcpp
++iokit/ndacpi/IOACPIPlatformDevice.cpp	optional iokitcpp
++iokit/ndacpi/nd_acpi_osl.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dsargs.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dscontrol.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dsdebug.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dsfield.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dsinit.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dsmethod.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dsmthdat.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dsobject.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dsopcode.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dspkginit.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dsutils.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dswexec.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dswload.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dswload2.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dswscope.c	standard
++iokit/ndacpi/acpica/source/components/dispatcher/dswstate.c	standard
++iokit/ndacpi/acpica/source/components/events/evevent.c	standard
++iokit/ndacpi/acpica/source/components/events/evglock.c	standard
++iokit/ndacpi/acpica/source/components/events/evgpe.c	standard
++iokit/ndacpi/acpica/source/components/events/evgpeblk.c	standard
++iokit/ndacpi/acpica/source/components/events/evgpeinit.c	standard
++iokit/ndacpi/acpica/source/components/events/evgpeutil.c	standard
++iokit/ndacpi/acpica/source/components/events/evhandler.c	standard
++iokit/ndacpi/acpica/source/components/events/evmisc.c	standard
++iokit/ndacpi/acpica/source/components/events/evregion.c	standard
++iokit/ndacpi/acpica/source/components/events/evrgnini.c	standard
++iokit/ndacpi/acpica/source/components/events/evsci.c	standard
++iokit/ndacpi/acpica/source/components/events/evxface.c	standard
++iokit/ndacpi/acpica/source/components/events/evxfevnt.c	standard
++iokit/ndacpi/acpica/source/components/events/evxfgpe.c	standard
++iokit/ndacpi/acpica/source/components/events/evxfregn.c	standard
++iokit/ndacpi/acpica/source/components/executer/exconcat.c	standard
++iokit/ndacpi/acpica/source/components/executer/exconfig.c	standard
++iokit/ndacpi/acpica/source/components/executer/exconvrt.c	standard
++iokit/ndacpi/acpica/source/components/executer/excreate.c	standard
++iokit/ndacpi/acpica/source/components/executer/exdebug.c	standard
++iokit/ndacpi/acpica/source/components/executer/exdump.c	standard
++iokit/ndacpi/acpica/source/components/executer/exfield.c	standard
++iokit/ndacpi/acpica/source/components/executer/exfldio.c	standard
++iokit/ndacpi/acpica/source/components/executer/exmisc.c	standard
++iokit/ndacpi/acpica/source/components/executer/exmutex.c	standard
++iokit/ndacpi/acpica/source/components/executer/exnames.c	standard
++iokit/ndacpi/acpica/source/components/executer/exoparg1.c	standard
++iokit/ndacpi/acpica/source/components/executer/exoparg2.c	standard
++iokit/ndacpi/acpica/source/components/executer/exoparg3.c	standard
++iokit/ndacpi/acpica/source/components/executer/exoparg6.c	standard
++iokit/ndacpi/acpica/source/components/executer/exprep.c	standard
++iokit/ndacpi/acpica/source/components/executer/exregion.c	standard
++iokit/ndacpi/acpica/source/components/executer/exresnte.c	standard
++iokit/ndacpi/acpica/source/components/executer/exresolv.c	standard
++iokit/ndacpi/acpica/source/components/executer/exresop.c	standard
++iokit/ndacpi/acpica/source/components/executer/exserial.c	standard
++iokit/ndacpi/acpica/source/components/executer/exstore.c	standard
++iokit/ndacpi/acpica/source/components/executer/exstoren.c	standard
++iokit/ndacpi/acpica/source/components/executer/exstorob.c	standard
++iokit/ndacpi/acpica/source/components/executer/exsystem.c	standard
++iokit/ndacpi/acpica/source/components/executer/extrace.c	standard
++iokit/ndacpi/acpica/source/components/executer/exutils.c	standard
++iokit/ndacpi/acpica/source/components/hardware/hwacpi.c	standard
++iokit/ndacpi/acpica/source/components/hardware/hwesleep.c	standard
++iokit/ndacpi/acpica/source/components/hardware/hwgpe.c	standard
++iokit/ndacpi/acpica/source/components/hardware/hwpci.c	standard
++iokit/ndacpi/acpica/source/components/hardware/hwregs.c	standard
++iokit/ndacpi/acpica/source/components/hardware/hwsleep.c	standard
++iokit/ndacpi/acpica/source/components/hardware/hwtimer.c	standard
++iokit/ndacpi/acpica/source/components/hardware/hwvalid.c	standard
++iokit/ndacpi/acpica/source/components/hardware/hwxface.c	standard
++iokit/ndacpi/acpica/source/components/hardware/hwxfsleep.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsaccess.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsalloc.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsarguments.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsconvert.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsdump.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsdumpdv.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nseval.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsinit.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsload.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsnames.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsobject.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsparse.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nspredef.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsprepkg.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsrepair.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsrepair2.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nssearch.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsutils.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nswalk.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsxfeval.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsxfname.c	standard
++iokit/ndacpi/acpica/source/components/namespace/nsxfobj.c	standard
++iokit/ndacpi/acpica/source/components/parser/psargs.c	standard
++iokit/ndacpi/acpica/source/components/parser/psloop.c	standard
++iokit/ndacpi/acpica/source/components/parser/psobject.c	standard
++iokit/ndacpi/acpica/source/components/parser/psopcode.c	standard
++iokit/ndacpi/acpica/source/components/parser/psopinfo.c	standard
++iokit/ndacpi/acpica/source/components/parser/psparse.c	standard
++iokit/ndacpi/acpica/source/components/parser/psscope.c	standard
++iokit/ndacpi/acpica/source/components/parser/pstree.c	standard
++iokit/ndacpi/acpica/source/components/parser/psutils.c	standard
++iokit/ndacpi/acpica/source/components/parser/pswalk.c	standard
++iokit/ndacpi/acpica/source/components/parser/psxface.c	standard
++iokit/ndacpi/acpica/source/components/resources/rsaddr.c	standard
++iokit/ndacpi/acpica/source/components/resources/rscalc.c	standard
++iokit/ndacpi/acpica/source/components/resources/rscreate.c	standard
++iokit/ndacpi/acpica/source/components/resources/rsdumpinfo.c	standard
++iokit/ndacpi/acpica/source/components/resources/rsinfo.c	standard
++iokit/ndacpi/acpica/source/components/resources/rsio.c	standard
++iokit/ndacpi/acpica/source/components/resources/rsirq.c	standard
++iokit/ndacpi/acpica/source/components/resources/rslist.c	standard
++iokit/ndacpi/acpica/source/components/resources/rsmemory.c	standard
++iokit/ndacpi/acpica/source/components/resources/rsmisc.c	standard
++iokit/ndacpi/acpica/source/components/resources/rsserial.c	standard
++iokit/ndacpi/acpica/source/components/resources/rsutils.c	standard
++iokit/ndacpi/acpica/source/components/resources/rsxface.c	standard
++iokit/ndacpi/acpica/source/components/tables/tbdata.c	standard
++iokit/ndacpi/acpica/source/components/tables/tbfadt.c	standard
++iokit/ndacpi/acpica/source/components/tables/tbfind.c	standard
++iokit/ndacpi/acpica/source/components/tables/tbinstal.c	standard
++iokit/ndacpi/acpica/source/components/tables/tbprint.c	standard
++iokit/ndacpi/acpica/source/components/tables/tbutils.c	standard
++iokit/ndacpi/acpica/source/components/tables/tbxface.c	standard
++iokit/ndacpi/acpica/source/components/tables/tbxfload.c	standard
++iokit/ndacpi/acpica/source/components/tables/tbxfroot.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utaddress.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utalloc.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utascii.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utbuffer.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utcache.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utcksum.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utclib.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utcopy.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utdebug.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utdecode.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utdelete.c	standard
++iokit/ndacpi/acpica/source/components/utilities/uterror.c	standard
++iokit/ndacpi/acpica/source/components/utilities/uteval.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utexcep.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utglobal.c	standard
++iokit/ndacpi/acpica/source/components/utilities/uthex.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utids.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utinit.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utlock.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utmath.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utmisc.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utmutex.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utnonansi.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utobject.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utosi.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utownerid.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utpredef.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utprint.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utresdecode.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utresrc.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utstate.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utstring.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utstrsuppt.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utstrtoul64.c	standard
++iokit/ndacpi/acpica/source/components/utilities/uttrack.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utuuid.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utxface.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utxferror.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utxfinit.c	standard
++iokit/ndacpi/acpica/source/components/utilities/utxfmutex.c	standard
++
+ # tightbeamc generated implementation files
+ ./Exclaves/IOService.tightbeam.c		optional iokitcpp config_exclaves
+--- a/iokit/conf/Makefile.template
++++ b/iokit/conf/Makefile.template
+@@ -57,6 +57,20 @@
+ %SFILES
+ 
+ %MACHDEP
++
++# NeoDarwin's ACPI platform (patch 0018). ACPICA's objects read acnd.h, its
++# host configuration, before anything else: it stands in for the platform
++# header ACPICA would choose for __APPLE__ and, with ND_ACPICA_CORE, gives
++# ACPICA's own C library (utclib.c, utprint.c) names of its own. -w:
++# upstream warnings are not NeoDarwin's to fix here (BUILD_WERROR is off for
++# xnu anyway). NeoDarwin's three files see ACPICA's public headers and the
++# IOKit/acpi headers.
++ND_ACPI = $(SRCROOT)/iokit/ndacpi
++ND_ACPICA = $(ND_ACPI)/acpica/source
++ND_ACPICA_OBJS = $(patsubst %.c,%.o,$(notdir $(wildcard $(ND_ACPICA)/components/*/*.c)))
++$(foreach o,$(ND_ACPICA_OBJS),$(eval $(o)_CFLAGS_ADD += -DND_ACPICA_CORE -include $(ND_ACPI)/acnd.h -I$(ND_ACPICA)/include -w))
++$(foreach o,nd_acpi_osl.o NeoDarwinACPIPlatform.cpo IOACPIPlatformDevice.cpo,$(eval $(o)_CFLAGS_ADD += \
++	-I$(ND_ACPI) -I$(ND_ACPI)/include -I$(ND_ACPICA)/include))
+ 
+ #
+ # Diagnostic opt-outs.  We need to make this list empty.

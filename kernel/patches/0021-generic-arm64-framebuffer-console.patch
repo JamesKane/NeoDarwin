@@ -1,0 +1,124 @@
+From: NeoDarwin
+Subject: [PATCH] console: the booter's framebuffer as a second console on generic Arm
+
+A board's serial console may be unreadable while its UEFI firmware drives
+a monitor through GOP: the Radxa Dragon Q8B's GENI UART sits on 1.8 V
+pads, and FreeBSD shows its console on HDMI through efifb. neoboot passes
+the GOP framebuffer in boot_args.Video with v_display 0, so
+PE_create_console() already takes kPETextMode and initialize_screen()
+maps it; vcattach() then acquires the screen and replays the message
+buffer. But xnu has one console at a time: serial=3 selects
+SERIAL_CONS_OPS in arm_init(), and after the replay nothing reached the
+screen again.
+
+For GENERIC_ARM64_PLATFORM:
+- _cnputc() also hands each character to the video console while the
+  serial console is selected and initialize_screen() has mapped a
+  framebuffer (vc_mirrors_serial). Kernel printf and IOLog,
+  panics and /dev/console (getty, shells) all pass through it; input stays
+  on the serial port. vcputc_options() draws nothing until the screen is
+  acquired, so without a framebuffer nothing changes.
+- The framebuffer is mapped with VM_WIMG_WCOMB, as on
+  APPLEVIRTUALPLATFORM. It lies outside the DRAM window (gDramBase/Size),
+  so pmap_map_bd_with_options() makes it Device-GRE, where writes gather,
+  instead of io_map's Device-nGnRnE. The vc_* routines make only aligned
+  32-bit stores and 64-byte-aligned bcopy()s, which Device memory needs.
+- initialize_screen() prints the mode it mapped ("video console: WxH, ...").
+
+io_map() before VM (startup_phase < STARTUP_SUB_KMEM) advanced
+virtual_space_start by round_page(size) but mapped alloc_size, which is a
+page more when phys_addr is not page aligned: a GOP framebuffer is 4 KiB
+aligned and the kernel's pages are 16 KiB, so the mapping ran into the
+next caller's address space. It now advances by alloc_size.
+
+Rebase-risk: low (one hunk each in _cnputc, initialize_screen and io_map).
+---
+diff --git a/osfmk/arm/io_map.c b/osfmk/arm/io_map.c
+--- a/osfmk/arm/io_map.c
++++ b/osfmk/arm/io_map.c
+@@ -109,7 +109,8 @@
+ 		virtual_space_start = round_page(virtual_space_start);
+ 
+ 		start = virtual_space_start;
+-		virtual_space_start += round_page(size);
++		/* alloc_size: an unaligned phys_addr maps one page more than size. */
++		virtual_space_start += alloc_size;
+ 
+ 		assert(flags == VM_WIMG_WCOMB || flags == VM_WIMG_IO);
+ 
+diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -130,6 +130,11 @@
+ 
+ SECURITY_READ_ONLY_EARLY(uint32_t) nconsops = (sizeof cons_ops / sizeof cons_ops[0]);
+ 
++#if GENERIC_ARM64_PLATFORM
++/* Set by initialize_screen() once a booter framebuffer is mapped. */
++extern bool vc_mirrors_serial;
++#endif /* GENERIC_ARM64_PLATFORM */
++
+ #if __x86_64__
+ uint32_t cons_ops_index = VC_CONS_OPS;
+ #else
+@@ -261,6 +266,17 @@
+ 	}
+ 
+ 	cons_ops[idx].putc(c, poll);
++#if GENERIC_ARM64_PLATFORM
++	/*
++	 * A board's UART may be unreadable (1.8 V pads, no header) while
++	 * the booter's framebuffer drives a monitor: the video console
++	 * shows the serial console's output too. vcputc_options draws
++	 * nothing until the screen is acquired.
++	 */
++	if (idx == SERIAL_CONS_OPS && vc_mirrors_serial) {
++		cons_ops[VC_CONS_OPS].putc(c, poll);
++	}
++#endif /* GENERIC_ARM64_PLATFORM */
+ }
+ 
+ /**
+diff --git a/osfmk/console/video_console.c b/osfmk/console/video_console.c
+--- a/osfmk/console/video_console.c
++++ b/osfmk/console/video_console.c
+@@ -123,6 +123,10 @@
+ extern int       disableConsoleOutput;
+ static boolean_t gc_enabled     = FALSE;
+ static boolean_t gc_initialized = FALSE;
++#if GENERIC_ARM64_PLATFORM
++/* A booter framebuffer is mapped: _cnputc copies the serial console here. */
++bool vc_mirrors_serial = false;
++#endif /* GENERIC_ARM64_PLATFORM */
+ static boolean_t vm_initialized = FALSE;
+ 
+ static struct {
+@@ -2860,7 +2864,7 @@
+ 			gc_acquired = TRUE;
+ 		} else {
+ 			if (makeMapping) {
+-#if HAS_UCNORMAL_MEM || APPLEVIRTUALPLATFORM
++#if HAS_UCNORMAL_MEM || APPLEVIRTUALPLATFORM || GENERIC_ARM64_PLATFORM
+ 				/*
+ 				 * Framebuffers would normally use VM_WIMG_RT, which
+ 				 * io_map doesn't support.  However this buffer is set up
+@@ -2878,6 +2882,19 @@
+ 					newMapSize = (unsigned int) round_page(new_vinfo.v_height * new_vinfo.v_rowbytes);                      /* Remember size */
+ 				}
+ 				newVideoVirt = ml_io_map_unmappable((vm_map_offset_t)new_vinfo.v_physaddr, newMapSize, flags);   /* Allocate address space for framebuffer */
++#if GENERIC_ARM64_PLATFORM
++				/*
++				 * A UEFI GOP framebuffer lies outside the kernel's DRAM
++				 * window (neoboot keeps it out), so the write-combining
++				 * request maps it Device-GRE: aligned accesses only,
++				 * which is all the vc_* routines make.
++				 */
++				printf("video console: %ux%u, %u bpp, %u bytes per row, framebuffer at 0x%llx\n",
++				    new_vinfo.v_width, new_vinfo.v_height, new_vinfo.v_depth, new_vinfo.v_rowbytes,
++				    (unsigned long long)new_vinfo.v_physaddr);
++				vc_mirrors_serial = (new_vinfo.v_depth == 32 || new_vinfo.v_depth == 30 ||
++				    new_vinfo.v_depth == 16 || new_vinfo.v_depth == 8);
++#endif /* GENERIC_ARM64_PLATFORM */
+ 			}
+ 			new_vinfo.v_baseaddr = newVideoVirt + boot_vinfo->v_offset;                     /* Set the new framebuffer address */
+ 		}

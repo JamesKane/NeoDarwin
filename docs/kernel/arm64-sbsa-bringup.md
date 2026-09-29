@@ -98,7 +98,7 @@ The kernel creates a linear "physmap" of exactly `[physBase, physBase+memSize)` 
 | Fixups | None in the loader; it must not touch pointers. The kernel rebases the whole collection from its `LC_DYLD_CHAINED_FIXUPS` before anything else runs. `kcheck` verifies the chains at build time (§2.1.1) | `arm_slide_rebase_and_sign_image()` → `kernel_collection_slide()` (`osfmk/arm/arm_init.c:230-285`, compiled for `config_pmap_ppl`, which SBSA uses like VMAPPLE; the SPTM kernel has its own copy in `arm_init_sptm.c`) |
 | KASLR | `slide` = random multiple of 16 KiB inside the chosen window; it is implied by where the collection is mapped, never written into the image | the kernel computes `slide = &_mh_execute_header − kernel __TEXT.vmaddr` (`arm_init.c:246`) |
 | boot_args | `Revision=2 Version=2`; `virtBase = VM_KERNEL_LINK_ADDRESS + slide − (kernelcache_phys − physBase)`; pointers (`deviceTreeP`) are given in **virtual** terms (kernel uses them after MMU on via `PE_state.deviceTreeHead`, `pe_init.c:423`) | `boot.h:61-64`, `pe_init.c:412-444` |
-| Video | If GOP present: `v_baseAddr, v_rowBytes, v_width, v_height, v_depth=32, v_display=1`; else `v_display=0` (text console) | `pe_init.c:425-436, 536-548` |
+| Video | If GOP has a linear framebuffer: `v_baseAddr, v_rowBytes, v_width, v_height, v_depth=32`; always `v_display=0`, a text console (§2.1.7) | `pe_init.c:425-436, 536-548` |
 | CommandLine | `boot.cfg` contents, e.g. `serial=3 debug=0x14e rd=md0 -v cs_enforcement_disable=1` | `PE_boot_args()` in `pe_bootargs.c` |
 | EL | Enter kernel at **EL1**. If firmware hands off at EL2: `HCR_EL2 = RW`, `CNTHCTL_EL2 = EL1PCTEN|EL1PCEN`, `CNTVOFF_EL2 = 0`, `CPTR_EL2` no FP trap, `SCTLR_EL1 = RES1`, `SPSR_EL2 = EL1h + DAIF`, `ERET` | `start.s` never inspects `CurrentEL` and programs only `*_EL1` registers |
 | Caches | Clean to PoC every byte the kernel will read with MMU off (image, DT, boot_args, ramdisk), invalidate I-cache, then disable MMU | `start.s` reads boot_args before enabling MMU |
@@ -132,9 +132,9 @@ What the first boot established:
 
 | Finding | Consequence |
 |---|---|
-| The kernel executes `TLBI RVALE1IS` (FEAT_TLBIRANGE, part of Armv8.4). QEMU's `cortex-a76` (v8.2) and `neoverse-v1` models don't advertise it, so the instruction is undefined there | test on `neoverse-n2` (Armv9.0). **The Q8B's Cortex-X1C/A78C are Armv8.2 and lack it**: P1-17 makes the kernel run on Armv8.2, tested on QEMU `cortex-a76` |
+| The kernel executes `TLBI RVALE1IS` (FEAT_TLBIRANGE, part of Armv8.4). QEMU's `cortex-a76` (v8.2) and `neoverse-v1` models don't advertise it, so the instruction is undefined there | tested on `neoverse-n2` (Armv9.0) until P1-17. The Q8B's Cortex-X1C/A78C are Armv8.2 and lack it too. Since P1-17 the kernel's baseline is Armv8.2 without range TLBI (patch 0019, §2.1.8), and the `sbsa_a76_*` tests boot it on `cortex-a76` |
 | kalloc_type's zone policy gave the 48-byte class 15 + 17 zones; with the shared zone that overran a 32-entry stack array, which upstream only asserts on | patch 0007 enforces the limit |
-| With no framebuffer, `PE_init_iokit`'s progress-bar centring loop never ends | `-noprogress` in neoboot's default command line until GOP video is passed |
+| With no framebuffer, `PE_init_iokit`'s progress-bar centring loop never ends | `-noprogress` in neoboot's default command line; the framebuffer console (§2.1.7) is text, so it stays |
 | Data abort in `kmem_crypto_init`: nothing had called `register_crypto_functions()`, which Apple's corecrypto kext does. Apple's full corecrypto source is evaluation-only, so it can't be used | P1-13, done: ndcrypto, compiled into the kernel from xnu's own corecrypto subset and FreeBSD's kernel crypto (`crypto-provider.md`) |
 | `image4 interface not available` in `bsd/kern/kern_trustcache.c`. AppleImage4 and AMFI, both closed kexts, normally register the Image4 and AMFI interfaces | P1-14, done: ndamfi (`amfi-provider.md`), with Apple's published trust-cache format and lookup |
 | `Unable to find driver for this platform: "NeoDarwin,sbsa"` (`IOPlatformExpert.cpp`) | P1-06: `NeoDarwinPlatformExpert`, `NeoDarwinGICv3`, `NeoDarwinPSCI` (patch 0009), matched by a built-in personality; secondary CPUs in §2.1.6 |
@@ -203,6 +203,7 @@ A launch failure is visible: dyld's error goes into the exit reason, which the "
 - **P1-06 is done.** Secondaries start through PSCI, and the exit is met on QEMU: `//kernel:sbsa_smp_boot_test` (`virt`, `-smp 4`, PSCI over HVC) and `//kernel:sbsa_secure_smp_boot_test` (TF-A at EL3, PSCI over SMC, GIC DS=0) log in and read `hw.ncpu` and `hw.activecpu` as 4 and 4 with `sysctl` (system_cmds), and the platform expert logs `NeoDarwinPlatformExpert: 4 of 4 CPUs online` and one IPI round trip per CPU. The design is in §2.1.6.
 - **P1-15.** CoreEntitlements, static trust caches from neoboot, and signed trust-cache loads, replacing ndamfi's default deny.
 - **P1-04 is done.** The device tree from ACPI, DT-ABI v1 (`dt-abi.md`), `dump-acpi` in neoboot and the `dtdump` host tool.
+- **P1-09, checkpoint 1 is done** (`acpi.md`): ACPICA 20260408 compiled into the kernel (patch 0018) over neoboot's copy of the tables, hardware-reduced, and an `IOACPIPlatformDevice` nub per present device, with `_CRS` memory as `IODeviceMemory` and GSIVs as GIC interrupt specifiers. On QEMU `virt` it publishes 44 devices, the PCI host bridge `PNP0A08` among them, asserted by `//kernel:sbsa_boot_test` and `//kernel:sbsa_secure_boot_test`. Next: checkpoint 2, IOPCIFamily over ECAM; `sbsa-ref` is not in the test matrix yet.
 
 Each probe build of `//kernel:sbsa_kc` takes about 9 minutes. Never run `bazel clean`: it throws the kernel build away.
 
@@ -230,7 +231,7 @@ What P1-06's SMP half found:
 
 | Area | Q8B | NeoDarwin |
 |---|---|---|
-| CPUs | 8 (4 Cortex-X1C + 4 Cortex-A78C, **Armv8.2**), MPIDR 0x000–0x700: DynamIQ, cores in Aff1 | the kernel is built for Armv8.4 and executes `TLBI RVALE1IS` (FEAT_TLBIRANGE); the reset vector matches MPIDR & 0xFF without `HAS_CLUSTER` (`start.s`), and `ml_get_cpu_number` and `find_gicr_pe_base` mask to Aff1:Aff0, so every core would look like CPU 0. Both are P1-17, testable on QEMU `cortex-a76` |
+| CPUs | 8 (4 Cortex-X1C + 4 Cortex-A78C, **Armv8.2**), MPIDR 0x000–0x700: DynamIQ, cores in Aff1 | P1-17, §2.1.8: the kernel's baseline is Armv8.2 (`-march=armv8.2-a+rcpc`, no range TLBI; patch 0019), enforced by `sbsa_isa_audit`. The reset vector matched MPIDR & 0xFF, so every core (Aff0 = 0) would have run on the boot CPU's `cpu_data`; it and the other CPU lookups now use Aff2:Aff1:Aff0 (patch 0020). QEMU tests: `cortex-a76` with 8 CPUs, and 18 CPUs for Aff1 (0x100, 0x101) |
 | GIC | GICv3, GICD 0x17a00000, one GICR range of 8 × 128 KiB frames at 0x17a60000, ITS at 0x17a40000 | supported as is |
 | Timer | virtual timer PPI 27, level | supported |
 | PSCI | FADT: compliant, SMC | supported (P1-06) |
@@ -244,6 +245,63 @@ Also still open from P1-06:
 - Caches are real: `ResetHandlerData`, `CpuDataEntries` and the reset vector are read with the MMU off. `cpu_start` cleans the per-CPU entries; the rest is cleaned at boot only by neoboot's image clean. QEMU TCG can't catch a miss.
 
 The Q8B's ACPI tables, as captured by the FreeBSD work, reconstructed into `acpidump` format, reproduce these findings in `dtdump`.
+
+### 2.1.7 The framebuffer console (UEFI GOP)
+
+The Q8B's serial console is a GENI UART on 1.8 V pads that nothing reads yet, while its UEFI firmware drives HDMI through GOP (FreeBSD shows its console there with efifb). So the kernel's console also goes to the firmware's framebuffer:
+
+- **neoboot** (`Sources/GOP.swift`) looks up every `EFI_GRAPHICS_OUTPUT_PROTOCOL` handle, prefers the one that is also a console-out device, and takes its **current** mode: it never calls `SetMode`, since a mode switch can blank a monitor on real firmware. Only linear 32-bit formats are used (`PixelBlueGreenRedReserved8BitPerColor`, the xRGB word `video_console.c` draws, and `PixelRedGreenBlue…`, where coloured text swaps red and blue); `PixelBitMask` and `PixelBltOnly` (virtio-gpu's GOP) are skipped. It fills `boot_args.Video` with `FrameBufferBase`, `PixelsPerScanLine × 4`, the resolution and depth 32, with `v_display = 0` (`dt-abi.md`, `boot_args.Video`). If the framebuffer lies inside the DRAM window, the window loses it and keeps its larger side, as for any other hole, because the kernel owns every page of its window. The framebuffer is cleaned to PoC before `ExitBootServices`. `gop=off` in `boot.cfg` passes no framebuffer. The serial log names the mode: `neoboot: GOP: 800x600 BGRx, mode 1 of 3, 3200 bytes per row, framebuffer 0xbc7a0000 (0x300000 bytes)`.
+- **The kernel** needed no new driver. `PE_init_platform` copies `boot_args.Video` on every arm64 board, and `PE_create_console` takes `kPETextMode` for `v_display = 0`. `initialize_screen` then maps the framebuffer, `kernel_bootstrap_thread` acquires the screen, and `vcattach` (from `PE_init_iokit`) replays the message buffer onto it. Patch 0021 does three things. It makes `_cnputc` hand every character to the video console as well while the serial console is selected (`serial=3`) and a framebuffer is mapped, so kernel printf, IOLog, panics and `/dev/console` (getty, the shell) reach both. Input stays on the serial port. It maps the framebuffer with `VM_WIMG_WCOMB`, which outside the DRAM window gives Device-GRE with gathered writes instead of Device-nGnRnE. It also fixes `io_map`'s early path, which reserved `round_page(size)` but mapped a page more when the address isn't 16 KiB aligned (GOP buffers are 4 KiB aligned). The kernel logs `video console: 800x600, 32 bpp, 3200 bytes per row, framebuffer at 0x…`.
+- **Nothing tears it down.** The only callers of `kPEReleaseScreen`/`kPEDisableScreen` are `IOPlatformExpert::setConsoleInfo` (an `IOFramebuffer`, which doesn't exist) and the commented-out calls around `IOCPUSleepKernel`. `vcattach` releases and re-acquires the screen once, which clears it before the replay. Without a serial device (`serial_init` fails), the video console is the only console, as upstream.
+- **Cost.** Every character is drawn, and every newline scrolls the whole framebuffer with `bcopy`. The cursor is drawn by reading pixels back. On Device memory those reads are uncached: about 8 MiB per line at 1080p. That is tolerable for bring-up; a shadow buffer or repainting from `gc_buffer_*` would fix it.
+
+Without the patch the screen showed the log only up to `PE_init_iokit` (the replay), ending at `Initializing serial KDP`, and nothing after it. `//kernel:sbsa_fb_console_boot_test` boots the getty session with QEMU's `ramfb`, which EDK2 drives through GOP (`QemuRamfbDxe`, 800x600, in `EfiReservedMemoryType` above the DRAM window). It logs in over serial, runs `echo fb-$((6*7)); uname -sm`, takes a screendump through QEMU's monitor and reads the screen back with xnu's own 8x16 font (`qemu_efi_test.sh --screen-font`). It requires `fb-42` and `Darwin arm64` on screen as well as on serial. `//boot/neoboot:neoboot_gop_qemu_test` checks the loader's side.
+
+On the Q8B, still to check: where the firmware's framebuffer lies and what memory type the UEFI map gives it (it must be outside the window, or neoboot trims the window); that the current mode is the monitor's native one; and that the display engine scans out what the kernel's Device-GRE writes put in memory. neoboot prints the framebuffer's address, mode and UEFI memory type, both to serial and to its firmware console, which is the same HDMI screen.
+
+### 2.1.8 An Armv8.2 baseline and DynamIQ CPU numbering (P1-17)
+
+The Q8B's cores are Cortex-X1C and Cortex-A78C: Armv8.2 plus some later features. FreeBSD reads them as ISAR0 `CondM-8.4,DP,RDM,Atomic,CRC32,SHA2,SHA1,AES+PMULL`, ISAR1 `GPA,RCPC-8.4,APA EPAC2,DCPoP`, PFR0 without DIT, SVE or AMU, and PFR1 `SSBS`. They have no FEAT_TLBIRANGE, DIT, SHA3/SHA512, RNDR or MTE. Their MPIDRs are DynamIQ's, 0x000–0x700: the core number is in Aff1 and Aff0 is 0. QEMU's `cortex-a76` has the same Armv8.2 ISA, with RCpc at the 8.3 level (LDAPR without LDAPUR).
+
+**Baseline.** The kernel builds with `-march=armv8.2-a+rcpc` (patch 0019). Every Armv8.3+ dependency the build had, and what happened to each:
+
+| Dependency | Where | Now |
+|---|---|---|
+| FEAT_TLBIRANGE (`TLBI RVAE1IS`, `RVALE1IS`, …) | `__ARM_RANGE_TLBI__` in `SBSA.h`: pmap's range flushes, `pmap_clear_refmod_range_options` | not defined. pmap flushes by page, or by ASID past 256 pages, as on Apple's pre-A14 configurations; `pmap_clear_refmod_range_options` returns false and the VM clears refmod bits page by page |
+| Range TLBI under `__ARM_MIXED_PAGE_SIZE__` | `pmap_switch_user`'s commpage flush on a switch between 4K and 16K pmaps: unguarded, since every Apple mixed-page configuration has range TLBI | patch 0019 guards it; without range TLBI the switch flushes the local TLB, as the shared-region switch already did (the first build failed here) |
+| FEAT_DIT (`PSTATE.DIT`) | `cswitch.s` saves and restores it per thread `#if __ARM_ARCH_8_4__` | on `GENERIC_ARM64_PLATFORM`, only when `gARM_FEAT_DIT` (from `ID_AA64PFR0_EL1`, set by commpage init) says the CPU has it, through the encoded name `S3_3_C4_C2_5`. corecrypto's `CC_ENSURE_DIT_ENABLED` compiles to nothing in the kernel (`CC_HAS_DIT()` is 0 outside Apple's internal SDK): the audit finds no `MSR DIT, #imm` |
+| FEAT_LSE2 (16-byte single-copy atomicity) | `os_atomic_load_is_plain` treats 16-byte loads as atomic `#if __ARM_ARCH_8_4__` | off at 8.2: those loads use the exclusive-pair path |
+| RCpc (LDAPR) | compiler code generation for acquire loads | kept (`+rcpc`): the Q8B and `cortex-a76` both have it. LDAPUR (RCpc 8.4, which QEMU's `cortex-a76` lacks) is not generated at 8.2 |
+| PAC, BTI, SB, `DC CVADP` and later | none | plain `arm64` without BTI, as before; the audit would list any of them |
+
+**The ISA audit.** `//kernel:sbsa_isa_audit` (`tools/xnu/isa_audit.sh --mattr +v8.2a,+rcpc,+dotprod,+aes,+sha2,+fullfp16`, the ISA both the Q8B's cores and `cortex-a76` have) disassembles the kernel twice: once with every feature LLVM knows and once with that list only. A word the two decode differently needs a feature outside the list. Plain instructions then show as `<unknown>`, and system-instruction aliases fall back to their generic form: `TLBI RVAE1IS` becomes `sys`, `MSR DIT` becomes `S3_3_C4_C2_5`. Two kinds of difference are allowed, because they're safe on Armv8.2: hint-space words (`hint #N`: PACIBSP, BTI and the like are NOPs where they aren't implemented) and `MRS` from the ID register space `S3_0_C0_*` (RAZ where unallocated; the kernel reads `ID_AA64SMFR0_EL1` in commpage init). The Apple-ISA checks (C15 system registers, `hvc`, AMX, GXF) still run. `kernel/isa_audit/sbsa_release.txt` allows three things by name:
+- the HVC PSCI conduit;
+- the six DIT save/restore sites in the context-switch macros, guarded at run time;
+- ten data words in `__TEXT_EXEC` that decode as SVE, SME or `CB<cc>` only with every feature on: lz4's constant tables, and panic strings placed after `fleh_*`, `preempt_underflow`, `_update_mdscr` and `_os_cpu_in_cksum_mbuf`.
+
+The Armv8.4 build executed `TLBI RVALE1IS` (§2.1.2) and touched DIT on every context switch; the Armv8.2 kernel's TLB maintenance is `TLBI VMALLE1(IS)`, `ASIDE1(IS)`, `VAE1IS`, `VALE1IS`, `VAAE1IS` and `VAALE1IS` only.
+
+**Userland.** swiftc and clang target `apple-m1` for `arm64-apple-macos` unless told otherwise. On `cortex-a76` the first session boot ran the kernel and launchd, then `launchctl` died with SIGILL on `LDAPUR` (RCpc 8.4). `tools/darwin_executable/build.sh` and `tools/static_macho/build_static_macho.sh` now pass `-target-cpu cortex-a76` to swiftc and `-mcpu=cortex-a76` to clang. The Q8B has LDAPUR, but not every `apple-m1` feature (FHM, SHA3, FRINTTS, FlagM2, SB), so this matters on the board too. The C base (`tools/base/common.sh` `TARGET_FLAGS`, plain `-arch arm64`) passes the same double-disassembly check except for Apple's run-time-gated paths, which the commpage steers: DIT in `libsystem_platform`'s `timingsafe_*` and dyld's corecrypto, `CNTVCTSS_EL0` in `mach_absolute_time`, and `STG` in libunwind. It still targets Xcode clang's default CPU; pinning it to `cortex-a76`, and auditing the images, is still to do.
+
+**DynamIQ MPIDRs.** The cpu node's `reg`, which the kernel keeps as `cpu_phys_id`, has always been MPIDR Aff2:Aff1:Aff0 (`dt-abi.md`). Without `HAS_CLUSTER`, xnu matched less of it (patch 0020 fixes each on `GENERIC_ARM64_PLATFORM`):
+- the reset vector (`start.s`) compared `MPIDR_EL1 & 0xFF` with `cpu_phys_id`. On the Q8B every core has Aff0 = 0, so every secondary would have found the boot CPU's `cpu_data` and run on it. It now compares bits 23:0; the MT bit (24), which DynamIQ cores set, is outside the mask;
+- `ml_get_cpu_number()` (used by `NeoDarwinGICv3` to map a cpu nub to its CPU) and `find_gicr_pe_base()` (`pe_fiq.c`, each CPU's redistributor) compared Aff1:Aff0. That is enough for the Q8B, whose Aff2 is 0, but not for Aff2 ≠ 0; both now use Aff2:Aff1:Aff0.
+`NeoDarwinGICv3` already matched redistributors on Aff3.Aff2.Aff1.Aff0 and built `ICC_SGI1R_EL1` from Aff1, Aff2, `RS` and the Aff0 bit (P1-06), and `NeoDarwinPSCI` passes the whole `reg` to `CPU_ON`, which now logs `NeoDarwinPSCI: CPU_ON cpu 16, MPIDR 0x100`. neoboot refuses a MADT whose enabled GICCs have Aff3 ≠ 0, because the kernel's CPU id holds 24 bits.
+
+**Clusters.** Without `HAS_CLUSTER`, `ml_parse_cpu_topology` takes a CPU's cluster from `cluster-type` alone. neoboot writes none, so every CPU is in logical cluster 0: one SMP processor set, which is what a DynamIQ cluster is (the Q8B's eight cores share one DSU). neoboot writes `die-cluster-id` 0 and `cluster-core-id` = index so the per-CPU fields describe that cluster; the kernel's defaults (MPIDR Aff1 and Aff0) would be a core number and 0 on DynamIQ. Splitting the X1C and A78C cores (`cluster-type` `'P'`/`'E'`) needs the AMP scheduler, which SBSA doesn't build.
+
+**QEMU.** `virt` can't give eight CPUs DynamIQ numbers. `virt_cpu_mp_affinity` (`hw/arm/virt.c`) puts 16 CPUs in each Aff1 value, since that is what fits `ICC_SGI1R_EL1`'s target list, whatever `-smp`'s sockets, clusters and cores say (8 CPUs as `clusters=2,cores=4` or `clusters=8,cores=1` are still 0x0–0x7). So:
+- `//kernel:sbsa_a76_smp8_boot_test`: `cortex-a76`, 8 CPUs, to root's shell; `hw.ncpu hw.activecpu` = 8 8;
+- `//kernel:sbsa_a76_aff1_boot_test`: `cortex-a76`, 18 CPUs, where cpu 16 and 17 are MPIDR 0x100 and 0x101. 0x100 has Aff0 = 0, like the boot CPU, which is the Q8B's failure. All 18 come up, cpu 16 and 17 answer IPIs sent through `ICC_SGI1R_EL1`'s Aff1 field, and `hw.ncpu hw.activecpu` = 18 18;
+- `//kernel:sbsa_a76_secure_smp8_boot_test`: `cortex-a76`, 8 CPUs under TF-A (PSCI over SMC, the timer on Group 1). TF-A's QEMU platform stops at eight cores, so it can't run the Aff1 case;
+- `//tools/dtdump:qemu_virt_a76_smp18_test` checks the tree for those tables (captured with `dump-acpi`), and `mpidr_aff3_test` checks the Aff3 refusal.
+The existing tests keep `neoverse-n2`.
+
+**Only on the Q8B:**
+- the reset-vector match and GIC redistributor lookup with Aff0 = 0 on every core, and the MT bit set;
+- that the firmware's `CPU_ON` accepts the MADT's MPIDRs as they are;
+- whether Qualcomm's EL2 leaves the kernel at EL1 on secondaries;
+- the userland's C base on real Armv8.2 cores.
 
 ### 2.2 ACPI → kernel: the two-tier strategy
 
@@ -279,6 +337,8 @@ Boards whose SPCR names a 16550 (many SBCs, Raspberry Pi with EDK2) need a new `
 4. provides ECAM (`MCFG`) and `_CBA` to an open **IOPCIFamily** build (apple-oss-distributions/IOPCIFamily), and IORT/ITS to MSI allocation on the GIC kext.
 Nothing in the kernel proper depends on Tier 2; the terminal OS milestone (M4) boots without it.
 
+**As built (P1-09 checkpoint 1, `acpi.md`).** Not a kext yet: for the reason HFS+ isn't (§2.1.4, no kexts before M5), ACPICA and `NeoDarwinACPIPlatform` are compiled into IOKit by patch 0018, and `NeoDarwinPlatformExpert` starts the platform on a thread of its own. ACPICA is configured hardware-reduced (`ACPI_REDUCED_HARDWARE`): no SCI, GPEs or global lock. The tables are read through the physmap, since neoboot copied them into the DRAM window; OperationRegions outside DRAM are mapped as device memory. `_PRT`, `_DSD` and ECAM are checkpoint 2's.
+
 ### 2.3 Kernel-side platform layer: the `SBSA` board config
 
 Created by forking `VMAPPLE`:
@@ -287,7 +347,7 @@ Created by forking `VMAPPLE`:
 |---|---|---|
 | `pexpert/pexpert/arm64/SBSA.h` | copy of `VMAPPLE.h` minus `CPU_HAS_APPLE_PAC`, `HAS_PARAVIRTUALIZED_PAC/CTRR`, `HAS_ARM_FEAT_SME*`, `APPLEVIRTUALPLATFORM`; keep `NO_MONITOR`, `HAS_GIC_V3`, `PL011_UART`, `__ARM_16K_PG__` (or 4K variant), GIC register defines; add `GENERIC_ARM64_PLATFORM 1`, `NO_XNU_PLATFORM_ERROR_HANDLER`, `USE_APPLEARMSMP` | `VMAPPLE.h`, `board_config.h:281-295` |
 | `board_config.h` | new `#ifdef ARM64_BOARD_CONFIG_SBSA` block, `MAX_CPUS 64`, `MAX_CPU_CLUSTERS 8`, `MAX_L2_CLINE 7` | `board_config.h:281-295` |
-| `makedefs/MakeInc.def` | `SUPPORTED_ARM64_MACHINE_CONFIGS += SBSA`; `MACHINE_FLAGS_ARM64_SBSA = -DARM64_BOARD_CONFIG_SBSA -march=armv8.4-a`; build with `ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64 BTI_BUILD=0` (no `arm64e`, no BTI on pre-8.5 cores); `EXTRA_TARGET_CONFIGS_RELEASE="SBSA"` sidesteps the missing EmbeddedDeviceMap (`MakeInc.def:298-320`) | `MakeInc.def:32, 55-66, 87, 293-326` |
+| `makedefs/MakeInc.def` | `SUPPORTED_ARM64_MACHINE_CONFIGS += SBSA`; `MACHINE_FLAGS_ARM64_SBSA = -DARM64_BOARD_CONFIG_SBSA -march=armv8.2-a+rcpc` (Armv8.4 until P1-17, §2.1.8); build with `ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64 BTI_BUILD=0` (no `arm64e`, no BTI on pre-8.5 cores); `EXTRA_TARGET_CONFIGS_RELEASE="SBSA"` sidesteps the missing EmbeddedDeviceMap (`MakeInc.def:298-320`) | `MakeInc.def:32, 55-66, 87, 293-326` |
 | `osfmk/arm64/proc_reg.h` | add `#elif defined(SBSA)` cache-line branch | `proc_reg.h:238-247` (`#error processor not supported`) |
 | `apple_arm64_common.h` → `generic_arm64_common.h` | drop `AIC.h`, `apple_arm64_regs.h`, `apple_arm64_cpu.h`, `apple_uart_regs.h`; keep `ARM_ARCH_TIMER`, `__ARM_COHERENT_CACHE__`; **do not** define `APPLE_ARM64_ARCH_FAMILY` | `apple_arm64_common.h` |
 | `APPLEVIRTUALPLATFORM` sites (≈30) | audit each: GIC ack in `sleh_fiq` (`sleh.c:2624, 2670`; done, patch 0014) and `reset_vector_vaddr` (`arm_init.c:192, 359`; `AppleARMSMP.cpp:279-281`; done, patch 0017; the sleep paths in `cpu.c:97-101, 351-355, 1086-1132` wait for system sleep) become `GENERIC_ARM64_PLATFORM`; hypercall probes in `arm64_hypercall.c` and `machine_routines_apple.c:197-264` compile to the `#else` stubs (an `hvc` at EL1 with no hypervisor is UNDEFINED → panic) | grep list in this drop |
@@ -400,7 +460,7 @@ The categories overlap (some pmap symbols are also exported). The authoritative 
 | Risk | Signal | Mitigation |
 |---|---|---|
 | 16 KiB granule unsupported on target core | `ID_AA64MMFR0_EL1.TGran16 == 0` | loader refuses 16K kernel and picks the 4K build from the ESP |
-| BTI / PAC assumptions | `XNU_BUILT_WITH_BTI` default on (`MakeInc.def:57-66`); arm64e ABI | build `arm64`, `BTI_BUILD=0` for v8.4 targets; enable per-board when v8.5 |
+| BTI / PAC assumptions | `XNU_BUILT_WITH_BTI` default on (`MakeInc.def:57-66`); arm64e ABI | build `arm64`, `BTI_BUILD=0` for the Armv8.2 baseline (§2.1.8); enable per-board when v8.5 |
 | SME/SVE feature flags in `VMAPPLE.h` | illegal-instruction on cores without SME | drop `HAS_ARM_FEAT_SME*`; gate on `ID_AA64PFR1_EL1` |
 | Non-coherent DMA on cheaper SoCs | data corruption in virtio/NVMe | `__ARM_COHERENT_IO__` off for those boards; IODMACommand cache ops in the drivers (the Q8B's firmware reports `_CCA` 0 for USB; check each device's `_CCA` and the IORT) |
 | PSCI/SMC from EL1 trapped by a hypervisor | `SMC` UNDEF | loader verifies `CurrentEL` and `HCR_EL2.TSC = 0`; the conduit comes from the firmware: `/chosen` `psci-conduit` (P1-06); HVC is refused when neoboot itself runs at EL2 |

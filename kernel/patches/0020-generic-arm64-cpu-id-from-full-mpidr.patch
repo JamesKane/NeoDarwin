@@ -1,0 +1,76 @@
+From: NeoDarwin
+Subject: [PATCH] arm64, pexpert: identify generic Arm CPUs by MPIDR Aff2:Aff1:Aff0
+
+DynamIQ cores (Cortex-A55/A7x/X, as on the Radxa Dragon Q8B) number
+themselves in Aff1 with Aff0 = 0: the Q8B's MPIDRs are 0x000-0x700.
+The cpu node's reg, which the kernel keeps as cpu_phys_id, is the MPIDR's
+Aff2:Aff1:Aff0 (docs/kernel/dt-abi.md). Without HAS_CLUSTER three
+lookups used less of it; on GENERIC_ARM64_PLATFORM:
+
+- start.s: the reset vector matches MPIDR & 0xFFFFFF to cpu_phys_id, not
+  MPIDR & 0xFF. With Aff0 alone every Q8B core matched the boot CPU and
+  ran on its cpu_data;
+- ml_get_cpu_number() compares Aff2:Aff1:Aff0, not Aff1:Aff0;
+- pe_fiq.c find_gicr_pe_base() matches GICR_TYPER's Aff2:Aff1:Aff0.
+
+The MT bit (24), which DynamIQ cores set, is outside the mask.
+
+Rebase-risk: low (three masks).
+---
+--- a/osfmk/arm64/start.s	2026-09-29 09:57:18
++++ b/osfmk/arm64/start.s	2026-09-29 09:58:14
+@@ -145,6 +145,14 @@
+ 	mrs		x15, MPIDR_EL1						// Load MPIDR to get CPU number
+ #if HAS_CLUSTER
+ 	and		x0, x15, #0xFFFF					// CPU number in Affinity0, cluster ID in Affinity1
++#elif GENERIC_ARM64_PLATFORM
++	/*
++	 * Generic Arm: the cpu node's reg (cpu_phys_id) is MPIDR Aff2:Aff1:Aff0.
++	 * DynamIQ cores number themselves in Aff1 with Aff0 = 0 (the Radxa
++	 * Dragon Q8B: 0x000-0x700), so Aff0 alone would match every core to the
++	 * boot CPU's data. Bit 24 (MT) is not part of the id.
++	 */
++	and		x0, x15, #0xFFFFFF
+ #else
+ 	and		x0, x15, #0xFF						// CPU number is in MPIDR Affinity Level 0
+ #endif
+--- a/osfmk/arm64/machine_routines.c	2026-09-29 09:57:18
++++ b/osfmk/arm64/machine_routines.c	2026-09-29 09:58:14
+@@ -1388,7 +1388,12 @@
+ int
+ ml_get_cpu_number(uint32_t phys_id)
+ {
++#if GENERIC_ARM64_PLATFORM
++	/* The cpu node's reg is MPIDR Aff2:Aff1:Aff0 (start.s). */
++	phys_id &= MPIDR_AFF2_MASK | MPIDR_AFF1_MASK | MPIDR_AFF0_MASK;
++#else
+ 	phys_id &= MPIDR_AFF1_MASK | MPIDR_AFF0_MASK;
++#endif
+ 
+ 	for (unsigned i = 0; i < topology_info.num_cpus; i++) {
+ 		if (topology_info.cpus[i].phys_id == phys_id) {
+--- a/pexpert/arm/pe_fiq.c	2026-09-29 09:57:25
++++ b/pexpert/arm/pe_fiq.c	2026-09-29 09:58:25
+@@ -113,13 +113,20 @@
+ static vm_offset_t
+ find_gicr_pe_base()
+ {
++#if GENERIC_ARM64_PLATFORM
++	// Aff2, aff1 and aff0: GICR_TYPER's affinity packs them as MPIDR does,
++	// and DynamIQ cores number themselves in aff1
++	const uint32_t aff_mask = MPIDR_AFF2_MASK | MPIDR_AFF1_MASK | MPIDR_AFF0_MASK;
++#else
+ 	// We only care about aff1 and aff0
+-	uint32_t phys_id = __builtin_arm_rsr64("MPIDR_EL1") & (MPIDR_AFF1_MASK | MPIDR_AFF0_MASK);
++	const uint32_t aff_mask = MPIDR_AFF1_MASK | MPIDR_AFF0_MASK;
++#endif
++	uint32_t phys_id = __builtin_arm_rsr64("MPIDR_EL1") & aff_mask;
+ 
+ 	for (vm_offset_t offset = 0; offset < gicr_size; offset += GICR_PE_SIZE) {
+ 		vm_offset_t gicr_pe_base = gicr_base + offset;
+ 		uint64_t gicr_typer = gicr_read64(GICR_TYPER);
+-		uint32_t aff_value = (uint32_t) (gicr_typer >> GICR_TYPER_AFFINITY_VALUE_SHIFT) & (MPIDR_AFF1_MASK | MPIDR_AFF0_MASK);
++		uint32_t aff_value = (uint32_t) (gicr_typer >> GICR_TYPER_AFFINITY_VALUE_SHIFT) & aff_mask;
+ 
+ 		if (phys_id == aff_value) {
+ 			return gicr_pe_base;

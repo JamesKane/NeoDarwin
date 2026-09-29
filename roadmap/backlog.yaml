@@ -172,7 +172,7 @@ epics:
     title: "ndacpi kext — ACPICA runtime, IOACPIPlatformDevice nubs, MCFG ECAM, IOPCIFamily"
     phase: 1
     owner: acpi
-    status: todo
+    status: doing
     depends: [P1-06, P0-07]
     exit: "ioreg shows PCI nubs on QEMU virt and sbsa-ref"
     doc: docs/kernel/arm64-sbsa-bringup.md
@@ -236,9 +236,9 @@ epics:
     title: "Armv8.2 kernel baseline for the Q8B's Cortex-X1C/A78C: no unconditional Armv8.3+ instructions (FEAT_TLBIRANGE, DIT, ...), with DynamIQ MPIDRs (cores in Aff1) matched in start.s and CPU numbering"
     phase: 1
     owner: kernel-bridge
-    status: todo
+    status: done
     depends: [P1-06]
-    exit: "the SBSA kernel boots to the session on QEMU cortex-a76 (Armv8.2) with -smp 8 and Aff1-numbered CPUs; the ISA audit enforces the Armv8.2 baseline"
+    exit: "the SBSA kernel boots to the session on QEMU cortex-a76 (Armv8.2) with -smp 8, and with Aff1-numbered CPUs (-smp 18: QEMU virt numbers 16 CPUs per Aff1); the ISA audit enforces the Armv8.2 baseline"
     doc: docs/kernel/arm64-sbsa-bringup.md
   # ---- Phase 2: Base system, packaging, updates ----
   - id: P2-01

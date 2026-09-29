@@ -1,41 +1,70 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
-# Apple-ISA audit for generic Arm kernels.
-#   sysreg_audit.sh FILE... BASELINE   (the *.unstripped kernel among FILEs is audited)
+# ISA audit for generic Arm kernels.
+#   isa_audit.sh [--mattr FEATURES] FILE... BASELINE   (the *.unstripped kernel among FILEs is audited)
 # Lists every instruction a generic Arm core would fault on or mis-execute:
 #   - MRS/MSR to op0=3, CRn=15 (S3_<op1>_C15_<CRm>_<op2>), the IMPLEMENTATION
 #     DEFINED register space where Apple keeps PMCs, HID and IPI registers;
 #   - HVC (Apple's virtual-machine hypercalls; there is no hypervisor);
-#   - Apple AMX (0x00201000-0x002013ff) and GXF (0x00201400, 0x00201420) words.
+#   - Apple AMX (0x00201000-0x002013ff) and GXF (0x00201400, 0x00201420) words;
+#   - with --mattr (llvm-objdump features, e.g. +v8.2a,+rcpc), every
+#     instruction outside that ISA: the kernel is disassembled twice, with
+#     every feature llvm knows (llvm-objdump's default) and with FEATURES
+#     only, and a word the two decode differently needs a feature FEATURES
+#     lacks. That catches plain instructions (FEATURES shows <unknown>) and
+#     SYS/MSR aliases alike (TLBI RVAE1IS becomes "sys", MSR DIT a generic
+#     S3_3_C4_C2_5). Two differences are architecturally safe and allowed:
+#     words FEATURES decodes as "hint #N" (NOP-space: PACIBSP, BTI, ... are
+#     NOPs where unimplemented) and MRS reads of the ID register space
+#     S3_0_C0_* (RAZ where unallocated). The finding's detail is the
+#     instruction's mnemonic, plus the first operand for system instructions.
 # The set may shrink but never grow. Controls guard the parser: the kernel must
-# contain NOPs and system-register moves, or the disassembly format changed.
+# contain NOPs and system-register moves, or the disassembly format changed,
+# and both disassemblies must list the same addresses.
 set -euo pipefail
+mattr=""
+[ "${1:-}" = "--mattr" ] && { mattr="$2"; shift 2; }
 baseline="${@: -1}"; kernel=""
 for f in "${@:1:$#-1}"; do case "$f" in *.unstripped) kernel="$f" ;; esac; done
 [ -n "$kernel" ] || { echo "no *.unstripped kernel among inputs"; exit 1; }
-current="$(mktemp)"; base="$(mktemp)"; controls="$(mktemp)"; trap 'rm -f "$current" "$base" "$controls"' EXIT
-"$(xcrun -f llvm-objdump)" -d "$kernel" | awk -v controls="$controls" '
-	/^[0-9a-f]+ <.*>:$/ { fn = $2; gsub(/[<>:]/, "", fn); next }
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+objdump="$(xcrun -f llvm-objdump)"
+# Instruction lines as "address<TAB>word<TAB>text"; function labels as "<name>".
+lines() { "$objdump" -d "$@" "$kernel" | awk '
+	/^[0-9a-f]+ <.*>:$/ { fn = $2; gsub(/[<>:]/, "", fn); print "<" fn ">"; next }
 	!/^ *[0-9a-f]+: [0-9a-f]{8} / { next }
+	{ a = $1; sub(/:$/, "", a); t = $0; sub(/^[^\t]*\t/, "", t); print a "\t" $2 "\t" t }'; }
+lines > "$tmp/all"
+if [ -n "$mattr" ]; then lines --mattr="$mattr" > "$tmp/base"; else cp "$tmp/all" "$tmp/base"; fi
+paste -d $'\001' "$tmp/all" "$tmp/base" | awk -F '\001' -v controls="$tmp/controls" -v isa="$mattr" '
 	{
-		w = $2; l = tolower($0)
+		if ($1 ~ /^</) { if ($1 != $2) { bad++ } fn = substr($1, 2, length($1) - 2); next }
+		split($1, x, "\t"); split($2, y, "\t")
+		if (x[1] != y[1]) { bad++; next }
+		w = x[2]; l = $1; b = $2
+		sub(/^[^\t]*\t[^\t]*\t/, "", l); sub(/^[^\t]*\t[^\t]*\t/, "", b); l = tolower(l); b = tolower(b)
 		if (w == "d503201f") nops++
-		if (l ~ /\t(msr|mrs)\t/) sysmoves++
-		if (l ~ /\t(msr|mrs)\t/ && match(l, /s3_[0-7]_c15_c[0-9]+_[0-7]/)) {
-			print fn "\t" ((l ~ /\tmsr\t/) ? "write" : "read") "\t" substr(l, RSTART, RLENGTH)
+		if (l ~ /^(msr|mrs)\t/) sysmoves++
+		if (l ~ /^(msr|mrs)\t/ && match(l, /s3_[0-7]_c15_c[0-9]+_[0-7]/)) {
+			print fn "\t" ((l ~ /^msr\t/) ? "write" : "read") "\t" substr(l, RSTART, RLENGTH)
 		}
-		if (l ~ /\thvc\t/) print fn "\thvc\t-"
+		if (l ~ /^hvc\t/) print fn "\thvc\t-"
 		if (w ~ /^00201[0-3][0-9a-f][0-9a-f]$/) print fn "\tamx\t" w
 		if (w == "00201400" || w == "00201420") print fn "\tgxf\t" w
+		if (isa != "" && l != b && b !~ /^hint\t/ && b !~ /^mrs\t[xw][0-9]+, s3_0_c0_c[0-7]_[0-7]$/) {
+			split(l, m, "\t"); d = m[1]
+			if (d ~ /^(msr|mrs|sys|sysl|tlbi|dc|ic|at)$/) { o = m[2]; if (d == "mrs") sub(/^[^,]*, */, "", o); sub(/,.*/, "", o); d = d " " o }
+			print fn "\tisa\t" d
+		}
 	}
-	END { print (nops + 0) " " (sysmoves + 0) > controls }' | sort -u > "$current"
-read -r nops sysmoves < "$controls"
-if [ "$nops" -eq 0 ] || [ "$sysmoves" -eq 0 ]; then
-	echo "parser control failed (nops=$nops system-register moves=$sysmoves): llvm-objdump output format changed"
+	END { print (nops + 0) " " (sysmoves + 0) " " (bad + 0) > controls }' | sort -u > "$tmp/current"
+read -r nops sysmoves bad < "$tmp/controls"
+if [ "$nops" -eq 0 ] || [ "$sysmoves" -eq 0 ] || [ "$bad" -ne 0 ]; then
+	echo "parser control failed (nops=$nops system-register moves=$sysmoves misaligned lines=$bad): llvm-objdump output format changed"
 	exit 1
 fi
-{ grep -v '^#' "$baseline" || true; } | sed '/^$/d' | sort -u > "$base"
-echo "Apple-ISA findings: $(wc -l < "$current" | tr -d ' ') now, $(wc -l < "$base" | tr -d ' ') in baseline (controls: $nops nops, $sysmoves system-register moves)"
-gone="$(comm -13 "$current" "$base")"; new="$(comm -23 "$current" "$base")"
+{ grep -v '^#' "$baseline" || true; } | sed '/^$/d' | sort -u > "$tmp/base.txt"
+echo "ISA findings${mattr:+ (baseline ISA $mattr)}: $(wc -l < "$tmp/current" | tr -d ' ') now, $(wc -l < "$tmp/base.txt" | tr -d ' ') in baseline (controls: $nops nops, $sysmoves system-register moves)"
+gone="$(comm -13 "$tmp/current" "$tmp/base.txt")"; new="$(comm -23 "$tmp/current" "$tmp/base.txt")"
 [ -z "$gone" ] || { echo "removed since baseline; update the baseline:"; echo "$gone" | sed 's/^/  - /'; }
 [ -z "$new" ] || { echo "NEW findings:"; echo "$new" | sed 's/^/  + /'; exit 1; }

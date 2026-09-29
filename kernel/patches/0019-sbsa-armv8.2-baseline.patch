@@ -1,0 +1,120 @@
+From: NeoDarwin
+Subject: [PATCH] SBSA: an Armv8.2 baseline (Cortex-A76/A78, Cortex-X1C)
+
+The bring-up board, the Radxa Dragon Q8B (Qualcomm SC8280XP), has
+Cortex-X1C and Cortex-A78C cores: Armv8.2 with RCpc (LDAPR) and more,
+but no FEAT_TLBIRANGE and no FEAT_DIT. The SBSA kernel was built for
+Armv8.4 and executed TLBI RVALE1IS, undefined on those cores.
+
+- MakeInc.def: SBSA builds with -march=armv8.2-a+rcpc. RCpc is in both
+  the Q8B's cores and QEMU's cortex-a76; nothing else past 8.2 is
+  needed by the compiler. This also turns off __ARM_ARCH_8_4__, so
+  os_atomic no longer treats a 16-byte load as single-copy atomic
+  (FEAT_LSE2), and cswitch.s no longer names DIT unconditionally.
+- SBSA.h: no __ARM_RANGE_TLBI__. pmap flushes by page, or by ASID past
+  256 pages, as on Apple's pre-A14 configurations.
+- pmap.c: the commpage flush on a switch between 4K and 16K pmaps
+  (__ARM_MIXED_PAGE_SIZE__) used a range TLBI unconditionally, since every
+  Apple configuration with mixed page sizes has FEAT_TLBIRANGE. Without it
+  that switch flushes the local TLB, as the shared-region switch already
+  does.
+- cswitch.s: on GENERIC_ARM64_PLATFORM, the thread's PSTATE.DIT is saved
+  and restored when the CPU has FEAT_DIT (gARM_FEAT_DIT, set from
+  ID_AA64PFR0_EL1 by commpage init), through its encoded name. On an
+  Armv8.4+ CPU corecrypto sets DIT (cc_enable_dit, already gated on the
+  commpage's kHasFeatDIT); on the Q8B neither path runs.
+
+//kernel:sbsa_isa_audit checks the result against the Armv8.2 baseline.
+
+Rebase-risk: low (one flag, one define, two assembler blocks, one #if in pmap).
+---
+--- a/makedefs/MakeInc.def	2026-09-29 09:57:25
++++ b/makedefs/MakeInc.def	2026-09-29 09:57:40
+@@ -85,7 +85,7 @@
+ MACHINE_FLAGS_ARM64_T8132 = -DARM64_BOARD_CONFIG_T8132			-mcpu=apple-m4
+ 
+ MACHINE_FLAGS_ARM64_VMAPPLE = -DARM64_BOARD_CONFIG_VMAPPLE              -march=armv8.5a+sme2
+-MACHINE_FLAGS_ARM64_SBSA = -DARM64_BOARD_CONFIG_SBSA                    -march=armv8.4-a
++MACHINE_FLAGS_ARM64_SBSA = -DARM64_BOARD_CONFIG_SBSA                    -march=armv8.2-a+rcpc
+ 
+ 
+ #
+--- a/pexpert/pexpert/arm64/SBSA.h	2026-09-29 09:57:25
++++ b/pexpert/pexpert/arm64/SBSA.h	2026-09-29 09:57:40
+@@ -20,7 +20,11 @@
+ 
+ #define __ARM_PAN_AVAILABLE__     1
+ #define __ARM_16K_PG__            1
+-#define __ARM_RANGE_TLBI__        1  /* FEAT_TLBIRANGE, part of the ARMv8.4 baseline */
++/*
++ * No __ARM_RANGE_TLBI__: the baseline is Armv8.2 (Cortex-A76/A78, the Radxa
++ * Dragon Q8B's Cortex-X1C/A78C), which has no FEAT_TLBIRANGE. pmap flushes
++ * by page or by ASID instead (docs/kernel/arm64-sbsa-bringup.md §2.1.7).
++ */
+ 
+ #define ARM_PARAMETERIZED_PMAP    1
+ #define __ARM_MIXED_PAGE_SIZE__   1
+--- a/osfmk/arm64/cswitch.s	2026-09-29 09:57:18
++++ b/osfmk/arm64/cswitch.s	2026-09-29 09:57:55
+@@ -71,8 +71,22 @@
+ #endif // HAS_ARM_FEAT_SSBS2
+ #if __ARM_ARCH_8_4__
+ 	mrs		x$1, DIT
++	lsr     x$1, x$1, #0 + PSR64_DIT_SHIFT
++	strb	w$1, [$0, SS64_KERNEL_DIT]
++#elif GENERIC_ARM64_PLATFORM
++	/*
++	 * An Armv8.2 kernel may run on a CPU with FEAT_DIT, where corecrypto
++	 * sets PSTATE.DIT (cc_enable_dit, gated on the commpage's kHasFeatDIT).
++	 * Keep it per thread when the CPU has it; S3_3_C4_C2_5 is DIT, which
++	 * an Armv8.2 assembler doesn't name.
++	 */
++	adrp	x$1, EXT(gARM_FEAT_DIT)@page
++	ldr		w$1, [x$1, EXT(gARM_FEAT_DIT)@pageoff]
++	cbz		w$1, 2f
++	mrs		x$1, S3_3_C4_C2_5
+ 	lsr     x$1, x$1, #0 + PSR64_DIT_SHIFT
+ 	strb	w$1, [$0, SS64_KERNEL_DIT]
++2:
+ #endif //__ARM_ARCH_8_4__
+ #if __ARM_ARCH_8_2__
+ 	mrs		x$1, UAO
+@@ -140,6 +154,14 @@
+ 	ldrb	w$1, [$0, SS64_KERNEL_DIT]
+ 	lsl     x$1, x$1, #0 + PSR64_DIT_SHIFT
+ 	msr		DIT, x$1
++#elif GENERIC_ARM64_PLATFORM
++	adrp	x$1, EXT(gARM_FEAT_DIT)@page
++	ldr		w$1, [x$1, EXT(gARM_FEAT_DIT)@pageoff]
++	cbz		w$1, 2f
++	ldrb	w$1, [$0, SS64_KERNEL_DIT]
++	lsl     x$1, x$1, #0 + PSR64_DIT_SHIFT
++	msr		S3_3_C4_C2_5, x$1
++2:
+ #endif //__ARM_ARCH_8_4__
+ 
+ 	ldr		d8,	[$0, NS64_KERNEL_D8]
+--- a/osfmk/arm/pmap/pmap.c	2026-09-29 09:57:25
++++ b/osfmk/arm/pmap/pmap.c	2026-09-29 10:17:17
+@@ -4784,10 +4784,21 @@
+ 
+ #if __ARM_MIXED_PAGE_SIZE__
+ 	if (__improbable(do_commpage_flush)) {
++#if __ARM_RANGE_TLBI__
+ 		const uint64_t commpage_shift = cpu_data_ptr->commpage_page_shift;
+ 		const uint64_t rtlbi_param = generate_rtlbi_param((ppnum_t)_COMM_PAGE64_NESTING_SIZE >> commpage_shift,
+ 		    0, _COMM_PAGE64_NESTING_START, commpage_shift);
+ 		flush_core_tlb_allrange_async(rtlbi_param);
++#else
++		/*
++		 * Without FEAT_TLBIRANGE (generic Armv8.2), the commpage's global
++		 * entries for the other page size go with a full local flush, as
++		 * the nested region's do above. Only a switch between 4K and 16K
++		 * pmaps gets here.
++		 */
++		do_asid_flush = false;
++		flush_core_tlb_async();
++#endif /* __ARM_RANGE_TLBI__ */
+ 	}
+ #endif
+ 	if (__improbable(do_asid_flush)) {

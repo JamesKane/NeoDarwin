@@ -10,7 +10,7 @@ acpi: SPCR: interface type 0x3 at 0x9000000
 gic: GICD_CTLR 0x12 (DS=0): timer on Group 1
 psci: conduit SMC: the FADT reports none, but the CPU implements EL3 (its firmware, e.g. TF-A)
 acpi: relocated copy: 6960 bytes at 0x42000000
-device tree: 3840 bytes
+device tree: 4160 bytes
 /
     compatible = "NeoDarwin,sbsa"
     model = "BOCHS,BXPC"
@@ -38,6 +38,8 @@ device tree: 3840 bytes
 /cpus/cpu0
     device_type = "cpu"
     reg = <0x0>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x0>
     state = "running"
     timebase-frequency = <0x3b9aca0>
     interrupt-parent = <0x5>
@@ -46,6 +48,8 @@ device tree: 3840 bytes
 /cpus/cpu1
     device_type = "cpu"
     reg = <0x1>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x1>
     state = "waiting"
     timebase-frequency = <0x3b9aca0>
     interrupt-parent = <0x5>
@@ -54,6 +58,8 @@ device tree: 3840 bytes
 /cpus/cpu2
     device_type = "cpu"
     reg = <0x2>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x2>
     state = "waiting"
     timebase-frequency = <0x3b9aca0>
     interrupt-parent = <0x5>
@@ -62,6 +68,8 @@ device tree: 3840 bytes
 /cpus/cpu3
     device_type = "cpu"
     reg = <0x3>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x3>
     state = "waiting"
     timebase-frequency = <0x3b9aca0>
     interrupt-parent = <0x5>

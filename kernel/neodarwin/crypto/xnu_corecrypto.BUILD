@@ -61,3 +61,7 @@ cc_library(
     ],
     strip_include_prefix = "osfmk",
 )
+
+# The video console's 8x16 font, with which qemu_efi_test.sh reads text back
+# from a screendump (//kernel:sbsa_fb_console_boot_test).
+exports_files(["osfmk/console/iso_font.c"])

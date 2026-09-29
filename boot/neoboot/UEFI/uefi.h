@@ -57,7 +57,8 @@ typedef struct {
 	EFI_STATUS (*FreePages)(uint64_t Memory, uint64_t Pages);
 	EFI_STATUS (*GetMemoryMap)(uint64_t *MemoryMapSize, EFI_MEMORY_DESCRIPTOR *MemoryMap, uint64_t *MapKey,
 	    uint64_t *DescriptorSize, uint32_t *DescriptorVersion);
-	void *AllocatePool, *FreePool;
+	void *AllocatePool;
+	EFI_STATUS (*FreePool)(void *Buffer);
 	void *CreateEvent, *SetTimer, *WaitForEvent, *SignalEvent, *CloseEvent, *CheckEvent;
 	void *InstallProtocolInterface, *ReinstallProtocolInterface, *UninstallProtocolInterface;
 	EFI_STATUS (*HandleProtocol)(EFI_HANDLE Handle, const EFI_GUID *Protocol, void **Interface);
@@ -66,7 +67,13 @@ typedef struct {
 	EFI_STATUS (*ExitBootServices)(EFI_HANDLE ImageHandle, uint64_t MapKey);
 	void *GetNextMonotonicCount, *Stall;
 	EFI_STATUS (*SetWatchdogTimer)(uint64_t Timeout, uint64_t WatchdogCode, uint64_t DataSize, CHAR16 *WatchdogData);
+	void *ConnectController, *DisconnectController;
+	void *OpenProtocol, *CloseProtocol, *OpenProtocolInformation;
+	void *ProtocolsPerHandle;
+	EFI_STATUS (*LocateHandleBuffer)(uint32_t SearchType, const EFI_GUID *Protocol, void *SearchKey, uint64_t *NoHandles,
+	    EFI_HANDLE **Buffer);
 } EFI_BOOT_SERVICES;
+enum { AllHandles, ByRegisterNotify, ByProtocol };  // EFI_LOCATE_SEARCH_TYPE
 
 // EFI_LOADED_IMAGE_PROTOCOL: which device neoboot was loaded from.
 typedef struct {
@@ -95,6 +102,29 @@ typedef struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
 	EFI_STATUS (*OpenVolume)(struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *This, EFI_FILE_PROTOCOL **Root);
 } EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
 enum { EFI_FILE_MODE_READ = 1 };
+
+// EFI_GRAPHICS_OUTPUT_PROTOCOL (UEFI 2.10 §12.9): the firmware's linear
+// framebuffer, which neoboot hands the kernel in boot_args.Video.
+enum {  // EFI_GRAPHICS_PIXEL_FORMAT
+	PixelRedGreenBlueReserved8BitPerColor, PixelBlueGreenRedReserved8BitPerColor, PixelBitMask, PixelBltOnly,
+};
+typedef struct {
+	uint32_t Version;
+	uint32_t HorizontalResolution, VerticalResolution;
+	uint32_t PixelFormat;  // EFI_GRAPHICS_PIXEL_FORMAT
+	uint32_t RedMask, GreenMask, BlueMask, ReservedMask;  // EFI_PIXEL_BITMASK, for PixelBitMask
+	uint32_t PixelsPerScanLine;
+} EFI_GRAPHICS_OUTPUT_MODE_INFORMATION;
+typedef struct {
+	uint32_t MaxMode, Mode;
+	EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *Info;
+	uint64_t SizeOfInfo;
+	uint64_t FrameBufferBase, FrameBufferSize;
+} EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE;
+typedef struct {
+	void *QueryMode, *SetMode, *Blt;
+	EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE *Mode;
+} EFI_GRAPHICS_OUTPUT_PROTOCOL;
 
 // EFI_CONFIGURATION_TABLE: where the firmware publishes the ACPI RSDP.
 typedef struct {

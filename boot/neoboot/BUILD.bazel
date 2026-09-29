@@ -47,6 +47,8 @@ sh_test(
         "'DS=1 (Group 0 open to Non-secure); timer PPI 27 on Group 0 (FIQ)'",
         # QEMU's own PSCI, behind HVC since there is no EL3 (P1-06).
         "'neoboot: PSCI conduit: HVC, as the FADT says'",
+        # No display device, so no GOP: the kernel's console is serial only.
+        "'neoboot: GOP: none; the console is serial only'",
         "'neoboot: no \\NeoDarwin\\kernelcache on the boot volume'",
     ],
     data = [":neoboot"],
@@ -72,6 +74,27 @@ sh_test(
         ":neoboot",
         "testdata/timer-group1.cfg",
     ],
+    tags = ["qemu"],
+)
+
+# QEMU's ramfb is a linear framebuffer EDK2 drives through GOP (QemuRamfbDxe):
+# neoboot reports its mode for boot_args.Video (arm64-sbsa-bringup.md §2.1.7).
+# The other tests have no display device, and so no GOP.
+sh_test(
+    name = "neoboot_gop_qemu_test",
+    size = "small",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--device ramfb",
+        "--screendump screen.ppm",
+        "--until-lines",
+        "$(rootpath :neoboot)",
+        "45",
+        # EDK2's QemuRamfbDxe offers three modes and starts in 800x600.
+        "'neoboot: GOP: 800x600 BGRx, mode 1 of 3, 3200 bytes per row, framebuffer 0x'",
+        "'neoboot: no \\NeoDarwin\\kernelcache on the boot volume'",
+    ],
+    data = [":neoboot"],
     tags = ["qemu"],
 )
 

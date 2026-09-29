@@ -373,6 +373,11 @@ enum ACPI {
             throw ACPIError("GTDT virtual timer is edge-triggered; the Arm generic timer's interrupt is level-sensitive. Flags", gtdt, UInt64(f.timerFlags))
         }
         for i in 0..<f.cpuEntries where f.cpus[i].enabled {
+            // The kernel keeps a CPU's id as a u32, MPIDR Aff2:Aff1:Aff0
+            // (start.s matches MPIDR bits 23:0), so Aff3 must be 0.
+            guard (f.cpus[i].mpidr >> 32) & 0xff == 0 else {
+                throw ACPIError("GICC MPIDR has a non-zero Aff3, which the kernel's 24-bit CPU id can't hold; MPIDR", madt, f.cpus[i].mpidr)
+            }
             let pmu = f.cpus[i].pmuGSIV
             guard pmu == 0 || (pmu >= 16 && pmu < 32) else { throw ACPIError("GICC performance interrupt is not a PPI; GSIV", madt, UInt64(pmu)) }
             for j in 0..<i where f.cpus[j].enabled && f.cpus[j].affinity == f.cpus[i].affinity {

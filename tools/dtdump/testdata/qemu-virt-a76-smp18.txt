@@ -1,0 +1,260 @@
+acpi: INPUT: 11 tables: RSDP XSDT FACP DSDT APIC PPTT GTDT MCFG SPCR DBG2 IORT
+acpi: OEM "BOCHS " "BXPC    ", hardware-reduced true, PSCI HVC
+acpi: MADT: GICv3 GICD 0x8000000; GICR 0x80a0000, 18 frame(s) of 0xf60000 reserved
+acpi: MADT: GICC uid 0 MPIDR 0x0 flags 0x1 PMU GSIV 23 (boot)
+acpi: MADT: GICC uid 1 MPIDR 0x1 flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 2 MPIDR 0x2 flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 3 MPIDR 0x3 flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 4 MPIDR 0x4 flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 5 MPIDR 0x5 flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 6 MPIDR 0x6 flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 7 MPIDR 0x7 flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 8 MPIDR 0x8 flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 9 MPIDR 0x9 flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 10 MPIDR 0xa flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 11 MPIDR 0xb flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 12 MPIDR 0xc flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 13 MPIDR 0xd flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 14 MPIDR 0xe flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 15 MPIDR 0xf flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 16 MPIDR 0x100 flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 17 MPIDR 0x101 flags 0x1 PMU GSIV 23
+acpi: GTDT: virtual timer GSIV 27 flags 0x0
+acpi: SPCR: interface type 0x3 at 0x9000000
+gic: GICD_CTLR 0x40 (DS=1): timer on Group 0
+psci: conduit HVC, as the FADT says
+acpi: relocated copy: 8784 bytes at 0x42000000
+device tree: 10096 bytes
+/
+    compatible = "NeoDarwin,sbsa"
+    model = "BOCHS,BXPC"
+    target-type = "sbsa"
+    #address-cells = <0x2>
+    #size-cells = <0x2>
+    AAPL,phandle = <0x1>
+/chosen
+    dram-base = <0x40000000> (u64)
+    dram-size = <0x80000000> (u64)
+    debug-enabled = <0x1>
+    firmware-version = "neoboot-0.1"
+    random-seed = <0x40822041 0x100041060c011441 0x9b1e842f6e862629 0xf554f503555d8025 0x860c1fb090599265 0xf6b05302e5531801 0xa2460108ebbd9e71 0xc62c9fc114d9590d> (u64)
+    acpi-rsdp = <0x42000000> (u64)
+    acpi-tables = <0x42000000 0x2250> (u64)
+    psci-conduit = "hvc"
+    AAPL,phandle = <0x2>
+/chosen/memory-map
+    ACPITables = <0x42000000 0x2250> (u64)
+/defaults
+    serial-device = <0x3>
+/cpus
+    #address-cells = <0x1>
+    #size-cells = <0x0>
+/cpus/cpu0
+    device_type = "cpu"
+    reg = <0x0>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x0>
+    state = "running"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x10>
+/cpus/cpu1
+    device_type = "cpu"
+    reg = <0x1>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x1>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x11>
+/cpus/cpu2
+    device_type = "cpu"
+    reg = <0x2>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x2>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x12>
+/cpus/cpu3
+    device_type = "cpu"
+    reg = <0x3>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x3>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x13>
+/cpus/cpu4
+    device_type = "cpu"
+    reg = <0x4>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x4>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x14>
+/cpus/cpu5
+    device_type = "cpu"
+    reg = <0x5>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x5>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x15>
+/cpus/cpu6
+    device_type = "cpu"
+    reg = <0x6>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x6>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x16>
+/cpus/cpu7
+    device_type = "cpu"
+    reg = <0x7>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x7>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x17>
+/cpus/cpu8
+    device_type = "cpu"
+    reg = <0x8>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x8>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x18>
+/cpus/cpu9
+    device_type = "cpu"
+    reg = <0x9>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x9>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x19>
+/cpus/cpu10
+    device_type = "cpu"
+    reg = <0xa>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0xa>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x1a>
+/cpus/cpu11
+    device_type = "cpu"
+    reg = <0xb>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0xb>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x1b>
+/cpus/cpu12
+    device_type = "cpu"
+    reg = <0xc>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0xc>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x1c>
+/cpus/cpu13
+    device_type = "cpu"
+    reg = <0xd>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0xd>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x1d>
+/cpus/cpu14
+    device_type = "cpu"
+    reg = <0xe>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0xe>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x1e>
+/cpus/cpu15
+    device_type = "cpu"
+    reg = <0xf>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0xf>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x1f>
+/cpus/cpu16
+    device_type = "cpu"
+    reg = <0x100>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x10>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = " "
+/cpus/cpu17
+    device_type = "cpu"
+    reg = <0x101>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x11>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca0>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = "!"
+/arm-io
+    device_type = "soc"
+    ranges = <0x0 0x8000000 0x1010000> (u64)
+    #address-cells = <0x2>
+    #size-cells = <0x2>
+    AAPL,phandle = <0x4>
+/arm-io/gic
+    compatible = "arm,gic-v3"
+    reg = <0x0 0x10000 0xa0000 0x240000> (u64)
+    interrupt-controller = "gic"
+    #interrupt-cells = <0x1>
+    #address-cells = <0x0>
+    timer-ppi = <0x1b>
+    timer-group = <0x0>
+    AAPL,phandle = <0x5>
+/arm-io/interrupt-controller
+    interrupt-controller = "master"
+    reg = <0x0 0x10000> (u64)
+    AAPL,phandle = <0x6>
+/arm-io/timer
+    device_type = "timer"
+    reg = <0xa0000 0x10000> (u64)
+    AAPL,phandle = <0x7>
+/arm-io/uart0
+    device_type = "serial"
+    compatible = "arm,pl011"
+    reg = <0x1000000 0x1000> (u64)
+    AAPL,phandle = <0x3>
+dtdump: DT-ABI v1: ok (28 nodes)

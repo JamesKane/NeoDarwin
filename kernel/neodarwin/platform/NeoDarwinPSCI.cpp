@@ -143,6 +143,9 @@ NeoDarwinPSCI::enableCPUCore(unsigned int cpu_id, uint64_t entry_pa)
 	int64_t rc = call(PSCI_CPU_ON_64, mpidr, entry_pa, 0);
 	switch (rc) {
 	case PSCI_SUCCESS:
+		// The logical number and the MPIDR it maps to (reg, Aff2:Aff1:Aff0):
+		// on DynamIQ boards the core is in Aff1 (P1-17).
+		IOLog("NeoDarwinPSCI: CPU_ON cpu %u, MPIDR 0x%llx\n", cpu_id, mpidr);
 		return;
 	case PSCI_ON_PENDING:
 		// An earlier CPU_ON for this CPU is still completing: it will

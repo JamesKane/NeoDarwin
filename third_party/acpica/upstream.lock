@@ -1,0 +1,5 @@
+# ACPICA pin. Must match the http_archive entry in MODULE.bazel.
+# Licence: Intel's dual licence (Intel source licence / BSD-3-Clause / GPL-2.0);
+# NeoDarwin uses it under BSD-3-Clause (source/components/*/*.c, section 3 of
+# each file's header, and LICENSE in the archive).
+acpica   20260408   https://github.com/acpica/acpica/archive/refs/tags/20260408.tar.gz   sha256:ddc5d3e0f54030e2348484fff681861a161efb4e388e20631209574e7884ad39

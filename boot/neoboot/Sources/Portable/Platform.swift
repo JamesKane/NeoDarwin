@@ -207,6 +207,14 @@ enum Platform {
             cpuName(&w, index)
             w.property("device_type", string: "cpu")
             w.property("reg", u32: cpu.affinity)  // the kernel's phys_id; MPIDR Aff2:Aff1:Aff0
+            // One cluster: without HAS_CLUSTER, ml_parse_cpu_topology puts
+            // every cpu with no cluster-type in logical cluster 0 (one SMP
+            // processor set), which is what a DynamIQ cluster is. These
+            // describe that cluster, replacing the kernel's defaults from
+            // the MPIDR (Aff1, Aff0), which on DynamIQ are a core number
+            // and 0.
+            w.property("die-cluster-id", u32: 0)
+            w.property("cluster-core-id", u32: index)
             if i == l.bootIndex {
                 w.property("state", string: "running")
             } else {

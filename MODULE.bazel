@@ -286,6 +286,18 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/hfs/archive/refs/tags/hfs-704.0.3.0.2.tar.gz"],
 )
 
+# ACPICA 20260408 (acpica/acpica, the latest release; Intel's dual licence,
+# used under its BSD-3-Clause terms): the AML interpreter and namespace, built
+# into the SBSA kernel with NeoDarwin's OS layer (kernel/neodarwin/acpi,
+# docs/kernel/acpi.md). Pin in third_party/acpica/upstream.lock.
+http_archive(
+    name = "acpica",
+    build_file = "//third_party/acpica:acpica.BUILD",
+    sha256 = "ddc5d3e0f54030e2348484fff681861a161efb4e388e20631209574e7884ad39",
+    strip_prefix = "acpica-20260408",
+    urls = ["https://github.com/acpica/acpica/archive/refs/tags/20260408.tar.gz"],
+)
+
 # xnu's corecrypto subset and headers, for ndcrypto's host tests: the same
 # archive as apple_xnu (the repository cache serves it once), with its own
 # BUILD file so the kernel's inputs are untouched.

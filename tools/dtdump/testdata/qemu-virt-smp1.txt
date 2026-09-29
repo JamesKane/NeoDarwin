@@ -7,7 +7,7 @@ acpi: SPCR: interface type 0x3 at 0x9000000
 gic: GICD_CTLR 0x40 (DS=1): timer on Group 0
 psci: conduit HVC, as the FADT says
 acpi: relocated copy: 6576 bytes at 0x42000000
-device tree: 2808 bytes
+device tree: 2888 bytes
 /
     compatible = "NeoDarwin,sbsa"
     model = "BOCHS,BXPC"
@@ -35,6 +35,8 @@ device tree: 2808 bytes
 /cpus/cpu0
     device_type = "cpu"
     reg = <0x0>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x0>
     state = "running"
     timebase-frequency = <0x3b9aca0>
     interrupt-parent = <0x5>

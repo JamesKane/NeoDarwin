@@ -1,0 +1,30 @@
+# NeoDarwin's ACPI platform: ACPICA's OS layer and host header, the ACPI
+# platform driver and IOACPIPlatformDevice (docs/kernel/acpi.md, P1-09).
+# Kernel-only C and IOKit C++, compiled into the SBSA kernel with ACPICA
+# (@acpica) by patch 0018.
+load("//rules:cc.bzl", "lang_audit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+SRCS = [
+    "IOACPIPlatformDevice.cpp",
+    "NeoDarwinACPIPlatform.cpp",
+    "NeoDarwinACPIPlatform.h",
+    "acnd.h",
+    "include/IOKit/acpi/IOACPIPlatformDevice.h",
+    "include/IOKit/acpi/IOACPITypes.h",
+    "nd_acpi_osl.c",
+    "nd_acpica.h",
+]
+
+# Overlaid at iokit/ndacpi (kernel/BUILD.bazel); ACPICA itself at
+# iokit/ndacpi/acpica.
+filegroup(
+    name = "kernel_srcs",
+    srcs = SRCS,
+)
+
+lang_audit_test(
+    name = "acpi_lang_audit",
+    srcs = SRCS,
+)

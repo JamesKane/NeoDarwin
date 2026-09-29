@@ -33,6 +33,18 @@ struct BootArgs {
     var deviceTreeLength: UInt32 = 0
     var memSizeActual: UInt64 = 0
 
+    /// Boot_Video. v_display stays 0, which makes PE_create_console() take
+    /// kPETextMode: a text console on the framebuffer, not a boot picture.
+    /// v_depth's upper bytes (rotation, scale) stay 0.
+    struct Video {
+        var baseAddr: UInt64
+        var rowBytes: UInt64
+        var width: UInt64
+        var height: UInt64
+        var depth: UInt64
+    }
+    var video: Video? = nil
+
     func write(to p: UnsafeMutableRawPointer, commandLine: UnsafeRawBufferPointer) {
         p.initializeMemory(as: UInt8.self, repeating: 0, count: Self.size)
         p.storeBytes(of: UInt16(2), toByteOffset: Offset.revision, as: UInt16.self)
@@ -41,7 +53,13 @@ struct BootArgs {
         p.storeBytes(of: physBase, toByteOffset: Offset.physBase, as: UInt64.self)
         p.storeBytes(of: memSize, toByteOffset: Offset.memSize, as: UInt64.self)
         p.storeBytes(of: topOfKernelData, toByteOffset: Offset.topOfKernelData, as: UInt64.self)
-        // Video stays zero: v_display = 0 selects the text console (GOP is later).
+        if let v = video {
+            p.storeBytes(of: v.baseAddr, toByteOffset: Offset.video, as: UInt64.self)
+            p.storeBytes(of: v.rowBytes, toByteOffset: Offset.video + 16, as: UInt64.self)
+            p.storeBytes(of: v.width, toByteOffset: Offset.video + 24, as: UInt64.self)
+            p.storeBytes(of: v.height, toByteOffset: Offset.video + 32, as: UInt64.self)
+            p.storeBytes(of: v.depth, toByteOffset: Offset.video + 40, as: UInt64.self)
+        }
         p.storeBytes(of: deviceTree, toByteOffset: Offset.deviceTreeP, as: UInt64.self)
         p.storeBytes(of: deviceTreeLength, toByteOffset: Offset.deviceTreeLength, as: UInt32.self)
         let n = min(commandLine.count, Self.commandLineLength - 1)

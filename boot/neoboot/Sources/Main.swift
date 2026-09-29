@@ -24,8 +24,9 @@ let bootConfigPath: StaticString = "\\NeoDarwin\\boot.cfg"
 let ramdiskPath: StaticString = "\\NeoDarwin\\ramdisk"
 /// Appended when a ramdisk is loaded and the command line names no root.
 let ramdiskRoot: StaticString = " rd=md0"
-/// -noprogress until the loader passes a GOP framebuffer: with no display,
-/// PE_init_iokit()'s progress-bar centring loop never terminates.
+/// -noprogress: with no framebuffer, PE_init_iokit()'s progress-bar
+/// centring loop never terminates; with one, the console is text anyway
+/// (boot_args.Video.v_display = 0).
 let defaultCommandLine: StaticString = "debug=0x14e serial=3 -v -noprogress"
 /// Appended on a multiprocessor without a PSCI conduit when the command line
 /// doesn't name a CPU count: the tree lists every CPU, but NeoDarwinPSCI
@@ -178,6 +179,13 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     reportACPI(acpi, layout)
     let timerGroup = chooseTimerGroup(acpi, config, configLength)
     let psci = choosePSCIConduit(acpi, layout)
+    // The firmware's framebuffer, for the kernel's video console (§2.1.7).
+    var framebuffer: Framebuffer? = nil
+    if hasArgument(config, configLength, gopOffOption) {
+        put("neoboot: GOP: not used (gop=off); the console is serial only\n")
+    } else {
+        framebuffer = fw.framebuffer(system)
+    }
 
     guard let file = EFIFile(root: root, path: kernelcachePath) else { return fail("no \\NeoDarwin\\kernelcache on the boot volume") }
     let fileSize = file.size
@@ -195,7 +203,27 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     guard kc.vmSize == fileSize else { return fail("the kernelcache is not flat; rebuild it with kcgen") }
 
     guard var map = MemoryMap(fw) else { return fail("cannot read the memory map") }
-    let window = map.largestWindow()
+    var window = map.largestWindow()
+    if let fb = framebuffer {
+        // Where the framebuffer lies decides how the kernel may treat it.
+        put("neoboot: GOP: the framebuffer's memory is ")
+        if let type = map.type(at: fb.base) {
+            put("UEFI memory type ")
+            putDec(UInt64(type))
+        } else {
+            put("not in the UEFI memory map")
+        }
+        put("\n")
+        let rest = excluding(window, fb, page: kernelPage)
+        if rest != window {
+            put("neoboot: GOP: the framebuffer lies in the DRAM window; the kernel gets ")
+            putHex(rest.start)
+            put("-")
+            putHex(rest.end)
+            put("\n")
+            window = rest
+        }
+    }
     // The ramdisk (mockfs's executable until P1-08's HFS+ image): memdev
     // counts it in 4 KiB pages, so its length is rounded up and zero-filled.
     let ramdisk = EFIFile(root: root, path: ramdiskPath)
@@ -299,6 +327,9 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     bootArgs.deviceTree = virtBase + dtOffset
     bootArgs.deviceTreeLength = UInt32(treeLength)
     bootArgs.memSizeActual = map.totalRAM()
+    if let fb = framebuffer {
+        bootArgs.video = BootArgs.Video(baseAddr: fb.base, rowBytes: fb.rowBytes, width: fb.width, height: fb.height, depth: 32)
+    }
     bootArgs.write(to: args, commandLine: commandLine)
 
     log("  DRAM window        ", window.start)
@@ -314,6 +345,7 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
         log("  ramdisk bytes      ", ramdiskSize)
     }
     log("  boot_args at       ", base + argsOffset)
+    if let fb = framebuffer { log("  framebuffer at     ", fb.base) }
     log("  memSize            ", memSize)
     log("  timebase (Hz)      ", facts.timebase)
     log("  UTC seconds        ", utc)
@@ -322,8 +354,11 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     put(bytes: UnsafeRawBufferPointer(start: args + BootArgs.Offset.commandLine, count: lineLength))
     put("\n")
 
-    // start.s reads all of this with the MMU and caches off.
+    // start.s reads all of this with the MMU and caches off. The kernel
+    // maps the framebuffer uncached, so the firmware's last drawing goes to
+    // memory too.
     nd_dcache_clean_poc(base, span)
+    if let fb = framebuffer { nd_dcache_clean_poc(fb.base, fb.size) }
     Console.pl011Base = UInt(acpi.uartBase)  // SPCR: the console once the firmware's is gone
     guard fw.exitBootServices(&map) else { return fail("ExitBootServices failed") }
     Console.detach()

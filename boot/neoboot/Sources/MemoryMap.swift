@@ -76,6 +76,15 @@ struct MemoryMap {
         return best
     }
 
+    /// The type of the descriptor holding `address`, or nil if none does.
+    func type(at address: UInt64) -> UInt32? {
+        for i in 0..<count {
+            let d = descriptor(i)
+            if address >= d.start && address < d.end { return d.type }
+        }
+        return nil
+    }
+
     /// Total RAM the firmware reports, for boot_args.memSizeActual.
     func totalRAM() -> UInt64 {
         var total: UInt64 = 0

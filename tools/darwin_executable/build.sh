@@ -20,15 +20,20 @@ swift=(); while [ $# -gt 0 ] && [ "$1" != "--" ]; do swift+=("$1"); shift; done
 [ "${1:-}" = "--" ] && shift
 csrcs=("$@")
 target=arm64-apple-macos26.0
+# The CPU baseline, as for the kernel (docs/kernel/arm64-sbsa-bringup.md §2.1.8):
+# Armv8.2 with RCpc, dot product, crypto and FP16, which the Radxa Dragon
+# Q8B's Cortex-X1C/A78C and QEMU's cortex-a76 implement. Without it swiftc
+# and clang target apple-m1 for arm64-apple-macos and emit LDAPUR (Armv8.4).
+cpu=cortex-a76
 sdk="$(xcrun --sdk macosx --show-sdk-path)"
 bin="$tc/usr/bin"; work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 iflags=(); IFS=: read -ra dirs <<< "$incs"; for d in "${dirs[@]}"; do [ -n "$d" ] && iflags+=(-I "$d"); done
-"$bin/swiftc" -target "$target" -sdk "$sdk" -enable-experimental-feature Embedded -wmo -parse-as-library \
+"$bin/swiftc" -target "$target" -target-cpu "$cpu" -sdk "$sdk" -enable-experimental-feature Embedded -wmo -parse-as-library \
 	-Osize -swift-version 6 -warnings-as-errors "${iflags[@]}" -module-name "$module" \
 	-c "${swift[@]}" -o "$work/swift.o"
 objs=("$work/swift.o"); i=0
 for c in ${csrcs[@]+"${csrcs[@]}"}; do
-	"$bin/clang" --target="$target" -isysroot "$sdk" -std=c23 -Os -Wall -Wextra -Werror "${iflags[@]}" \
+	"$bin/clang" --target="$target" -mcpu="$cpu" -isysroot "$sdk" -std=c23 -Os -Wall -Wextra -Werror "${iflags[@]}" \
 		-c "$c" -o "$work/c$i.o"
 	objs+=("$work/c$i.o"); i=$((i + 1))
 done

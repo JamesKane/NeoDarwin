@@ -127,3 +127,42 @@ sh_test(
         "//boot/neoboot:testdata/qemu-virt-smp1.acpidump",
     ],
 )
+
+# QEMU virt with 18 cortex-a76 CPUs, captured with dump-acpi: QEMU numbers 16
+# CPUs per MPIDR Aff1, so cpu16 and cpu17 are 0x100 and 0x101, the DynamIQ
+# form (core in Aff1) of the Radxa Dragon Q8B. Their reg keeps Aff1, and every
+# cpu is in the one cluster (die-cluster-id 0, cluster-core-id = index; P1-17).
+sh_test(
+    name = "qemu_virt_a76_smp18_test",
+    size = "small",
+    srcs = ["dtdump_test.sh"],
+    args = [
+        "ok",
+        "$(rootpath :dtdump)",
+        "$(rootpath //boot/neoboot:testdata/qemu-virt-a76-smp18.acpidump)",
+        "$(rootpath testdata/qemu-virt-a76-smp18.txt)",
+    ],
+    data = [
+        ":dtdump",
+        "testdata/qemu-virt-a76-smp18.txt",
+        "//boot/neoboot:testdata/qemu-virt-a76-smp18.acpidump",
+    ],
+)
+
+# Negative: the four-CPU tables with MPIDR Aff3 = 1 on the last GICC (the
+# checksum fixed up). The kernel's CPU id is Aff2:Aff1:Aff0, so neoboot refuses.
+sh_test(
+    name = "mpidr_aff3_test",
+    size = "small",
+    srcs = ["dtdump_test.sh"],
+    args = [
+        "fail",
+        "$(rootpath :dtdump)",
+        "$(rootpath //boot/neoboot:testdata/qemu-virt-aff3.acpidump)",
+        "'GICC MPIDR has a non-zero Aff3'",
+    ],
+    data = [
+        ":dtdump",
+        "//boot/neoboot:testdata/qemu-virt-aff3.acpidump",
+    ],
+)

@@ -39,6 +39,7 @@ neoboot refuses to boot, and prints why, when:
 - the virtual timer isn't a PPI (INTID 16–31), or the GTDT calls it edge-triggered. The generic timer's interrupt is level-sensitive, and the kernel re-arms it by writing `CNTV_CVAL`, which drops the line;
 - a GICC's performance interrupt isn't a PPI;
 - two enabled GICCs have the same MPIDR;
+- an enabled GICC's MPIDR has a non-zero Aff3. The kernel keeps a CPU's id as MPIDR Aff2:Aff1:Aff0 (the cpu `reg`, which `start.s` matches against `MPIDR_EL1[23:0]`, P1-17);
 - the SPCR UART isn't a PL011 or an SBSA Generic UART (types 0x03, 0x0D, 0x0E). The 16550 family (0x00, 0x01, 0x12) waits for P1-12;
 - the boot CPU isn't an enabled GICC;
 - a device sits in physical page 0.
@@ -76,8 +77,8 @@ Types: `u32` and `u64` are little-endian. `string` is NUL-terminated. `(u64,u64)
 | `firmware-version` | `"neoboot-0.1"` | constant | `pe_init.c:489-496` (`iBoot version:` line) |
 | `random-seed` | 64 bytes, xorshift64 of `CNTPCT` | loader | `pe_gen.c:177-178` (early PRNG) |
 | `neodarwin,utc-seconds`, `neodarwin,utc-counter` | u64 each. Omitted when the firmware has no clock | UEFI `GetTime()`, `CNTVCT` | `NeoDarwinPlatformExpert.cpp:109-116` (`IORTC`, time of day) |
-| `acpi-rsdp` | u64: physical address of the copied RSDP | ACPI copy | reserved: NeoDarwinACPIPlatform (Tier 2 ACPICA kext) |
-| `acpi-tables` | (u64,u64): the ACPI copy | ACPI copy | reserved: as above |
+| `acpi-rsdp` | u64: physical address of the copied RSDP | ACPI copy | `nd_acpi_osl.c` `AcpiOsGetRootPointer`: ACPICA's root (P1-09, `acpi.md`). Without it the ACPI platform doesn't start |
+| `acpi-tables` | (u64,u64): the ACPI copy | ACPI copy | not read: the copy is inside DRAM, which `nd_acpi_osl.c` maps for ACPICA through the physmap (`dram-base`, `dram-size`), anything else as device memory |
 | `psci-conduit` | `"smc"` or `"hvc"`. Omitted when there is no PSCI | FADT `ARM_BOOT_ARCH`, `ID_AA64PFR0_EL1.EL3`, the loader's EL (below) | `NeoDarwinPSCI.cpp` `init`: `CPU_ON`, `CPU_OFF` and `PSCI_VERSION` go through `smc #0` or `hvc #0` |
 | `AAPL,phandle` | u32 2 | constant | phandle map |
 
@@ -104,12 +105,16 @@ Every entry lies inside `[dram-base, dram-base+dram-size)`, below `topOfKernelDa
 |---|---|---|---|
 | `name` | `"cpu<index>"` | index | IORegistry naming only |
 | `device_type` | `"cpu"` | constant | `AppleARMSMP.cpp:97` matching; `IOPlatformExpert.cpp:1681` cpu nubs |
-| `reg` | u32: MPIDR Aff2:Aff1:Aff0 | GICC MPIDR | `machine_routines.c:1197` (`phys_id`, mandatory); `AppleARMSMP.cpp:98`; `IOPlatformExpert.cpp:1686`; the `CPU_ON` target (`NeoDarwinPSCI`) and the `ICC_SGI1R_EL1` affinity (`NeoDarwinGICv3::sendIPI`) |
+| `reg` | u32: MPIDR Aff2:Aff1:Aff0 | GICC MPIDR | `machine_routines.c:1197` (`phys_id`, mandatory); `AppleARMSMP.cpp:98`; `IOPlatformExpert.cpp:1686`; the `CPU_ON` target (`NeoDarwinPSCI`) and the `ICC_SGI1R_EL1` affinity (`NeoDarwinGICv3::sendIPI`). All three affinity levels identify the CPU: the reset vector (`start.s`), `ml_get_cpu_number` and `find_gicr_pe_base` match bits 23:0 (patch 0020), since DynamIQ cores number themselves in Aff1 with Aff0 0 (the Q8B: 0x000–0x700) |
+| `die-cluster-id` | u32 0 | constant | `machine_routines.c:1268` (`die_cluster_id`, default MPIDR Aff1). One cluster: see below |
+| `cluster-core-id` | u32 index | index | `machine_routines.c:1271` (`cluster_core_id`, default MPIDR Aff0) |
 | `state` | `"running"` for the boot CPU, `"waiting"` for the rest | boot MPIDR | `machine_routines.c:1066` (`ml_is_boot_cpu`); `pe_identify_machine.c:64` (only the running CPU's timebase is read) |
 | `timebase-frequency` | u32 `CNTFRQ_EL0` | loader | `pe_identify_machine.c:70-80`. Without it the kernel assumes 24 MHz: it never reads `CNTFRQ` |
 | `interrupt-parent` | u32 5 (the GIC) | constant | `IODeviceTreeSupport.cpp:566` |
 | `interrupts` | three u32: SGI 0 (IPI), the PMU PPI, SGI 1 (deferred IPI) | GICC performance GSIV; 23 (SBSA PPI 7) if the MADT gives 0 | `AppleARMSMP.cpp:125-150`: with three specifiers it registers entries 0 and 2 as IPIs, once per CPU, and never enables entry 1. `NeoDarwinGICv3` keeps them per CPU (banked). SGI numbers match `NeoDarwinGICv3.cpp` `ND_SGI_IPI`/`ND_SGI_DEFERRED_IPI` |
 | `AAPL,phandle` | u32 16 + index | constant | phandle map |
+
+**One cluster (P1-17).** The SBSA kernel has no `HAS_CLUSTER`, so `ml_parse_cpu_topology` takes a CPU's cluster from `cluster-type` alone, and every CPU without one (all of them: neoboot writes none) is in logical cluster 0, one SMP processor set. That is right for a DynamIQ system such as the Q8B, whose eight cores share one DSU and L3 whatever their MPIDR Aff1. neoboot writes `die-cluster-id` 0 and `cluster-core-id` = the cpu's index so the per-CPU fields describe that cluster; the kernel's defaults (MPIDR Aff1, Aff0) are a core number and 0 on DynamIQ. Splitting big and little cores (`cluster-type` `'P'`/`'E'`) needs the AMP scheduler, which SBSA doesn't build.
 
 **The PSCI conduit (P1-06).** The kernel starts every CPU but the boot one with PSCI `CPU_ON`. It reaches PSCI through the conduit the firmware describes, chosen at boot as Linux chooses it (`Platform.psciConduit`):
 - The FADT's `ARM_BOOT_ARCH` says `PSCI_COMPLIANT`: SMC, or HVC with `PSCI_USE_HVC`. QEMU `virt` without EL3 says HVC: its own PSCI emulation answers.
@@ -183,6 +188,20 @@ These are legacy lookups. Without them `pe_arm_map_interrupt_controller` fails a
 
 The UART has no `interrupts`: the console is polled (`serial_keyboard_poll`). neoboot's own console switches to this UART at `ExitBootServices`.
 
+### Outside the tree: `boot_args.Video`
+
+The framebuffer is not in the tree. It travels in `boot_args.Video` (`pexpert/pexpert/arm64/boot.h`), which `PE_init_platform` copies into `PE_state.video` (`pe_init.c:425-436`). The framebuffer console is described in `arm64-sbsa-bringup.md` §2.1.7.
+
+| Field | Value | Kernel reader |
+|---|---|---|
+| `v_baseAddr` | physical address of the GOP's linear framebuffer (`Mode->FrameBufferBase`); 0 with no usable GOP or with `gop=off` in `boot.cfg` | `initialize_screen` maps it with `ml_io_map_unmappable` (`video_console.c`); 0 means no video console |
+| `v_display` | 0: a text console, not a boot picture | `PE_create_console` → `kPETextMode` |
+| `v_rowBytes` | `PixelsPerScanLine` × 4 | `vc_*` |
+| `v_width`, `v_height` | the current mode's resolution; neoboot never changes the mode | `vc_initialize`: columns = width / 8, rows = height / 16 |
+| `v_depth` | 32; the rotation and scale bytes are 0 | depth 32 draws xRGB words, GOP's `PixelBlueGreenRedReserved8BitPerColor` |
+
+The framebuffer never lies inside `[dram-base, dram-base+dram-size)`: neoboot cuts it out of the DRAM window, so the kernel maps it as memory it doesn't own.
+
 ## The checks (`DTCheck.check`)
 
 A tree is DT-ABI v1 when:
@@ -205,7 +224,8 @@ A tree is DT-ABI v1 when:
 6. **Console.** `/defaults serial-device` names exactly one node, which is `"arm,pl011"` with one `reg` pair.
 7. **`/cpus`.**
    - `#address-cells` is 1 and `#size-cells` is 0; there are 1 to 32 cpus.
-   - Each cpu has `device_type` `"cpu"` and a u32 `reg` that is unique.
+   - Each cpu has `device_type` `"cpu"` and a u32 `reg` that is unique and has no bits above Aff2 (23:0).
+   - Each cpu has `die-cluster-id` 0 and `cluster-core-id` equal to its index.
    - Each `state` is `"running"` or `"waiting"`, and exactly one is running.
    - Each `timebase-frequency` is non-zero, and `interrupt-parent` is the GIC's phandle.
    - Each `interrupts` is three u32: two distinct SGIs, with a PPI between them that isn't the timer's (`timer-ppi`, else 27).
