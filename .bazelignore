@@ -1,0 +1,3 @@
+# Claude Code keeps git worktrees here (.claude/worktrees); each is a full
+# checkout of this repository, which Bazel must not load as packages.
+.claude
