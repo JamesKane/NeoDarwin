@@ -471,6 +471,54 @@ sh_test(
     tags = ["manual", "kernel", "qemu"],
 )
 
+# The framebuffer as the only console (DT-ABI v1.1): what the Radxa Dragon
+# Q8B boots with until its GENI UART has a driver (P1-12). boot.cfg's
+# uart=off makes neoboot treat the SPCR UART as absent, as it treats one the
+# kernel has no driver for; with ramfb's GOP it leaves /arm-io/uart0 and
+# /defaults serial-device out of the tree and says nothing on the UART after
+# ExitBootServices. The kernel finds no serial device, so the video console
+# is its console (patch 0021). Serial shows only neoboot's lines before
+# ExitBootServices; the test reads the screen until getty's banner and
+# prompt are on it. There is no input device yet, so nothing logs in.
+sh_test(
+    name = "sbsa_fb_only_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--device ramfb",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:getty_root)",
+        "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/uart-off.cfg)",
+        "--until-lines",
+        "--until-screen",
+        "--screendump screen.ppm",
+        "--screen-font $(rootpath @apple_xnu_corecrypto//:osfmk/console/iso_font.c)",
+        # The last lines, which one 800x600 screen (37 rows) still holds
+        # when getty's prompt appears.
+        "--screen-line 'getty_init: PID 1 on /dev/console; starting getty'",
+        "--screen-line 'Darwin/BSD (Amnesiac) (console)'",
+        "--screen-line 'login:'",
+        # Nothing reaches the PL011 after ExitBootServices: neither neoboot's
+        # last line nor the kernel's.
+        "--absent 'neoboot: entering the kernel'",
+        "--absent 'Darwin Kernel Version'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'neoboot: SPCR UART not used (uart=off); console on the framebuffer only'",
+        "'  command line       debug=0x14e serial=3 -v -noprogress uart=off rd=md0'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//boot/neoboot:testdata/uart-off.cfg",
+        "//images:getty_root",
+        "@apple_xnu_corecrypto//:osfmk/console/iso_font.c",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
 # P1-07: the same boot with PID 1 itself as the ramdisk, rooted on mockfs
 # (patches 0011-0013).
 sh_test(

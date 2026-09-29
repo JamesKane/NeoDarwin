@@ -25,6 +25,11 @@
 //                        that reports no PSCI, the PSCI conduit is then SMC
 //     --loader-el N      the EL neoboot runs at, 1 or 2 (default 1): at EL2 a FADT's
 //                        HVC conduit is refused
+//     --gop WxH          a GOP framebuffer of that mode, which neoboot passes in
+//                        boot_args.Video: the kernel's console without a UART, so
+//                        the tree may leave out an SPCR UART the kernel has no
+//                        driver for (DT-ABI v1.1). With --dt, the tree may have none
+//     --uart-off         treat the SPCR UART as absent, as boot.cfg's uart=off
 //     --write-dt FILE    also write the binary tree
 // Exits 1 on an ACPI error or a DT-ABI violation, 2 on a usage error.
 
@@ -57,7 +62,7 @@ struct PrintReport: DTReport {
 
 // MARK: arguments
 
-let usage = "usage: dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--write-dt FILE] ACPIDUMP | dtdump --dt TREE"
+let usage = "usage: dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--gop WxH] [--uart-off] [--write-dt FILE] ACPIDUMP | dtdump [--gop WxH] --dt TREE"
 var args = Array(CommandLine.arguments.dropFirst())
 var input: String?
 var treeInput: String?
@@ -73,6 +78,8 @@ var gicdCTLR: UInt32 = Platform.gicdCTLRDS
 var forcedTimerGroup: UInt32?
 var el3 = false
 var loaderEL: UInt64 = 1
+var gop: (width: UInt64, height: UInt64)?
+var uartOff = false
 
 func number(_ s: String) -> UInt64 {
     let t = s.hasPrefix("0x") ? String(s.dropFirst(2)) : s
@@ -106,6 +113,11 @@ while !args.isEmpty {
     case "--loader-el":
         loaderEL = number(value())
         guard loaderEL == 1 || loaderEL == 2 else { fail(usage, code: 2) }
+    case "--gop":
+        let parts = value().split(separator: "x").map { number(String($0)) }
+        guard parts.count == 2, parts[0] >= 8, parts[1] >= 16 else { fail(usage, code: 2) }
+        gop = (parts[0], parts[1])
+    case "--uart-off": uartOff = true
     case "--write-dt": writeTree = value()
     case "--dt": treeInput = value()
     default:
@@ -155,9 +167,9 @@ func printNode(_ n: DTNode, path: String, into out: inout String, count: inout I
 }
 
 /// Prints and checks a tree; returns the violations (checks of its own included).
-func show(_ tree: UnsafeRawPointer, _ length: Int, extra: [String]) -> Int {
+func show(_ tree: UnsafeRawPointer, _ length: Int, framebuffer: Bool, extra: [String]) -> Int {
     var report = PrintReport()
-    let n = DTCheck.check(tree, length: length, &report)
+    let n = DTCheck.check(tree, length: length, framebuffer: framebuffer, &report)
     var out = "device tree: \(length) bytes\n"
     var nodeCount = 0
     if DTNode(tree: tree, length: length, offset: 0).end() != nil {
@@ -175,7 +187,7 @@ func show(_ tree: UnsafeRawPointer, _ length: Int, extra: [String]) -> Int {
 if let treeInput {
     guard input == nil, let data = FileManager.default.contents(atPath: treeInput) else { fail(usage, code: 2) }
     let bytes = [UInt8](data)
-    let violations = bytes.withUnsafeBytes { show($0.baseAddress!, $0.count, extra: []) }
+    let violations = bytes.withUnsafeBytes { show($0.baseAddress!, $0.count, framebuffer: gop != nil, extra: []) }
     exit(violations == 0 ? 0 : 1)
 }
 
@@ -200,10 +212,18 @@ do throws(ACPIError) {
     fail("the tables do not describe a machine neoboot can boot")
 }
 
+// The console: the SPCR UART if the kernel drives it, else the framebuffer
+// alone, else nothing, which neoboot refuses.
+let uartUse = Platform.uartUse(facts, off: uartOff)
+if uartUse != .console && gop == nil {
+    print("dtdump: " + (uartUse == .off ? "--uart-off" : ACPI.uartProblem(facts).map(describe) ?? ""))
+    fail("no UART the kernel can drive, and no framebuffer (--gop): the kernel would have no console")
+}
+
 let boot = bootMPIDR ?? (0..<facts.cpuEntries).map { facts.cpus[$0] }.first { $0.enabled }!.mpidr
 let layout: Platform.Layout
 do throws(ACPIError) {
-    layout = try Platform.layout(facts, bootMPIDR: boot)
+    layout = try Platform.layout(facts, bootMPIDR: boot, uart: uartUse == .console)
 } catch {
     print("dtdump: \(describe(error))")
     fail("the tables do not describe a machine neoboot can boot")
@@ -221,7 +241,15 @@ for i in 0..<facts.cpuEntries {
           + (c.gicrBase != 0 ? " GICR \(hex(c.gicrBase))" : "") + (i == layout.bootIndex ? " (boot)" : ""))
 }
 print("acpi: GTDT: virtual timer GSIV \(facts.timerGSIV) flags \(hex(UInt64(facts.timerFlags)))")
-print("acpi: SPCR: interface type \(hex(UInt64(facts.uartType))) at \(hex(facts.uartBase))")
+print(facts.hasSPCR ? "acpi: SPCR: interface type \(hex(UInt64(facts.uartType))) at \(hex(facts.uartBase))" : "acpi: no SPCR")
+if let gop { print("video: \(gop.width)x\(gop.height) framebuffer in boot_args.Video") }
+switch uartUse {
+case .console: break
+case .off: print("console: the SPCR UART is not used (--uart-off); the framebuffer only")
+case .missing: print("console: no SPCR UART; the framebuffer only")
+case .noDriver: print("console: SPCR UART type \(hex(UInt64(facts.uartType))) has no kernel driver; the framebuffer only")
+case .unusable: print("console: the SPCR UART is unusable (\(ACPI.uartProblem(facts).map(describe) ?? "")); the framebuffer only")
+}
 let timerGroup = Platform.timerGroup(gicdCTLR: gicdCTLR, forced: forcedTimerGroup)
 print("gic: GICD_CTLR \(hex(UInt64(gicdCTLR))) (DS=\(gicdCTLR & Platform.gicdCTLRDS != 0 ? 1 : 0)): timer on Group \(timerGroup)"
       + (forcedTimerGroup != nil ? ", forced" : ""))
@@ -277,6 +305,9 @@ if let io = root.child(named: "arm-io"), let soc = io.u64("ranges", 1) {
     if let uart = io.child(named: "uart0"), (uart.u64("reg", 0) ?? 0) + soc != facts.uartBase {
         extra.append("cross-check: /arm-io/uart0 is not the SPCR UART")
     }
+    if (io.child(named: "uart0") != nil) != (uartUse == .console) {
+        extra.append("cross-check: /arm-io/uart0 is " + (uartUse == .console ? "missing" : "present, though the kernel can't drive it"))
+    }
 }
 
 if let writeTree {
@@ -284,4 +315,4 @@ if let writeTree {
         fail("cannot write \(writeTree)")
     }
 }
-exit(show(treeBuffer, treeLength, extra: extra) == 0 ? 0 : 1)
+exit(show(treeBuffer, treeLength, framebuffer: gop != nil, extra: extra) == 0 ? 0 : 1)

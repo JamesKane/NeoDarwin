@@ -42,6 +42,12 @@ let dumpACPIOption: StaticString = "dump-acpi"
 /// EL3 tests the path TrustZone boards need.
 let timerGroup0Option: StaticString = "timer-group=0"
 let timerGroup1Option: StaticString = "timer-group=1"
+/// A loader option in boot.cfg: treat the SPCR UART as absent. The kernel's
+/// console is then the GOP framebuffer alone, as on a board whose UART the
+/// kernel has no driver for (the Q8B's GENI UART); without a framebuffer
+/// neoboot refuses to boot. For boards whose UART is unreadable, and for
+/// testing that path on QEMU.
+let uartOffOption: StaticString = "uart=off"
 /// GICD_CTLR, at offset 0 of the distributor.
 let gicdCTLROffset: UInt64 = 0
 
@@ -120,6 +126,46 @@ func chooseTimerGroup(_ a: ACPIFacts, _ config: UnsafeMutableRawPointer, _ confi
     return group
 }
 
+/// Whether the SPCR UART is the kernel's serial console (DT-ABI v1.1): it
+/// must be one the kernel drives, unless a framebuffer console takes its
+/// place. Reports the choice; nil means the kernel would have no console.
+func chooseConsole(_ a: ACPIFacts, framebuffer: Bool, off: Bool) -> Platform.UARTUse? {
+    let use = Platform.uartUse(a, off: off)
+    if use == .console { return use }
+    guard framebuffer else {
+        if use == .off {
+            put("neoboot: uart=off in boot.cfg, and there is no GOP framebuffer: the kernel would have no console\n")
+        } else if let problem = ACPI.uartProblem(a) {
+            put("neoboot: ACPI: ")
+            put(problem.message)
+            if problem.value != 0 {
+                put(" ")
+                putHex(problem.value)
+            }
+            put("\nneoboot: and there is no GOP framebuffer to use instead: the kernel would have no console\n")
+        }
+        return nil
+    }
+    switch use {
+    case .off:
+        put("neoboot: SPCR UART not used (uart=off)")
+    case .missing:
+        put("neoboot: no SPCR UART")
+    case .noDriver:
+        put("neoboot: SPCR UART type ")
+        putHex(UInt64(a.uartType))
+        put(" at ")
+        putHex(a.uartBase)
+        put(" has no kernel driver")
+    case .unusable, .console:
+        put("neoboot: SPCR UART unusable (")
+        if let problem = ACPI.uartProblem(a) { put(problem.message) }
+        put(")")
+    }
+    put("; console on the framebuffer only\n")
+    return use
+}
+
 /// The PSCI conduit for NeoDarwinPSCI (/chosen psci-conduit), from the FADT
 /// and the CPU (Platform.psciConduit), reported on the console. Without one
 /// a multiprocessor boots its boot CPU alone.
@@ -168,17 +214,12 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
         return fail("the firmware publishes no ACPI 2.0 RSDP (EFI_ACPI_20_TABLE_GUID); cannot describe this machine")
     }
     let acpi: ACPIFacts
-    let layout: Platform.Layout
     do throws(ACPIError) {
         if mentions(config, configLength, dumpACPIOption) { try dumpACPI(rsdp: rsdp) }
         acpi = try ACPI.parse(PhysicalMemory(), rsdp: rsdp)
-        layout = try Platform.layout(acpi, bootMPIDR: nd_mpidr())
     } catch {
         return report(error)
     }
-    reportACPI(acpi, layout)
-    let timerGroup = chooseTimerGroup(acpi, config, configLength)
-    let psci = choosePSCIConduit(acpi, layout)
     // The firmware's framebuffer, for the kernel's video console (§2.1.7).
     var framebuffer: Framebuffer? = nil
     if hasArgument(config, configLength, gopOffOption) {
@@ -186,6 +227,20 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     } else {
         framebuffer = fw.framebuffer(system)
     }
+    // The serial console, or the framebuffer alone when the kernel can't
+    // drive the SPCR UART.
+    guard let uartUse = chooseConsole(acpi, framebuffer: framebuffer != nil, off: hasArgument(config, configLength, uartOffOption)) else {
+        return fail("cannot boot without a console")
+    }
+    let layout: Platform.Layout
+    do throws(ACPIError) {
+        layout = try Platform.layout(acpi, bootMPIDR: nd_mpidr(), uart: uartUse == .console)
+    } catch {
+        return report(error)
+    }
+    reportACPI(acpi, layout)
+    let timerGroup = chooseTimerGroup(acpi, config, configLength)
+    let psci = choosePSCIConduit(acpi, layout)
 
     guard let file = EFIFile(root: root, path: kernelcachePath) else { return fail("no \\NeoDarwin\\kernelcache on the boot volume") }
     let fileSize = file.size
@@ -295,7 +350,7 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
                                timerGroup: timerGroup, psciConduit: psci)
     guard let treeLength = Platform.deviceTree(into: &tree, facts, acpi, layout) else { return fail("the device tree does not fit") }
     var violations = ConsoleReport()
-    guard DTCheck.check(image + Int(dtOffset), length: treeLength, &violations) == 0 else {
+    guard DTCheck.check(image + Int(dtOffset), length: treeLength, framebuffer: framebuffer != nil, &violations) == 0 else {
         return fail("the synthesised device tree breaks DT-ABI v1")
     }
 
@@ -359,7 +414,10 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     // memory too.
     nd_dcache_clean_poc(base, span)
     if let fb = framebuffer { nd_dcache_clean_poc(fb.base, fb.size) }
-    Console.pl011Base = UInt(acpi.uartBase)  // SPCR: the console once the firmware's is gone
+    // SPCR: the console once the firmware's is gone, if it is a PL011. Any
+    // other UART (the Q8B's GENI) is left alone, and neoboot says nothing
+    // more after ExitBootServices.
+    Console.pl011Base = layout.uart ? UInt(acpi.uartBase) : 0
     guard fw.exitBootServices(&map) else { return fail("ExitBootServices failed") }
     Console.detach()
     put("neoboot: entering the kernel\n")

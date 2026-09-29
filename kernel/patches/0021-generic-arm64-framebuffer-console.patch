@@ -1,5 +1,6 @@
 From: NeoDarwin
-Subject: [PATCH] console: the booter's framebuffer as a second console on generic Arm
+Subject: [PATCH] console: the booter's framebuffer as a second or only console on
+ generic Arm
 
 A board's serial console may be unreadable while its UEFI firmware drives
 a monitor through GOP: the Radxa Dragon Q8B's GENI UART sits on 1.8 V
@@ -25,13 +26,26 @@ For GENERIC_ARM64_PLATFORM:
   32-bit stores and 64-byte-aligned bcopy()s, which Device memory needs.
 - initialize_screen() prints the mode it mapped ("video console: WxH, ...").
 
+A board whose UART the kernel has no driver for (the Q8B until its GENI
+driver) boots with no serial device: neoboot leaves /defaults
+serial-device out when a framebuffer exists. serial_init() then finds no
+device, cons_ops_index stays VC_CONS_OPS, and the video console is the
+only console, as upstream; the mirror above never runs (idx is not
+SERIAL_CONS_OPS), so nothing is drawn twice. kprintf() falls back to
+console_write_unbuffered() (PE_init_kprintf), which is that same video
+console, and consdebug_putc() copied panic and debugger output to
+PE_kputc as well whenever the console isn't serial: every panic
+character was drawn twice. For GENERIC_ARM64_PLATFORM it now skips
+PE_kputc when that is the console itself.
+
 io_map() before VM (startup_phase < STARTUP_SUB_KMEM) advanced
 virtual_space_start by round_page(size) but mapped alloc_size, which is a
 page more when phys_addr is not page aligned: a GOP framebuffer is 4 KiB
 aligned and the kernel's pages are 16 KiB, so the mapping ran into the
 next caller's address space. It now advances by alloc_size.
 
-Rebase-risk: low (one hunk each in _cnputc, initialize_screen and io_map).
+Rebase-risk: low (one hunk each in _cnputc, initialize_screen, io_map and
+consdebug_putc).
 ---
 diff --git a/osfmk/arm/io_map.c b/osfmk/arm/io_map.c
 --- a/osfmk/arm/io_map.c
@@ -122,3 +136,42 @@ diff --git a/osfmk/console/video_console.c b/osfmk/console/video_console.c
  			}
  			new_vinfo.v_baseaddr = newVideoVirt + boot_vinfo->v_offset;                     /* Set the new framebuffer address */
  		}
+diff --git a/osfmk/kern/printf.c b/osfmk/kern/printf.c
+--- a/osfmk/kern/printf.c
++++ b/osfmk/kern/printf.c
+@@ -914,6 +914,17 @@
+ 	return vprintf_internal(fmt, ap, __builtin_return_address(0));
+ }
+ 
++#if GENERIC_ARM64_PLATFORM
++/*
++ * Without a serial device PE_init_kprintf() points PE_kputc at the console
++ * itself (console_write_unbuffered), which is then the video console:
++ * copying panic output to it again would draw every character twice.
++ */
++#define CONSDEBUG_KPUTC_IS_CONSOLE() (PE_kputc == console_write_unbuffered)
++#else
++#define CONSDEBUG_KPUTC_IS_CONSOLE() false
++#endif /* GENERIC_ARM64_PLATFORM */
++
+ void
+ consdebug_putc(char c)
+ {
+@@ -921,7 +932,7 @@
+ 
+ 	debug_putc(c);
+ 
+-	if (!console_is_serial() && !disable_serial_output && (PE_kputc != NULL)) {
++	if (!console_is_serial() && !disable_serial_output && (PE_kputc != NULL) && !CONSDEBUG_KPUTC_IS_CONSOLE()) {
+ 		PE_kputc(c);
+ 	}
+ }
+@@ -933,7 +944,7 @@
+ 
+ 	debug_putc(c);
+ 
+-	if (!console_is_serial() && !disable_serial_output && (PE_kputc != NULL)) {
++	if (!console_is_serial() && !disable_serial_output && (PE_kputc != NULL) && !CONSDEBUG_KPUTC_IS_CONSOLE()) {
+ 		PE_kputc(c);
+ 	}
+ }

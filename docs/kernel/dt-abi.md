@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
 # DT-ABI v1: the device tree neoboot gives the kernel
 
-**Version 1, P1-04; `timer-ppi` and `timer-group` added in P1-05; `/chosen` `psci-conduit` added in P1-06.** This is the contract between the loader (`boot/neoboot`) and the SBSA kernel. neoboot writes it from the machine's ACPI tables and its own facts, in Apple's flattened format (`pexpert/pexpert/device_tree.h`, not FDT). The design is in `arm64-sbsa-bringup.md` §2.2.
+**Version 1, P1-04; `timer-ppi` and `timer-group` added in P1-05; `/chosen` `psci-conduit` added in P1-06; v1.1, P1-11: the UART is optional when `boot_args` carries a framebuffer.** This is the contract between the loader (`boot/neoboot`) and the SBSA kernel. neoboot writes it from the machine's ACPI tables and its own facts, in Apple's flattened format (`pexpert/pexpert/device_tree.h`, not FDT). The design is in `arm64-sbsa-bringup.md` §2.2.
 
 The contract is enforced in three places, all built from the same sources in `boot/neoboot/Sources/Portable/`:
 - `ACPI.swift` reads the tables and refuses ones the kernel can't run on (`ACPI.check`).
@@ -23,16 +23,16 @@ Line numbers below refer to xnu-12377.1.9 as pinned (`@apple_xnu`) with NeoDarwi
 | MADT: GICC (type 0x0B) | `ACPI.parseMADT` | per CPU: MPIDR, flags (Enabled, Online Capable), performance-interrupt GSIV, processor UID |
 | GTDT | `ACPI.parse` | the EL1 virtual timer's GSIV and flags: a level-sensitive PPI (INTID 16–31), SBSA's being 27 |
 | GIC distributor, `GICD_CTLR` | `Main.swift` `chooseTimerGroup` | the security state: `DS` (bit 6) reads 1 when Non-secure software may use Group 0, 0 when the GIC has two security states and Group 0 is Secure. It picks the timer's group |
-| SPCR | `ACPI.parse` | the console UART's interface type and base address, which must be in system-memory space |
+| SPCR | `ACPI.parse`, `ACPI.uartProblem`, `Platform.uartUse` | the console UART's interface type and base address. It becomes the kernel's serial console only if the kernel drives it (below); otherwise the framebuffer is the only console, if there is one |
 | FADT (`FACP`), else the XSDT header | `ACPI.parse`, `ACPI.copyOEM` | OEM ID and OEM table ID for `model`; hardware-reduced flag; ARM boot flags (`PSCI_COMPLIANT`, `PSCI_USE_HVC`), which choose the PSCI conduit |
 | `ID_AA64PFR0_EL1.EL3` (bits 15:12) | `Main.swift` `choosePSCIConduit` | whether the CPU implements EL3, where PSCI firmware lives: the conduit when the FADT reports no PSCI |
-| the loader | `Main.swift` | DRAM window, `CNTFRQ_EL0`, the boot CPU's `MPIDR_EL1`, the `CNTPCT` seed, UEFI `GetTime()`, ramdisk placement, where the ACPI copy goes, the exception level it runs at, and `timer-group=0`/`timer-group=1` in `boot.cfg` |
+| the loader | `Main.swift` | DRAM window, `CNTFRQ_EL0`, the boot CPU's `MPIDR_EL1`, the `CNTPCT` seed, UEFI `GetTime()`, ramdisk placement, where the ACPI copy goes, the exception level it runs at, whether a GOP framebuffer exists (`GOP.swift`), and `timer-group=0`/`timer-group=1`, `gop=off` and `uart=off` in `boot.cfg` |
 
 Every table is checked for length and checksum. The FACS has no checksum; it's dumped but never parsed. Tables neoboot doesn't parse (DSDT, MCFG, IORT, PPTT, DBG2, …) are still copied for the kernel.
 
 neoboot refuses to boot, and prints why, when:
 - the RSDP or any table is missing, truncated, or fails its checksum;
-- there is no MADT, GTDT or SPCR;
+- there is no MADT or GTDT;
 - there is no GICD, more than one GICD, or no GICC;
 - the GIC version is neither 3 nor 0. GICv4 redistributors are 256 KiB, and the kernel steps through them in 128 KiB `GICR_PE_SIZE` units;
 - the GICR ranges are too small for one frame per GICC, or the GICC frames aren't contiguous;
@@ -40,7 +40,7 @@ neoboot refuses to boot, and prints why, when:
 - a GICC's performance interrupt isn't a PPI;
 - two enabled GICCs have the same MPIDR;
 - an enabled GICC's MPIDR has a non-zero Aff3. The kernel keeps a CPU's id as MPIDR Aff2:Aff1:Aff0 (the cpu `reg`, which `start.s` matches against `MPIDR_EL1[23:0]`, P1-17);
-- the SPCR UART isn't a PL011 or an SBSA Generic UART (types 0x03, 0x0D, 0x0E). The 16550 family (0x00, 0x01, 0x12) waits for P1-12;
+- the kernel has no console: there is no GOP framebuffer, and the SPCR UART is missing, not in system memory, at address 0, not a PL011 or an SBSA Generic UART (types 0x03, 0x0D, 0x0E), or turned off with `uart=off`. The 16550 family (0x00, 0x01, 0x12) waits for P1-12, the Qualcomm GENI UART (0x13) for P1-12 too. With a framebuffer, such a UART is left out of the tree instead (see "The console" below);
 - the boot CPU isn't an enabled GICC;
 - a device sits in physical page 0.
 
@@ -93,9 +93,11 @@ Every entry lies inside `[dram-base, dram-base+dram-size)`, below `topOfKernelDa
 
 ### `/defaults`
 
+The node is always there: `get_serial_device_phandle` panics without it (`pe_serial.c:831-833`).
+
 | Property | Value | Source | Kernel reader |
 |---|---|---|---|
-| `serial-device` | u32: the UART's `AAPL,phandle` (3) | constant | `pe_serial.c:837`, resolved at `:921`. The node's `compatible` selects the driver at `:934` |
+| `serial-device` | u32: the UART's `AAPL,phandle` (3). Omitted when the console is the framebuffer alone (v1.1) | constant | `pe_serial.c:837`, resolved at `:921`. The node's `compatible` selects the driver at `:934`. Without it `serial_init` returns 0: no serial device |
 
 ### `/cpus` and `/cpus/cpuN`
 
@@ -188,6 +190,26 @@ These are legacy lookups. Without them `pe_arm_map_interrupt_controller` fails a
 
 The UART has no `interrupts`: the console is polled (`serial_keyboard_poll`). neoboot's own console switches to this UART at `ExitBootServices`.
 
+The node exists only when the kernel's console is this UART (`Platform.uartUse` is `.console`). `socBase` then counts its address; otherwise it covers the GIC alone.
+
+### The console (v1.1)
+
+The kernel's console is the SPCR UART when the kernel drives it, and the framebuffer in `boot_args.Video` alone otherwise. neoboot decides after it has looked for a GOP (`chooseConsole` in `Main.swift`, `Platform.uartUse`):
+
+| SPCR UART | GOP framebuffer | Tree | neoboot says |
+|---|---|---|---|
+| PL011 or SBSA Generic, in system memory, non-zero address | either | `/arm-io/uart0`, `/defaults serial-device` = 3 | (the ACPI line names the UART) |
+| any other type, e.g. the Q8B's GENI UART (0x13) | yes | neither | `neoboot: SPCR UART type 0x13 at 0x884000 has no kernel driver; console on the framebuffer only` |
+| turned off with `uart=off` in `boot.cfg` | yes | neither | `neoboot: SPCR UART not used (uart=off); console on the framebuffer only` |
+| no SPCR, not in system memory, or at address 0 | yes | neither | `neoboot: no SPCR UART; …` or `neoboot: SPCR UART unusable (…); …` |
+| anything the kernel can't drive, or `uart=off` | no | none: neoboot refuses | the ACPI reason, then `neoboot: and there is no GOP framebuffer to use instead: the kernel would have no console` |
+
+`uart=off` is for boards whose UART is unreadable, and for testing the framebuffer-only path on QEMU. Like every `boot.cfg` option, it also reaches the kernel's command line, which ignores it.
+
+Without `serial-device`, `serial_init` finds no serial device, so `arm_init` never switches to the serial console and `cons_ops_index` stays `VC_CONS_OPS`: kernel printf, IOLog and `/dev/console` (getty, shells) draw on the video console, as upstream. `PE_init_kprintf` falls back to `console_write_unbuffered`, the same console, and patch 0021 stops `consdebug_putc` from drawing panic output twice through it. There is no input: `_vcgetc` polls `uart_getc`, which has no device, and the serial keyboard thread `serial=3` starts finds nothing. getty waits at `login:`. `/dev/console` reports 80×24 because `serial=3` asks for the serial console (`kmopen`, `bsd/dev/arm/km.c:116`), although the screen has more cells.
+
+Once `ExitBootServices` has run, neoboot writes to the SPCR UART only if it is the kernel's console, a PL011. It never touches a UART it can't drive as though it were one, and it prints nothing after that point (its last line, `neoboot: entering the kernel`, is lost). Everything before goes through the firmware's console, which on the Q8B is the HDMI screen.
+
 ### Outside the tree: `boot_args.Video`
 
 The framebuffer is not in the tree. It travels in `boot_args.Video` (`pexpert/pexpert/arm64/boot.h`), which `PE_init_platform` copies into `PE_state.video` (`pe_init.c:425-436`). The framebuffer console is described in `arm64-sbsa-bringup.md` §2.1.7.
@@ -221,7 +243,7 @@ A tree is DT-ABI v1 when:
    - `gic` `timer-ppi`, if present, is a u32 from 16 to 31, and `timer-group`, if present, is a u32 0 or 1.
    - `interrupt-controller` is `"master"`, with the GICD as its `reg`.
    - Exactly one node has `device_type` `"timer"`, with one `reg` pair.
-6. **Console.** `/defaults serial-device` names exactly one node, which is `"arm,pl011"` with one `reg` pair.
+6. **Console.** `/defaults` exists. Its `serial-device`, if present, is a u32 naming exactly one node, which is `"arm,pl011"` with one `reg` pair. It may be absent only when `boot_args` carries a framebuffer (`DTCheck.check`'s `framebuffer`, which neoboot sets from its GOP and dtdump from `--gop`).
 7. **`/cpus`.**
    - `#address-cells` is 1 and `#size-cells` is 0; there are 1 to 32 cpus.
    - Each cpu has `device_type` `"cpu"` and a u32 `reg` that is unique and has no bits above Aff2 (23:0).
@@ -235,6 +257,7 @@ dtdump adds cross-checks against the tables:
 - one cpu node per enabled GICC, up to 32;
 - GICR frames equal to the number of MADT GICCs;
 - GICD, GICR and UART bases, plus `socBase`, equal to their ACPI addresses;
+- `/arm-io/uart0` present exactly when the SPCR UART is the kernel's console;
 - `timer-ppi` equal to the GTDT's virtual timer GSIV;
 - the relocated copy parsing to the same facts as the original.
 
@@ -242,13 +265,19 @@ dtdump adds cross-checks against the tables:
 
 - `\NeoDarwin\boot.cfg` containing `dump-acpi` makes neoboot print every table (RSDP, XSDT, each XSDT table, DSDT, FACS) before booting. The format is Linux `acpidump`'s text: a `SIG @ 0x…` line per table and rows of 16 bytes. Capture it from any UEFI board's serial console. `boot/neoboot/testdata/qemu-virt-smp{1,4}.acpidump` were captured this way on QEMU 11.1 `virt,gic-version=3`, `neoverse-n2`, 2 GiB, and `qemu-virt-secure-smp4.acpidump` on `virt,secure=on` with TF-A (`--machine virt-secure --smp 4`).
 - `timer-group=1` (or `=0`) in `boot.cfg` chooses the timer's group instead of `GICD_CTLR.DS` (see `/arm-io/gic`). neoboot logs the choice: `neoboot: GIC: GICD_CTLR 0x…, DS=…; timer PPI 27 on Group 0 (FIQ)`.
-- `dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--write-dt FILE] ACPIDUMP` prints the tables' facts and the tree, then checks it, and exits 1 on any violation. `--gicd-ctlr` is the value neoboot would read (default 0x40, DS = 1, as on QEMU). `--el3` says the CPU implements EL3 and `--loader-el` is the EL neoboot runs at (default 1); with the FADT they choose the PSCI conduit. `dtdump --dt FILE` checks an existing binary tree. The tests are `//tools/dtdump:all`: four golden trees (one with a DS = 0 distributor, one from QEMU with TF-A and four CPUs, whose conduit is SMC), a truncated MADT, and a tree with a dangling `serial-device`.
+- `uart=off` in `boot.cfg` makes neoboot treat the SPCR UART as absent (see "The console").
+- `dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--gop WxH] [--uart-off] [--write-dt FILE] ACPIDUMP` prints the tables' facts and the tree, then checks it, and exits 1 on any violation. `--gicd-ctlr` is the value neoboot would read (default 0x40, DS = 1, as on QEMU). `--el3` says the CPU implements EL3 and `--loader-el` is the EL neoboot runs at (default 1); with the FADT they choose the PSCI conduit. `--gop WxH` says neoboot found a framebuffer of that mode, and `--uart-off` models `uart=off`: together they choose the console. `dtdump [--gop WxH] --dt FILE` checks an existing binary tree. The tests are `//tools/dtdump:all`:
+  - golden trees: QEMU with one and four CPUs, one with a DS = 0 distributor, QEMU with TF-A and four CPUs (conduit SMC), and 18 `cortex-a76` CPUs;
+  - the Radxa Dragon Q8B's own tables (`radxa-dragon-q8b.acpidump`): refused without `--gop`; with `--gop 1920x1080` a golden tree with eight CPUs (MPIDR 0x000–0x700), eight GICR frames at 0x17a60000, PPI 27, SMC and no UART;
+  - `qemu-virt-spcr-geni.acpidump`, QEMU's single-CPU tables with the SPCR rewritten as the Q8B's (type 0x13 at 0x884000): refused without `--gop`, a golden tree with it, and its tree rejected by `--dt` without `--gop`;
+  - a truncated MADT, an MPIDR with Aff3 set, and a tree with a dangling `serial-device`.
 
 ## Versioning
 
-Adding an optional property is backwards compatible and keeps v1, with a row here. Removing or retyping a property, or changing a node's meaning, makes v2. Planned additions:
+Adding an optional property is backwards compatible and keeps v1, with a row here. Removing or retyping a property, or changing a node's meaning, makes v2. Making a property optional in a case where the kernel already copes without it is a minor revision (v1.1). Changes:
 - P1-05 (added): `/arm-io/gic` `timer-ppi` and `timer-group`, from the GTDT and `GICD_CTLR`.
 - P1-06 (added): `/chosen` `psci-conduit`, from FADT `ARM_BOOT_ARCH` and the CPU's EL3. neoboot caps the kernel at one CPU only when there is no conduit.
 - P1-10 and the Tier 2 kext: `/arm-io/pcie@N`, from MCFG and IORT.
-- P1-12 and P1-11 (Radxa Dragon Q8B): SPCR type 0x13, the Qualcomm GENI UART, needs a `/arm-io` UART node the kernel has a driver for. Its GIC is v3 with 128 KiB frames, so no stride change is needed there; GICv4 boards would need the stride in the tree.
+- P1-11 (added, v1.1): `/defaults serial-device` and the UART node are optional when `boot_args` carries a framebuffer. The Radxa Dragon Q8B boots this way, its console on HDMI.
+- P1-12 (Radxa Dragon Q8B): SPCR type 0x13, the Qualcomm GENI UART, needs a `/arm-io` UART node the kernel has a driver for. Its GIC is v3 with 128 KiB frames, so no stride change is needed there; GICv4 boards would need the stride in the tree.
 - P1-12: a 16550 serial node.

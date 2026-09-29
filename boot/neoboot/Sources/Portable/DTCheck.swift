@@ -140,9 +140,11 @@ extension DTReport {
 enum DTCheck {
     /// Checks a tree against DT-ABI v1; returns the number of violations.
     /// The rules are listed, with their reasons, in docs/kernel/dt-abi.md.
-    static func check<R: DTReport>(_ tree: UnsafeRawPointer, length: Int, _ r: inout R) -> Int {
+    /// `framebuffer`: boot_args.Video carries one, so the kernel has a
+    /// console without a serial device and the tree may have no UART.
+    static func check<R: DTReport>(_ tree: UnsafeRawPointer, length: Int, framebuffer: Bool, _ r: inout R) -> Int {
         var count = Counter(inner: r)
-        run(tree, length, &count)
+        run(tree, length, framebuffer, &count)
         r = count.inner
         return count.n
     }
@@ -156,7 +158,7 @@ enum DTCheck {
         }
     }
 
-    static func run<R: DTReport>(_ tree: UnsafeRawPointer, _ length: Int, _ r: inout R) {
+    static func run<R: DTReport>(_ tree: UnsafeRawPointer, _ length: Int, _ framebuffer: Bool, _ r: inout R) {
         let root = DTNode(tree: tree, length: length, offset: 0)
         guard length >= 8, let end = root.end() else { r.violation("the tree is malformed: a node or property overruns it"); return }
         if end != length { r.violation("the tree's length is not its root node's; bytes past the root", UInt64(length - end)) }
@@ -290,17 +292,24 @@ enum DTCheck {
             r.violation("no /arm-io")
         }
 
-        // /defaults serial-device → a PL011 under /arm-io
-        if let defaults = root.child(named: "defaults"), let p = defaults.u32("serial-device") {
-            let (uart, n) = findPhandle(root, p)
-            if n != 1 || uart == nil {
-                r.violation("/defaults serial-device names no node; phandle", UInt64(p))
-            } else if let uart {
-                if !uart.string("compatible", is: "arm,pl011") { r.violation("the serial device is not compatible \"arm,pl011\", the kernel's only UART driver") }
-                if uart.property("reg")?.count != 16 { r.violation("the serial device reg is not one (offset, size) pair (pe_serial.c asserts)") }
+        // The console: /defaults serial-device → a PL011 under /arm-io, or
+        // none when boot_args carries a framebuffer (DT-ABI v1.1).
+        if let defaults = root.child(named: "defaults") {
+            if let p = defaults.u32("serial-device") {
+                let (uart, n) = findPhandle(root, p)
+                if n != 1 || uart == nil {
+                    r.violation("/defaults serial-device names no node; phandle", UInt64(p))
+                } else if let uart {
+                    if !uart.string("compatible", is: "arm,pl011") { r.violation("the serial device is not compatible \"arm,pl011\", the kernel's only UART driver") }
+                    if uart.property("reg")?.count != 16 { r.violation("the serial device reg is not one (offset, size) pair (pe_serial.c asserts)") }
+                }
+            } else if defaults.property("serial-device") != nil {
+                r.violation("/defaults serial-device is not a u32 phandle")
+            } else if !framebuffer {
+                r.violation("no /defaults serial-device and no framebuffer in boot_args (the kernel would have no console)")
             }
         } else {
-            r.violation("no /defaults serial-device (the kernel would have no console)")
+            r.violation("no /defaults (pe_serial.c panics)")
         }
 
         // /cpus

@@ -119,10 +119,21 @@ func reportACPI(_ a: ACPIFacts, _ l: Platform.Layout) {
     put("neoboot: ACPI: timer PPI ")
     putDec(UInt64(a.timerGSIV))
     put((a.timerFlags & 1) != 0 ? " edge" : " level")
-    put(", UART ")
-    put(a.uartType == ACPI.uartPL011 ? "PL011" : "SBSA generic")
-    put(" at ")
-    putHex(a.uartBase)
+    if !a.hasSPCR {
+        put(", no SPCR UART")
+    } else {
+        put(", UART ")
+        if a.uartType == ACPI.uartPL011 {
+            put("PL011")
+        } else if ACPI.uartIsPL011(a.uartType) {
+            put("SBSA generic")
+        } else {
+            put("type ")
+            putHex(UInt64(a.uartType))
+        }
+        put(" at ")
+        putHex(a.uartBase)
+    }
     put(", PSCI ")
     put((a.armBootFlags & 1) == 0 ? "absent" : (a.armBootFlags & 2) != 0 ? "HVC" : "SMC")
     put("\n")

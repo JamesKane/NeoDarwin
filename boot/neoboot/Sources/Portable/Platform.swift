@@ -102,8 +102,27 @@ enum Platform {
         return gicdCTLR & gicdCTLRDS != 0 ? 0 : 1
     }
 
+    /// What becomes of the SPCR UART. Only `.console` puts it in the tree
+    /// (/arm-io/uart0, /defaults serial-device); otherwise the kernel's
+    /// console is the framebuffer alone, and without one the loader refuses.
+    enum UARTUse: UInt8 {
+        case console      // a PL011 or SBSA Generic UART: the serial console
+        case off          // boot.cfg says uart=off
+        case missing      // no SPCR
+        case noDriver     // an interface type the kernel has no driver for (the Q8B's GENI, 0x13)
+        case unusable     // not in system memory, or at address 0
+    }
+
+    static func uartUse(_ a: ACPIFacts, off: Bool) -> UARTUse {
+        if off { return .off }
+        if !a.hasSPCR { return .missing }
+        if a.uartSpace == 0 && !ACPI.uartIsPL011(a.uartType) { return .noDriver }
+        return ACPI.uartProblem(a) == nil ? .console : .unusable
+    }
+
     /// Where the devices go in the tree, from the ACPI facts.
     struct Layout {
+        var uart = true              // /arm-io/uart0 and /defaults serial-device (UARTUse.console)
         var socBase: UInt64 = 0      // /arm-io ranges[1]; every reg under /arm-io is relative to it
         var socSize: UInt64 = 0
         var gicrSize: UInt64 = 0
@@ -122,8 +141,10 @@ enum Platform {
         }
     }
 
-    static func layout(_ a: ACPIFacts, bootMPIDR: UInt64) throws(ACPIError) -> Layout {
+    /// `uart`: whether the SPCR UART is in the tree (uartUse is .console).
+    static func layout(_ a: ACPIFacts, bootMPIDR: UInt64, uart: Bool = true) throws(ACPIError) -> Layout {
         var l = Layout()
+        l.uart = uart
         let boot = UInt32(truncatingIfNeeded: bootMPIDR & 0xff_ffff)
         var found = false
         for i in 0..<a.cpuEntries where a.cpus[i].enabled && a.cpus[i].affinity == boot {
@@ -138,8 +159,12 @@ enum Platform {
         // ranges: the smallest aligned window over the devices, so that
         // nothing depends on one board's address map. ranges[1] must not be
         // 0: pe_identify_machine and serial_init read 0 as "no SoC".
-        let lo = min(min(a.gicdBase, a.gicrBase), a.uartBase) & ~(socAlignment - 1)
-        let hi = max(max(a.gicdBase + gicdSize, a.gicrBase + l.gicrSize), a.uartBase + uartSize)
+        var lo = min(a.gicdBase, a.gicrBase), hi = max(a.gicdBase + gicdSize, a.gicrBase + l.gicrSize)
+        if uart {
+            lo = min(lo, a.uartBase)
+            hi = max(hi, a.uartBase + uartSize)
+        }
+        lo &= ~(socAlignment - 1)
         guard lo != 0 else { throw ACPIError("a device at physical page 0 would make /arm-io ranges[1] zero, which the kernel reads as no SoC") }
         l.socBase = lo
         l.socSize = (hi - lo + socAlignment - 1) & ~(socAlignment - 1)
@@ -191,9 +216,11 @@ enum Platform {
         w.end()
         w.end()
 
-        w.begin()  // /defaults
+        w.begin()  // /defaults: pe_serial.c panics without the node
         w.property("name", string: "defaults")
-        w.property("serial-device", u32: uartPhandle)  // pe_serial.c: which UART is the console
+        if l.uart {
+            w.property("serial-device", u32: uartPhandle)  // pe_serial.c: which UART is the console
+        }
         w.end()
 
         w.begin()  // /cpus: every enabled GICC; the boot CPU is running, PSCI starts the rest
@@ -264,13 +291,15 @@ enum Platform {
         w.property("AAPL,phandle", u32: timerPhandle)
         w.end()
 
-        w.begin()  // /arm-io/uart0: the SPCR console, a polled PL011
-        w.property("name", string: "uart0")
-        w.property("device_type", string: "serial")
-        w.property("compatible", string: "arm,pl011")
-        w.property("reg", a.uartBase - l.socBase, uartSize)
-        w.property("AAPL,phandle", u32: uartPhandle)
-        w.end()
+        if l.uart {
+            w.begin()  // /arm-io/uart0: the SPCR console, a polled PL011
+            w.property("name", string: "uart0")
+            w.property("device_type", string: "serial")
+            w.property("compatible", string: "arm,pl011")
+            w.property("reg", a.uartBase - l.socBase, uartSize)
+            w.property("AAPL,phandle", u32: uartPhandle)
+            w.end()
+        }
         w.end()  // /arm-io
 
         w.end()  // /

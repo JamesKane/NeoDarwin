@@ -3,7 +3,8 @@
 // The ACPI static tables neoboot turns into the device tree (DT-ABI v1,
 // docs/kernel/dt-abi.md): the RSDP and XSDT, the MADT (GIC distributor,
 // redistributors, one GICC per CPU), the GTDT (the virtual timer's
-// interrupt), the SPCR (the console UART) and the FADT (OEM ids, PSCI).
+// interrupt), the SPCR (the console UART, optional when a framebuffer
+// console exists) and the FADT (OEM ids, PSCI).
 // Offsets are from ACPI 6.5 §5.2 and the SPCR specification.
 //
 // Target-independent: no UEFI import and no heap. The same file builds into
@@ -88,8 +89,11 @@ struct ACPIFacts {
     var timerGSIV: UInt32 = 0
     var timerFlags: UInt32 = 0           // bit 0 edge-triggered, bit 1 active-low
 
-    // SPCR.
+    // SPCR. Recorded as the table says; ACPI.uartProblem says whether the
+    // kernel can drive it.
+    var hasSPCR = false
     var uartType: UInt8 = 0xff
+    var uartSpace: UInt8 = 0             // GAS address space: 0 is system memory
     var uartBase: UInt64 = 0
 
     // FADT.
@@ -233,7 +237,7 @@ enum ACPI {
     /// Reads the tables (docs/kernel/dt-abi.md, "Where the values come from").
     static func parse<M: ACPIMemory>(_ m: M, rsdp: UInt64) throws(ACPIError) -> ACPIFacts {
         var f = ACPIFacts()
-        var sawMADT = false, sawGTDT = false, sawSPCR = false, sawFADT = false
+        var sawMADT = false, sawGTDT = false, sawFADT = false
         let x = try xsdtTable(m, rsdp: rsdp)
         copyOEM(x.bytes, into: &f)
         var relocated = 48 + ((Int(u32(x.bytes, 4)) + 15) & ~15)  // the RSDP and XSDT copies
@@ -262,11 +266,10 @@ enum ACPI {
                 f.timerGSIV = u32(p, 64)
                 f.timerFlags = u32(p, 68)
             case spcr:
-                sawSPCR = true
                 guard n >= 52 else { throw ACPIError("SPCR too short for the base address", signature, UInt64(n)) }
+                f.hasSPCR = true
                 f.uartType = p.load(fromByteOffset: 36, as: UInt8.self)
-                let space = p.load(fromByteOffset: 40, as: UInt8.self)
-                guard space == 0 else { throw ACPIError("SPCR UART not in system memory; address space", signature, UInt64(space)) }
+                f.uartSpace = p.load(fromByteOffset: 40, as: UInt8.self)
                 f.uartBase = u64(p, 44)
             default:
                 break
@@ -275,7 +278,6 @@ enum ACPI {
         f.relocatedLength = relocated
         guard sawMADT else { throw ACPIError("no MADT (APIC): the GIC and the CPUs are described nowhere") }
         guard sawGTDT else { throw ACPIError("no GTDT: the timer interrupt is described nowhere") }
-        guard sawSPCR else { throw ACPIError("no SPCR: the console UART is described nowhere") }
         try check(f)
         return f
     }
@@ -384,13 +386,23 @@ enum ACPI {
                 throw ACPIError("two enabled GICCs have the same MPIDR", madt, f.cpus[i].mpidr)
             }
         }
+    }
+
+    /// Why the SPCR UART can't be the kernel's serial console, or nil if it
+    /// can: a PL011 or SBSA Generic UART in system memory. The loader then
+    /// boots with the framebuffer as the only console if there is one, and
+    /// refuses otherwise (Platform.uartUse).
+    static func uartProblem(_ f: ACPIFacts) -> ACPIError? {
+        guard f.hasSPCR else { return ACPIError("no SPCR: the console UART is described nowhere") }
+        guard f.uartSpace == 0 else { return ACPIError("SPCR UART not in system memory; address space", spcr, UInt64(f.uartSpace)) }
         guard uartIsPL011(f.uartType) else {
             if f.uartType == uart16550 || f.uartType == uart16450 || f.uartType == uart16550GAS {
-                throw ACPIError("SPCR names a 16550-family UART, which the kernel has no driver for until P1-12; interface type", spcr, UInt64(f.uartType))
+                return ACPIError("SPCR names a 16550-family UART, which the kernel has no driver for until P1-12; interface type", spcr, UInt64(f.uartType))
             }
-            throw ACPIError("SPCR names a UART the kernel has no driver for; interface type", spcr, UInt64(f.uartType))
+            return ACPIError("SPCR names a UART the kernel has no driver for; interface type", spcr, UInt64(f.uartType))
         }
-        guard f.uartBase != 0 else { throw ACPIError("SPCR UART base address is zero") }
+        guard f.uartBase != 0 else { return ACPIError("SPCR UART base address is zero") }
+        return nil
     }
 
     /// Copies the tables into `dst`, which the kernel will reach at

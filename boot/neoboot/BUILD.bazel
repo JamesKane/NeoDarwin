@@ -98,6 +98,53 @@ sh_test(
     tags = ["qemu"],
 )
 
+# boot.cfg's uart=off: neoboot treats the SPCR UART as absent, as on a
+# board whose UART the kernel has no driver for (the Q8B's GENI UART,
+# SPCR type 0x13). With ramfb's GOP the kernel's console is the framebuffer
+# alone (DT-ABI v1.1); //kernel:sbsa_fb_only_boot_test boots it this way.
+sh_test(
+    name = "neoboot_uart_off_qemu_test",
+    size = "small",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--device ramfb",
+        "--esp NeoDarwin/boot.cfg=$(rootpath testdata/uart-off.cfg)",
+        "--until-lines",
+        "$(rootpath :neoboot)",
+        "45",
+        "'neoboot: GOP: 800x600 BGRx'",
+        "'neoboot: SPCR UART not used (uart=off); console on the framebuffer only'",
+        "'neoboot: no \\NeoDarwin\\kernelcache on the boot volume'",
+    ],
+    data = [
+        ":neoboot",
+        "testdata/uart-off.cfg",
+    ],
+    tags = ["qemu"],
+)
+
+# Negative: uart=off without a display device, so without a GOP. The kernel
+# would have no console, and neoboot refuses to boot.
+sh_test(
+    name = "neoboot_uart_off_no_gop_qemu_test",
+    size = "small",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--esp NeoDarwin/boot.cfg=$(rootpath testdata/uart-off.cfg)",
+        "--until-lines",
+        "$(rootpath :neoboot)",
+        "45",
+        "'neoboot: GOP: none; the console is serial only'",
+        "'neoboot: uart=off in boot.cfg, and there is no GOP framebuffer: the kernel would have no console'",
+        "'neoboot: cannot boot without a console'",
+    ],
+    data = [
+        ":neoboot",
+        "testdata/uart-off.cfg",
+    ],
+    tags = ["qemu"],
+)
+
 # QEMU virt with a Secure world: TF-A at EL3 (BL1, BL2, BL31) hands over to
 # EDK2 at Non-secure EL1, and the GIC has two security states, as on SBSA
 # boards (docs/kernel/qemu-secure.md). neoboot reads GICD_CTLR.DS as 0 and
