@@ -1,0 +1,11 @@
+# TRE's sources phase (Libc-1725.0.11 Libc.xcodeproj), relative to the Libc tree;
+# after a tab, the file's COMPILER_FLAGS.
+regex/TRE/lib/regcomp.c
+regex/TRE/lib/regexec.c
+regex/TRE/lib/tre-ast.c
+regex/TRE/lib/tre-compile.c
+regex/TRE/lib/tre-match-backtrack.c
+regex/TRE/lib/tre-match-parallel.c
+regex/TRE/lib/tre-mem.c
+regex/TRE/lib/tre-parse.c
+regex/TRE/lib/tre-stack.c

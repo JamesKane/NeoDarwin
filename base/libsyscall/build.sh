@@ -29,13 +29,16 @@ flags=("${TARGET_FLAGS[@]}" -Os -std=gnu11 -Wno-int-conversion -fdollars-in-iden
 	$(sysroot_flags "$SYSROOT"))
 write_rsp "$B/cflags" "${flags[@]}"
 
-# MIG user stubs (and exc's server), as Xcode's .defs rule runs them with OTHER_MIGFLAGS.
+# MIG user stubs (and exc's server), as Xcode's .defs rule runs them with
+# OTHER_MIGFLAGS: the sysroot's header directories, in search order.
+mig_includes=(-I"$SYSROOT/System/Library/Frameworks/System.framework/Versions/B/PrivateHeaders"
+	-I"$SYSROOT/usr/local/include" -I"$SYSROOT/usr/include")
 mkdir -p "$B/mig"; srcs=()
 while read -r src attrs; do
 	case "$src" in ''|'#'*) continue ;; esac
 	if [ "${src%.defs}" != "$src" ]; then
 		n="$(basename "${src%.defs}")"; server=/dev/null; [ -n "$attrs" ] && server="$B/mig/${n}Server.c"
-		(cd "$B/mig" && xcrun mig -novouchers $(sysroot_flags "$SYSROOT" | sed 's/^-isystem$/-I/' | paste -sd' ' - | sed 's/-I /-I/g') \
+		(cd "$B/mig" && xcrun mig -novouchers "${mig_includes[@]}" \
 			-DKOBJECT_SERVER -arch arm64 -header "$n.h" -user "${n}User.c" -server "$server" "$L/$src") > /dev/null
 		srcs+=("$B/mig/${n}User.c"); [ -n "$attrs" ] && srcs+=("$server")
 	else

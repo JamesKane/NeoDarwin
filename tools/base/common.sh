@@ -15,10 +15,11 @@ TARGET_FLAGS=(-arch arm64 -mmacosx-version-min=26.0 -isysroot "$SDK" -Wno-error=
 
 # sysroot_flags SYSROOT: the staged headers ahead of the SDK's, in the order of
 # Apple's builds: System.framework's PrivateHeaders (xnu's private variants of
-# shared headers), then usr/local/include, then usr/include.
+# shared headers), then usr/local/include, then usr/include; System.framework
+# also as a framework, for <System/...> includes.
 sysroot_flags() {
 	printf '%s\n' -isystem "$1/System/Library/Frameworks/System.framework/Versions/B/PrivateHeaders" \
-		-isystem "$1/usr/local/include" -isystem "$1/usr/include"
+		-isystem "$1/usr/local/include" -isystem "$1/usr/include" -iframework "$1/usr/local/frameworks"
 }
 
 # compile OBJDIR RSP SRC...: compile each source in parallel into OBJDIR with
@@ -50,7 +51,7 @@ VERS
 }
 
 # dep_libdirs DEPROOT...: -L flags for the dependencies' installed dylibs.
-dep_libdirs() { local d; for d in "$@"; do printf '%s\n' "-L$d/usr/lib/system" "-L$d/usr/lib"; done; }
+dep_libdirs() { local d s; for d in "$@"; do for s in usr/lib/system usr/lib; do [ -d "$d/$s" ] && printf '%s\n' "-L$d/$s"; done; done; }
 
 # stage_src SRC DEST PATCHDIR: copy an upstream tree and apply its numbered
 # patches (repository.md §3); prints DEST.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
 # Stage the header sysroot the userland base builds against (docs/base/libsystem.md §2).
-#   stage_sysroot.sh OUT XNU_HEADERS XNU_SRC LIBPLATFORM LIBPTHREAD LIBMALLOC AVAILABILITY DYLD LIBC SHIMS
+#   stage_sysroot.sh OUT XNU_HEADERS XNU_SRC LIBPLATFORM LIBPTHREAD LIBMALLOC AVAILABILITY DYLD LIBC LIBINFO LIBCLOSURE SHIMS
 # Each project's headers go where its Xcode headers phase installs them:
 # Public to usr/include, Private to usr/local/include. The projects include
 # each other's private headers, so this runs before any library builds.
@@ -9,7 +9,7 @@
 set -euo pipefail
 abspath() { case "$1" in /*) printf '%s' "$1" ;; *) printf '%s/%s' "$PWD" "$1" ;; esac; }
 OUT="$(abspath "$1")"; XH="$(abspath "$2")"; XNU="$(abspath "$3")"; PLAT="$(abspath "$4")"
-PTH="$(abspath "$5")"; MAL="$(abspath "$6")"; AV="$(abspath "$7")"; DYLD="$(abspath "$8")"; LIBC="$(abspath "$9")"; SHIMS="$(abspath "${10}")"
+PTH="$(abspath "$5")"; MAL="$(abspath "$6")"; AV="$(abspath "$7")"; DYLD="$(abspath "$8")"; LIBC="$(abspath "$9")"; LIBINFO="$(abspath "${10}")"; LIBCLOSURE="$(abspath "${11}")"; SHIMS="$(abspath "${12}")"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 rm -rf "$OUT"; mkdir -p "$OUT"
 PUB="$OUT/usr/include"; PRIV="$OUT/usr/local/include"
@@ -84,6 +84,22 @@ done < "$DYLD/include/mach-o/dyld_priv.h" > "$PRIV/mach-o/dyld_priv.h"
 	DEPLOYMENT_LOCATION=YES PLATFORM_NAME=macosx VARIANT_PLATFORM_NAME=macosx ARCHS=arm64 CURRENT_ARCH=arm64 \
 	bash -e xcodescripts/headers.sh) > "$work/libc-headers.log" 2>&1 || { tail -20 "$work/libc-headers.log" >&2; exit 1; }
 cp -R "$work/libc/." "$OUT/"
+
+# Libinfo, by its own xcodescripts/install_files.sh.
+(cd "$LIBINFO" && env DSTROOT="$work/libinfo" PLATFORM_NAME=macosx INSTALL_OWNER="$(id -u)" INSTALL_GROUP="$(id -g)" \
+	bash xcodescripts/install_files.sh) > "$work/libinfo.log" 2>&1 || { tail -20 "$work/libinfo.log" >&2; exit 1; }
+cp -R "$work/libinfo/." "$OUT/"; chmod -R u+w "$OUT"
+
+# libclosure (Blocks-dynamic headers phase).
+put "$LIBCLOSURE/Block.h" "$PUB"; put "$LIBCLOSURE/Block_private.h" "$PRIV"
+
+# System.framework as a framework, for <System/...> includes: xnu installs
+# only Versions/B.
+F="$OUT/System/Library/Frameworks/System.framework"
+ln -sfn B "$F/Versions/Current"; ln -sfn Versions/Current/PrivateHeaders "$F/PrivateHeaders"
+# A framework directory holding only System.framework: xnu also installs a
+# partial IOKit.framework, which must not hide the SDK's.
+mkdir -p "$OUT/usr/local/frameworks"; ln -sfn ../../../System/Library/Frameworks/System.framework "$OUT/usr/local/frameworks/System.framework"
 
 # NeoDarwin's internal-SDK shims (base/sdk).
 cp -R "$SHIMS/." "$OUT/"

@@ -10,6 +10,8 @@ base_sysroot(
     availability = "@apple_availability_versions//:all",
     dyld = "@apple_dyld//:all",
     libc = "@apple_libc//:all",
+    libclosure = "@apple_libclosure//:all",
+    libinfo = "@apple_libinfo//:all",
     libmalloc = "@apple_libmalloc//:all",
     libplatform = "@apple_libplatform//:all",
     libpthread = "@apple_libpthread//:all",
@@ -54,6 +56,24 @@ base_library(
     sysroot = ":sysroot",
 )
 
+base_library(
+    name = "libsystem_c",
+    data = glob(["libc/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc"],
+    script = "libc/build.sh",
+    srcs = "@apple_libc//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libsystem_blocks",
+    data = glob(["libclosure/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_malloc"],
+    script = "libclosure/build.sh",
+    srcs = "@apple_libclosure//:all",
+    sysroot = ":sysroot",
+)
+
 [sh_test(
     name = lib + "_exports_test",
     size = "small",
@@ -72,6 +92,8 @@ base_library(
     ("libplatform", "libsystem_platform"),
     ("libpthread", "libsystem_pthread"),
     ("libmalloc", "libsystem_malloc"),
+    ("libc", "libsystem_c"),
+    ("libclosure", "libsystem_blocks"),
 ]]
 
 lang_audit_test(

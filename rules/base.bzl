@@ -17,7 +17,7 @@ def _root(target):
 def _sysroot_impl(ctx):
     out = ctx.actions.declare_directory(ctx.label.name)
     repos = [ctx.attr.xnu, ctx.attr.libplatform, ctx.attr.libpthread, ctx.attr.libmalloc,
-             ctx.attr.availability, ctx.attr.dyld, ctx.attr.libc]
+             ctx.attr.availability, ctx.attr.dyld, ctx.attr.libc, ctx.attr.libinfo, ctx.attr.libclosure]
     inputs = ctx.files.xnu_headers + ctx.files.shims
     for r in repos:
         inputs += r.files.to_list()
@@ -47,6 +47,8 @@ base_sysroot = rule(
         "availability": attr.label(mandatory = True),
         "dyld": attr.label(mandatory = True),
         "libc": attr.label(mandatory = True),
+        "libinfo": attr.label(mandatory = True),
+        "libclosure": attr.label(mandatory = True),
         "shims": attr.label(mandatory = True, doc = "base/sdk's headers."),
         "shims_root": attr.string(mandatory = True, doc = "Their directory, e.g. base/sdk."),
         "_script": attr.label(default = "//tools/base:stage_sysroot.sh", allow_single_file = True),

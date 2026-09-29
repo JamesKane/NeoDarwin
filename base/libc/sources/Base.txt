@@ -1,0 +1,100 @@
+# Base's sources phase (Libc-1725.0.11 Libc.xcodeproj), relative to the Libc tree;
+# after a tab, the file's COMPILER_FLAGS.
+compat-43/sigaltstk.c
+compat-43/sigcompat.c
+gen/clock_gettime.c
+emulated/brk.c
+emulated/bsd_signal.c
+stdlib/strtofp.c
+emulated/lchflags.c
+emulated/lchmod.c
+emulated/lutimes.c
+emulated/statvfs.c
+gen/backtrace.c
+gen/confstr.c
+gen/crypt.c
+gen/devname.c
+gen/disklabel.c
+gen/errlst.c
+gen/filesec.c
+gen/fts.c
+gen/get_compat.c
+gen/getloadavg.c
+gen/getttyent.c
+gen/getusershell.c
+gen/getvfsbyname.c
+darwin/atexit_receipt.c
+gen/nanosleep.c
+gen/nftw.c
+gen/setlogin.c
+gen/sigsetops.c
+gen/strtofflags.c
+gen/thread_stack_pcs.c
+gen/uname.c
+gen/utmpx-darwin.c
+os/debug_private.c
+gmon/gmon.c
+locale/isctype.c
+string/bcopy.c	-momit-leaf-frame-pointer
+locale/iswctype.c
+locale/xlocale.c
+posix1e/acl.c
+posix1e/acl_entry.c
+posix1e/acl_file.c
+posix1e/acl_flag.c
+posix1e/acl_perm.c
+posix1e/acl_translate.c
+darwin/subsystem.c
+stdtime/getdate.c
+stdtime/timezone_unix03.c
+stdio/xprintf_all_in_one.c	-I$(SRCROOT)/stdio/FreeBSD
+stdio/xprintf_comp.c	-I$(SRCROOT)/stdio/FreeBSD
+stdio/xprintf_domain.c	-I$(SRCROOT)/stdio/FreeBSD
+stdio/xprintf_exec.c	-I$(SRCROOT)/stdio/FreeBSD
+util/fparseln.c	-D__FBSDID=__RCSID
+util/login_tty.c
+util/logwtmp.c
+util/mkpath_np.c
+gen/raise.c
+util/opendev.c
+util/pty.c
+uuid/uuidsrc/clear.c	-include $(SRCROOT)/uuid/uuid-config.h
+uuid/uuidsrc/compare.c	-include $(SRCROOT)/uuid/uuid-config.h
+uuid/uuidsrc/copy.c	-include $(SRCROOT)/uuid/uuid-config.h
+uuid/uuidsrc/gen_uuid.c	-include $(SRCROOT)/uuid/uuid-config.h
+uuid/uuidsrc/isnull.c	-include $(SRCROOT)/uuid/uuid-config.h
+uuid/uuidsrc/pack.c	-include $(SRCROOT)/uuid/uuid-config.h
+uuid/uuidsrc/parse.c	-include $(SRCROOT)/uuid/uuid-config.h
+uuid/uuidsrc/unpack.c	-include $(SRCROOT)/uuid/uuid-config.h
+uuid/uuidsrc/unparse.c	-include $(SRCROOT)/uuid/uuid-config.h
+emulated/tcgetsid.c
+sys/_libc_init.c
+sys/_libc_atfork.c
+sys/chmodx_np.c
+sys/crt_externs.c
+sys/fork.c
+sys/gettimeofday.c
+sys/openx_np.c
+sys/posix_spawn.c
+sys/settimeofday.c
+sys/sigaction.c
+sys/statx_np.c
+sys/umaskx_np.c
+locale/frune.c	-D__FBSDID=__RCSID
+locale/mbrune.c	-D__FBSDID=__RCSID
+locale/runedepreciated.c	-D__FBSDID=__RCSID
+locale/setinvalidrune.c	-D__FBSDID=__RCSID
+util/login.c
+util/logout.c
+gen/nlist.c
+darwin/kvm.c
+sys/OSMemoryNotification.c
+sys/OSThermalNotification.c
+string/stpcpy.c
+string/stpncpy.c
+string/strcat.c
+string/strncat.c
+gen/sync_volume_np.c
+darwin/libc_hooks.c
+gen/dirfd.c
+os/assumes.c

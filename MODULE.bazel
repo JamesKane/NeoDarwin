@@ -84,11 +84,27 @@ http_archive(
 )
 
 http_archive(
+    name = "apple_libclosure",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "03b8da2acde57a757f9cb9a585965eec94e7c7bc0a5ed18223f58b8908701198",
+    strip_prefix = "libclosure-libclosure-96",
+    urls = ["https://github.com/apple-oss-distributions/libclosure/archive/refs/tags/libclosure-96.tar.gz"],
+)
+
+http_archive(
     name = "apple_libc",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
     sha256 = "e5cb194a8017db90ee43e303e87bf7fe9b34245d0a94d0245cfedfa3ba012a3e",
     strip_prefix = "Libc-Libc-1725.0.11",
     urls = ["https://github.com/apple-oss-distributions/Libc/archive/refs/tags/Libc-1725.0.11.tar.gz"],
+)
+
+http_archive(
+    name = "apple_libinfo",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "ea37be1f7876e8ca20761ab03f484f1cb0fa1ac15c437bb5615167c88529563b",
+    strip_prefix = "Libinfo-Libinfo-600",
+    urls = ["https://github.com/apple-oss-distributions/Libinfo/archive/refs/tags/Libinfo-600.tar.gz"],
 )
 
 http_archive(

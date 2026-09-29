@@ -17,6 +17,8 @@ Every component comes from the macOS 26.0 release set (`distribution-macOS` tag 
 | `libsystem_malloc` | `/usr/lib/system/libsystem_malloc.dylib` | `libmalloc-792.1.1` |
 | `libsystem_c` (+ `libc_dyld.a`) | `/usr/lib/system/libsystem_c.dylib` | `Libc-1725.0.11` |
 | `libsystem_blocks` | `/usr/lib/system/libsystem_blocks.dylib` | `libclosure-96` |
+| `libobjc.A` | `/usr/lib/libobjc.A.dylib` | `objc4` (macOS 26.0 set), which libclosure links upward |
+| `libsystem_info` | `/usr/lib/system/libsystem_info.dylib` | `Libinfo-600` |
 | dyld, `libdyld` | `/usr/lib/dyld`, `/usr/lib/system/libdyld.dylib` | `dyld-1323.3` |
 | `libSystem.B` | `/usr/lib/libSystem.B.dylib` | `Libsystem-1356` |
 
@@ -39,7 +41,7 @@ Every component comes from the macOS 26.0 release set (`distribution-macOS` tag 
 | # | Deliverable | Check | Status |
 |---|---|---|---|
 | 1 | `//base:sysroot`; `libsystem_kernel`, `libsystem_platform`, `libsystem_pthread`, `libsystem_malloc` with their dyld archives | each links with no undefined symbols outside its declared dependencies; `//base:*_exports_test` records each export list | done |
-| 2 | `libsystem_c` and `libc_dyld.a`, `libsystem_blocks`, the stand-ins | same | todo |
+| 2 | `libsystem_c` and `libc.a` (dyld), `libsystem_blocks`, libobjc with the C++ runtime and libunwind it needs (LLVM), the other open libraries Libc imports from, and the stand-ins | same | doing: Libc and blocks done |
 | 3 | dyld and `libdyld` | same; dyld's closed headers replaced by stand-ins, corecrypto's digests by a small SHA implementation | todo |
 | 4 | `libSystem.B`; a hello world linked against it; an HFS+ image holding all of it | `//kernel:sbsa_boot_test` runs the hello world through dyld | todo |
 
@@ -76,3 +78,20 @@ The four libraries build in about 15 seconds. They link against each other; depe
 | `_os_xbs_chrooted` is defined in libsystem_kernel but declared in no published header | libpthread patch 0001 |
 | libmalloc's `nano_zone.h` stops with `#error` on arm64 (the v1 layout, which arm64 doesn't use) | libmalloc patch 0001 |
 | libmalloc's `resolver_internal.h` is a stub, so nano v2 compiled to nothing | libmalloc patch 0002: an unresolved build defines both variant selectors |
+
+### Checkpoint 2 so far: Libc and blocks
+
+`libsystem_c` (1,325 exports; Apple's macOS 27 list has 1,323, and the 15 it lacks are newer APIs such as `scandirat` and the `$NFTS` fts variants) and `libsystem_blocks` (all 19 of Apple's exports) build. Libc's own imports list the rest of checkpoint 2:
+- **Open, to build:** libdyld (12 symbols; checkpoint 3), libsystem_info (13), libsystem_asl (11), libdispatch (5), libsystem_notify (5), libsystem_m (4), libmacho (1), libcompiler_rt (1).
+- **Closed, to stand in for:** libsystem_trace (3), corecrypto (2), libxpc (1).
+
+libclosure is built in its macOS form, Objective-C included: `data.m`, upward `-lobjc`, `-lunwind`. So NeoDarwin builds Apple's objc4 as well, with the C++ runtime and libunwind it needs from LLVM. Upstream code in Objective-C sits within the language policy, which keeps a fourth language out of NeoDarwin's own code only.
+
+| Finding | Resolution |
+|---|---|
+| Libc's archives are Xcode targets whose files carry per-file `COMPILER_FLAGS`: symbol aliases (`LIBC_ALIAS_*`), `-include gen/__dirent.h`, the db interface, uuid's `uuid-config.h`, the xprintf search path | `base/libc/sources/*.txt` record each target's files with their flags; the build compiles each flag group with its own flags |
+| Variant archives compile the same file list with variant macros; on arm64 only Cancelable and DarwinExtsn have content | the xcconfigs' per-variant name lists pick the files; Legacy, Inode32, Pre1050 (i386/x86_64 only) and DarwinExtsn_Cancelable (no list) are left out |
+| `<System/sys/fsctl.h>` is a framework include, but xnu installs System.framework without its `Versions/Current` and `PrivateHeaders` links, and a partial IOKit.framework that must not hide the SDK's | the sysroot adds the links and a framework directory holding only System.framework (`usr/local/frameworks`) |
+| Libc's `os/assumes.c`, `arc4random.c` and `vfprintf.c` use libsystem_trace's private log interface (the log pack, `os_log_send_and_compose`) | `base/sdk`'s `os/log_private.h`; the libsystem_trace stand-in will implement the same calls |
+| `membershipPriv.h` and the other Libinfo headers | Libinfo-600 is pinned and its `install_files.sh` runs in the sysroot stage |
+| libclosure's `runtime.cpp` needs libc++'s headers ahead of the C headers | the SDK's `c++/v1` goes first for that build |
