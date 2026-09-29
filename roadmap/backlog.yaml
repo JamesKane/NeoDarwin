@@ -116,7 +116,7 @@ epics:
     title: "DT-ABI v1 + Apple-format DT synthesis from MADT/GTDT/SPCR + dtdump"
     phase: 1
     owner: loader
-    status: todo
+    status: done
     depends: [P1-03]
     exit: "dtdump validates synthesized DT; kernel reaches arm_vm_init without a hand-made blob"
     doc: docs/kernel/arm64-sbsa-bringup.md

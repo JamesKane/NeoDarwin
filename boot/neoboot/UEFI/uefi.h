@@ -96,6 +96,12 @@ typedef struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
 } EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
 enum { EFI_FILE_MODE_READ = 1 };
 
+// EFI_CONFIGURATION_TABLE: where the firmware publishes the ACPI RSDP.
+typedef struct {
+	EFI_GUID VendorGuid;
+	void *VendorTable;
+} EFI_CONFIGURATION_TABLE;
+
 typedef struct {
 	EFI_TABLE_HEADER Hdr;
 	CHAR16 *FirmwareVendor;
@@ -104,7 +110,7 @@ typedef struct {
 	EFI_HANDLE ConsoleOutHandle; EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut;
 	EFI_HANDLE StandardErrorHandle; EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *StdErr;
 	EFI_RUNTIME_SERVICES *RuntimeServices; EFI_BOOT_SERVICES *BootServices;
-	uint64_t NumberOfTableEntries; void *ConfigurationTable;
+	uint64_t NumberOfTableEntries; EFI_CONFIGURATION_TABLE *ConfigurationTable;
 } EFI_SYSTEM_TABLE;
 
 // AArch64 operations Swift cannot express: system registers, cache

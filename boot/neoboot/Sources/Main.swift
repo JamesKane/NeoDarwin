@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// neoboot v0 (P1-03): load the flat boot kernel collection from the ESP,
-// describe the machine in an Apple device tree, fill boot_args, leave boot
-// services and enter the kernel at EL1 with the MMU off, as iBoot does
+// neoboot: read the ACPI tables, load the flat boot kernel collection from
+// the ESP, describe the machine in an Apple device tree synthesised from ACPI
+// (DT-ABI v1, docs/kernel/dt-abi.md), fill boot_args, leave boot services
+// and enter the kernel at EL1 with the MMU off, as iBoot does
 // (docs/kernel/arm64-sbsa-bringup.md §2.1).
 //
 // Physical layout, from the collection's (32 MiB-congruent) base:
 //
-//     kernelcache (flat, kcgen) | device tree (64 KiB) | ramdisk | boot_args page | ← topOfKernelData
+//     kernelcache (flat, kcgen) | device tree (64 KiB) | ACPI tables | ramdisk | boot_args page | ← topOfKernelData
 //
+// The ACPI tables are a copy, with their pointers rewritten, so that the
+// kernel reaches them through its physmap (/chosen/memory-map/ACPITables).
 // The ramdisk is optional. It lies below topOfKernelData because the kernel
 // maps it with ml_static_ptovirt() (IOKitBSDInit.cpp), and boot_args
 // describes the DRAM window from that base to the end of the
@@ -24,6 +27,14 @@ let ramdiskRoot: StaticString = " rd=md0"
 /// -noprogress until the loader passes a GOP framebuffer: with no display,
 /// PE_init_iokit()'s progress-bar centring loop never terminates.
 let defaultCommandLine: StaticString = "debug=0x14e serial=3 -v -noprogress"
+/// Appended on a multiprocessor when the command line doesn't name a CPU
+/// count: the tree lists every CPU, but secondaries come up with P1-06
+/// (NeoDarwinPSCI's conduit). ml_parse_cpu_topology then takes the boot CPU
+/// alone, and IOKit leaves the other cpu nubs unused (IOPlatformExpert.cpp).
+let uniprocessorCap: StaticString = " cpus=1"
+/// A loader option in boot.cfg: list every ACPI table on the console in
+/// acpidump's format before booting (for dtdump fixtures from any board).
+let dumpACPIOption: StaticString = "dump-acpi"
 
 let kernelPage: UInt64 = 0x4000
 /// start.s maps the kernel with 16 KiB-granule L2 blocks, so the collection's
@@ -38,7 +49,7 @@ func efiMain(_ image: EFI_HANDLE?, _ system: UnsafeMutablePointer<EFI_SYSTEM_TAB
     let fw = Firmware(image: image, boot: system.pointee.BootServices, runtime: system.pointee.RuntimeServices)
     fw.disableWatchdog()
     put("neoboot 0.1: loading NeoDarwin\n")
-    return boot(fw)  // returns only on failure
+    return boot(fw, system)  // returns only on failure
 }
 
 func fail(_ why: StaticString) -> EFI_STATUS {
@@ -65,8 +76,50 @@ func mentions(_ line: UnsafeMutableRawPointer, _ length: Int, _ prefix: StaticSt
     return false
 }
 
-func boot(_ fw: Firmware) -> EFI_STATUS {
+/// \NeoDarwin\boot.cfg with whitespace runs made single spaces, into `line`
+/// (BootArgs.commandLineLength bytes); returns its length, 0 if absent.
+func readBootConfig(_ root: UnsafeMutablePointer<EFI_FILE_PROTOCOL>, into line: UnsafeMutableRawPointer) -> Int {
+    guard let cfg = EFIFile(root: root, path: bootConfigPath) else { return 0 }
+    var length = 0
+    let n = min(cfg.size, UInt64(BootArgs.commandLineLength - 1))
+    if cfg.read(at: 0, count: n, into: line) { length = Int(n) }
+    cfg.close()
+    var out = 0
+    for i in 0..<length {
+        var b = line.load(fromByteOffset: i, as: UInt8.self)
+        if b == 10 || b == 13 || b == 9 { b = 32 }
+        if b == 32 && (out == 0 || line.load(fromByteOffset: out - 1, as: UInt8.self) == 32) { continue }
+        line.storeBytes(of: b, toByteOffset: out, as: UInt8.self)
+        out += 1
+    }
+    while out > 0 && line.load(fromByteOffset: out - 1, as: UInt8.self) == 32 { out -= 1 }
+    return out
+}
+
+func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> EFI_STATUS {
     guard let root = fw.openBootVolume() else { return fail("cannot open the boot volume") }
+
+    // The command line first: it may ask for the ACPI dump.
+    guard let linePage = fw.allocate(pages: 1) else { return fail("out of memory") }
+    let config = UnsafeMutableRawPointer(bitPattern: UInt(linePage))!
+    let configLength = readBootConfig(root, into: config)
+
+    // ACPI: the machine description (DT-ABI v1). No tables, no boot: the
+    // loader has no built-in description to fall back on.
+    guard let rsdp = fw.rsdp(system) else {
+        return fail("the firmware publishes no ACPI 2.0 RSDP (EFI_ACPI_20_TABLE_GUID); cannot describe this machine")
+    }
+    let acpi: ACPIFacts
+    let layout: Platform.Layout
+    do throws(ACPIError) {
+        if mentions(config, configLength, dumpACPIOption) { try dumpACPI(rsdp: rsdp) }
+        acpi = try ACPI.parse(PhysicalMemory(), rsdp: rsdp)
+        layout = try Platform.layout(acpi, bootMPIDR: nd_mpidr())
+    } catch {
+        return report(error)
+    }
+    reportACPI(acpi, layout)
+
     guard let file = EFIFile(root: root, path: kernelcachePath) else { return fail("no \\NeoDarwin\\kernelcache on the boot volume") }
     let fileSize = file.size
 
@@ -89,7 +142,9 @@ func boot(_ fw: Firmware) -> EFI_STATUS {
     let ramdisk = EFIFile(root: root, path: ramdiskPath)
     let ramdiskSize = ramdisk.map { roundUp($0.size, kernelPage) } ?? 0
     let dtOffset = roundUp(kc.vmSize, kernelPage)
-    let ramdiskOffset = dtOffset + treeCapacity
+    let acpiOffset = dtOffset + treeCapacity
+    let acpiCapacity = roundUp(UInt64(acpi.relocatedLength), kernelPage)
+    let ramdiskOffset = acpiOffset + acpiCapacity
     let argsOffset = ramdiskOffset + ramdiskSize
     let span = argsOffset + kernelPage
 
@@ -131,32 +186,37 @@ func boot(_ fw: Firmware) -> EFI_STATUS {
     let utc = fw.utcSeconds() ?? 0
     let utcCounter = nd_current_el() == 2 ? nd_cntpct() : nd_cntvct()
 
-    var tree = DeviceTreeWriter(base: image + Int(dtOffset), capacity: Int(treeCapacity))
-    let facts = Platform.Facts(dramBase: base, dramSize: memSize, timebase: nd_cntfrq(), mpidr: nd_mpidr(), seed: nd_cntpct(),
-                                ramdiskBase: ramdiskSize == 0 ? 0 : base + ramdiskOffset, ramdiskSize: ramdiskSize,
-                                utcSeconds: utc, utcCounter: utcCounter)
-    guard let treeLength = Platform.deviceTree(into: &tree, facts) else { return fail("the device tree does not fit") }
+    // The ACPI copy the kernel gets, checked by parsing it again where it lies.
+    let acpiBase = base + acpiOffset
+    let acpiLength: Int
+    (image + Int(acpiOffset)).initializeMemory(as: UInt8.self, repeating: 0, count: Int(acpiCapacity))
+    do throws(ACPIError) {
+        acpiLength = try ACPI.relocate(PhysicalMemory(), rsdp: rsdp, into: image + Int(acpiOffset), physical: acpiBase,
+                                       capacity: Int(acpiCapacity))
+        let copy = try ACPI.parse(PhysicalMemory(), rsdp: acpiBase)
+        guard copy.gicCount == acpi.gicCount, copy.gicdBase == acpi.gicdBase, copy.uartBase == acpi.uartBase else {
+            throw ACPIError("the relocated tables read differently from the firmware's")
+        }
+    } catch {
+        return report(error)
+    }
 
-    // Command line: \NeoDarwin\boot.cfg if present, read into the spare half
-    // of the boot_args page; whitespace runs become single spaces.
+    var tree = DeviceTreeWriter(base: image + Int(dtOffset), capacity: Int(treeCapacity))
+    let facts = Platform.Facts(dramBase: base, dramSize: memSize, timebase: nd_cntfrq(), bootMPIDR: nd_mpidr(), seed: nd_cntpct(),
+                               ramdiskBase: ramdiskSize == 0 ? 0 : base + ramdiskOffset, ramdiskSize: ramdiskSize,
+                               utcSeconds: utc, utcCounter: utcCounter, acpiBase: acpiBase, acpiLength: UInt64(acpiLength))
+    guard let treeLength = Platform.deviceTree(into: &tree, facts, acpi, layout) else { return fail("the device tree does not fit") }
+    var violations = ConsoleReport()
+    guard DTCheck.check(image + Int(dtOffset), length: treeLength, &violations) == 0 else {
+        return fail("the synthesised device tree breaks DT-ABI v1")
+    }
+
+    // Command line: boot.cfg if present, in the spare half of the boot_args page.
     let args = image + Int(argsOffset)
     let lineBuffer = args + 0x2000
-    var lineLength = 0
-    if let cfg = EFIFile(root: root, path: bootConfigPath) {
-        let n = min(cfg.size, UInt64(BootArgs.commandLineLength - 1))
-        if cfg.read(at: 0, count: n, into: lineBuffer) { lineLength = Int(n) }
-        cfg.close()
-        var out = 0
-        for i in 0..<lineLength {
-            var b = lineBuffer.load(fromByteOffset: i, as: UInt8.self)
-            if b == 10 || b == 13 || b == 9 { b = 32 }
-            if b == 32 && (out == 0 || lineBuffer.load(fromByteOffset: out - 1, as: UInt8.self) == 32) { continue }
-            lineBuffer.storeBytes(of: b, toByteOffset: out, as: UInt8.self)
-            out += 1
-        }
-        while out > 0 && lineBuffer.load(fromByteOffset: out - 1, as: UInt8.self) == 32 { out -= 1 }
-        lineLength = out
-    }
+    var lineLength = configLength
+    lineBuffer.copyMemory(from: config, byteCount: configLength)
+    fw.free(linePage, pages: 1)
     if lineLength == 0 {
         defaultCommandLine.withUTF8Buffer { lineBuffer.copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
         lineLength = defaultCommandLine.utf8CodeUnitCount
@@ -164,6 +224,10 @@ func boot(_ fw: Firmware) -> EFI_STATUS {
     if ramdiskSize != 0 && !mentions(lineBuffer, lineLength, "rd=") {
         ramdiskRoot.withUTF8Buffer { (lineBuffer + lineLength).copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
         lineLength += ramdiskRoot.utf8CodeUnitCount
+    }
+    if layout.cpuNodes > 1 && !mentions(lineBuffer, lineLength, "cpus=") && !mentions(lineBuffer, lineLength, "cpumask=") {
+        uniprocessorCap.withUTF8Buffer { (lineBuffer + lineLength).copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
+        lineLength += uniprocessorCap.utf8CodeUnitCount
     }
     let commandLine = UnsafeRawBufferPointer(start: lineBuffer, count: lineLength)
 
@@ -183,6 +247,8 @@ func boot(_ fw: Firmware) -> EFI_STATUS {
     log("  link address       ", kc.linkAddress)
     log("  kernel entry       ", entry)
     log("  device tree bytes  ", UInt64(treeLength))
+    log("  ACPI tables at     ", acpiBase)
+    log("  ACPI tables bytes  ", UInt64(acpiLength))
     if ramdiskSize != 0 {
         log("  ramdisk at         ", base + ramdiskOffset)
         log("  ramdisk bytes      ", ramdiskSize)
@@ -198,6 +264,7 @@ func boot(_ fw: Firmware) -> EFI_STATUS {
 
     // start.s reads all of this with the MMU and caches off.
     nd_dcache_clean_poc(base, span)
+    Console.pl011Base = UInt(acpi.uartBase)  // SPCR: the console once the firmware's is gone
     guard fw.exitBootServices(&map) else { return fail("ExitBootServices failed") }
     Console.detach()
     put("neoboot: entering the kernel\n")

@@ -1,0 +1,85 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:swift.bzl", "nd_swift_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# dtdump: neoboot's ACPI parser, device-tree synthesis and DT-ABI check,
+# compiled for the host from the same sources (docs/kernel/dt-abi.md).
+nd_swift_binary(
+    name = "dtdump",
+    srcs = [
+        "AcpiDump.swift",
+        "main.swift",
+        "//boot/neoboot:portable_srcs",
+    ],
+)
+
+# QEMU virt's tables, captured with neoboot's dump-acpi option: the tree
+# must pass DT-ABI v1 and match the reviewed output byte for byte.
+sh_test(
+    name = "qemu_virt_smp1_test",
+    size = "small",
+    srcs = ["dtdump_test.sh"],
+    args = [
+        "ok",
+        "$(rootpath :dtdump)",
+        "$(rootpath //boot/neoboot:testdata/qemu-virt-smp1.acpidump)",
+        "$(rootpath testdata/qemu-virt-smp1.txt)",
+    ],
+    data = [
+        ":dtdump",
+        "testdata/qemu-virt-smp1.txt",
+        "//boot/neoboot:testdata/qemu-virt-smp1.acpidump",
+    ],
+)
+
+sh_test(
+    name = "qemu_virt_smp4_test",
+    size = "small",
+    srcs = ["dtdump_test.sh"],
+    args = [
+        "ok",
+        "$(rootpath :dtdump)",
+        "$(rootpath //boot/neoboot:testdata/qemu-virt-smp4.acpidump)",
+        "$(rootpath testdata/qemu-virt-smp4.txt)",
+    ],
+    data = [
+        ":dtdump",
+        "testdata/qemu-virt-smp4.txt",
+        "//boot/neoboot:testdata/qemu-virt-smp4.acpidump",
+    ],
+)
+
+# Negative: a MADT cut short in the dump must be refused, not half-read.
+sh_test(
+    name = "truncated_madt_test",
+    size = "small",
+    srcs = ["dtdump_test.sh"],
+    args = [
+        "fail",
+        "$(rootpath :dtdump)",
+        "$(rootpath //boot/neoboot:testdata/qemu-virt-truncated-madt.acpidump)",
+        "'ACPI: table truncated at [APIC]'",
+    ],
+    data = [
+        ":dtdump",
+        "//boot/neoboot:testdata/qemu-virt-truncated-madt.acpidump",
+    ],
+)
+
+# Negative: a tree whose console phandle names no node must fail the check.
+sh_test(
+    name = "broken_tree_test",
+    size = "small",
+    srcs = ["dtdump_test.sh"],
+    args = [
+        "broken-tree",
+        "$(rootpath :dtdump)",
+        "$(rootpath //boot/neoboot:testdata/qemu-virt-smp1.acpidump)",
+        "'DT-ABI v1 violation: /defaults serial-device names no node; phandle 0x9'",
+    ],
+    data = [
+        ":dtdump",
+        "//boot/neoboot:testdata/qemu-virt-smp1.acpidump",
+    ],
+)

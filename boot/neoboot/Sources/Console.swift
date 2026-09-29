@@ -9,7 +9,7 @@ import _Volatile
 
 enum Console {
     nonisolated(unsafe) static var firmware: UnsafeMutablePointer<EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL>? = nil
-    nonisolated(unsafe) static var pl011Base: UInt = Platform.uartBase
+    nonisolated(unsafe) static var pl011Base: UInt = 0  // the SPCR UART, set before ExitBootServices
 
     // Firmware output is batched through a small stack-free buffer: eight
     // UTF-16 code units and a terminator.
@@ -19,6 +19,7 @@ enum Console {
 
     static func byte(_ b: UInt8) {
         guard let con = firmware else {
+            guard pl011Base != 0 else { return }
             let dr = VolatileMappedRegister<UInt32>(unsafeBitPattern: pl011Base + 0x00)
             let fr = VolatileMappedRegister<UInt32>(unsafeBitPattern: pl011Base + 0x18)
             while fr.load() & (1 << 5) != 0 {}  // UARTFR.TXFF

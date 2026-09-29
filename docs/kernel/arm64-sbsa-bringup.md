@@ -126,7 +126,7 @@ The kernel is linked as position-independent (`MH_PIE`) with 65,407 local `ARM64
 
 ### 2.1.2 First boot on QEMU (P1-03)
 
-`//kernel:sbsa_boot_test` boots neoboot, `kernelcache.release.sbsa` and the PID 1 test program as the ramdisk on QEMU `virt` (`gic-version=3`, 2 GiB, one CPU). In under six seconds the kernel goes through the loader handoff, its own fixups, MMU and VM bootstrap, zalloc, the scheduler, IPC and logging, and prints `iBoot version: neoboot-0.1` from `PE_init_iokit`. With ndcrypto (P1-13), ndamfi (P1-14), the platform expert (P1-06) and libpthread's `kern/` (P1-16) it continues through crypto, PRNG, trust caches, IOKit and BSD initialisation, including networking. It then roots on mockfs over the ramdisk and runs the first userland program as PID 1 (P1-07, §2.1.3). The whole boot takes about six seconds. The device tree is still hand-written for `virt` in `boot/neoboot/Sources/Platform.swift`; P1-04 derives it from ACPI.
+`//kernel:sbsa_boot_test` boots neoboot, `kernelcache.release.sbsa` and the PID 1 test program as the ramdisk on QEMU `virt` (`gic-version=3`, 2 GiB, one CPU). In under six seconds the kernel goes through the loader handoff, its own fixups, MMU and VM bootstrap, zalloc, the scheduler, IPC and logging, and prints `iBoot version: neoboot-0.1` from `PE_init_iokit`. With ndcrypto (P1-13), ndamfi (P1-14), the platform expert (P1-06) and libpthread's `kern/` (P1-16) it continues through crypto, PRNG, trust caches, IOKit and BSD initialisation, including networking. It then roots on mockfs over the ramdisk and runs the first userland program as PID 1 (P1-07, §2.1.3). The whole boot takes about six seconds. Since P1-04 the device tree is synthesised from the ACPI tables (MADT, GTDT, SPCR, FADT) to the DT-ABI v1 contract, `docs/kernel/dt-abi.md`; nothing in it is specific to `virt`.
 
 What the first boot established:
 
@@ -138,7 +138,7 @@ What the first boot established:
 | Data abort in `kmem_crypto_init`: nothing had called `register_crypto_functions()`, which Apple's corecrypto kext does. Apple's full corecrypto source is evaluation-only, so it can't be used | P1-13, done: ndcrypto, compiled into the kernel from xnu's own corecrypto subset and FreeBSD's kernel crypto (`crypto-provider.md`) |
 | `image4 interface not available` in `bsd/kern/kern_trustcache.c`. AppleImage4 and AMFI, both closed kexts, normally register the Image4 and AMFI interfaces | P1-14, done: ndamfi (`amfi-provider.md`), with Apple's published trust-cache format and lookup |
 | `Unable to find driver for this platform: "NeoDarwin,sbsa"` (`IOPlatformExpert.cpp`) | P1-06, boot CPU done: `NeoDarwinPlatformExpert`, `NeoDarwinGICv3`, `NeoDarwinPSCI` (patch 0009), matched by a built-in personality |
-| A 16 MB `kmem_alloc` failed while mapping the GIC redistributors: the device tree gave QEMU's whole 123-CPU region | the tree now describes one frame per CPU present (P1-04 takes them from the MADT), and the GIC driver caps its mapping at `MAX_CPUS` frames |
+| A 16 MB `kmem_alloc` failed while mapping the GIC redistributors: the device tree gave QEMU's whole 123-CPU region | the tree describes one frame per MADT GICC (P1-04), and the GIC driver caps its mapping at `MAX_CPUS` frames |
 | `pthread kernel extension not loaded` (`pthread_shims.c`), after BSD init has brought up the MAC framework, buffer cache and mbufs: pthread.kext registers the pthread function table | P1-16, done: Apple's libpthread-539 `kern/` (APSL) built into libkern by patch 0010 and started at `EARLY_BOOT` by `kernel/neodarwin/pthread`. It compiles as the kext does, against the exported headers without `XNU_KERNEL_PRIVATE`, with a compat `TargetConditionals.h`; its `current_uthread` and `pthread_kern` are renamed to avoid clashing with the kernel's |
 | `Waiting on <dict …IOProviderClass… IOMedia … Apple_HFS…>`, after `dlil` and `lo0`: no root device | P1-07, done: mockfs roots on the ramdisk as md0 (§2.1.3); P1-08 brings an HFS+ ramdisk, P1-10 virtio-blk |
 | Data abort in `OSMetaClass::applyToInstances` as soon as IOFindBSDRoot chose md0: `publishHiddenMedia()` asserts that the IOMedia class exists, and IOStorageFamily isn't loaded | patch 0012 skips the walk when there is no IOMedia class |
@@ -201,10 +201,11 @@ A launch failure is visible: dyld's error goes into the exit reason, which the "
 - **P1-08 is done** (`docs/base/session.md`). launchd-842 is PID 1 and starts getty from its plist, and `//kernel:sbsa_session_boot_test` logs in over serial. Next on the userland side: zsh or bash with ncurses, OpenPAM, diskdev_cmds' `mount` and fsck, and replacing more of the libxpc stand-in.
 - **The nested panic on a failed PID 1 launch** (§2.1.5): a data abort at FAR 0xc in the panic path after "initproc failed to start".
 - **P1-06, SMP half (status `doing`).** The boot CPU is done. Still to do: bringing up secondaries through `NeoDarwinPSCI` (`CPU_ON`), per-CPU GIC redistributor init and IPI measurement. The exit is `hw.ncpu` equal to the MADT count.
-  - **PSCI conduit:** QEMU `virt` without EL3 firmware uses `hvc`, but `sbsa_isa_audit` forbids `hvc` in the kernel, so the conduit choice (take it from the FADT/DT, and how the audit treats it) comes first.
+  - **PSCI conduit:** QEMU `virt` without EL3 firmware uses `hvc`, but `sbsa_isa_audit` forbids `hvc` in the kernel, so the conduit choice (take it from the FADT/DT, and how the audit treats it) comes first. neoboot already reads FADT `ARM_BOOT_ARCH` and logs it (`PSCI HVC` on QEMU); the DT property is P1-06's to add (`dt-abi.md`, Versioning).
+  - **The tree already lists every CPU** (P1-04), with the secondaries `"waiting"`, and neoboot appends `cpus=1` on a multiprocessor until SMP works. Without the cap, QEMU `-smp 4` panics with `Error registering IPIs @AppleARMSMP.cpp:138` as the second CPU registers SGI 0: every cpu nub names the same banked SGIs, and `NeoDarwinGICv3::vectorCanBeShared` says no. The GIC needs per-CPU (banked) vectors for SGIs and PPIs before PSCI is even reached.
   - **Testing:** `tools/efi/qemu_efi_test.sh --smp N` runs SMP boots.
 - **P1-15.** CoreEntitlements, static trust caches from neoboot, and signed trust-cache loads, replacing ndamfi's default deny.
-- **P1-04.** The device tree from ACPI, replacing `Platform.swift`'s hand-written `virt` tree.
+- **P1-04 (status `doing`, in review).** The device tree from ACPI, DT-ABI v1 (`dt-abi.md`), `dump-acpi` in neoboot and the `dtdump` host tool.
 
 Each probe build of `//kernel:sbsa_kc` takes about 9 minutes. Never run `bazel clean`: it throws the kernel build away.
 
@@ -212,7 +213,7 @@ Each probe build of `//kernel:sbsa_kc` takes about 9 minutes. Never run `bazel c
 
 **Tier 1 (loader, static tables → Apple DT).** The kernel's early boot reads a fixed set of DT nodes through `SecureDT*` (`pexpert/gen/device_tree.c`). The DT binary format is Apple's, not FDT: nodes are `{u32 nProperties; u32 nChildren; props[]; children[]}` with each property `{char name[32]; u32 length; u8 value[length] (4-byte aligned)}` (`pexpert/pexpert/device_tree.h:74-90`). The loader emits this directly.
 
-Required node/property contract (the "DT-ABI"), derived from the source reads:
+Required node/property contract (the "DT-ABI"), derived from the source reads. **The versioned contract is `dt-abi.md` (DT-ABI v1, P1-04)**, which gives each property's ACPI source and kernel reader with line numbers, and the checks neoboot and `dtdump` apply. The table below is the original design sketch; where they differ, `dt-abi.md` is what neoboot does (e.g. `/arm-io` ranges are computed from the device addresses, and the ACPI tables are copied into the DRAM window).
 
 | Node | Property | Source of value | Consumer |
 |---|---|---|---|
@@ -332,7 +333,7 @@ Agent messaging discipline: the DT-ABI table is the interface between A1 and A2/
 - New DT property `/arm-io/gic` `timer-group` (0 or 1). With group 1: `pe_init_fiq` programs `GICR_IGROUPR0` bit 27 = 1 and `ICC_IGRPEN1_EL1`; the timer then arrives as **IRQ**. In `sleh_irq`/`PE_handle_ext_interrupt`, the GIC controller's `handleInterrupt` recognises INTID 27 and calls the same `rtclock_intr` path the FIQ handler uses (`sleh.c:2650-2665`), acking with `ICC_EOIR1_EL1`. Boards set `timer-group=1`; QEMU tests both.
 - IPIs are SGIs in Group 1 through `sendIPI` (`ICC_SGI1R_EL1`); CPU nodes carry three `interrupts` specifiers so AppleARMSMP takes the `aic_ipis` path (`AppleARMSMP.cpp:131-144`).
 - `PMR = 0xFF`, `BPR`, `EOImode = 0` as VMAPPLE does; A7 adds a TF-A-backed QEMU config (`secure=on` with `ARM_TRUSTZONE` firmware) to CI so the DS=0 case is tested in software before hardware.
-- Redistributor discovery already loops `GICR_TYPER` for the CPU's affinity (`pe_fiq.c:44-68`); loader passes the full GICR stride region from MADT GICR structures, not a per-CPU list.
+- Redistributor discovery already loops `GICR_TYPER` for the CPU's affinity (`pe_fiq.c:44-68`); the loader passes one range from the start of the MADT's GICR structure (or the contiguous GICC frames), sized one 128 KiB frame per GICC rather than the whole reservation (`dt-abi.md`). GICv4's 256 KiB frames are refused until the kernel takes its stride from the tree (P1-11).
 
 ### 5.3a Measured: the published XNU source does not link on its own
 
