@@ -1,0 +1,27 @@
+From: NeoDarwin
+Subject: [PATCH] libutil: tzlink without tzlinkd
+
+tzlink(3) asks the tzlinkd daemon over XPC to repoint /etc/localtime.
+NeoDarwin runs no tzlinkd yet, and its libxpc stand-in has no XPC
+connections (nor xpc_dictionary_get_uint64, which only this call uses). Add a
+LIBUTIL_NO_TZLINKD switch that selects the simulator's version, which
+returns ENOTSUP.
+
+Rebase-risk: low (one preprocessor condition).
+---
+diff --git a/tzlink.c b/tzlink.c
+--- a/tzlink.c
++++ b/tzlink.c
+@@ -31,7 +31,11 @@
+ errno_t
+ tzlink(const char *tz)
+ {
+-#if TARGET_OS_IPHONE || TARGET_OS_OSX && !TARGET_OS_SIMULATOR
++/*
++ * LIBUTIL_NO_TZLINKD: build without tzlinkd, with the simulator's version,
++ * which returns ENOTSUP.
++ */
++#if (TARGET_OS_IPHONE || TARGET_OS_OSX && !TARGET_OS_SIMULATOR) && !defined(LIBUTIL_NO_TZLINKD)
+ 	xpc_connection_t connection;
+ 	xpc_object_t request, reply;
+ 	errno_t e;

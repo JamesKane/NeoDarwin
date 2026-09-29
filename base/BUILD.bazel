@@ -279,6 +279,95 @@ base_root(
     ],
 )
 
+# Commands and the libraries only they use, linked against the runtime root
+# (base/commands.sh); none is part of //base:root, so there's no cycle.
+base_library(
+    name = "libutil_dylib",
+    data = glob(["libutil/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "libutil/build.sh",
+    srcs = "@apple_libutil//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libxo_dylib",
+    data = glob(["libxo/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "libxo/build.sh",
+    srcs = "@freebsd_libxo//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "shell_commands",
+    data = glob(["shell_cmds/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "shell_cmds/build.sh",
+    srcs = "@apple_shell_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "system_commands",
+    data = glob(["system_cmds/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "system_cmds/build.sh",
+    srcs = "@apple_system_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "file_commands",
+    data = glob(["file_cmds/**"]) + ["commands.sh"],
+    deps = [":root", ":libutil_dylib"],
+    script = "file_cmds/build.sh",
+    srcs = "@apple_file_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "text_commands",
+    data = glob(["text_cmds/**"]) + ["commands.sh"],
+    deps = [":root", ":libxo_dylib"],
+    script = "text_cmds/build.sh",
+    srcs = "@apple_text_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "adv_commands",
+    data = glob(["adv_cmds/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "adv_cmds/build.sh",
+    srcs = "@apple_adv_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "etc_files",
+    data = glob(["etc/**"]),
+    script = "etc/build.sh",
+    srcs = "@apple_files//:all",
+    sysroot = ":sysroot",
+)
+
+# The system root: the runtime root with the commands and /etc.
+base_root(
+    name = "system_root",
+    libraries = [
+        ":root",
+        ":libutil_dylib",
+        ":libxo_dylib",
+        ":shell_commands",
+        ":system_commands",
+        ":file_commands",
+        ":text_commands",
+        ":adv_commands",
+        ":etc_files",
+    ],
+)
+
 [sh_test(
     name = lib + "_exports_test",
     size = "small",
@@ -327,6 +416,8 @@ base_root(
     ("libdispatch", ":libdispatch_dylib", "usr/lib/system/libdispatch.dylib", "libdispatch/exports.txt"),
     ("libobjc", ":libobjc", "usr/lib/libobjc.A.dylib", "objc4/exports.txt"),
     ("libdyld", ":dyld_images", "usr/lib/system/libdyld.dylib", "dyld/exports.txt"),
+    ("libutil", ":libutil_dylib", "usr/lib/libutil.dylib", "libutil/exports.txt"),
+    ("libxo", ":libxo_dylib", "usr/lib/libxo.dylib", "libxo/exports.txt"),
     ("libsystem", ":libsystem_b", "usr/lib/libSystem.B.dylib", "libsystem/exports.txt"),
     ("libcompiler_rt", ":llvm_runtimes", "usr/lib/system/libcompiler_rt.dylib", "llvm/exports/libcompiler_rt.txt"),
     ("libunwind", ":llvm_runtimes", "usr/lib/system/libunwind.dylib", "llvm/exports/libunwind.txt"),

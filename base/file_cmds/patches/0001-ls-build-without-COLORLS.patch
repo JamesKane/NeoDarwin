@@ -1,0 +1,33 @@
+From: NeoDarwin
+Subject: [PATCH] ls: build without COLORLS
+
+ls/extern.h declares unix2003_compat inside its COLORLS section, but ls.c
+and print.c use it whatever the colour setting, so ls only builds with
+COLORLS (which links libcurses). Move the declaration out of the section.
+
+Rebase-risk: low (a declaration moved).
+---
+diff --git a/ls/extern.h b/ls/extern.h
+--- a/ls/extern.h
++++ b/ls/extern.h
+@@ -60,16 +60,16 @@
+ size_t	 len_octal(const char *, int);
+ int	 prn_octal(const char *);
+ int	 prn_printable(const char *);
+-#ifdef COLORLS
+-void	 parsecolors(const char *cs);
+-void	 colorquit(int);
+-
+ #ifdef __APPLE__
+ extern	bool	 unix2003_compat;
+ #else
+ #define	unix2003_compat	true
+ #endif
+ 
++#ifdef COLORLS
++void	 parsecolors(const char *cs);
++void	 colorquit(int);
++
+ extern	char	*ansi_fgcol;
+ extern	char	*ansi_bgcol;
+ extern	char	*ansi_coloff;

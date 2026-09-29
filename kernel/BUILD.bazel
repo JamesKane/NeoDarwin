@@ -263,6 +263,37 @@ sh_test(
     tags = ["manual", "kernel", "qemu"],
 )
 
+# P1-08: an interactive session over serial. getty runs on the console,
+# the test logs in as root (empty password) and types shell commands.
+sh_test(
+    name = "sbsa_shell_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:shell_root)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after '# ' 'echo hi-$$((6*7))\\n'",
+        "--send-after '# ' 'uname -sm; ls /usr/libexec; tty\\n'",
+        "$(rootpath //boot/neoboot)",
+        "180",
+        "'hfs: mounted NeoDarwin on device'",
+        "'getty_init: PID 1 on /dev/console; starting getty'",
+        "'hi-42'",
+        "'Darwin arm64'",
+        "'/dev/console'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:shell_root",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
 # P1-07: the same boot with PID 1 itself as the ramdisk, rooted on mockfs
 # (patches 0011-0013).
 sh_test(

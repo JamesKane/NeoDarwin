@@ -1,0 +1,4 @@
+module LibSystem {
+  header "libsystem.h"
+  export *
+}

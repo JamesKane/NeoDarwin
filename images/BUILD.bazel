@@ -21,3 +21,30 @@ hfs_ramdisk(
     files = {"//tests/qemu/hello": "sbin/launchd"},
     trees = ["//base:root"],
 )
+
+# The HFS+ root of P1-08: the system root (runtime libraries, commands and
+# /etc) with its macOS layout, and PID 1 as /sbin/launchd; for now the
+# test-only getty_init. Booted by //kernel:sbsa_shell_boot_test.
+hfs_ramdisk(
+    name = "shell_root",
+    dirs = [
+        "dev",
+        "private/tmp",
+        "private/var/empty",
+        "private/var/root",
+        "private/var/run",
+        "private/var/log",
+    ],
+    files = {"//tests/qemu/getty_init": "sbin/launchd"},
+    links = {
+        "etc": "private/etc",
+        "tmp": "private/tmp",
+        "var": "private/var",
+    },
+    tree_modes = {
+        "private/etc/master.passwd": "0600",
+        "private/tmp": "1777",
+        "usr/bin/login": "4555",
+    },
+    trees = ["//base:system_root"],
+)

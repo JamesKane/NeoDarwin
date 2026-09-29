@@ -1,0 +1,16 @@
+# FreeBSD's libxo (contrib/libxo, Juniper's, 1.6.0), which base/libxo/build.sh builds as /usr/lib/libxo.dylib;
+# Apple publishes no libxo project. Fetched unmodified by //rules:pinned_files.bzl.
+# Repository: https://github.com/freebsd/freebsd-src
+# commit: 050683bb8e136981e4a1f66e845ab05c135630f4
+# Format: shasum -a 256 (hash, two spaces, path). Regenerate with tools/pinned/lock.sh.
+b79f7d0da3afaabb2684e8abcb4608cdb0f98be7b9c5101f9006c6ec33e147f7  contrib/libxo/libxo/libxo.c
+aaaef326df52e51a9da0b053986eee7ba88cda3c23e43009b50806b60471a4bb  contrib/libxo/libxo/xo_buf.h
+847fcf636316884002c5bb59ef2766ca4adccfef049918b52cb35434279cb33c  contrib/libxo/libxo/xo_encoder.c
+4180a11df305f6e641a80a39f3c6bb79958020b32ab002fd9b1e0de1704b7f19  contrib/libxo/libxo/xo_encoder.h
+fec50cd125ce643825dafe4a693a8e121971df15daef8ad1704b2a4b2bf9d9c3  contrib/libxo/libxo/xo_explicit.h
+793d91d60837821568de1293e83e06814cafe6e495c53caa2c7f1309b3889425  contrib/libxo/libxo/xo_humanize.h
+cf4d1b48dccf29103d8e2c30fca84daf6bee9eb35546986442f665477293303e  contrib/libxo/libxo/xo_syslog.c
+a0167da203d0edde06bf452fb00c236a3c6f17d54ac3b6cba01668f91a747953  contrib/libxo/libxo/xo_wcwidth.h
+ce99879819b69243bcbbf1ed7fe627ffdad1310e5ea9ec95c69fb6c74398a596  contrib/libxo/libxo/xo.h
+ddfa64250e454bfc0074018bcf3733efe0682daa4e19f06073986fb1c758ec8f  contrib/libxo/LICENSE
+16d2dd9e0bf470d3fbe3790eeab59d2d51fa3b1d7b0af3305be95ab4d5269e6c  lib/libxo/libxo/xo_config.h

@@ -163,10 +163,10 @@ epics:
     title: "launchd-842 + getty + shell on the HFS+ root"
     phase: 1
     owner: userland
-    status: todo
+    status: doing
     depends: [P1-08b]
     exit: "interactive shell over serial"
-    doc: docs/kernel/arm64-sbsa-bringup.md
+    doc: docs/base/session.md
   - id: P1-09
     title: "ndacpi kext — ACPICA runtime, IOACPIPlatformDevice nubs, MCFG ECAM, IOPCIFamily"
     phase: 1

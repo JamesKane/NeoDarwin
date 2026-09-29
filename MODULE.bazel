@@ -164,6 +164,62 @@ http_archive(
 )
 
 http_archive(
+    name = "apple_system_cmds",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "978ebaeb23cff7307e96447dc6bec74bc568ea1eaf7fa768e2720f79afb23ab2",
+    strip_prefix = "system_cmds-system_cmds-1039",
+    urls = ["https://github.com/apple-oss-distributions/system_cmds/archive/refs/tags/system_cmds-1039.tar.gz"],
+)
+
+http_archive(
+    name = "apple_shell_cmds",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "19893f3eb4d35f6891a7899b4fbef3518ac82ce9f5c019053b5ca622e13a18c8",
+    strip_prefix = "shell_cmds-shell_cmds-326",
+    urls = ["https://github.com/apple-oss-distributions/shell_cmds/archive/refs/tags/shell_cmds-326.tar.gz"],
+)
+
+http_archive(
+    name = "apple_file_cmds",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "1b82afa97d108873cb0094303a92c0967de0181803f982595b1210be2a7848a2",
+    strip_prefix = "file_cmds-file_cmds-475",
+    urls = ["https://github.com/apple-oss-distributions/file_cmds/archive/refs/tags/file_cmds-475.tar.gz"],
+)
+
+http_archive(
+    name = "apple_text_cmds",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "8ce8b985ab6d79134af74e2da9d260b8c482233e5aed6895a38be3c6e645af88",
+    strip_prefix = "text_cmds-text_cmds-197",
+    urls = ["https://github.com/apple-oss-distributions/text_cmds/archive/refs/tags/text_cmds-197.tar.gz"],
+)
+
+http_archive(
+    name = "apple_adv_cmds",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "ab644d648dd851c5514ec7abe91a835c9ad418d2530e73730d1281e9b3d68ef5",
+    strip_prefix = "adv_cmds-adv_cmds-237",
+    urls = ["https://github.com/apple-oss-distributions/adv_cmds/archive/refs/tags/adv_cmds-237.tar.gz"],
+)
+
+http_archive(
+    name = "apple_libutil",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "dfb7a334e716768079c46bf9ae0846e6231eb6e4481dbad9981ac666f112d61e",
+    strip_prefix = "libutil-libutil-73",
+    urls = ["https://github.com/apple-oss-distributions/libutil/archive/refs/tags/libutil-73.tar.gz"],
+)
+
+http_archive(
+    name = "apple_files",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "86ca6ad735f4731f0ed49fe1a8e393834a9bbef143995883ee96fa8834887b35",
+    strip_prefix = "files-files-968",
+    urls = ["https://github.com/apple-oss-distributions/files/archive/refs/tags/files-968.tar.gz"],
+)
+
+http_archive(
     name = "apple_objc4",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
     sha256 = "acd6e36cd8df5c7a5a78fe45adc7749da26b5e414986968c7aebeab22a75933b",
@@ -223,6 +279,15 @@ pinned_files(
     name = "freebsd_msun",
     build_file = "//base:libm/freebsd.BUILD",
     lockfile = "//base:libm/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
+# FreeBSD's contrib/libxo, libxo's source (base/libxo): Apple uses libxo in
+# wc, df and others but doesn't publish it.
+pinned_files(
+    name = "freebsd_libxo",
+    build_file = "//base:libxo/freebsd.BUILD",
+    lockfile = "//base:libxo/freebsd.lock",
     url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
 )
 

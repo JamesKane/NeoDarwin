@@ -1,0 +1,25 @@
+load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:darwin_executable.bzl", "swift_embedded_executable")
+
+package(default_visibility = ["//visibility:public"])
+
+# A test-only PID 1 (P1-08, checkpoint 1): runs getty on the console until
+# launchd-842 does. /sbin/launchd on //images:shell_root.
+swift_embedded_executable(
+    name = "getty_init",
+    srcs = ["Sources/Main.swift"],
+    c_srcs = ["runtime/libsystem.c"],
+    hdrs = [
+        "LibSystem/libsystem.h",
+        "LibSystem/module.modulemap",
+    ],
+    root = "//base:root",
+)
+
+lang_audit_test(
+    name = "getty_init_lang_audit",
+    srcs = [
+        "LibSystem/libsystem.h",
+        "runtime/libsystem.c",
+    ],
+)
