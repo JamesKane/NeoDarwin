@@ -375,6 +375,24 @@ base_library(
     sysroot = ":sysroot",
 )
 
+base_library(
+    name = "libncurses_dylib",
+    data = glob(["ncurses/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "ncurses/build.sh",
+    srcs = "@apple_ncurses//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "zsh_shell",
+    data = glob(["zsh/**"]) + ["commands.sh"],
+    deps = [":root", ":libncurses_dylib"],
+    script = "zsh/build.sh",
+    srcs = "@apple_zsh//:all",
+    sysroot = ":sysroot",
+)
+
 # The system root: the runtime root with the commands and /etc.
 base_root(
     name = "system_root",
@@ -388,6 +406,8 @@ base_root(
         ":text_commands",
         ":adv_commands",
         ":etc_files",
+        ":libncurses_dylib",
+        ":zsh_shell",
     ],
 )
 
@@ -442,6 +462,7 @@ base_root(
     ("libutil", ":libutil_dylib", "usr/lib/libutil.dylib", "libutil/exports.txt"),
     ("libxo", ":libxo_dylib", "usr/lib/libxo.dylib", "libxo/exports.txt"),
     ("libxpc", ":libxpc", "usr/lib/system/libxpc.dylib", "launchd/exports.txt"),
+    ("libncurses", ":libncurses_dylib", "usr/lib/libncurses.5.4.dylib", "ncurses/exports.txt"),
     ("libsystem", ":libsystem_b", "usr/lib/libSystem.B.dylib", "libsystem/exports.txt"),
     ("libcompiler_rt", ":llvm_runtimes", "usr/lib/system/libcompiler_rt.dylib", "llvm/exports/libcompiler_rt.txt"),
     ("libunwind", ":llvm_runtimes", "usr/lib/system/libunwind.dylib", "llvm/exports/libunwind.txt"),

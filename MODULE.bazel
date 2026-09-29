@@ -230,6 +230,22 @@ http_archive(
 )
 
 http_archive(
+    name = "apple_ncurses",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "5a7bfa041c4b5f7da6ae8b45c8fd7df5595968168199237b52a5fa27f690a4d6",
+    strip_prefix = "ncurses-ncurses-79",
+    urls = ["https://github.com/apple-oss-distributions/ncurses/archive/refs/tags/ncurses-79.tar.gz"],
+)
+
+http_archive(
+    name = "apple_zsh",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "63cb3b4ffd2de40e1c091b8db2f2e91d5c8b612424857d149779d63642cdb27c",
+    strip_prefix = "zsh-zsh-110.1.1",
+    urls = ["https://github.com/apple-oss-distributions/zsh/archive/refs/tags/zsh-110.1.1.tar.gz"],
+)
+
+http_archive(
     name = "apple_objc4",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
     sha256 = "acd6e36cd8df5c7a5a78fe45adc7749da26b5e414986968c7aebeab22a75933b",

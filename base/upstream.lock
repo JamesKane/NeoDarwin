@@ -30,3 +30,5 @@ libutil              libutil-73                    sha256:dfb7a334e716768079c46b
 files                files-968                     sha256:86ca6ad735f4731f0ed49fe1a8e393834a9bbef143995883ee96fa8834887b35
 libxo                freebsd-src 050683bb8e13      contrib/libxo (1.6.0); pinned per file in base/libxo/freebsd.lock (Apple publishes no libxo)
 launchd              launchd-842.92.1              sha256:76657450aee11bdc2f4ebf85e19e3b9c215771564257e710e3a59b1340c1b49b  (last published launchd; outside the release set)
+ncurses              ncurses-79                    sha256:5a7bfa041c4b5f7da6ae8b45c8fd7df5595968168199237b52a5fa27f690a4d6  (ncurses 6.0-20150808, 5.4 ABI)
+zsh                  zsh-110.1.1                   sha256:63cb3b4ffd2de40e1c091b8db2f2e91d5c8b612424857d149779d63642cdb27c  (zsh 5.9)

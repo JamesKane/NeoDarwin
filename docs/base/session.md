@@ -82,5 +82,24 @@ Still to check on the kernel: `ps` (`KERN_PROC`, `proc_pidinfo`, `task_read_for_
 | macOS's `<launch.h>` marks launch_msg deprecated, and it's part of the SDK's Darwin module, so the marking can't be undone for one import | `launch_shim.h` declares the calls as 842's own `launch.h` does |
 | Embedded Swift has no `CommandLine`; String comparison needs the Unicode tables | a `@_cdecl("main")` entry; `rules/darwin_executable.bzl` links the Embedded stdlib's `libswiftUnicodeDataTables.a`, which dead-stripping trims to what's used |
 
-Not in NeoDarwin's launchctl yet: binary plists, the overrides database (`load -w` doesn't persist), fsck, `/etc/rc.*`, loopback setup and `sysctl.conf`. Of the other session pieces, zsh and bash (ncurses, libedit), line editing in `/bin/sh`, PAM and the `mount`/fsck tools (diskdev_cmds) come later.
+Not in NeoDarwin's launchctl yet: binary plists, the overrides database (`load -w` doesn't persist), fsck, `/etc/rc.*`, loopback setup and `sysctl.conf`.
+
+### After P1-08: zsh and ncurses
+
+Root's login shell is zsh 5.9, as on macOS, built from zsh-110.1.1 on ncurses-79 (ncurses 6.0, the 5.4 ABI):
+- **libncurses** exports Apple's 942 symbols. It installs as `/usr/lib/libncurses.5.4.dylib`, with the names `libncurses`, `libncurses.5`, `libcurses` and `libtermcap` linked to it.
+- **The terminfo database** has all 2,684 entries, compiled by a `tic` built from the same sources. It is byte-identical to macOS's.
+- **zsh** loads its 36 modules as bundles under `/usr/lib/zsh/5.9`, as on macOS (all but `pcre`), and has the 1,203 autoloaded functions. `/etc/zshrc` and `/etc/zprofile` are Apple's.
+- **The test:** `//kernel:sbsa_session_boot_test` logs in to zsh's prompt and runs commands. It checks `$ZSH_VERSION`, and loads `zsh/datetime`, which `dlopen`s its bundle through dyld.
+
+| Finding | Resolution |
+|---|---|
+| Apple's `run_tic.sh` compiles terminfo with the build machine's `/usr/bin/tic` | the build uses the `tic_static` it builds from these sources |
+| ncurses' generated sources run the internal SDK's `cc` | replayed with `clang -E` over NeoDarwin's headers. Apple's build doesn't run configure either: its committed `ncurses_cfg.h` is used as is |
+| zsh's configure runs about 20 test programs, which would describe the host's newer libSystem | configure runs in cross-compiling mode, as Apple's embedded builds do, with `base/zsh/config.cache` (Apple's `configure.cache-embedded` plus pinned answers). Compile and link checks use NeoDarwin's sysroot and root |
+| The base has no PCRE or libiconv | `--enable-pcre` is dropped and iconv is pinned absent; zsh uses its own UTF-8 code |
+| A Bazel target named like its source directory hides that directory's files from tests' runfiles | targets `libncurses_dylib` and `zsh_shell`, as `libutil_dylib` |
+| zle writes a character, backs up (`\b`) and redraws the line, which the harness's log showed doubled | `qemu_efi_test.sh` applies backspaces when it cleans the log, and types half a second after its prompt appears, as a person would |
+
+Not yet: locale data (zprofile sets `LANG=C.UTF-8`; zsh falls back to the C locale), `/usr/libexec/path_helper` and `/usr/bin/locale` (zprofile and zshrc skip them), and bash, libedit and line editing in `/bin/sh`. PAM and the `mount`/fsck tools (diskdev_cmds) come later too.
 

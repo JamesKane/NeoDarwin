@@ -264,7 +264,9 @@ sh_test(
 )
 
 # P1-08's exit: launchd-842 is PID 1 and starts getty from its LaunchDaemon
-# plist; the test logs in over serial and runs commands.
+# plist; the test logs in over serial and runs commands in root's shell,
+# zsh. Each step waits for zsh's prompt itself, since its PROMPT_SP line
+# also starts with "#".
 sh_test(
     name = "sbsa_session_boot_test",
     size = "medium",
@@ -276,8 +278,10 @@ sh_test(
         "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
-        "--send-after '# ' 'echo hi-$$((6*7))\\n'",
-        "--send-after '# ' 'uname -sm; ls /usr/libexec; tty; launchctl list\\n'",
+        "--send-after 'root@localhost ~ # ' 'echo hi-$$((6*7))\\n'",
+        "--send-after 'root@localhost ~ # ' 'uname -sm; ls /usr/libexec; tty; launchctl list\\n'",
+        "--send-after 'root@localhost ~ # ' 'echo shell=$${(U)ZSH_NAME}-$$ZSH_VERSION\\n'",
+        "--send-after 'root@localhost ~ # ' 'zmodload zsh/datetime && strftime %Y $$EPOCHSECONDS | read y && echo datetime-$$(( y > 2024 ))\\n'",
         "$(rootpath //boot/neoboot)",
         "180",
         "'hfs: mounted NeoDarwin on device'",
@@ -285,6 +289,9 @@ sh_test(
         "'Darwin arm64'",
         "'/dev/console'",
         "'com.apple.getty'",
+        # zsh 5.9 is root's shell; loading a module dlopens its bundle.
+        "'shell=ZSH-5.9'",
+        "'datetime-1'",
     ],
     data = [
         ":sbsa_kc",

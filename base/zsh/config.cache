@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# NeoDarwin's answers to zsh 5.9's configure (base/zsh/build.sh;
+# docs/base/session.md). configure runs cross-compiling, as Apple configures
+# zsh for its embedded platforms (Makefile, RC_PURPLE), so it runs no test
+# program: every check below would otherwise run on the build host, against
+# the host's libSystem and file system, and describes the target instead.
+# Compile and link checks aren't pinned; they build against NeoDarwin's
+# sysroot and link against its runtime root and libncurses.
+
+# Apple's configure.cache-embedded (zsh-110.1.1), for 64-bit arm.
+ac_cv_func_mmap_fixed_mapped=${ac_cv_func_mmap_fixed_mapped=yes}
+ac_cv_func_msync=${ac_cv_func_msync=yes}
+ac_cv_func_munmap=${ac_cv_func_munmap=yes}
+ac_cv_func_strcoll_works=${ac_cv_func_strcoll_works=yes}
+zsh_cv_c_broken_isprint=${zsh_cv_c_broken_isprint=yes}
+zsh_cv_func_realpath_accepts_null=${zsh_cv_func_realpath_accepts_null=yes}
+zsh_cv_func_tgetent_accepts_null=${zsh_cv_func_tgetent_accepts_null=yes}
+zsh_cv_getcwd_malloc=${zsh_cv_getcwd_malloc=yes}
+zsh_cv_ino_t_is_64_bit=${zsh_cv_ino_t_is_64_bit=yes}
+zsh_cv_off_t_is_64_bit=${zsh_cv_off_t_is_64_bit=yes}
+zsh_cv_printf_has_lld=${zsh_cv_printf_has_lld=yes}
+zsh_cv_rlim_t_is_longer=${zsh_cv_rlim_t_is_longer=no}
+zsh_cv_rlimit_rss_is_as=${zsh_cv_rlimit_rss_is_as=yes}
+zsh_cv_shared_environ=${zsh_cv_shared_environ=yes}
+zsh_cv_shared_tgetent=${zsh_cv_shared_tgetent=yes}
+zsh_cv_shared_tigetstr=${zsh_cv_shared_tigetstr=yes}
+zsh_cv_struct_member_struct_utmp_ut_host=${zsh_cv_struct_member_struct_utmp_ut_host=yes}
+zsh_cv_sys_dynamic_clash_ok=${zsh_cv_sys_dynamic_clash_ok=yes}
+zsh_cv_sys_dynamic_execsyms=${zsh_cv_sys_dynamic_execsyms=yes}
+zsh_cv_sys_dynamic_rtld_global=${zsh_cv_sys_dynamic_rtld_global=yes}
+zsh_cv_sys_dynamic_strip_exe=${zsh_cv_sys_dynamic_strip_exe=yes}
+zsh_cv_sys_dynamic_strip_lib=${zsh_cv_sys_dynamic_strip_lib=yes}
+zsh_cv_sys_elf=${zsh_cv_sys_elf=no}
+zsh_cv_type_rlim_t_is_unsigned=${zsh_cv_type_rlim_t_is_unsigned=yes}
+zsh_cv_long_is_64_bit=${zsh_cv_long_is_64_bit=yes}
+
+# The other run checks, which Apple's file leaves to configure's
+# cross-compiling defaults. NeoDarwin states each: xnu and Libc-1725 behave
+# as macOS does.
+zsh_cv_c_broken_signed_to_unsigned_casting=${zsh_cv_c_broken_signed_to_unsigned_casting=no}
+zsh_cv_c_broken_wcwidth=${zsh_cv_c_broken_wcwidth=no}
+# ncurses' tgetent returns 1 on success.
+zsh_cv_func_tgetent_zero_success=${zsh_cv_func_tgetent_zero_success=no}
+zsh_cv_func_dlsym_needs_underscore=${zsh_cv_func_dlsym_needs_underscore=no}
+zsh_cv_sys_fifo=${zsh_cv_sys_fifo=yes}
+zsh_cv_sys_lseek=${zsh_cv_sys_lseek=yes}
+zsh_cv_sys_link=${zsh_cv_sys_link=yes}
+zsh_cv_sys_killesrch=${zsh_cv_sys_killesrch=yes}
+zsh_cv_sys_sigsuspend=${zsh_cv_sys_sigsuspend=yes}
+zsh_cv_sys_tcsetpgrp=${zsh_cv_sys_tcsetpgrp=yes}
+zsh_cv_sys_getpwnam_faked=${zsh_cv_sys_getpwnam_faked=no}
+
+# Host file-system and getconf probes. /dev/fd is xnu's fdesc; no RFS
+# superroot; utmpx is read through getutxent(3), so no file paths (as
+# macOS's /bin/zsh has none); _CS_PATH is Libc's.
+zsh_cv_sys_path_dev_fd=${zsh_cv_sys_path_dev_fd=/dev/fd}
+zsh_cv_sys_superroot=${zsh_cv_sys_superroot=no}
+zsh_cv_path_utmp=${zsh_cv_path_utmp=no}
+zsh_cv_path_wtmp=${zsh_cv_path_wtmp=no}
+zsh_cv_path_utmpx=${zsh_cv_path_utmpx=no}
+zsh_cv_path_wtmpx=${zsh_cv_path_wtmpx=no}
+zsh_cv_cs_path=${zsh_cv_cs_path='/usr/bin:/bin:/usr/sbin:/sbin'}
+
+# Not in NeoDarwin's base: PCRE (--enable-pcre is off), libiconv (Libc's
+# own iconv is absent too), gdbm, libcap.
+ac_cv_header_iconv_h=${ac_cv_header_iconv_h=no}
+ac_cv_header_pcre_h=${ac_cv_header_pcre_h=no}
+ac_cv_header_gdbm_h=${ac_cv_header_gdbm_h=no}
+ac_cv_header_sys_capability_h=${ac_cv_header_sys_capability_h=no}

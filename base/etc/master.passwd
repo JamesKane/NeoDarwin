@@ -5,8 +5,8 @@
 # (generated from this file) otherwise; no pwd.db. Format: name:passwd:uid:
 # gid:class:change:expire:gecos:home:shell. root has an empty password, so
 # login(1) on a secure tty (the console) asks for none. Entries as in Apple's
-# master.passwd.iPhone (files-968), with root's shell /bin/sh (ash).
+# master.passwd.iPhone (files-968), with root's shell /bin/zsh, as on macOS.
 ##
 nobody:*:-2:-2::0:0:Unprivileged User:/var/empty:/usr/bin/false
-root::0:0::0:0:System Administrator:/var/root:/bin/sh
+root::0:0::0:0:System Administrator:/var/root:/bin/zsh
 daemon:*:1:1::0:0:System Services:/var/root:/usr/bin/false
