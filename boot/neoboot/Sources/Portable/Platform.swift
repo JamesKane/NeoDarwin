@@ -50,6 +50,46 @@ enum Platform {
         var acpiBase: UInt64 = 0     // the relocated tables; the RSDP is first
         var acpiLength: UInt64 = 0
         var timerGroup: UInt32 = 0   // /arm-io/gic timer-group (Platform.timerGroup)
+        var psciConduit = PSCIConduit.absent  // /chosen psci-conduit (Platform.psciConduit)
+    }
+
+    /// How the kernel reaches PSCI, /chosen psci-conduit: an SMC to EL3
+    /// firmware, or an HVC to a hypervisor. Without one the kernel can't
+    /// start secondary CPUs, and neoboot boots one (cpus=1).
+    enum PSCIConduit: UInt8 { case absent, smc, hvc }
+
+    /// The conduit and why, for the log.
+    struct PSCIChoice {
+        var conduit: PSCIConduit
+        var why: StaticString
+    }
+
+    /// FADT ARM_BOOT_ARCH (ACPI 6.5 table 5.10): PSCI_COMPLIANT, PSCI_USE_HVC.
+    static let armBootPSCICompliant: UInt16 = 1 << 0
+    static let armBootPSCIUseHVC: UInt16 = 1 << 1
+
+    /// The PSCI conduit, from the firmware at run time, as Linux chooses it
+    /// (drivers/firmware/psci): the FADT's ARM_BOOT_ARCH flags. A FADT that
+    /// reports no PSCI on a CPU that implements EL3 (ID_AA64PFR0_EL1.EL3)
+    /// gets SMC: QEMU virt with TF-A is like this, since QEMU describes only
+    /// its own PSCI emulation, which it turns off when firmware owns EL3
+    /// (docs/kernel/qemu-secure.md). HVC needs a hypervisor above the
+    /// kernel, so it is refused when the firmware left EL2 to the loader:
+    /// neoboot enters the kernel at EL1 and leaves nothing at EL2 to answer.
+    static func psciConduit(armBootFlags: UInt16, el3: Bool, loaderEL: UInt64) -> PSCIChoice {
+        if armBootFlags & armBootPSCICompliant != 0 {
+            if armBootFlags & armBootPSCIUseHVC == 0 {
+                return PSCIChoice(conduit: .smc, why: "SMC, as the FADT says")
+            }
+            if loaderEL == 2 {
+                return PSCIChoice(conduit: .absent, why: "none: the FADT says HVC, but the loader runs at EL2, so no hypervisor would answer")
+            }
+            return PSCIChoice(conduit: .hvc, why: "HVC, as the FADT says")
+        }
+        if el3 {
+            return PSCIChoice(conduit: .smc, why: "SMC: the FADT reports none, but the CPU implements EL3 (its firmware, e.g. TF-A)")
+        }
+        return PSCIChoice(conduit: .absent, why: "none: the FADT reports none and the CPU has no EL3")
     }
 
     /// The timer's GIC group, /arm-io/gic timer-group: Group 0 (a FIQ, the
@@ -136,6 +176,11 @@ enum Platform {
         }
         w.property("acpi-rsdp", u64: f.acpiBase)  // the relocated RSDP, for the ACPICA kext (Tier 2)
         w.property("acpi-tables", f.acpiBase, f.acpiLength)
+        switch f.psciConduit {  // NeoDarwinPSCI: how CPU_ON reaches the firmware
+        case .smc: w.property("psci-conduit", string: "smc")
+        case .hvc: w.property("psci-conduit", string: "hvc")
+        case .absent: break
+        }
         w.property("AAPL,phandle", u32: chosenPhandle)
         w.begin()  // /chosen/memory-map
         w.property("name", string: "memory-map")
@@ -151,7 +196,7 @@ enum Platform {
         w.property("serial-device", u32: uartPhandle)  // pe_serial.c: which UART is the console
         w.end()
 
-        w.begin()  // /cpus: every enabled GICC; only the boot CPU is running
+        w.begin()  // /cpus: every enabled GICC; the boot CPU is running, PSCI starts the rest
         w.property("name", string: "cpus")
         w.property("#address-cells", u32: 1)
         w.property("#size-cells", u32: 0)

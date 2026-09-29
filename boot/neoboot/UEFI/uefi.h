@@ -121,6 +121,7 @@ uint64_t nd_cntfrq(void);
 uint64_t nd_cntpct(void);
 uint64_t nd_cntvct(void);
 uint64_t nd_mpidr(void);
+uint64_t nd_el3_implemented(void);
 uint32_t nd_mmio_read32(uint64_t address);
 void nd_dcache_clean_poc(uint64_t start, uint64_t length);
 [[noreturn]] void nd_enter_kernel(uint64_t entry, uint64_t boot_args);

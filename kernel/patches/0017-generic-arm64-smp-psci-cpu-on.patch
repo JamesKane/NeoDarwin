@@ -1,0 +1,123 @@
+From: NeoDarwin
+Subject: [PATCH] arm, pexpert, AppleARMSMP: secondary CPUs through PSCI on generic Arm
+
+Secondary CPUs start through the platform's IOPMGR, NeoDarwinPSCI
+(kernel/neodarwin/platform), which issues PSCI CPU_ON. CPU_ON takes the
+entry point's physical address, as Apple's virtual platform's PMGR does:
+- arm_init.c keeps reset_vector_vaddr (LowResetVectorBase) for
+  GENERIC_ARM64_PLATFORM as for APPLEVIRTUALPLATFORM;
+- AppleARMSMP.cpp's PE_cpu_start_internal() passes
+  ml_vtophys(reset_vector_vaddr) to IOPMGR::enableCPUCore() on both. The
+  CPU enters there with the MMU off and finds itself by MPIDR, as on a
+  reset (start.s).
+
+pe_init_fiq() runs on every CPU as it comes up (PE_init_cpu). On
+GENERIC_ARM64_PLATFORM it now ends by calling pe_gic_cpu_init_hook, which
+NeoDarwinGICv3 sets: the IRQ controller programs the CPU's SGIs and PPIs
+(IPIs) and its Group 1 CPU interface there. That must run on the CPU
+itself after CPU_ON, because TF-A resets the redistributor's SGI/PPI
+configuration when it powers a CPU on. The boot CPU's first call comes
+before IOKit and finds no hook.
+
+The sleep paths that also pass the reset vector (cpu.c, under
+APPLEVIRTUALPLATFORM) are unchanged: generic Arm has no system sleep yet.
+
+Rebase-risk: low (two conditionals and the tail of pe_init_fiq).
+---
+--- a/osfmk/arm/arm_init.c	2026-09-29 08:14:44
++++ b/osfmk/arm/arm_init.c	2026-09-29 08:15:14
+@@ -189,9 +189,10 @@
+ static SECURITY_READ_ONLY_LATE(bool) enable_sme = true;
+ #endif
+ 
+-#if APPLEVIRTUALPLATFORM
++#if APPLEVIRTUALPLATFORM || GENERIC_ARM64_PLATFORM
++/* PSCI CPU_ON (generic Arm) needs the reset vector's physical address. */
+ SECURITY_READ_ONLY_LATE(vm_offset_t) reset_vector_vaddr = 0;
+-#endif /* APPLEVIRTUALPLATFORM */
++#endif /* APPLEVIRTUALPLATFORM || GENERIC_ARM64_PLATFORM */
+ 
+ /*
+  * Forward definition
+@@ -356,9 +357,9 @@
+ 	const_boot_args = *args;
+ 	BootArgs = args = &const_boot_args;
+ 
+-#if APPLEVIRTUALPLATFORM
++#if APPLEVIRTUALPLATFORM || GENERIC_ARM64_PLATFORM
+ 	reset_vector_vaddr = (vm_offset_t) &LowResetVectorBase;
+-#endif /* APPLEVIRTUALPLATFORM */
++#endif /* APPLEVIRTUALPLATFORM || GENERIC_ARM64_PLATFORM */
+ 
+ 	cpu_data_init(&BootCpuData);
+ #if defined(HAS_APPLE_PAC)
+--- a/iokit/Kernel/arm/AppleARMSMP.cpp	2026-09-29 08:14:44
++++ b/iokit/Kernel/arm/AppleARMSMP.cpp	2026-09-29 08:15:14
+@@ -278,13 +278,16 @@
+ 
+ 	assert(cpu_id != cpu_number()); /* we can't be already on the CPU to be started */
+ 
+-#if APPLEVIRTUALPLATFORM
+-	/* When running virtualized, the reset vector address must be passed to PMGR explicitly */
++#if APPLEVIRTUALPLATFORM || GENERIC_ARM64_PLATFORM
++	/*
++	 * When running virtualized, the reset vector address must be passed to PMGR explicitly.
++	 * So it must on generic Arm, where the PMGR is PSCI: CPU_ON takes the entry point.
++	 */
+ 	extern vm_offset_t reset_vector_vaddr;
+ 	gPMGR->enableCPUCore(cpu_id, ml_vtophys(reset_vector_vaddr));
+-#else /* APPLEVIRTUALPLATFORM */
++#else /* APPLEVIRTUALPLATFORM || GENERIC_ARM64_PLATFORM */
+ 	gPMGR->enableCPUCore(cpu_id, 0);
+-#endif /* APPLEVIRTUALPLATFORM */
++#endif /* APPLEVIRTUALPLATFORM || GENERIC_ARM64_PLATFORM */
+ }
+ 
+ // Initialize a CPU when it first comes up.  Runs on the target CPU.
+--- a/pexpert/arm/pe_fiq.c	2026-09-29 08:14:44
++++ b/pexpert/arm/pe_fiq.c	2026-09-29 08:15:14
+@@ -60,6 +60,26 @@
+ 			panic("%s: /arm-io/gic timer-group is neither 0 nor 1", __func__);
+ 		}
+ 		pe_gic_timer_group = group;
++	}
++}
++
++/*
++ * Called at the end of pe_init_fiq() on every CPU, the boot CPU's first run
++ * excepted (it comes before IOKit), once the redistributor is awake and the
++ * timer configured. NeoDarwinGICv3 sets it: a secondary CPU's SGIs and
++ * PPIs, and its Group 1 CPU interface, are the IRQ controller's to program
++ * (P1-06). TF-A resets a redistributor's SGI/PPI configuration when it
++ * powers the CPU on, so this runs on the CPU itself after CPU_ON.
++ */
++extern void (*pe_gic_cpu_init_hook)(void);
++void (*pe_gic_cpu_init_hook)(void);
++
++static void
++pe_gic_cpu_init_done(void)
++{
++	void (*hook)(void) = os_atomic_load(&pe_gic_cpu_init_hook, acquire);
++	if (hook != NULL) {
++		hook();
+ 	}
+ }
+ #else
+@@ -227,6 +247,7 @@
+ 		}
+ 		__builtin_arm_wsr64("ICC_IGRPEN1_EL1", 1);
+ 		__builtin_arm_isb(ISB_SY);
++		pe_gic_cpu_init_done();
+ 		return;
+ 	}
+ #endif
+@@ -258,6 +279,9 @@
+ 	gicd_write32(GICD_CTLR, gicd_ctlr);
+ 	__builtin_arm_wsr64("ICC_IGRPEN0_EL1", 1);
+ 	__builtin_arm_isb(ISB_SY);
++#if GENERIC_ARM64_PLATFORM
++	pe_gic_cpu_init_done();
++#endif
+ }
+ #else
+ void

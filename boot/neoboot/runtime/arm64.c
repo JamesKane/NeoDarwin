@@ -32,6 +32,14 @@ uint64_t nd_cntvct(void) {
 	return v;
 }
 
+// ID_AA64PFR0_EL1.EL3 (bits 15:12): nonzero when the CPU implements EL3,
+// where PSCI firmware such as TF-A lives. Readable at EL1 and EL2.
+uint64_t nd_el3_implemented(void) {
+	uint64_t v;
+	__asm__ volatile("mrs %0, id_aa64pfr0_el1" : "=r"(v));
+	return (v >> 12) & 0xf;
+}
+
 uint64_t nd_mpidr(void) {
 	uint64_t v;
 	__asm__ volatile("mrs %0, mpidr_el1" : "=r"(v));

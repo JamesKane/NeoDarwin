@@ -183,6 +183,9 @@ enum DTCheck {
             if (chosen.property("random-seed")?.count ?? 0) < 64 { r.violation("/chosen random-seed is shorter than 64 bytes") }
             if chosen.u32("debug-enabled") == nil { r.violation("/chosen debug-enabled is not a u32") }
             if !chosen.isString("firmware-version") { r.violation("/chosen has no firmware-version string") }
+            if chosen.property("psci-conduit") != nil && !chosen.string("psci-conduit", is: "smc") && !chosen.string("psci-conduit", is: "hvc") {
+                r.violation("/chosen psci-conduit is neither \"smc\" nor \"hvc\"")
+            }
             let rsdp = chosen.u64("acpi-rsdp")
             let tables = chosen.property("acpi-tables")
             if rsdp == nil || rsdp == 0 { r.violation("/chosen acpi-rsdp missing or zero") }

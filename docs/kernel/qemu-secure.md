@@ -12,12 +12,12 @@
 | neoboot and the kernel run at | Non-secure EL1 | Non-secure EL1 (BL31 enters BL33 at EL1, since there is no EL2) |
 | GIC | `has-security-extensions = false` | `has-security-extensions = true` |
 | `GICD_CTLR` read by neoboot (Non-secure) | `0x52`: DS, ARE, EnableGrp1 | `0x12`: ARE_NS, EnableGrp1A; DS reads 0 |
-| FADT PSCI | HVC | **absent** (see below) |
+| FADT PSCI | HVC | **absent** (see below); neoboot uses SMC |
 | Minimum RAM | 512M | 1G: TF-A loads BL33 at `0x60000000` |
 
 The GIC's state comes from QEMU's monitor (`info qtree`) and its `gicv3_dist_*` trace. TF-A's Secure write to `GICD_CTLR` is `0x34` (ARE_S, ARE_NS, EnableGrp1S), so EnableGrp0 stays clear. After that, BL31 sets every SGI and PPI to Group 1 Non-secure.
 
-**PSCI absent.** When firmware owns EL3, QEMU turns its own PSCI emulation off, and its ACPI FADT then advertises no PSCI at all, although TF-A's BL31 implements PSCI over SMC. BL2 adds a PSCI node only to the device tree, which neoboot doesn't read. A real board's FADT says SMC. Secondary-CPU bring-up and power-off through PSCI can't be tested from ACPI in this configuration until neoboot has a fallback (for example, assuming SMC when EL3 exists).
+**PSCI absent.** When firmware owns EL3, QEMU turns its own PSCI emulation off, and its ACPI FADT then advertises no PSCI at all, although TF-A's BL31 implements PSCI over SMC. BL2 adds a PSCI node only to the device tree, which neoboot doesn't read. A real board's FADT says SMC. neoboot therefore takes SMC when the FADT reports no PSCI but the CPU implements EL3 (`ID_AA64PFR0_EL1.EL3`, readable from EL1), and logs `neoboot: PSCI conduit: SMC: the FADT reports none, but the CPU implements EL3` (P1-06, `dt-abi.md`). `//kernel:sbsa_secure_smp_boot_test` starts four CPUs through TF-A this way.
 
 **CPU.** QEMU's `cortex-a76`, `neoverse-n2`, `cortex-a57` and `max` all boot. TF-A logs "workaround ... missing" warnings for the CPUs it has errata code for, because QEMU doesn't implement the IMPDEF registers.
 
@@ -50,6 +50,7 @@ This is test firmware, so a known cookie costs nothing. `ND_SECURE_FW_KEEP=DIR` 
 ```sh
 bazel test //boot/neoboot:neoboot_secure_qemu_test   # TF-A → EDK2 → neoboot; DS=0, timer on Group 1
 bazel test //kernel:sbsa_secure_boot_test             # manual: the sbsa_boot_test boot under DS=0
+bazel test //kernel:sbsa_secure_smp_boot_test         # manual: four CPUs started by TF-A (PSCI over SMC)
 ```
 
 `tools/efi/qemu_efi_test.sh --machine virt-secure --firmware FILE` selects the configuration for any other test. To run it by hand:

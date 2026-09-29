@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
 # DT-ABI v1: the device tree neoboot gives the kernel
 
-**Version 1, P1-04; `timer-ppi` and `timer-group` added in P1-05.** This is the contract between the loader (`boot/neoboot`) and the SBSA kernel. neoboot writes it from the machine's ACPI tables and its own facts, in Apple's flattened format (`pexpert/pexpert/device_tree.h`, not FDT). The design is in `arm64-sbsa-bringup.md` §2.2.
+**Version 1, P1-04; `timer-ppi` and `timer-group` added in P1-05; `/chosen` `psci-conduit` added in P1-06.** This is the contract between the loader (`boot/neoboot`) and the SBSA kernel. neoboot writes it from the machine's ACPI tables and its own facts, in Apple's flattened format (`pexpert/pexpert/device_tree.h`, not FDT). The design is in `arm64-sbsa-bringup.md` §2.2.
 
 The contract is enforced in three places, all built from the same sources in `boot/neoboot/Sources/Portable/`:
 - `ACPI.swift` reads the tables and refuses ones the kernel can't run on (`ACPI.check`).
@@ -24,8 +24,9 @@ Line numbers below refer to xnu-12377.1.9 as pinned (`@apple_xnu`) with NeoDarwi
 | GTDT | `ACPI.parse` | the EL1 virtual timer's GSIV and flags: a level-sensitive PPI (INTID 16–31), SBSA's being 27 |
 | GIC distributor, `GICD_CTLR` | `Main.swift` `chooseTimerGroup` | the security state: `DS` (bit 6) reads 1 when Non-secure software may use Group 0, 0 when the GIC has two security states and Group 0 is Secure. It picks the timer's group |
 | SPCR | `ACPI.parse` | the console UART's interface type and base address, which must be in system-memory space |
-| FADT (`FACP`), else the XSDT header | `ACPI.parse`, `ACPI.copyOEM` | OEM ID and OEM table ID for `model`; hardware-reduced flag; ARM boot flags (PSCI, HVC) |
-| the loader | `Main.swift` | DRAM window, `CNTFRQ_EL0`, the boot CPU's `MPIDR_EL1`, the `CNTPCT` seed, UEFI `GetTime()`, ramdisk placement, where the ACPI copy goes, and `timer-group=0`/`timer-group=1` in `boot.cfg` |
+| FADT (`FACP`), else the XSDT header | `ACPI.parse`, `ACPI.copyOEM` | OEM ID and OEM table ID for `model`; hardware-reduced flag; ARM boot flags (`PSCI_COMPLIANT`, `PSCI_USE_HVC`), which choose the PSCI conduit |
+| `ID_AA64PFR0_EL1.EL3` (bits 15:12) | `Main.swift` `choosePSCIConduit` | whether the CPU implements EL3, where PSCI firmware lives: the conduit when the FADT reports no PSCI |
+| the loader | `Main.swift` | DRAM window, `CNTFRQ_EL0`, the boot CPU's `MPIDR_EL1`, the `CNTPCT` seed, UEFI `GetTime()`, ramdisk placement, where the ACPI copy goes, the exception level it runs at, and `timer-group=0`/`timer-group=1` in `boot.cfg` |
 
 Every table is checked for length and checksum. The FACS has no checksum; it's dumped but never parsed. Tables neoboot doesn't parse (DSDT, MCFG, IORT, PPTT, DBG2, …) are still copied for the kernel.
 
@@ -77,6 +78,7 @@ Types: `u32` and `u64` are little-endian. `string` is NUL-terminated. `(u64,u64)
 | `neodarwin,utc-seconds`, `neodarwin,utc-counter` | u64 each. Omitted when the firmware has no clock | UEFI `GetTime()`, `CNTVCT` | `NeoDarwinPlatformExpert.cpp:109-116` (`IORTC`, time of day) |
 | `acpi-rsdp` | u64: physical address of the copied RSDP | ACPI copy | reserved: NeoDarwinACPIPlatform (Tier 2 ACPICA kext) |
 | `acpi-tables` | (u64,u64): the ACPI copy | ACPI copy | reserved: as above |
+| `psci-conduit` | `"smc"` or `"hvc"`. Omitted when there is no PSCI | FADT `ARM_BOOT_ARCH`, `ID_AA64PFR0_EL1.EL3`, the loader's EL (below) | `NeoDarwinPSCI.cpp` `init`: `CPU_ON`, `CPU_OFF` and `PSCI_VERSION` go through `smc #0` or `hvc #0` |
 | `AAPL,phandle` | u32 2 | constant | phandle map |
 
 ### `/chosen/memory-map`
@@ -102,14 +104,24 @@ Every entry lies inside `[dram-base, dram-base+dram-size)`, below `topOfKernelDa
 |---|---|---|---|
 | `name` | `"cpu<index>"` | index | IORegistry naming only |
 | `device_type` | `"cpu"` | constant | `AppleARMSMP.cpp:97` matching; `IOPlatformExpert.cpp:1681` cpu nubs |
-| `reg` | u32: MPIDR Aff2:Aff1:Aff0 | GICC MPIDR | `machine_routines.c:1197` (`phys_id`, mandatory); `AppleARMSMP.cpp:98`; `IOPlatformExpert.cpp:1686` |
+| `reg` | u32: MPIDR Aff2:Aff1:Aff0 | GICC MPIDR | `machine_routines.c:1197` (`phys_id`, mandatory); `AppleARMSMP.cpp:98`; `IOPlatformExpert.cpp:1686`; the `CPU_ON` target (`NeoDarwinPSCI`) and the `ICC_SGI1R_EL1` affinity (`NeoDarwinGICv3::sendIPI`) |
 | `state` | `"running"` for the boot CPU, `"waiting"` for the rest | boot MPIDR | `machine_routines.c:1066` (`ml_is_boot_cpu`); `pe_identify_machine.c:64` (only the running CPU's timebase is read) |
 | `timebase-frequency` | u32 `CNTFRQ_EL0` | loader | `pe_identify_machine.c:70-80`. Without it the kernel assumes 24 MHz: it never reads `CNTFRQ` |
 | `interrupt-parent` | u32 5 (the GIC) | constant | `IODeviceTreeSupport.cpp:566` |
-| `interrupts` | three u32: SGI 0 (IPI), the PMU PPI, SGI 1 (deferred IPI) | GICC performance GSIV; 23 (SBSA PPI 7) if the MADT gives 0 | `AppleARMSMP.cpp:125-150`: with three specifiers it registers entries 0 and 2 as IPIs and never enables entry 1. SGI numbers match `NeoDarwinGICv3.cpp` `ND_SGI_IPI`/`ND_SGI_DEFERRED_IPI` |
+| `interrupts` | three u32: SGI 0 (IPI), the PMU PPI, SGI 1 (deferred IPI) | GICC performance GSIV; 23 (SBSA PPI 7) if the MADT gives 0 | `AppleARMSMP.cpp:125-150`: with three specifiers it registers entries 0 and 2 as IPIs, once per CPU, and never enables entry 1. `NeoDarwinGICv3` keeps them per CPU (banked). SGI numbers match `NeoDarwinGICv3.cpp` `ND_SGI_IPI`/`ND_SGI_DEFERRED_IPI` |
 | `AAPL,phandle` | u32 16 + index | constant | phandle map |
 
-**Secondary CPUs (until P1-06).** Every CPU node takes part in the topology whatever its `state` (`machine_routines.c:1160-1240`), and `AppleARMSMP::cpu_boot_thread` then starts each one through `IOPMGR::enableCPUCore`. On a multiprocessor neoboot therefore appends `cpus=1` to the command line when it names neither `cpus=` nor `cpumask=`. `ml_parse_cpu_topology` then keeps only the boot CPU (`machine_routines.c:1138, 1181-1186`), and `IODTPlatformExpert::createNubs` registers the other cpu nubs unused. That case is anticipated at `IOPlatformExpert.cpp:1693-1700`. The tree still describes the whole machine. Measured on QEMU `-smp 4` without the cap, the kernel panics with `Error registering IPIs @AppleARMSMP.cpp:138` when it gets to the second CPU. PSCI would fail next: `NeoDarwinPSCI` uses `smc`, and QEMU `virt` has no EL3.
+**The PSCI conduit (P1-06).** The kernel starts every CPU but the boot one with PSCI `CPU_ON`. It reaches PSCI through the conduit the firmware describes, chosen at boot as Linux chooses it (`Platform.psciConduit`):
+- The FADT's `ARM_BOOT_ARCH` says `PSCI_COMPLIANT`: SMC, or HVC with `PSCI_USE_HVC`. QEMU `virt` without EL3 says HVC: its own PSCI emulation answers.
+- It says PSCI is absent, and the CPU implements EL3 (`ID_AA64PFR0_EL1.EL3` ≠ 0): SMC, to that EL3's firmware. QEMU `virt,secure=on` with TF-A is this case. QEMU describes only its own PSCI emulation, which it turns off when firmware owns EL3, although TF-A's BL31 implements PSCI (`qemu-secure.md`).
+- It says HVC, but neoboot runs at EL2: none. neoboot enters the kernel at EL1 and leaves nothing at EL2 to answer an HVC.
+- Otherwise none.
+
+neoboot logs the choice (`neoboot: PSCI conduit: HVC, as the FADT says`). With no conduit on a multiprocessor it appends `cpus=1` to the command line, unless the line names `cpus=` or `cpumask=`, and says why. `ml_parse_cpu_topology` then keeps only the boot CPU (`machine_routines.c:1138, 1181-1186`), and `IODTPlatformExpert::createNubs` registers the other cpu nubs unused (`IOPlatformExpert.cpp:1693-1700`). The tree still describes the whole machine. A kernel told to start a CPU without a conduit panics and says so (`NeoDarwinPSCI::enableCPUCore`).
+
+**Secondary CPUs.** Every CPU node takes part in the topology whatever its `state` (`machine_routines.c:1160-1240`), and `AppleARMSMP::cpu_boot_thread` starts each one through `IOPMGR::enableCPUCore`, which is `NeoDarwinPSCI`: `CPU_ON` with the node's `reg` as the target MPIDR and the physical address of `LowResetVectorBase` as the entry point (patch 0017). The CPU enters there with the MMU off and finds its `cpu_data` by MPIDR (`start.s`). `state` stays `"waiting"` for them: the kernel only asks which CPU is `"running"`.
+
+Every cpu node names the same SGIs, which are banked: each CPU has its own. `NeoDarwinGICv3` gives a cpu nub's SGIs and PPIs vectors of that CPU's own and enables them in that CPU's redistributor. Before P1-06 the second CPU's registration of SGI 0 panicked (`Error registering IPIs @AppleARMSMP.cpp:138`).
 
 ### `/arm-io`
 
@@ -180,6 +192,7 @@ A tree is DT-ABI v1 when:
 4. **`/chosen`.**
    - `dram-base` and `dram-size` are u64, the size is non-zero and the base is 16 KiB aligned.
    - `random-seed` is at least 64 bytes; `debug-enabled` is a u32; `firmware-version` is a string.
+   - `psci-conduit`, if present, is `"smc"` or `"hvc"`.
    - `acpi-rsdp` is non-zero and lies inside `acpi-tables`, which is (u64,u64).
    - `/chosen/memory-map` exists. Each entry is a non-empty (u64,u64) inside DRAM, `ACPITables` equals `acpi-tables`, and a `RAMDisk` length is a multiple of 16 KiB.
 5. **`/arm-io`.**
@@ -207,15 +220,15 @@ dtdump adds cross-checks against the tables:
 
 ## Tools
 
-- `\NeoDarwin\boot.cfg` containing `dump-acpi` makes neoboot print every table (RSDP, XSDT, each XSDT table, DSDT, FACS) before booting. The format is Linux `acpidump`'s text: a `SIG @ 0x…` line per table and rows of 16 bytes. Capture it from any UEFI board's serial console. `boot/neoboot/testdata/qemu-virt-smp{1,4}.acpidump` were captured this way on QEMU 11.1 `virt,gic-version=3`, `neoverse-n2`, 2 GiB.
+- `\NeoDarwin\boot.cfg` containing `dump-acpi` makes neoboot print every table (RSDP, XSDT, each XSDT table, DSDT, FACS) before booting. The format is Linux `acpidump`'s text: a `SIG @ 0x…` line per table and rows of 16 bytes. Capture it from any UEFI board's serial console. `boot/neoboot/testdata/qemu-virt-smp{1,4}.acpidump` were captured this way on QEMU 11.1 `virt,gic-version=3`, `neoverse-n2`, 2 GiB, and `qemu-virt-secure-smp4.acpidump` on `virt,secure=on` with TF-A (`--machine virt-secure --smp 4`).
 - `timer-group=1` (or `=0`) in `boot.cfg` chooses the timer's group instead of `GICD_CTLR.DS` (see `/arm-io/gic`). neoboot logs the choice: `neoboot: GIC: GICD_CTLR 0x…, DS=…; timer PPI 27 on Group 0 (FIQ)`.
-- `dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--write-dt FILE] ACPIDUMP` prints the tables' facts and the tree, then checks it, and exits 1 on any violation. `--gicd-ctlr` is the value neoboot would read (default 0x40, DS = 1, as on QEMU). `dtdump --dt FILE` checks an existing binary tree. The tests are `//tools/dtdump:all`: three golden trees (one with a DS = 0 distributor), a truncated MADT, and a tree with a dangling `serial-device`.
+- `dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--write-dt FILE] ACPIDUMP` prints the tables' facts and the tree, then checks it, and exits 1 on any violation. `--gicd-ctlr` is the value neoboot would read (default 0x40, DS = 1, as on QEMU). `--el3` says the CPU implements EL3 and `--loader-el` is the EL neoboot runs at (default 1); with the FADT they choose the PSCI conduit. `dtdump --dt FILE` checks an existing binary tree. The tests are `//tools/dtdump:all`: four golden trees (one with a DS = 0 distributor, one from QEMU with TF-A and four CPUs, whose conduit is SMC), a truncated MADT, and a tree with a dangling `serial-device`.
 
 ## Versioning
 
 Adding an optional property is backwards compatible and keeps v1, with a row here. Removing or retyping a property, or changing a node's meaning, makes v2. Planned additions:
 - P1-05 (added): `/arm-io/gic` `timer-ppi` and `timer-group`, from the GTDT and `GICD_CTLR`.
-- P1-06: a PSCI conduit, from FADT `ARM_BOOT_ARCH`, which neoboot already reads and logs. Dropping the `cpus=1` cap also belongs to P1-06.
+- P1-06 (added): `/chosen` `psci-conduit`, from FADT `ARM_BOOT_ARCH` and the CPU's EL3. neoboot caps the kernel at one CPU only when there is no conduit.
 - P1-10 and the Tier 2 kext: `/arm-io/pcie@N`, from MCFG and IORT.
 - P1-11 (CD8180): GICv4 redistributors, whose 256 KiB frames need the kernel's frame stride from the tree.
 - P1-12: a 16550 serial node.

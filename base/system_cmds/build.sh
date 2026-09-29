@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
-# getty and login from system_cmds-1039 (docs/base/libsystem.md): replays
-# system_cmds.xcodeproj's getty and login targets with the project's
-# base.xcconfig (gnu99, GCC_SYMBOLS_PRIVATE_EXTERN, its OTHER_CFLAGS).
+# getty, login and sysctl from system_cmds-1039 (docs/base/libsystem.md):
+# replays system_cmds.xcodeproj's getty, login and sysctl targets with the
+# project's base.xcconfig (gnu99, GCC_SYMBOLS_PRIVATE_EXTERN, its OTHER_CFLAGS).
 #   build.sh OUT SYSTEM_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root)
-# OUT receives usr/libexec/getty, usr/bin/login and getty's launchd job,
+# OUT receives usr/libexec/getty, usr/bin/login, usr/sbin/sysctl (the
+# target's one source, no frameworks; the SMP boot test reads hw.ncpu with
+# it, P1-06) and getty's launchd job,
 # System/Library/LaunchDaemons/com.apple.getty.plist (getty std.9600 on the
 # console). generate_plist.sh adds Disabled = true on macOS, where
 # loginwindow owns the console; NeoDarwin installs it as the embedded
@@ -36,5 +38,6 @@ write_rsp "$B/cflags" "${TARGET_FLAGS[@]}" -Os -std=gnu99 -fno-common -fvisibili
 
 tool "$B" "$ROOT" "$OUT/usr/libexec/getty" "$B/cflags" getty/chat.c getty/init.c getty/main.c getty/subr.c
 tool "$B" "$ROOT" "$OUT/usr/bin/login" "$B/cflags" login/login.c login/login_audit.c
+tool "$B" "$ROOT" "$OUT/usr/sbin/sysctl" "$B/cflags" sysctl/sysctl.c
 mkdir -p "$OUT/System/Library/LaunchDaemons"
 install -m 0644 getty/com.apple.getty.plist "$OUT/System/Library/LaunchDaemons/"

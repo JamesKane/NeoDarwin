@@ -96,6 +96,7 @@ SBSA_PATCHES = [
     "patches/0014-sleh-ack-group0-on-generic-gicv3.patch",
     "patches/0015-libkern-build-hfs.patch",
     "patches/0016-gicv3-timer-on-group1.patch",
+    "patches/0017-generic-arm64-smp-psci-cpu-on.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -147,7 +148,9 @@ sh_test(
 )
 
 # Apple-ISA audit: no implementation-defined system registers, HVC, AMX or GXF
-# in the SBSA kernel. The baseline is empty and must stay empty.
+# in the SBSA kernel. The baseline holds one entry, NeoDarwinPSCI's HVC
+# conduit, which runs only when the firmware puts PSCI behind a hypervisor
+# (P1-06); nothing may be added to it.
 sh_test(
     name = "sbsa_isa_audit",
     size = "small",
@@ -443,6 +446,89 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//tests/qemu/pid1",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P1-06's exit: four CPUs on QEMU virt, all online. neoboot takes the PSCI
+# conduit from the FADT (HVC: QEMU's own PSCI, with no EL3) and no longer
+# caps the kernel at one CPU; NeoDarwinPSCI starts the secondaries with
+# CPU_ON, NeoDarwinGICv3 gives each CPU its own SGI vectors, and the
+# platform expert times an IPI round trip to every other CPU. From root's
+# shell, sysctl (system_cmds) reads hw.ncpu and hw.activecpu: both must be
+# the MADT's four.
+sh_test(
+    name = "sbsa_smp_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--smp 4",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'r=($$(/usr/sbin/sysctl -n hw.ncpu hw.activecpu)) && echo ncpu-$${r[1]}-$${r[2]}\\n'",
+        "$(rootpath //boot/neoboot)",
+        "180",
+        "'neoboot: ACPI: 4 CPUs enabled of 4 GICCs; boot CPU MPIDR 0x0'",
+        "'neoboot: PSCI conduit: HVC, as the FADT says'",
+        "'NeoDarwinPSCI: PSCI 1.1 over HVC'",
+        "'NeoDarwinPlatformExpert: 4 of 4 CPUs online'",
+        "'NeoDarwinPlatformExpert: IPI round trip from cpu 0 to cpu 1: median '",
+        "'NeoDarwinPlatformExpert: IPI round trip from cpu 0 to cpu 2: median '",
+        "'NeoDarwinPlatformExpert: IPI round trip from cpu 0 to cpu 3: median '",
+        "'hfs: mounted NeoDarwin on device'",
+        "'ncpu-4-4'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:session_root",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# The same on QEMU virt with TF-A at EL3 (docs/kernel/qemu-secure.md): the
+# FADT reports no PSCI, since QEMU turns its own off when firmware owns EL3,
+# but the CPU implements EL3, so neoboot chooses SMC and TF-A's BL31 starts
+# the CPUs. The GIC has two security states (DS == 0): the timer is on
+# Group 1, and TF-A resets each redistributor's SGIs and PPIs as it powers
+# the CPU on, so NeoDarwinGICv3 programs them again on the CPU itself.
+sh_test(
+    name = "sbsa_secure_smp_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--machine virt-secure",
+        "--firmware $(rootpath //third_party/qemu_firmware:virt_secure_flash)",
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--smp 4",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'r=($$(/usr/sbin/sysctl -n hw.ncpu hw.activecpu)) && echo ncpu-$${r[1]}-$${r[2]}\\n'",
+        "--send-after 'root@localhost ~ # ' 'zmodload zsh/datetime && t=$$EPOCHREALTIME && sleep 1 && echo slept-$$(( EPOCHREALTIME - t >= 1 ))\\n'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'NOTICE:  BL31: v2.15.0(release)'",
+        "'neoboot: ACPI: timer PPI 27 level, UART PL011 at 0x9000000, PSCI absent'",
+        "'neoboot: PSCI conduit: SMC: the FADT reports none, but the CPU implements EL3'",
+        "'NeoDarwinPSCI: PSCI 1.1 over SMC'",
+        "'NeoDarwinGICv3: timer PPI 27 on Group 1 (IRQ); '",
+        "'NeoDarwinPlatformExpert: 4 of 4 CPUs online'",
+        "'NeoDarwinPlatformExpert: IPI round trip from cpu 0 to cpu 3: median '",
+        "'ncpu-4-4'",
+        "'slept-1'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:session_root",
+        "//third_party/qemu_firmware:virt_secure_flash",
     ],
     tags = ["manual", "kernel", "qemu"],
 )

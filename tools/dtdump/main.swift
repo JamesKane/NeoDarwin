@@ -21,6 +21,10 @@
 //     --gicd-ctlr HEX    the GICD_CTLR value neoboot reads, which chooses the
 //                        timer's group (default 0x40: DS=1, as QEMU virt without EL3)
 //     --timer-group N    force /arm-io/gic timer-group, as boot.cfg's timer-group=N
+//     --el3              the CPU implements EL3 (ID_AA64PFR0_EL1.EL3): with a FADT
+//                        that reports no PSCI, the PSCI conduit is then SMC
+//     --loader-el N      the EL neoboot runs at, 1 or 2 (default 1): at EL2 a FADT's
+//                        HVC conduit is refused
 //     --write-dt FILE    also write the binary tree
 // Exits 1 on an ACPI error or a DT-ABI violation, 2 on a usage error.
 
@@ -53,7 +57,7 @@ struct PrintReport: DTReport {
 
 // MARK: arguments
 
-let usage = "usage: dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--write-dt FILE] ACPIDUMP | dtdump --dt TREE"
+let usage = "usage: dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--write-dt FILE] ACPIDUMP | dtdump --dt TREE"
 var args = Array(CommandLine.arguments.dropFirst())
 var input: String?
 var treeInput: String?
@@ -67,6 +71,8 @@ var acpiBase: UInt64?
 var ramdisk: (UInt64, UInt64) = (0, 0)
 var gicdCTLR: UInt32 = Platform.gicdCTLRDS
 var forcedTimerGroup: UInt32?
+var el3 = false
+var loaderEL: UInt64 = 1
 
 func number(_ s: String) -> UInt64 {
     let t = s.hasPrefix("0x") ? String(s.dropFirst(2)) : s
@@ -96,6 +102,10 @@ while !args.isEmpty {
         let g = number(value())
         guard g <= 1 else { fail(usage, code: 2) }
         forcedTimerGroup = UInt32(g)
+    case "--el3": el3 = true
+    case "--loader-el":
+        loaderEL = number(value())
+        guard loaderEL == 1 || loaderEL == 2 else { fail(usage, code: 2) }
     case "--write-dt": writeTree = value()
     case "--dt": treeInput = value()
     default:
@@ -215,6 +225,8 @@ print("acpi: SPCR: interface type \(hex(UInt64(facts.uartType))) at \(hex(facts.
 let timerGroup = Platform.timerGroup(gicdCTLR: gicdCTLR, forced: forcedTimerGroup)
 print("gic: GICD_CTLR \(hex(UInt64(gicdCTLR))) (DS=\(gicdCTLR & Platform.gicdCTLRDS != 0 ? 1 : 0)): timer on Group \(timerGroup)"
       + (forcedTimerGroup != nil ? ", forced" : ""))
+let psci = Platform.psciConduit(armBootFlags: facts.armBootFlags, el3: el3, loaderEL: loaderEL)
+print("psci: conduit \(psci.why)")
 
 // The copy of the tables the kernel gets, and a check that it reads the same.
 let base = acpiBase ?? dramBase + 0x200_0000
@@ -241,7 +253,7 @@ treeBuffer.initializeMemory(as: UInt8.self, repeating: 0, count: capacity)
 var writer = DeviceTreeWriter(base: treeBuffer, capacity: capacity)
 let loader = Platform.Facts(dramBase: dramBase, dramSize: dramSize, timebase: timebase, bootMPIDR: boot, seed: seed,
                             ramdiskBase: ramdisk.0, ramdiskSize: ramdisk.1, acpiBase: base, acpiLength: UInt64(copyLength),
-                            timerGroup: timerGroup)
+                            timerGroup: timerGroup, psciConduit: psci.conduit)
 guard let treeLength = Platform.deviceTree(into: &writer, loader, facts, layout) else { fail("the tree does not fit in \(capacity) bytes") }
 
 // Checks that need the ACPI facts as well as the tree.

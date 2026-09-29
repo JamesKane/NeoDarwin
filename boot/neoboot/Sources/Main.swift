@@ -27,10 +27,10 @@ let ramdiskRoot: StaticString = " rd=md0"
 /// -noprogress until the loader passes a GOP framebuffer: with no display,
 /// PE_init_iokit()'s progress-bar centring loop never terminates.
 let defaultCommandLine: StaticString = "debug=0x14e serial=3 -v -noprogress"
-/// Appended on a multiprocessor when the command line doesn't name a CPU
-/// count: the tree lists every CPU, but secondaries come up with P1-06
-/// (NeoDarwinPSCI's conduit). ml_parse_cpu_topology then takes the boot CPU
-/// alone, and IOKit leaves the other cpu nubs unused (IOPlatformExpert.cpp).
+/// Appended on a multiprocessor without a PSCI conduit when the command line
+/// doesn't name a CPU count: the tree lists every CPU, but NeoDarwinPSCI
+/// can't start the secondaries. ml_parse_cpu_topology then takes the boot
+/// CPU alone, and IOKit leaves the other cpu nubs unused (IOPlatformExpert.cpp).
 let uniprocessorCap: StaticString = " cpus=1"
 /// A loader option in boot.cfg: list every ACPI table on the console in
 /// acpidump's format before booting (for dtdump fixtures from any board).
@@ -119,6 +119,20 @@ func chooseTimerGroup(_ a: ACPIFacts, _ config: UnsafeMutableRawPointer, _ confi
     return group
 }
 
+/// The PSCI conduit for NeoDarwinPSCI (/chosen psci-conduit), from the FADT
+/// and the CPU (Platform.psciConduit), reported on the console. Without one
+/// a multiprocessor boots its boot CPU alone.
+func choosePSCIConduit(_ a: ACPIFacts, _ l: Platform.Layout) -> Platform.PSCIConduit {
+    let choice = Platform.psciConduit(armBootFlags: a.armBootFlags, el3: nd_el3_implemented() != 0, loaderEL: nd_current_el())
+    put("neoboot: PSCI conduit: ")
+    put(choice.why)
+    put("\n")
+    if choice.conduit == .absent && l.cpuNodes > 1 {
+        put("neoboot: PSCI: the kernel cannot start the other CPUs; booting one (cpus=1) unless boot.cfg names cpus= or cpumask=\n")
+    }
+    return choice.conduit
+}
+
 /// \NeoDarwin\boot.cfg with whitespace runs made single spaces, into `line`
 /// (BootArgs.commandLineLength bytes); returns its length, 0 if absent.
 func readBootConfig(_ root: UnsafeMutablePointer<EFI_FILE_PROTOCOL>, into line: UnsafeMutableRawPointer) -> Int {
@@ -163,6 +177,7 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     }
     reportACPI(acpi, layout)
     let timerGroup = chooseTimerGroup(acpi, config, configLength)
+    let psci = choosePSCIConduit(acpi, layout)
 
     guard let file = EFIFile(root: root, path: kernelcachePath) else { return fail("no \\NeoDarwin\\kernelcache on the boot volume") }
     let fileSize = file.size
@@ -249,7 +264,7 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     let facts = Platform.Facts(dramBase: base, dramSize: memSize, timebase: nd_cntfrq(), bootMPIDR: nd_mpidr(), seed: nd_cntpct(),
                                ramdiskBase: ramdiskSize == 0 ? 0 : base + ramdiskOffset, ramdiskSize: ramdiskSize,
                                utcSeconds: utc, utcCounter: utcCounter, acpiBase: acpiBase, acpiLength: UInt64(acpiLength),
-                               timerGroup: timerGroup)
+                               timerGroup: timerGroup, psciConduit: psci)
     guard let treeLength = Platform.deviceTree(into: &tree, facts, acpi, layout) else { return fail("the device tree does not fit") }
     var violations = ConsoleReport()
     guard DTCheck.check(image + Int(dtOffset), length: treeLength, &violations) == 0 else {
@@ -270,7 +285,7 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
         ramdiskRoot.withUTF8Buffer { (lineBuffer + lineLength).copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
         lineLength += ramdiskRoot.utf8CodeUnitCount
     }
-    if layout.cpuNodes > 1 && !mentions(lineBuffer, lineLength, "cpus=") && !mentions(lineBuffer, lineLength, "cpumask=") {
+    if layout.cpuNodes > 1 && psci == .absent && !mentions(lineBuffer, lineLength, "cpus=") && !mentions(lineBuffer, lineLength, "cpumask=") {
         uniprocessorCap.withUTF8Buffer { (lineBuffer + lineLength).copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
         lineLength += uniprocessorCap.utf8CodeUnitCount
     }

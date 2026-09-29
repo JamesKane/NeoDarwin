@@ -71,6 +71,29 @@ sh_test(
     ],
 )
 
+# QEMU virt with TF-A at EL3 and four CPUs (--machine virt-secure,
+# docs/kernel/qemu-secure.md): the FADT reports no PSCI, since QEMU turns its
+# own off, but the CPU implements EL3, so the PSCI conduit is SMC (P1-06).
+sh_test(
+    name = "qemu_virt_secure_smp4_test",
+    size = "small",
+    srcs = ["dtdump_test.sh"],
+    args = [
+        "ok",
+        "$(rootpath :dtdump)",
+        "$(rootpath //boot/neoboot:testdata/qemu-virt-secure-smp4.acpidump)",
+        "$(rootpath testdata/qemu-virt-secure-smp4.txt)",
+        "--gicd-ctlr",
+        "0x12",
+        "--el3",
+    ],
+    data = [
+        ":dtdump",
+        "testdata/qemu-virt-secure-smp4.txt",
+        "//boot/neoboot:testdata/qemu-virt-secure-smp4.acpidump",
+    ],
+)
+
 # Negative: a MADT cut short in the dump must be refused, not half-read.
 sh_test(
     name = "truncated_madt_test",
