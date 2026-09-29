@@ -13,7 +13,7 @@ The UEFI loader (`BOOTAA64.EFI`), in Embedded Swift (language policy T3). Design
 - takes the largest hole-free run of RAM the kernel may own, minus the framebuffer if it lies there, and places the flat collection at the lowest free address congruent to its link address modulo 32 MiB (slide 0);
 - writes the Apple-format device tree after it, synthesised from ACPI to DT-ABI v1 (`docs/kernel/dt-abi.md`), and checks it against the ABI;
 - copies the ACPI tables next to the tree, with their pointers rewritten, and publishes them as `/chosen/memory-map/ACPITables`;
-- places the ramdisk, publishes it as `/chosen/memory-map/RAMDisk`, and roots on it with `rd=md0` unless the command line names a root;
+- places the ramdisk, publishes it as `/chosen/memory-map/RAMDisk`, and roots on it with `rd=md0` unless the command line names a root. Without a ramdisk it reads the GPT of the disk it was loaded from and passes the unique GUID of its first HFS+ partition as `/chosen boot-uuid`; `boot-uuid=<UUID>` in `boot.cfg` names the root instead (P1-10, `docs/kernel/storage.md`);
 - appends `cpus=1` on a multiprocessor until SMP works (P1-06), then writes `boot_args`;
 - cleans the caches, exits boot services, and enters `_start` at EL1 with the MMU off, dropping from EL2 first if the firmware ran there.
 
@@ -34,6 +34,7 @@ It applies no fixups; the kernel does. Design: `docs/kernel/arm64-sbsa-bringup.m
 | `bazel test //boot/neoboot:neoboot_qemu_test` | boots it on QEMU `virt` with EDK2 and an ESP with no kernel, and checks what it read from ACPI and that it reports the missing kernel; needs `brew install qemu`. `neoboot_smp4_qemu_test` does the same with four CPUs, `neoboot_dump_acpi_qemu_test` checks `dump-acpi`, and `neoboot_timer_group1_qemu_test` checks `timer-group=1`, `neoboot_gop_qemu_test` finds QEMU's `ramfb` framebuffer, and `neoboot_uart_off_qemu_test` and `neoboot_uart_off_no_gop_qemu_test` check `uart=off` with and without one |
 | `bazel test //tools/dtdump:all` | the same parser and synthesis on the host, against the captured tables |
 | `bazel test //kernel:sbsa_boot_test` | boots the real kernel collection with the PID 1 ramdisk to userland (kernel CI job) |
+| `bazel test //kernel:sbsa_disk_boot_test` | boots `//images:session_disk`, a GPT disk image with neoboot on its ESP, from virtio-blk: the root by boot-uuid, twice |
 | `bazel test //kernel:sbsa_fb_console_boot_test` | the getty session with `ramfb`: checks the shell's output on the screen, read back from a screendump |
 | `bazel test //kernel:sbsa_fb_only_boot_test` | the same with `uart=off`: the framebuffer is the kernel's only console, and getty's prompt must appear on the screen |
 

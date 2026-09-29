@@ -343,7 +343,7 @@ base_library(
 base_library(
     name = "file_commands",
     data = glob(["file_cmds/**"]) + ["commands.sh"],
-    deps = [":root", ":libutil_dylib"],
+    deps = [":root", ":libutil_dylib", ":libxo_dylib"],
     script = "file_cmds/build.sh",
     srcs = "@apple_file_cmds//:all",
     sysroot = ":sysroot",
@@ -501,5 +501,6 @@ lang_audit_test(
         "libinfo/include/**/*.h",
         "libm/src/*.c",
         "libm/compat/**/*.h",
+        "file_cmds/compat/*.h",
     ]),
 )

@@ -1,0 +1,44 @@
+From: NeoDarwin
+Subject: [PATCH] bsd_init: no sealed-root authentication on SBSA
+
+An Apple silicon macOS kernel rooted on anything but a ramdisk requires
+the root to be a sealed system volume: bsd_init() asks the root file
+system to authenticate itself (FSIOC_KERNEL_ROOTAUTH, which APFS answers
+for a signed snapshot) and panics otherwise ("rootvp not authenticated
+after mounting"). NeoDarwin's disk root (P1-10, docs/kernel/storage.md) is
+an ordinary journaled HFS+ volume, which has no seal and doesn't implement
+the ioctl. For GENERIC_ARM64_PLATFORM the check is skipped; a sealed root
+of NeoDarwin's own is later work (the signed system image, Phase 3), and
+other board configs keep Apple's rule. The ramdisk roots never reached the
+check (bsd_rooted_ramdisk()). Found at the first boot from virtio-blk.
+
+Rebase-risk: low (one condition and an include).
+---
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -383,6 +383,10 @@
+ 	strlcpy(p->p_comm, s, sizeof(p->p_comm));
+ 	strlcpy(p->p_name, s, sizeof(p->p_name));
+ }
++
++#if defined(__arm64__)
++#include <pexpert/arm64/board_config.h>
++#endif
+ 
+ /* To allow these values to be patched, they're globals here */
+ #include <machine/vmparam.h>
+@@ -938,7 +942,13 @@
+ 	if (!bsd_rooted_ramdisk()) {
+ 		boolean_t require_rootauth = FALSE;
+ 
+-#if XNU_TARGET_OS_OSX && defined(__arm64__)
++#if XNU_TARGET_OS_OSX && defined(__arm64__) && GENERIC_ARM64_PLATFORM
++		/*
++		 * NeoDarwin: the root is an ordinary writable HFS+ volume, not a
++		 * sealed system volume snapshot; nothing can authenticate it yet.
++		 */
++		require_rootauth = FALSE;
++#elif XNU_TARGET_OS_OSX && defined(__arm64__)
+ #if CONFIG_IMAGEBOOT
+ 		/* Apple Silicon MacOS */
+ 		require_rootauth = !imageboot_desired();

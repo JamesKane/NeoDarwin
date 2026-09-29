@@ -103,6 +103,31 @@ typedef struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
 } EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
 enum { EFI_FILE_MODE_READ = 1 };
 
+// EFI_DEVICE_PATH_PROTOCOL (UEFI 2.10 §10.2): where a handle's device is,
+// as nodes of a type, a subtype and a 16-bit little-endian length (the
+// node's, header included), ended by a node of type 0x7f. A partition's path
+// is its disk's with a Media/Hard Drive node (4, 1) added.
+typedef struct {
+	uint8_t Type, SubType;
+	uint8_t Length[2];
+} EFI_DEVICE_PATH_PROTOCOL;
+
+// EFI_BLOCK_IO_PROTOCOL (UEFI 2.10 §13.9): reading the boot disk's GPT.
+typedef struct {
+	uint32_t MediaId;
+	uint8_t RemovableMedia, MediaPresent, LogicalPartition, ReadOnly, WriteCaching;
+	uint32_t BlockSize, IoAlign;
+	uint64_t LastBlock;
+} EFI_BLOCK_IO_MEDIA;
+struct EFI_BLOCK_IO_PROTOCOL;
+typedef struct EFI_BLOCK_IO_PROTOCOL {
+	uint64_t Revision;
+	EFI_BLOCK_IO_MEDIA *Media;
+	void *Reset;
+	EFI_STATUS (*ReadBlocks)(struct EFI_BLOCK_IO_PROTOCOL *This, uint32_t MediaId, uint64_t Lba, uint64_t BufferSize,
+	    void *Buffer);
+} EFI_BLOCK_IO_PROTOCOL;
+
 // EFI_GRAPHICS_OUTPUT_PROTOCOL (UEFI 2.10 §12.9): the firmware's linear
 // framebuffer, which neoboot hands the kernel in boot_args.Video.
 enum {  // EFI_GRAPHICS_PIXEL_FORMAT

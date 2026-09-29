@@ -180,10 +180,10 @@ epics:
     title: "virtio-blk and NVMe kexts; root by boot-uuid from disk"
     phase: 1
     owner: storage
-    status: todo
+    status: doing
     depends: [P1-09]
     exit: "boot from NVMe on sbsa-ref"
-    doc: docs/architecture/drivers.md
+    doc: docs/kernel/storage.md
   - id: P1-11
     title: "Radxa Dragon Q8B (Qualcomm SC8280XP) hardware-in-the-loop bring-up"
     phase: 1

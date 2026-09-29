@@ -8,6 +8,10 @@ Phase 1). Used for the HFS+ root of P1-08a onward.
 def _impl(ctx):
     out = ctx.actions.declare_file(ctx.label.name + ".hfs")
     args = [out.path, ctx.attr.volume_name]
+    if ctx.attr.volume_size:
+        args += ["--size", ctx.attr.volume_size]
+    if ctx.attr.journaled:
+        args.append("--journaled")
     for d in ctx.attr.dirs:
         args += ["--dir", d]
     inputs = []
@@ -47,6 +51,8 @@ hfs_ramdisk = rule(
         "dirs": attr.string_list(doc = "Empty directories to create, e.g. mount points such as dev."),
         "modes": attr.string_dict(doc = "Path -> octal mode; files default to 0755."),
         "volume_name": attr.string(default = "NeoDarwin"),
+        "volume_size": attr.string(doc = "The volume's size (hdiutil's syntax, e.g. 256m); default: just big enough for its files."),
+        "journaled": attr.bool(doc = "Journaled HFS+, for a writable root on a disk (rules/disk.bzl)."),
         "_script": attr.label(default = "//tools/ramdisk:mkhfs.sh", allow_single_file = True),
     },
 )

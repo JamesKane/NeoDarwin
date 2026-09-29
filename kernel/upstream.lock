@@ -7,4 +7,6 @@ libpthread           libpthread-539                sha256:a9786dd16427812da39bcb
 hfs                  hfs-704.0.3.0.2               sha256:95e2508b9f38091f505111fd2154c97c8b1b13a8f01f0b61a1353b0fcfb80958
 acpica               20260408                      sha256:ddc5d3e0f54030e2348484fff681861a161efb4e388e20631209574e7884ad39
 IOPCIFamily          IOPCIFamily-726.0.5           sha256:671e3692756f337dfa365834def7aaf8855a8db4433b22c22ddb103f141ab6d5
+IOStorageFamily      IOStorageFamily-331           sha256:3b0bfb7a9b0170fb8f8cf4018813eadaa9be4491b3a79e7ac346ee4736fd646d
+AppleFileSystemDriver AppleFileSystemDriver-31     sha256:b5d95d83194b76f197ad8f3dd8768e74adf17b84e02b7cdd55a63a484fd3e0ee
 darwin_version       25.0.0

@@ -51,6 +51,7 @@ enum Platform {
         var acpiLength: UInt64 = 0
         var timerGroup: UInt32 = 0   // /arm-io/gic timer-group (Platform.timerGroup)
         var psciConduit = PSCIConduit.absent  // /chosen psci-conduit (Platform.psciConduit)
+        var bootUUID: UUID16? = nil  // /chosen boot-uuid: the root's GPT partition GUID; none with a ramdisk
     }
 
     /// How the kernel reaches PSCI, /chosen psci-conduit: an SMC to EL3
@@ -205,6 +206,9 @@ enum Platform {
         case .smc: w.property("psci-conduit", string: "smc")
         case .hvc: w.property("psci-conduit", string: "hvc")
         case .absent: break
+        }
+        if let uuid = f.bootUUID {  // IOKitBSDInit.cpp IOFindBSDRoot: the root by UUID (AppleFileSystemDriver)
+            w.property("boot-uuid", length: GPT.textLength + 1) { v in GPT.writeText(uuid, into: v) }
         }
         w.property("AAPL,phandle", u32: chosenPhandle)
         w.begin()  // /chosen/memory-map

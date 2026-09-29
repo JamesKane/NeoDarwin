@@ -1,3 +1,4 @@
+load("//rules:disk.bzl", "gpt_disk_image")
 load("//rules:ramdisk.bzl", "hfs_ramdisk")
 
 package(default_visibility = ["//visibility:public"])
@@ -71,4 +72,51 @@ hfs_ramdisk(
     links = _SYSTEM_LINKS,
     tree_modes = _SYSTEM_MODES,
     trees = ["//base:system_root"],
+)
+
+# P1-10 (docs/kernel/storage.md): the session system on a disk instead of a
+# ramdisk. The same files as session_root in a journaled 192 MiB volume
+# (a writable root must be journaled: HFS won't mount a dirty volume
+# read-write without a journal), and a GPT disk image around it: partition 1
+# an EFI System Partition with neoboot and the kernel collection (no
+# ramdisk), partition 2 this volume. neoboot passes partition 2's unique
+# GUID as /chosen boot-uuid; the kernel roots on /dev/disk0s2. Booted from
+# virtio-blk by //kernel:sbsa_disk_boot_test. Manual: 230 MiB of image,
+# built when a disk test runs.
+hfs_ramdisk(
+    name = "session_root_volume",
+    dirs = _SYSTEM_DIRS,
+    files = {"//base/launchctl": "bin/launchctl"},
+    journaled = True,
+    links = _SYSTEM_LINKS,
+    volume_size = "192m",
+    tags = ["manual"],
+    tree_modes = _SYSTEM_MODES,
+    trees = [
+        "//base:system_root",
+        "//base:launchd_daemon",
+    ],
+)
+
+gpt_disk_image(
+    name = "session_disk",
+    esp = {
+        "//boot/neoboot": "EFI/BOOT/BOOTAA64.EFI",
+        "//kernel:sbsa_kc": "NeoDarwin/kernelcache",
+    },
+    root = ":session_root_volume",
+    tags = ["manual"],
+)
+
+# The same disk with boot.cfg nd_pci_msi=0 on its ESP: the disk runs on INTx
+# (//kernel:sbsa_disk_intx_boot_test).
+gpt_disk_image(
+    name = "session_disk_intx",
+    esp = {
+        "//boot/neoboot": "EFI/BOOT/BOOTAA64.EFI",
+        "//boot/neoboot:testdata/pci-msi-off.cfg": "NeoDarwin/boot.cfg",
+        "//kernel:sbsa_kc": "NeoDarwin/kernelcache",
+    },
+    root = ":session_root_volume",
+    tags = ["manual"],
 )

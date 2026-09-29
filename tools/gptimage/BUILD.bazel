@@ -1,0 +1,16 @@
+load("//rules:swift.bzl", "nd_swift_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# gptimage: a raw GPT disk image around partition images, with name-based
+# GUIDs (docs/kernel/storage.md). It writes GPTs with neoboot's own GPT
+# code, compiled for the host as dtdump compiles the device-tree code.
+nd_swift_binary(
+    name = "gptimage",
+    srcs = [
+        "main.swift",
+        "//boot/neoboot:portable_srcs",
+    ],
+)
+
+exports_files(["mkdisk.sh"])

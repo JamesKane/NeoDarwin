@@ -188,6 +188,10 @@ enum DTCheck {
             if chosen.property("psci-conduit") != nil && !chosen.string("psci-conduit", is: "smc") && !chosen.string("psci-conduit", is: "hvc") {
                 r.violation("/chosen psci-conduit is neither \"smc\" nor \"hvc\"")
             }
+            if let uuid = chosen.property("boot-uuid"),
+               uuid.count != GPT.textLength + 1 || uuid[GPT.textLength] != 0 || GPT.parseText(uuid.baseAddress!, GPT.textLength) == nil {
+                r.violation("/chosen boot-uuid is not a UUID string (36 characters and a NUL)")
+            }
             let rsdp = chosen.u64("acpi-rsdp")
             let tables = chosen.property("acpi-tables")
             if rsdp == nil || rsdp == 0 { r.violation("/chosen acpi-rsdp missing or zero") }

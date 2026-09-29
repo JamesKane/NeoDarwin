@@ -78,7 +78,7 @@ Still to check on the kernel: `ps` (`KERN_PROC`, `proc_pidinfo`, `task_read_for_
 | Finding | Resolution |
 |---|---|
 | The kernel mounts the root read-only. PID 1 launchd creates its socket under `/var/tmp/launchd` only when launchctl first asks for it, and `EROFS` there fails silently, so `launch_msg` answered `ENOTCONN` | `launchctl bootstrap` remounts `/` read-write first, as launchctl-842 does with `mount -uw /`. The image has `/private/var/tmp` (1777), as macOS does |
-| The kernel names the root's device `root_device` (`vfs_rootmountalloc`), which no path reaches, and an update mount looks its device path up | launchctl finds the `/dev` block device whose device number is the root's (`/dev/md0`) and passes HFS's mount arguments (`hfs_mount.h`, not in the SDK, declared in `launch_shim.h`) |
+| The kernel names the root's device `root_device` (`vfs_rootmountalloc`), which no path reaches, and an update mount looks its device path up | launchctl finds the `/dev` block device whose device number is the root's (`/dev/md0`, or `/dev/disk0s2` on a disk root since P1-10, `docs/kernel/storage.md`) and passes HFS's mount arguments (`hfs_mount.h`, not in the SDK, declared in `launch_shim.h`) |
 | macOS's `<launch.h>` marks launch_msg deprecated, and it's part of the SDK's Darwin module, so the marking can't be undone for one import | `launch_shim.h` declares the calls as 842's own `launch.h` does |
 | Embedded Swift has no `CommandLine`; String comparison needs the Unicode tables | a `@_cdecl("main")` entry; `rules/darwin_executable.bzl` links the Embedded stdlib's `libswiftUnicodeDataTables.a`, which dead-stripping trims to what's used |
 

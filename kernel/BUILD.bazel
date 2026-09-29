@@ -7,6 +7,10 @@ package(default_visibility = ["//visibility:public"])
 
 DARWIN_VERSION = "25.0.0"  # macOS 26.0 release set; see upstream.lock
 
+# //images:session_disk's root partition GUID, a name-based UUID of the
+# image's label (tools/gptimage): the boot-uuid neoboot passes for it.
+SESSION_DISK_ROOT_UUID = "50E3894E-4559-5613-B313-CDF980E940F0"
+
 filegroup(
     name = "sdk_shims",
     srcs = glob(["sdk/**"]),
@@ -91,7 +95,6 @@ SBSA_PATCHES = [
     "patches/0009-iokit-build-neodarwin-platform.patch",
     "patches/0010-libkern-build-libpthread-kern.patch",
     "patches/0011-mockfs-sbsa-root.patch",
-    "patches/0012-iokit-publish-hidden-media-without-iomedia.patch",
     "patches/0013-mach-loader-static-pid1-on-sbsa.patch",
     "patches/0014-sleh-ack-group0-on-generic-gicv3.patch",
     "patches/0015-libkern-build-hfs.patch",
@@ -104,6 +107,10 @@ SBSA_PATCHES = [
     "patches/0022-iokit-build-iopcifamily-and-pci-host-bridge.patch",
     "patches/0023-iopcifamily-arm64-fixes-and-64-bit-bars.patch",
     "patches/0024-iokit-build-gic-its-and-pci-msi.patch",
+    "patches/0025-iokit-build-iostoragefamily-and-applefilesystemdriver.patch",
+    "patches/0026-iostoragefamily-block-storage-driver-without-driverkit.patch",
+    "patches/0027-iokit-build-virtio-blk.patch",
+    "patches/0028-bsd-init-no-sealed-root-on-sbsa.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -115,6 +122,10 @@ SBSA_OVERLAYS = {
     "//kernel/neodarwin/hfs:kernel_srcs": "libkern/ndhfs",
     "//kernel/neodarwin/pci:kernel_srcs": "iokit/ndpci",
     "@apple_iopcifamily//:kernel_srcs": "iokit/ndpci/IOPCIFamily",
+    "//kernel/neodarwin/storage:kernel_srcs": "iokit/ndstorage",
+    "@apple_iostoragefamily//:kernel_srcs": "iokit/ndstorage/IOStorageFamily",
+    "@apple_iostoragefamily//:headers": "iokit/ndstorage/include/IOKit/storage",
+    "@apple_filesystemdriver//:kernel_srcs": "iokit/ndstorage/AppleFileSystemDriver",
     "@apple_hfs//:kernel_srcs": "libkern/ndhfs/hfs",
     "//kernel/neodarwin/platform:kernel_srcs": "iokit/ndplatform",
     "//kernel/neodarwin/pthread:kernel_srcs": "libkern/ndpthread",
@@ -340,6 +351,10 @@ PCI_LINES = [
     "'NeoDarwinGICv3: SPI 37: shared for '",
     "'NeoDarwinPCIEduTest: 02:00.0: edu 0x010000ed: INTA on GSIV 37 (level) reached its handler in '",
     "'NeoDarwinPCIHostBridge: \\_SB.PCI0: segment 0: 10 devices (2 PCI-to-PCI bridges) on buses 0-2, 9 with INTx, 9 capable of MSI or MSI-X'",
+    # P1-10 (docs/kernel/storage.md): NeoDarwinVirtioBlock drives both blank
+    # disks, the transitional one through its modern interface.
+    "'NeoDarwinVirtioBlock: 00:02.0: virtio-blk 1af4:1001: 32768 512-byte blocks (16 MiB); features 0x100000a44; queue 256, 8 slots of 30 segments; '",
+    "'NeoDarwinVirtioBlock: 01:00.0: virtio-blk 1af4:1042: 32768 512-byte blocks (16 MiB); '",
 ]
 
 # P1-09 checkpoint 3 (docs/kernel/gic-its.md): MSI and MSI-X through the
@@ -360,6 +375,8 @@ MSI_LINES = [
     "'NeoDarwinPCINVMeTest: 00:03.0: NVMe 1.4: MSI-X 2 of 65 vectors on LPIs '",
     "'(DeviceID 0x18): vector 0 (admin) in '",
     "' us, vector 1 (I/O queue 1) in '",
+    # The virtio-blk disks' configuration and queue vectors.
+    "'8 slots of 30 segments; MSI-X 2 vectors (LPIs '",
 ]
 
 # The ITS as QEMU virt has it: a two-level device table (the flat one would
@@ -523,6 +540,7 @@ sh_test(
         "'NeoDarwinPCIEduTest: 00:04.0: edu 0x010000ed: no MSI (INTx only)'",
         "'NeoDarwinPCIEduTest: 02:00.0: edu 0x010000ed: no MSI (INTx only)'",
         "'NeoDarwinPCINVMeTest: 00:03.0: no two MSI-X vectors'",
+        "'8 slots of 30 segments; INTx; write cache on'",
     ] + PCI_LINES,
     data = [
         ":sbsa_kc",
@@ -530,6 +548,115 @@ sh_test(
         "//boot/neoboot:testdata/pci-msi-off.cfg",
         "//images:pid1_root",
     ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P1-10 checkpoint 1 (docs/kernel/storage.md): the session system from a
+# disk instead of a ramdisk. QEMU has one drive, //images:session_disk, a
+# GPT image on a modern virtio-blk-pci (1af4:1042); EDK2 boots neoboot from
+# its ESP. With no ramdisk neoboot reads the disk's GPT and passes the HFS+
+# partition's unique GUID as /chosen boot-uuid. NeoDarwinVirtioBlock drives
+# the disk over two MSI-X vectors, IOStorageFamily publishes disk0,
+# disk0s1 and disk0s2, AppleFileSystemDriver finds the IOMedia whose UUID is
+# the boot-uuid, and the kernel roots on /dev/disk0s2. launchctl remounts it
+# read-write; the shell shows df on it, writes a file and syncs. A second
+# boot of the same image reads the file back.
+DISK_BOOT_LINES = [
+    "'neoboot: root: HFS+ partition 2 of the boot disk, boot-uuid " + SESSION_DISK_ROOT_UUID + "'",
+    "'rooting via boot-uuid from /chosen: " + SESSION_DISK_ROOT_UUID + "'",
+    "'NeoDarwinVirtioBlock: 00:02.0: virtio-blk 1af4:1042: '",
+    "'MSI-X 2 vectors (LPIs '",
+    "'AppleFileSystemDriver: publishing boot-uuid-media=disk0s2'",
+    "'BSD root: disk0s2, major'",
+    "'hfs: mounted NeoDarwin on device'",
+]
+
+sh_test(
+    name = "sbsa_disk_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_disk_reboot_test.sh"],
+    args = [
+        "$(rootpath //images:session_disk)",
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'df /\\n'",
+        "--send-after 'root@localhost ~ # ' 'echo persisted-$$((6*7)) > /var/root/disk-test && zmodload -F zsh/files b:sync && sync && echo synced-$$((6*7))\\n'",
+        "-",
+        "180",
+    ] + DISK_BOOT_LINES + [
+        "'/dev/disk0s2 '",
+        "'synced-42'",
+        "--reboot",
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'cat /var/root/disk-test\\n'",
+        "-",
+        "180",
+        "'BSD root: disk0s2, major'",
+        "'persisted-42'",
+    ],
+    data = [
+        "//images:session_disk",
+        "//tools/efi:qemu_efi_test.sh",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# The same disk boot on virt,secure=on with TF-A (DS = 0), as on SBSA
+# boards: one boot, to root's shell and df.
+sh_test(
+    name = "sbsa_secure_disk_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--machine virt-secure",
+        "--firmware $(rootpath //third_party/qemu_firmware:virt_secure_flash)",
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--disk $(rootpath //images:session_disk)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'df /\\n'",
+        "-",
+        "240",
+        "'NOTICE:  BL31: v2.15.0(release)'",
+    ] + DISK_BOOT_LINES + [
+        "'/dev/disk0s2 '",
+    ],
+    data = [
+        "//images:session_disk",
+        "//third_party/qemu_firmware:virt_secure_flash",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# The disk without MSIs (boot.cfg nd_pci_msi=0 on the image's ESP): the
+# root disk's requests complete through INTx, level and shared, which the
+# driver's filter acknowledges by reading the ISR status.
+sh_test(
+    name = "sbsa_disk_intx_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--disk $(rootpath //images:session_disk_intx)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'df /\\n'",
+        "-",
+        "180",
+        "'NeoDarwinPCIMSI: no MSIs: disabled by nd_pci_msi=0; PCI devices use INTx'",
+        "'8 slots of 30 segments; INTx; write cache on'",
+        "'AppleFileSystemDriver: publishing boot-uuid-media=disk0s2'",
+        "'BSD root: disk0s2, major'",
+        "'/dev/disk0s2 '",
+    ],
+    data = ["//images:session_disk_intx"],
     tags = ["manual", "kernel", "qemu"],
 )
 

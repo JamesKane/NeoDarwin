@@ -1,0 +1,53 @@
+From: NeoDarwin
+Subject: [PATCH] iokit: build NeoDarwin's virtio-blk driver
+
+P1-10 checkpoint 1's disk driver: NeoDarwinVirtioBlock
+(kernel/neodarwin/storage, overlaid at iokit/ndstorage), an
+IOBlockStorageDevice for virtio 1.x block devices on PCI, through the
+modern PCI interface, with MSI-X or INTx and DMA that honours the host
+bridge's dma-coherent and dma-address-bits (docs/kernel/storage.md). This
+patch lists it, gives it the storage and PCI search paths, and adds its
+personality: IOPCIMatch 1af4:1042 (modern) and 1af4:1001 (transitional,
+whose modern capabilities it uses).
+
+Rebase-risk: low (appended entries; applies after 0026).
+---
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -67,6 +67,11 @@ const char * gIOKernelConfigTables =
+     "     'IOProbeScore'    = 0:32;"
+     "   },"
+     "   {"
++    "     'IOClass'         = NeoDarwinVirtioBlock;"
++    "     'IOProviderClass' = IOPCIDevice;"
++    "     'IOPCIMatch'      = '0x10421af4 0x10011af4';"
++    "   },"
++    "   {"
+     "     'IOClass'         = IOBlockStorageDriver;"
+     "     'IOProviderClass' = IOBlockStorageDevice;"
+     "     'IOPropertyMatch' = { 'device-type' = 'Generic'; };"
+--- a/iokit/conf/Makefile.template
++++ b/iokit/conf/Makefile.template
+@@ -113,6 +113,12 @@ $(foreach o,$(ND_IOSTORAGE_OBJS),$(eval $(o)_CFLAGS_ADD += -I$(ND_IOSTORAGE)/inc
+ AppleFileSystemDriver.cpo_CFLAGS_ADD += -I$(ND_STORAGE)/include -I$(ND_STORAGE)/compat \
+ 	-I$(SRCROOT)/libkern/ndhfs/hfs -I$(SRCROOT)/libkern/ndpthread/compat -w
+ 
++# NeoDarwin's virtio-blk driver (patch 0027): an IOBlockStorageDevice on an
++# IOPCIDevice, with the storage and PCI headers; IOPCIFamily's classes are
++# marked deprecated for kexts.
++NeoDarwinVirtioBlock.cpo_CFLAGS_ADD += -I$(ND_STORAGE) -I$(ND_STORAGE)/include -I$(ND_PCI) -I$(ND_IOPCI) \
++	-I$(ND_PCI)/compat -I$(SRCROOT)/libkern/ndpthread/compat -Wno-deprecated-declarations
++
+ #
+ # Diagnostic opt-outs.  We need to make this list empty.
+ #
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -217,6 +217,7 @@ iokit/ndstorage/IOStorageFamily/IOApplePartitionScheme.cpp	optional iokitcpp
+ iokit/ndstorage/IOStorageFamily/IOAppleLabelScheme.cpp	optional iokitcpp
+ iokit/ndstorage/IOStorageFamily/IOMediaBSDClient.cpp	optional iokitcpp
+ iokit/ndstorage/AppleFileSystemDriver/AppleFileSystemDriver.cpp	optional iokitcpp
++iokit/ndstorage/NeoDarwinVirtioBlock.cpp	optional iokitcpp
+ 
+ # tightbeamc generated implementation files
+ ./Exclaves/IOService.tightbeam.c		optional iokitcpp config_exclaves

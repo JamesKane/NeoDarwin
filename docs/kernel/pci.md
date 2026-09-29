@@ -170,6 +170,8 @@ Done: `gic-its.md`. The host bridge answers "GetMessagedInterruptController" wit
 
 ## For P1-10 (virtio-blk and NVMe)
 
+Checkpoint 1's virtio-blk driver follows this list (`storage.md`); NVMe is next.
+
 - Match `IOPCIDevice` by `IOPCIMatch` (virtio 0x10011af4 and 0x10421af4; NVMe by `IOPCIClassMatch` 0x01080200). Map BARs with `mapDeviceMemoryWithRegister`; an I/O BAR (transitional virtio) maps as MMIO too.
 - Interrupts: ask for MSI-X vectors with `configureInterrupts(kIOInterruptTypePCIMessagedX, …)` before anything else touches the device's interrupts (`gic-its.md`, "For P1-10"). Without MSIs (`nd_pci_msi=0`, no ITS) source 0 is INTx, level and possibly shared: use an `IOFilterInterruptEventSource` whose filter checks the device's own status.
 - Honour `dma-coherent` and `dma-address-bits` (above).

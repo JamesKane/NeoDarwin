@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
 # DT-ABI v1: the device tree neoboot gives the kernel
 
-**Version 1, P1-04; `timer-ppi` and `timer-group` added in P1-05; `/chosen` `psci-conduit` added in P1-06; v1.1, P1-11: the UART is optional when `boot_args` carries a framebuffer.** This is the contract between the loader (`boot/neoboot`) and the SBSA kernel. neoboot writes it from the machine's ACPI tables and its own facts, in Apple's flattened format (`pexpert/pexpert/device_tree.h`, not FDT). The design is in `arm64-sbsa-bringup.md` §2.2.
+**Version 1, P1-04; `timer-ppi` and `timer-group` added in P1-05; `/chosen` `psci-conduit` added in P1-06; `/chosen` `boot-uuid` added in P1-10; v1.1, P1-11: the UART is optional when `boot_args` carries a framebuffer.** This is the contract between the loader (`boot/neoboot`) and the SBSA kernel. neoboot writes it from the machine's ACPI tables and its own facts, in Apple's flattened format (`pexpert/pexpert/device_tree.h`, not FDT). The design is in `arm64-sbsa-bringup.md` §2.2.
 
 The contract is enforced in three places, all built from the same sources in `boot/neoboot/Sources/Portable/`:
 - `ACPI.swift` reads the tables and refuses ones the kernel can't run on (`ACPI.check`).
@@ -79,6 +79,7 @@ Types: `u32` and `u64` are little-endian. `string` is NUL-terminated. `(u64,u64)
 | `neodarwin,utc-seconds`, `neodarwin,utc-counter` | u64 each. Omitted when the firmware has no clock | UEFI `GetTime()`, `CNTVCT` | `NeoDarwinPlatformExpert.cpp:109-116` (`IORTC`, time of day) |
 | `acpi-rsdp` | u64: physical address of the copied RSDP | ACPI copy | `nd_acpi_osl.c` `AcpiOsGetRootPointer`: ACPICA's root (P1-09, `acpi.md`). Without it the ACPI platform doesn't start |
 | `acpi-tables` | (u64,u64): the ACPI copy | ACPI copy | not read: the copy is inside DRAM, which `nd_acpi_osl.c` maps for ACPICA through the physmap (`dram-base`, `dram-size`), anything else as device memory |
+| `boot-uuid` | string: a UUID, 36 characters and a NUL. Omitted with a ramdisk (unless `boot.cfg` names one) and when the boot disk has no GPT with an HFS+ partition | `boot.cfg` `boot-uuid=`, else the unique GUID of the boot disk's first HFS+ GPT partition (P1-10, `storage.md`) | `IOKitBSDInit.cpp` `IOFindBSDRoot`: published as the `boot-uuid` resource; AppleFileSystemDriver publishes the IOMedia whose `UUID` (or HFS+ volume UUID) it is as `boot-uuid-media`, the root |
 | `psci-conduit` | `"smc"` or `"hvc"`. Omitted when there is no PSCI | FADT `ARM_BOOT_ARCH`, `ID_AA64PFR0_EL1.EL3`, the loader's EL (below) | `NeoDarwinPSCI.cpp` `init`: `CPU_ON`, `CPU_OFF` and `PSCI_VERSION` go through `smc #0` or `hvc #0` |
 | `AAPL,phandle` | u32 2 | constant | phandle map |
 
@@ -234,6 +235,7 @@ A tree is DT-ABI v1 when:
    - `dram-base` and `dram-size` are u64, the size is non-zero and the base is 16 KiB aligned.
    - `random-seed` is at least 64 bytes; `debug-enabled` is a u32; `firmware-version` is a string.
    - `psci-conduit`, if present, is `"smc"` or `"hvc"`.
+   - `boot-uuid`, if present, is a UUID string: 36 characters and a NUL.
    - `acpi-rsdp` is non-zero and lies inside `acpi-tables`, which is (u64,u64).
    - `/chosen/memory-map` exists. Each entry is a non-empty (u64,u64) inside DRAM, `ACPITables` equals `acpi-tables`, and a `RAMDisk` length is a multiple of 16 KiB.
 5. **`/arm-io`.**
@@ -266,7 +268,8 @@ dtdump adds cross-checks against the tables:
 - `\NeoDarwin\boot.cfg` containing `dump-acpi` makes neoboot print every table (RSDP, XSDT, each XSDT table, DSDT, FACS) before booting. The format is Linux `acpidump`'s text: a `SIG @ 0x…` line per table and rows of 16 bytes. Capture it from any UEFI board's serial console. `boot/neoboot/testdata/qemu-virt-smp{1,4}.acpidump` were captured this way on QEMU 11.1 `virt,gic-version=3`, `neoverse-n2`, 2 GiB, and `qemu-virt-secure-smp4.acpidump` on `virt,secure=on` with TF-A (`--machine virt-secure --smp 4`).
 - `timer-group=1` (or `=0`) in `boot.cfg` chooses the timer's group instead of `GICD_CTLR.DS` (see `/arm-io/gic`). neoboot logs the choice: `neoboot: GIC: GICD_CTLR 0x…, DS=…; timer PPI 27 on Group 0 (FIQ)`.
 - `uart=off` in `boot.cfg` makes neoboot treat the SPCR UART as absent (see "The console").
-- `dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--gop WxH] [--uart-off] [--write-dt FILE] ACPIDUMP` prints the tables' facts and the tree, then checks it, and exits 1 on any violation. `--gicd-ctlr` is the value neoboot would read (default 0x40, DS = 1, as on QEMU). `--el3` says the CPU implements EL3 and `--loader-el` is the EL neoboot runs at (default 1); with the FADT they choose the PSCI conduit. `--gop WxH` says neoboot found a framebuffer of that mode, and `--uart-off` models `uart=off`: together they choose the console. `dtdump [--gop WxH] --dt FILE` checks an existing binary tree. The tests are `//tools/dtdump:all`:
+- `boot-uuid=<UUID>` in `boot.cfg` names the root (`/chosen boot-uuid`), even when there is a ramdisk; then no `rd=md0` is added (`storage.md`).
+- `dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--gop WxH] [--uart-off] [--boot-uuid UUID] [--write-dt FILE] ACPIDUMP` prints the tables' facts and the tree, then checks it, and exits 1 on any violation. `--gicd-ctlr` is the value neoboot would read (default 0x40, DS = 1, as on QEMU). `--el3` says the CPU implements EL3 and `--loader-el` is the EL neoboot runs at (default 1); with the FADT they choose the PSCI conduit. `--gop WxH` says neoboot found a framebuffer of that mode, and `--uart-off` models `uart=off`: together they choose the console. `--boot-uuid` adds `/chosen boot-uuid`. `dtdump [--gop WxH] --dt FILE` checks an existing binary tree. The tests are `//tools/dtdump:all`:
   - golden trees: QEMU with one and four CPUs, one with a DS = 0 distributor, QEMU with TF-A and four CPUs (conduit SMC), and 18 `cortex-a76` CPUs;
   - the Radxa Dragon Q8B's own tables (`radxa-dragon-q8b.acpidump`): refused without `--gop`; with `--gop 1920x1080` a golden tree with eight CPUs (MPIDR 0x000–0x700), eight GICR frames at 0x17a60000, PPI 27, SMC and no UART;
   - `qemu-virt-spcr-geni.acpidump`, QEMU's single-CPU tables with the SPCR rewritten as the Q8B's (type 0x13 at 0x884000): refused without `--gop`, a golden tree with it, and its tree rejected by `--dt` without `--gop`;
@@ -277,7 +280,8 @@ dtdump adds cross-checks against the tables:
 Adding an optional property is backwards compatible and keeps v1, with a row here. Removing or retyping a property, or changing a node's meaning, makes v2. Making a property optional in a case where the kernel already copes without it is a minor revision (v1.1). Changes:
 - P1-05 (added): `/arm-io/gic` `timer-ppi` and `timer-group`, from the GTDT and `GICD_CTLR`.
 - P1-06 (added): `/chosen` `psci-conduit`, from FADT `ARM_BOOT_ARCH` and the CPU's EL3. neoboot caps the kernel at one CPU only when there is no conduit.
-- P1-10 and the Tier 2 kext: `/arm-io/pcie@N`, from MCFG and IORT.
+- P1-10 (added): `/chosen` `boot-uuid`, the root by UUID when there is no ramdisk (`storage.md`).
+- The Tier 2 kext: `/arm-io/pcie@N`, from MCFG and IORT.
 - P1-11 (added, v1.1): `/defaults serial-device` and the UART node are optional when `boot_args` carries a framebuffer. The Radxa Dragon Q8B boots this way, its console on HDMI.
 - P1-12 (Radxa Dragon Q8B): SPCR type 0x13, the Qualcomm GENI UART, needs a `/arm-io` UART node the kernel has a driver for. Its GIC is v3 with 128 KiB frames, so no stride change is needed there; GICv4 boards would need the stride in the tree.
 - P1-12: a 16550 serial node.

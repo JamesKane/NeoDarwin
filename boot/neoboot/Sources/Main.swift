@@ -48,6 +48,11 @@ let timerGroup1Option: StaticString = "timer-group=1"
 /// neoboot refuses to boot. For boards whose UART is unreadable, and for
 /// testing that path on QEMU.
 let uartOffOption: StaticString = "uart=off"
+/// A loader option in boot.cfg naming the root by UUID (/chosen boot-uuid):
+/// a GPT partition's unique GUID or an HFS+ volume UUID, as
+/// AppleFileSystemDriver matches them. Without it and without a ramdisk,
+/// neoboot takes the unique GUID of the boot disk's first HFS+ partition.
+let bootUUIDOption: StaticString = "boot-uuid="
 /// GICD_CTLR, at offset 0 of the distributor.
 let gicdCTLROffset: UInt64 = 0
 
@@ -180,6 +185,69 @@ func choosePSCIConduit(_ a: ACPIFacts, _ l: Platform.Layout) -> Platform.PSCICon
     return choice.conduit
 }
 
+/// The value of the space-separated argument `prefix`VALUE, if the line has one.
+func argumentValue(_ line: UnsafeMutableRawPointer, _ length: Int, _ prefix: StaticString) -> UnsafeRawBufferPointer? {
+    let p = prefix.utf8Start, n = prefix.utf8CodeUnitCount
+    var i = 0
+    while i + n <= length {
+        if i == 0 || line.load(fromByteOffset: i - 1, as: UInt8.self) == 32 {
+            var j = 0
+            while j < n && line.load(fromByteOffset: i + j, as: UInt8.self) == p[j] { j += 1 }
+            if j == n {
+                var end = i + n
+                while end < length && line.load(fromByteOffset: end, as: UInt8.self) != 32 { end += 1 }
+                return UnsafeRawBufferPointer(start: line + i + n, count: end - i - n)
+            }
+        }
+        i += 1
+    }
+    return nil
+}
+
+func putUUID(_ u: UUID16) {
+    var text: (UInt64, UInt64, UInt64, UInt64, UInt64) = (0, 0, 0, 0, 0)
+    withUnsafeMutableBytes(of: &text) { raw in
+        GPT.writeText(u, into: raw.baseAddress!)
+        put(bytes: UnsafeRawBufferPointer(start: raw.baseAddress!, count: GPT.textLength))
+    }
+}
+
+/// The root's /chosen boot-uuid: boot.cfg's boot-uuid=, else, without a
+/// ramdisk, the boot disk's first HFS+ partition (BootDisk.swift). Reported
+/// on the console; nil keeps the ramdisk root (rd=md0) or leaves the kernel
+/// to wait for one.
+func chooseBootUUID(_ fw: Firmware, _ config: UnsafeMutableRawPointer, _ configLength: Int, ramdisk: Bool) -> UUID16? {
+    if let value = argumentValue(config, configLength, bootUUIDOption) {
+        guard let uuid = GPT.parseText(value.baseAddress!, value.count) else {
+            put("neoboot: boot.cfg: boot-uuid= is not a UUID; ignored\n")
+            return nil
+        }
+        put("neoboot: root: boot-uuid ")
+        putUUID(uuid)
+        put(" from boot.cfg\n")
+        return uuid
+    }
+    if ramdisk { return nil }
+    switch fw.bootDiskRoot() {
+    case .found(let index, let uuid):
+        put("neoboot: root: HFS+ partition ")
+        putDec(UInt64(index))
+        put(" of the boot disk, boot-uuid ")
+        putUUID(uuid)
+        put("\n")
+        return uuid
+    case .notPartition:
+        put("neoboot: root: no ramdisk, and neoboot was not loaded from a partition; no boot-uuid\n")
+    case .noDisk:
+        put("neoboot: root: no ramdisk, and the boot disk's Block I/O is not found; no boot-uuid\n")
+    case .noGPT:
+        put("neoboot: root: no ramdisk, and the boot disk has no GUID partition table; no boot-uuid\n")
+    case .noHFS:
+        put("neoboot: root: no ramdisk, and the boot disk has no HFS+ partition; no boot-uuid\n")
+    }
+    return nil
+}
+
 /// \NeoDarwin\boot.cfg with whitespace runs made single spaces, into `line`
 /// (BootArgs.commandLineLength bytes); returns its length, 0 if absent.
 func readBootConfig(_ root: UnsafeMutablePointer<EFI_FILE_PROTOCOL>, into line: UnsafeMutableRawPointer) -> Int {
@@ -283,6 +351,7 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     // counts it in 4 KiB pages, so its length is rounded up and zero-filled.
     let ramdisk = EFIFile(root: root, path: ramdiskPath)
     let ramdiskSize = ramdisk.map { roundUp($0.size, kernelPage) } ?? 0
+    let bootUUID = chooseBootUUID(fw, config, configLength, ramdisk: ramdisk != nil)
     let dtOffset = roundUp(kc.vmSize, kernelPage)
     let acpiOffset = dtOffset + treeCapacity
     let acpiCapacity = roundUp(UInt64(acpi.relocatedLength), kernelPage)
@@ -347,7 +416,7 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     let facts = Platform.Facts(dramBase: base, dramSize: memSize, timebase: nd_cntfrq(), bootMPIDR: nd_mpidr(), seed: nd_cntpct(),
                                ramdiskBase: ramdiskSize == 0 ? 0 : base + ramdiskOffset, ramdiskSize: ramdiskSize,
                                utcSeconds: utc, utcCounter: utcCounter, acpiBase: acpiBase, acpiLength: UInt64(acpiLength),
-                               timerGroup: timerGroup, psciConduit: psci)
+                               timerGroup: timerGroup, psciConduit: psci, bootUUID: bootUUID)
     guard let treeLength = Platform.deviceTree(into: &tree, facts, acpi, layout) else { return fail("the device tree does not fit") }
     var violations = ConsoleReport()
     guard DTCheck.check(image + Int(dtOffset), length: treeLength, framebuffer: framebuffer != nil, &violations) == 0 else {
@@ -364,7 +433,7 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
         defaultCommandLine.withUTF8Buffer { lineBuffer.copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
         lineLength = defaultCommandLine.utf8CodeUnitCount
     }
-    if ramdiskSize != 0 && !mentions(lineBuffer, lineLength, "rd=") {
+    if ramdiskSize != 0 && bootUUID == nil && !mentions(lineBuffer, lineLength, "rd=") {
         ramdiskRoot.withUTF8Buffer { (lineBuffer + lineLength).copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
         lineLength += ramdiskRoot.utf8CodeUnitCount
     }

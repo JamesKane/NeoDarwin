@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
 # Boot an EFI application as \EFI\BOOT\BOOTAA64.EFI on QEMU virt with EDK2 (and,
-# with --machine virt-secure, TF-A at EL3) and check the serial log.
+# with --machine virt-secure, TF-A at EL3), or a disk image (--disk), and
+# check the serial log.
 #   qemu_efi_test.sh [OPTIONS] EFI_FILE TIMEOUT_SECONDS EXPECTED_LINE...
 # Options:
 #   --esp PATH=FILE   also place FILE on the ESP at PATH (e.g. NeoDarwin/kernelcache=...)
@@ -35,6 +36,16 @@
 #                     virtio-blk-pci,drive=disk0. IMAGE is a size (a blank
 #                     sparse image of that many K, M or G bytes) or a file,
 #                     which is copied first: the guest writes to the copy
+#   --disk IMAGE      boot a raw disk image instead: it is the only boot
+#                     drive (no FAT ESP is made from EFI_FILE and --esp; pass
+#                     EFI_FILE as - or anything), attached as --disk-device;
+#                     EDK2 boots its ESP's \EFI\BOOT\BOOTAA64.EFI. The
+#                     image is copied first: the guest writes to the copy
+#   --disk-in-place IMAGE
+#                     the same, but the guest writes to IMAGE itself, so a
+#                     second run sees what the first wrote
+#   --disk-device DEV the disk's QEMU device (default
+#                     virtio-blk-pci,disable-legacy=on: modern virtio, 1af4:1042)
 #   --screendump NAME once the run has passed (or timed out), save the display
 #                     as a PPM through QEMU's monitor, as NAME in
 #                     $TEST_UNDECLARED_OUTPUTS_DIR (or ND_QEMU_DEBUG's directory)
@@ -55,6 +66,7 @@
 set -euo pipefail
 esp_files=(); mem=""; smp=1; cpu=cortex-a76; until_lines=0; sends=(); machine=virt; firmware=""
 devices=(); drives=(); screendump=""; screen_font=""; screen_lines=(); until_screen=0; absent=(); mopts=""
+disk=""; disk_in_place=0; disk_device="virtio-blk-pci,disable-legacy=on"
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--esp) esp_files+=("$2"); shift 2 ;;
@@ -68,6 +80,9 @@ while [ $# -gt 0 ]; do
 		--send-after) sends+=("$2" "$3"); shift 3 ;;
 		--device) devices+=(-device "$2"); shift 2 ;;
 		--drive) drives+=("$2"); shift 2 ;;
+		--disk) disk="$2"; disk_in_place=0; shift 2 ;;
+		--disk-in-place) disk="$2"; disk_in_place=1; shift 2 ;;
+		--disk-device) disk_device="$2"; shift 2 ;;
 		--screendump) screendump="$2"; shift 2 ;;
 		--screen-font) screen_font="$2"; shift 2 ;;
 		--screen-line) screen_lines+=("$2"); shift 2 ;;
@@ -145,10 +160,21 @@ if (defined $need) {
 	print $screen;
 }
 SCREEN_PL
-mkdir -p "$work/esp/EFI/BOOT"; cp "$efi" "$work/esp/EFI/BOOT/BOOTAA64.EFI"
-for spec in ${esp_files[@]+"${esp_files[@]}"}; do
-	dest="$work/esp/${spec%%=*}"; mkdir -p "$(dirname "$dest")"; cp "${spec#*=}" "$dest"
-done
+# The boot drive: a FAT ESP from EFI_FILE and --esp (QEMU's vvfat), or
+# with --disk the given image as the only one.
+if [ -n "$disk" ]; then
+	boot_file="$disk"
+	if [ "$disk_in_place" -eq 0 ]; then
+		boot_file="$work/disk.img"; cp "$disk" "$boot_file"; chmod u+w "$boot_file"
+	fi
+	boot_drive=(-drive "if=none,id=bootdisk,format=raw,file=$boot_file" -device "$disk_device,drive=bootdisk,bootindex=0")
+else
+	mkdir -p "$work/esp/EFI/BOOT"; cp "$efi" "$work/esp/EFI/BOOT/BOOTAA64.EFI"
+	for spec in ${esp_files[@]+"${esp_files[@]}"}; do
+		dest="$work/esp/${spec%%=*}"; mkdir -p "$(dirname "$dest")"; cp "${spec#*=}" "$dest"
+	done
+	boot_drive=(-drive format=raw,file=fat:rw:"$work/esp")
+fi
 for spec in ${drives[@]+"${drives[@]}"}; do
 	id="${spec%%=*}"; image="${spec#*=}"; file="$work/drive-$id.img"
 	case "$image" in
@@ -243,7 +269,7 @@ perl -e '
 	"$until_screen" "$work/screen.pl" "$screen_font" "$screen_need" \
 	"$qemu" "${machine_args[@]}" -cpu "$cpu" -smp "$smp" -m "$mem" \
 	-nographic -no-reboot ${devices[@]+"${devices[@]}"} \
-	-drive format=raw,file=fat:rw:"$work/esp" -chardev pipe,id=ser,path="$work/ser" -serial chardev:ser "${monitor[@]}" \
+	"${boot_drive[@]}" -chardev pipe,id=ser,path="$work/ser" -serial chardev:ser "${monitor[@]}" \
 	${debug[@]+"${debug[@]}"} || status=$?
 # The log as a terminal shows it: escape sequences dropped, backspaces
 # applied (line editors such as zsh's back up and redraw), lines split.

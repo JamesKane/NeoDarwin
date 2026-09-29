@@ -1,0 +1,186 @@
+From: NeoDarwin
+Subject: [PATCH] iokit: build IOStorageFamily and AppleFileSystemDriver
+
+P1-10 puts block storage under Apple's open IOStorageFamily
+(IOStorageFamily-331, the macOS 26.0 release, APSL; overlaid at
+iokit/ndstorage/IOStorageFamily, its headers at
+iokit/ndstorage/include/IOKit/storage), the family every macOS disk
+driver publishes through: IOBlockStorageDevice (a driver's device), IOBlockStorageDriver
+(its IOMedia), the partition schemes (GPT, MBR, Apple Partition Map, Apple
+Label) and IOMediaBSDClient, which makes /dev/diskN and /dev/diskNsM.
+AppleFileSystemDriver (AppleFileSystemDriver-31, APSL; at
+iokit/ndstorage/AppleFileSystemDriver) matches the booter's boot-uuid
+against IOMedia UUIDs (a GPT partition's unique GUID) and HFS+ volume
+UUIDs, and publishes the boot-uuid-media resource IOFindBSDRoot waits for.
+Like the rest of the platform they are compiled into the kernel, since
+kcgen links no kexts until M5 (docs/kernel/storage.md).
+
+This patch lists IOStorageFamily's eleven sources that build without
+DriverKit (IOUserBlockStorageDevice, IORequest and IORequestsPool serve
+dexts, which NeoDarwin doesn't have; patch 0026 cuts IOBlockStorageDriver's
+reference to them) and AppleFileSystemDriver, with their search paths: the
+family's headers, the compat TargetConditionals.h of patch 0010, and for
+AppleFileSystemDriver NeoDarwin's compat APFS/APFSConstants.h,
+uuid/namespace.h and hfs/hfs_format.h (kernel/neodarwin/storage/compat,
+the last one hfs-704's own header from patch 0015). The kext's Info.plist
+personalities become built-in ones: IOBlockStorageDriver on a Generic
+IOBlockStorageDevice; the four schemes on IOMedia (IOMatchCategory
+IOStorage, probe scores 4000/3000/2000/1000); IOMediaBSDClient once IOBSD
+is published; AppleFileSystemDriver on IOResources once boot-uuid is.
+
+Rebase-risk: low (appended entries; applies after 0024).
+---
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -67,6 +67,99 @@ const char * gIOKernelConfigTables =
+     "     'IOProbeScore'    = 0:32;"
+     "   },"
+     "   {"
++    "     'IOClass'         = IOBlockStorageDriver;"
++    "     'IOProviderClass' = IOBlockStorageDevice;"
++    "     'IOPropertyMatch' = { 'device-type' = 'Generic'; };"
++    "   },"
++    "   {"
++    "     'IOClass'         = IOGUIDPartitionScheme;"
++    "     'IOProviderClass' = IOMedia;"
++    "     'IOMatchCategory' = IOStorage;"
++    "     'IOProbeScore'    = 4000:32;"
++    "     'IOPropertyMatch' = { 'Whole' = .true.; };"
++    "     'Content Mask'    = 'GUID_partition_scheme';"
++    "   },"
++    "   {"
++    "     'IOClass'         = IOFDiskPartitionScheme;"
++    "     'IOProviderClass' = IOMedia;"
++    "     'IOMatchCategory' = IOStorage;"
++    "     'IOProbeScore'    = 3000:32;"
++    "     'IOPropertyMatch' = { 'Whole' = .true.; };"
++    "     'Content Mask'    = 'FDisk_partition_scheme';"
++    "     'Content Table'   = {"
++    "       '0x01' = 'DOS_FAT_12';"
++    "       '0x04' = 'DOS_FAT_16_S';"
++    "       '0x06' = 'DOS_FAT_16';"
++    "       '0x07' = 'Windows_NTFS';"
++    "       '0x0B' = 'DOS_FAT_32';"
++    "       '0x0C' = 'Windows_FAT_32';"
++    "       '0x0E' = 'Windows_FAT_16';"
++    "       '0x14' = 'DOS_FAT_16_S_Hidden';"
++    "       '0x16' = 'DOS_FAT_16_Hidden';"
++    "       '0x42' = 'Windows_LDM';"
++    "       '0x82' = 'Linux_Swap';"
++    "       '0x83' = 'Linux';"
++    "       '0x8E' = 'Linux_LVM';"
++    "       '0xA5' = 'FreeBSD';"
++    "       '0xA6' = 'OpenBSD';"
++    "       '0xA7' = 'Apple_Rhapsody_UFS';"
++    "       '0xA8' = 'Apple_UFS';"
++    "       '0xA9' = 'NetBSD';"
++    "       '0xAB' = 'Apple_Boot';"
++    "       '0xAE' = 'Apple_Encrypted';"
++    "       '0xAF' = 'Apple_HFS';"
++    "       '0xFD' = 'Linux_RAID';"
++    "     };"
++    "   },"
++    "   {"
++    "     'IOClass'         = IOApplePartitionScheme;"
++    "     'IOProviderClass' = IOMedia;"
++    "     'IOMatchCategory' = IOStorage;"
++    "     'IOProbeScore'    = 2000:32;"
++    "     'IOPropertyMatch' = ("
++    "       { 'Whole' = .true.; },"
++    "       { 'Content Hint' = 'CD_ROM_Mode_1'; 'Writable' = .false.; },"
++    "       { 'Content Hint' = 'CD_ROM_Mode_2_Form_1'; 'Writable' = .false.; }"
++    "     );"
++    "     'Content Mask'    = 'Apple_partition_scheme';"
++    "   },"
++    "   {"
++    "     'IOClass'         = IOAppleLabelScheme;"
++    "     'IOProviderClass' = IOMedia;"
++    "     'IOMatchCategory' = IOStorage;"
++    "     'IOProbeScore'    = 1000:32;"
++    "     'IOPropertyMatch' = ("
++    "       { 'Content Hint' = 'Apple_Label'; },"
++    "       { 'Content Hint' = '4C616265-6C00-11AA-AA11-00306543ECAC'; }"
++    "     );"
++    "     'Content Mask'    = 'Apple_Label';"
++    "   },"
++    "   {"
++    "     'IOClass'         = IOMediaBSDClient;"
++    "     'IOProviderClass' = IOMedia;"
++    "     'IOMatchCategory' = IOMediaBSDClient;"
++    "     'IOProbeScore'    = 30000:32;"
++    "     'IOResourceMatch' = IOBSD;"
++    "   },"
++    "   {"
++    "     'IOClass'         = AppleFileSystemDriver;"
++    "     'IOProviderClass' = IOResources;"
++    "     'IOMatchCategory' = AppleFileSystemDriver;"
++    "     'IOResourceMatch' = 'boot-uuid';"
++    "     'media-match'     = {"
++    "       'IOPropertyMatch' = ("
++    "         { 'Content Hint' = '41504653-0000-11AA-AA11-00306543ECAC'; 'Leaf' = .true.; },"
++    "         { 'Content Hint' = '48465300-0000-11AA-AA11-00306543ECAC'; 'Leaf' = .true.; },"
++    "         { 'Content Hint' = '426F6F74-0000-11AA-AA11-00306543ECAC'; 'Leaf' = .true.; },"
++    "         { 'Content Hint' = 'Apple_HFS'; 'Leaf' = .true.; },"
++    "         { 'Content Hint' = 'Apple_HFSX'; 'Leaf' = .true.; },"
++    "         { 'Content Hint' = 'Apple_Boot'; 'Leaf' = .true.; },"
++    "         { 'Content Hint' = '5265636F-7665-11AA-AA11-00306543ECAC'; 'Leaf' = .true.; },"
++    "         { 'Content Hint' = 'Apple_Recovery'; 'Leaf' = .true.; }"
++    "       );"
++    "     };"
++    "   },"
++    "   {"
+     "     'IOClass'         = IOExclaveProxy;"
+     "     'IOProviderClass' = IOService;"
+     "     'IOExclaveProxy'  = 1:32;"
+--- a/iokit/conf/Makefile.template
++++ b/iokit/conf/Makefile.template
+@@ -97,6 +97,23 @@ $(foreach o,nd_iort.o NeoDarwinPCIMSI.cpo NeoDarwinPCINVMeTest.cpo,$(eval $(o)_C
+ 	-I$(ND_PCI)/compat -I$(SRCROOT)/libkern/ndpthread/compat -I$(ND_ACPI)/include -Wno-deprecated-declarations))
+ NeoDarwinPCIMSI.cpo_CFLAGS_ADD += -I$(SRCROOT)/iokit/ndplatform
+ 
++# Storage (patch 0025). IOStorageFamily is kext code: its headers are at
++# ndstorage/include/IOKit/storage, as in the SDK, and it needs the compat
++# TargetConditionals.h (patch 0010). AppleFileSystemDriver also finds
++# NeoDarwin's compat APFS/APFSConstants.h, uuid/namespace.h and
++# hfs/hfs_format.h, the last one hfs-704's (patch 0015). -w: upstream
++# warnings are not NeoDarwin's to fix here; -Wno-register: IOMediaBSDClient
++# declares two `register` locals, an error in C++17 that -w leaves on.
++ND_STORAGE = $(SRCROOT)/iokit/ndstorage
++ND_IOSTORAGE = $(ND_STORAGE)/IOStorageFamily
++ND_IOSTORAGE_OBJS = IOStorage.cpo IOMedia.cpo IOBlockStorageDevice.cpo IOBlockStorageDriver.cpo \
++	IOPartitionScheme.cpo IOFilterScheme.cpo IOGUIDPartitionScheme.cpo IOFDiskPartitionScheme.cpo \
++	IOApplePartitionScheme.cpo IOAppleLabelScheme.cpo IOMediaBSDClient.cpo
++$(foreach o,$(ND_IOSTORAGE_OBJS),$(eval $(o)_CFLAGS_ADD += -I$(ND_STORAGE)/include \
++	-I$(SRCROOT)/libkern/ndpthread/compat -w -Wno-register))
++AppleFileSystemDriver.cpo_CFLAGS_ADD += -I$(ND_STORAGE)/include -I$(ND_STORAGE)/compat \
++	-I$(SRCROOT)/libkern/ndhfs/hfs -I$(SRCROOT)/libkern/ndpthread/compat -w
++
+ #
+ # Diagnostic opt-outs.  We need to make this list empty.
+ #
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -200,5 +200,23 @@ iokit/ndpci/IOPCIFamily/IOPCIMessagedInterruptController.cpp	optional iokitcpp
+ iokit/ndpci/IOPCIFamily/IOPCIRange.cpp	optional iokitcpp
+ iokit/ndpci/IOPCIFamily/IOPCITraceEventBuffer.cpp	optional iokitcpp
+ 
++# NeoDarwin storage (kernel/neodarwin/storage, overlaid at iokit/ndstorage):
++# Apple's IOStorageFamily-331 (@apple_iostoragefamily, APSL, at
++# iokit/ndstorage/IOStorageFamily: the kext's sources but DriverKit's
++# IOUserBlockStorageDevice and its request pool) and AppleFileSystemDriver-31
++# (@apple_filesystemdriver, APSL, at iokit/ndstorage/AppleFileSystemDriver)
++iokit/ndstorage/IOStorageFamily/IOStorage.cpp	optional iokitcpp
++iokit/ndstorage/IOStorageFamily/IOMedia.cpp	optional iokitcpp
++iokit/ndstorage/IOStorageFamily/IOBlockStorageDevice.cpp	optional iokitcpp
++iokit/ndstorage/IOStorageFamily/IOBlockStorageDriver.cpp	optional iokitcpp
++iokit/ndstorage/IOStorageFamily/IOPartitionScheme.cpp	optional iokitcpp
++iokit/ndstorage/IOStorageFamily/IOFilterScheme.cpp	optional iokitcpp
++iokit/ndstorage/IOStorageFamily/IOGUIDPartitionScheme.cpp	optional iokitcpp
++iokit/ndstorage/IOStorageFamily/IOFDiskPartitionScheme.cpp	optional iokitcpp
++iokit/ndstorage/IOStorageFamily/IOApplePartitionScheme.cpp	optional iokitcpp
++iokit/ndstorage/IOStorageFamily/IOAppleLabelScheme.cpp	optional iokitcpp
++iokit/ndstorage/IOStorageFamily/IOMediaBSDClient.cpp	optional iokitcpp
++iokit/ndstorage/AppleFileSystemDriver/AppleFileSystemDriver.cpp	optional iokitcpp
++
+ # tightbeamc generated implementation files
+ ./Exclaves/IOService.tightbeam.c		optional iokitcpp config_exclaves

@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
-# Build a raw HFS+ volume image for neoboot's ramdisk (md0).
-#   mkhfs.sh OUT VOLNAME [--dir PATH]... [--tree DIR]... [--file SRC DEST MODE]... [--link TARGET PATH]... [--mode PATH MODE]...
+# Build a raw HFS+ volume image for neoboot's ramdisk (md0), or for a disk
+# image's root partition (rules/disk.bzl).
+#   mkhfs.sh OUT VOLNAME [--size SIZE] [--journaled] [--dir PATH]... [--tree DIR]... [--file SRC DEST MODE]... [--link TARGET PATH]... [--mode PATH MODE]...
 # A --tree directory's contents are copied to the volume's root, symbolic
 # links kept. --link makes a symbolic link; --mode sets a path's mode after
-# everything is in place (e.g. setuid, or 0600 for master.passwd).
+# everything is in place (e.g. setuid, or 0600 for master.passwd). --size
+# makes the volume that big (hdiutil's size syntax, e.g. 256m) instead of
+# just big enough, leaving room to write; --journaled makes it journaled
+# HFS+, which a writable root needs: HFS refuses to mount a dirty volume
+# read-write without a journal to replay.
 # The image is a bare volume, no partition map, since md0 is the whole
 # device. Phase 1 uses the host's hdiutil (macOS; not journaled: a ramdisk
 # root has nothing to replay). A NeoDarwin image writer replaces it with the
@@ -12,9 +17,11 @@
 set -euo pipefail
 out="$1"; vol="$2"; shift 2
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
-root="$work/root"; mkdir -p "$root"; modes=()
+root="$work/root"; mkdir -p "$root"; modes=(); size=(); fs="HFS+"
 while [ $# -gt 0 ]; do
 	case "$1" in
+		--size) size=(-size "$2"); shift 2 ;;
+		--journaled) fs="Journaled HFS+"; shift ;;
 		--dir) mkdir -p "$root/$2"; shift 2 ;;
 		--tree) cp -PR "$2/." "$root/"; chmod -R u+w "$root"; shift 2 ;;
 		--file) mkdir -p "$(dirname "$root/$3")"; cp "$2" "$root/$3"; chmod "$4" "$root/$3"; shift 4 ;;
@@ -24,7 +31,7 @@ while [ $# -gt 0 ]; do
 	esac
 done
 i=0; while [ $i -lt ${#modes[@]} ]; do chmod "${modes[$((i + 1))]}" "$root/${modes[$i]}"; i=$((i + 2)); done
-hdiutil create -quiet -srcfolder "$root" -fs HFS+ -volname "$vol" -layout NONE -format UDTO -o "$work/image"
+hdiutil create -quiet -srcfolder "$root" -fs "$fs" -volname "$vol" ${size[@]+"${size[@]}"} -layout NONE -format UDTO -o "$work/image"
 mv "$work/image.cdr" "$out"
 # Check the volume header: "H+" at byte 1024.
 [ "$(dd if="$out" bs=1 skip=1024 count=2 2>/dev/null)" = "H+" ] || { echo "mkhfs.sh: $out has no HFS+ volume header" >&2; exit 1; }

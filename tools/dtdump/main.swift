@@ -30,6 +30,8 @@
 //                        the tree may leave out an SPCR UART the kernel has no
 //                        driver for (DT-ABI v1.1). With --dt, the tree may have none
 //     --uart-off         treat the SPCR UART as absent, as boot.cfg's uart=off
+//     --boot-uuid UUID   /chosen boot-uuid, the root's GPT partition GUID, as
+//                        neoboot passes it without a ramdisk
 //     --write-dt FILE    also write the binary tree
 // Exits 1 on an ACPI error or a DT-ABI violation, 2 on a usage error.
 
@@ -62,7 +64,7 @@ struct PrintReport: DTReport {
 
 // MARK: arguments
 
-let usage = "usage: dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--gop WxH] [--uart-off] [--write-dt FILE] ACPIDUMP | dtdump [--gop WxH] --dt TREE"
+let usage = "usage: dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--gop WxH] [--uart-off] [--boot-uuid UUID] [--write-dt FILE] ACPIDUMP | dtdump [--gop WxH] --dt TREE"
 var args = Array(CommandLine.arguments.dropFirst())
 var input: String?
 var treeInput: String?
@@ -80,6 +82,7 @@ var el3 = false
 var loaderEL: UInt64 = 1
 var gop: (width: UInt64, height: UInt64)?
 var uartOff = false
+var bootUUID: UUID16?
 
 func number(_ s: String) -> UInt64 {
     let t = s.hasPrefix("0x") ? String(s.dropFirst(2)) : s
@@ -118,6 +121,10 @@ while !args.isEmpty {
         guard parts.count == 2, parts[0] >= 8, parts[1] >= 16 else { fail(usage, code: 2) }
         gop = (parts[0], parts[1])
     case "--uart-off": uartOff = true
+    case "--boot-uuid":
+        let text = Array(value().utf8)
+        guard let u = text.withUnsafeBytes({ GPT.parseText($0.baseAddress!, $0.count) }) else { fail(usage, code: 2) }
+        bootUUID = u
     case "--write-dt": writeTree = value()
     case "--dt": treeInput = value()
     default:
@@ -281,7 +288,7 @@ treeBuffer.initializeMemory(as: UInt8.self, repeating: 0, count: capacity)
 var writer = DeviceTreeWriter(base: treeBuffer, capacity: capacity)
 let loader = Platform.Facts(dramBase: dramBase, dramSize: dramSize, timebase: timebase, bootMPIDR: boot, seed: seed,
                             ramdiskBase: ramdisk.0, ramdiskSize: ramdisk.1, acpiBase: base, acpiLength: UInt64(copyLength),
-                            timerGroup: timerGroup, psciConduit: psci.conduit)
+                            timerGroup: timerGroup, psciConduit: psci.conduit, bootUUID: bootUUID)
 guard let treeLength = Platform.deviceTree(into: &writer, loader, facts, layout) else { fail("the tree does not fit in \(capacity) bytes") }
 
 // Checks that need the ACPI facts as well as the tree.

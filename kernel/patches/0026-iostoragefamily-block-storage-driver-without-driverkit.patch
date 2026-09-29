@@ -1,0 +1,41 @@
+From: NeoDarwin
+Subject: [PATCH] iostoragefamily: IOBlockStorageDriver without DriverKit
+
+IOStorageFamily-331's IOBlockStorageDriver (overlay of patch 0025) asks
+whether its provider is an IOUserBlockStorageDevice, the kernel side of a
+DriverKit block storage dext, and if so takes that device's IOPerfControl
+client. The class is generated from DriverKit's .iig interface, which
+NeoDarwin doesn't build: there is no DriverKit yet. The driver now never
+has a user block storage device and always creates its own IOPerfControl
+client, as it does for every in-kernel device; the other references are
+pointer tests that stay false.
+
+Rebase-risk: low (one include and one condition).
+---
+--- a/iokit/ndstorage/IOStorageFamily/IOBlockStorageDriver.cpp
++++ b/iokit/ndstorage/IOStorageFamily/IOBlockStorageDriver.cpp
+@@ -33,7 +33,7 @@
+ #include <IOKit/storage/IOBlockStorageDriver.h>
+ #include <IOKit/storage/IOMedia.h>
+ #include <IOKit/storage/IOBlockStoragePerfControlExports.h>
+-#include "IOUserBlockStorageDevice_kext.h"
++/* NeoDarwin: no DriverKit, so no IOUserBlockStorageDevice (dexts' block storage devices). */
+ #include <kern/energy_perf.h>
+ #include <kern/thread_call.h>
+ #include <libkern/OSAtomic.h>
+@@ -1464,13 +1464,9 @@ IOBlockStorageDriver::handleStart(IOService * provider)
+     }
+ 
+     /* Set up perfcontrol client to track IO */
+-    _userBlockStorageDevice = OSDynamicCast(IOUserBlockStorageDevice, provider);
++    _userBlockStorageDevice = NULL;
+ 
+-    if (_userBlockStorageDevice) {
+-        _perfControlClient = _userBlockStorageDevice->getPerfControlClient();
+-        assert(_perfControlClient != NULL);
+-    }
+-    else {
++    {
+         _perfControlClient = IOPerfControlClient::copyClient(this, 0);
+ 
+         if (_perfControlClient ) {

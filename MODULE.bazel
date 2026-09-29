@@ -322,6 +322,57 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/IOPCIFamily/archive/refs/tags/IOPCIFamily-726.0.5.tar.gz"],
 )
 
+# Apple's IOStorageFamily (IOStorageFamily-331, the macOS 26.0 release; APSL
+# 2.0): block storage, IOMedia, the partition schemes and /dev/disk nodes,
+# built into the SBSA kernel (kernel/neodarwin/storage, docs/kernel/storage.md).
+# The headers are overlaid at iokit/ndstorage/include/IOKit/storage, where
+# kext code finds them in the SDK. IOUserBlockStorageDevice (DriverKit), IORequest and
+# IORequestsPool are left out: there is no DriverKit.
+http_archive(
+    name = "apple_iostoragefamily",
+    build_file_content = """filegroup(
+    name = "kernel_srcs",
+    srcs = [
+        "IOAppleLabelScheme.cpp",
+        "IOApplePartitionScheme.cpp",
+        "IOBlockStorageDevice.cpp",
+        "IOBlockStorageDriver.cpp",
+        "IOFDiskPartitionScheme.cpp",
+        "IOFilterScheme.cpp",
+        "IOGUIDPartitionScheme.cpp",
+        "IOMedia.cpp",
+        "IOMediaBSDClient.cpp",
+        "IOPartitionScheme.cpp",
+        "IOStorage.cpp",
+    ],
+    visibility = ["//visibility:public"],
+)
+filegroup(
+    name = "headers",
+    srcs = glob(["*.h"], exclude = ["IORequest.h", "IORequestsPool.h", "IOUserBlockStorageDevice_kext.h"]),
+    visibility = ["//visibility:public"],
+)""",
+    sha256 = "3b0bfb7a9b0170fb8f8cf4018813eadaa9be4491b3a79e7ac346ee4736fd646d",
+    strip_prefix = "IOStorageFamily-IOStorageFamily-331",
+    urls = ["https://github.com/apple-oss-distributions/IOStorageFamily/archive/refs/tags/IOStorageFamily-331.tar.gz"],
+)
+
+# Apple's AppleFileSystemDriver (AppleFileSystemDriver-31, the macOS 26.0
+# release; APSL 2.0): finds the IOMedia whose GPT partition UUID or HFS+
+# volume UUID is the booter's /chosen boot-uuid and publishes it as the
+# boot-uuid-media resource IOFindBSDRoot waits for (docs/kernel/storage.md).
+http_archive(
+    name = "apple_filesystemdriver",
+    build_file_content = """filegroup(
+    name = "kernel_srcs",
+    srcs = ["AppleFileSystemDriver.cpp", "AppleFileSystemDriver.h"],
+    visibility = ["//visibility:public"],
+)""",
+    sha256 = "b5d95d83194b76f197ad8f3dd8768e74adf17b84e02b7cdd55a63a484fd3e0ee",
+    strip_prefix = "AppleFileSystemDriver-AppleFileSystemDriver-31",
+    urls = ["https://github.com/apple-oss-distributions/AppleFileSystemDriver/archive/refs/tags/AppleFileSystemDriver-31.tar.gz"],
+)
+
 # xnu's corecrypto subset and headers, for ndcrypto's host tests: the same
 # archive as apple_xnu (the repository cache serves it once), with its own
 # BUILD file so the kernel's inputs are untouched.

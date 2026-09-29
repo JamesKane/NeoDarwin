@@ -18,7 +18,7 @@ Dexts are the default for anything new after the base storage and display path e
 |---|---|---|---|---|
 | ACPI platform (`ndacpi`) | new + ACPICA | P1-M5 | `sys/dev/acpica` for bus glue patterns | `drivers/acpi` |
 | PCIe (`IOPCIFamily`) | Apple open source | adopt; ECAM/MSI glue from `ndacpi` | `sys/dev/pci` | `drivers/pci` |
-| Storage stack (`IOStorageFamily`) | Apple open source | adopt | — | — |
+| Storage stack (`IOStorageFamily`) | Apple open source | adopted in P1-10: IOStorageFamily-331 and AppleFileSystemDriver-31 built into the kernel (`docs/kernel/storage.md`) | — | — |
 | virtio (bus, blk, net, console, gpu, input, 9p) | new | P1-M5 (blk, console), P3 (net, gpu, input) | `sys/dev/virtio/*` (derive) | `drivers/virtio` |
 | NVMe | new | P1-M5 | `sys/dev/nvme` (derive) | `drivers/nvme` |
 | AHCI/SATA | new | P3 | `sys/dev/ahci` (derive) | `drivers/ata` |
