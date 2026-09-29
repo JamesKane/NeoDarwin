@@ -1,0 +1,24 @@
+From: NeoDarwin
+Subject: [PATCH] dyld.h: define DYLD_EXCLAVEKIT_UNAVAILABLE
+
+The published include/mach-o/dyld.h uses DYLD_EXCLAVEKIT_UNAVAILABLE on the
+NSObjectFileImage and NSModule declarations, but the block that defines it
+sits inside the header's __OPEN_SOURCE__ scrub and was removed from the
+tarball. The SDK's copy defines it empty for every platform but ExclaveKit;
+do the same when nothing else has.
+
+Rebase-risk: low (three lines).
+---
+--- a/include/mach-o/dyld.h
++++ b/include/mach-o/dyld.h
+@@ -39,6 +39,10 @@
+  #define DYLD_DRIVERKIT_UNAVAILABLE __API_UNAVAILABLE(driverkit)
+ #else
+  #define DYLD_DRIVERKIT_UNAVAILABLE
++#endif
++
++#ifndef DYLD_EXCLAVEKIT_UNAVAILABLE
++ #define DYLD_EXCLAVEKIT_UNAVAILABLE
+ #endif
+ 
+ 

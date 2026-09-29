@@ -11,6 +11,9 @@ def _impl(ctx):
     for d in ctx.attr.dirs:
         args += ["--dir", d]
     inputs = []
+    for t in ctx.files.trees:
+        inputs.append(t)
+        args += ["--tree", t.path]
     for target, dest in ctx.attr.files.items():
         f = target.files.to_list()
         if len(f) != 1:
@@ -34,6 +37,7 @@ hfs_ramdisk = rule(
     doc = "A raw HFS+ volume image holding the given files and directories.",
     attrs = {
         "files": attr.label_keyed_string_dict(allow_files = True, doc = "File -> path in the volume, without a leading slash."),
+        "trees": attr.label_list(allow_files = True, doc = "Directories whose contents go at the volume's root, e.g. //base:root."),
         "dirs": attr.string_list(doc = "Empty directories to create, e.g. mount points such as dev."),
         "modes": attr.string_dict(doc = "Path -> octal mode; files default to 0755."),
         "volume_name": attr.string(default = "NeoDarwin"),

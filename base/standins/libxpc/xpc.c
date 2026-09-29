@@ -9,7 +9,9 @@
 //    dictionary, reference counted, with the type objects callers compare
 //    xpc_get_type() against. They are plain C objects: none of NeoDarwin's
 //    callers is Objective-C, which would treat them as NSObjects;
-//  - bootstrap_parent(), bootstrap_look_up2() and bootstrap_strerror(). NeoDarwin has one bootstrap
+//  - bootstrap_parent(), bootstrap_look_up2() and bootstrap_strerror(), and
+//    launchd's vproc_swap_integer(), which libdyld calls to ask whether
+//    launchd manages the process. NeoDarwin has one bootstrap
 //    namespace and no launchd until launchd-842 lands (P1-08), so every
 //    bootstrap port is its own parent, as the root of the tree is, and no
 //    service can be looked up;
@@ -20,7 +22,12 @@
 //  - calls about the caller's own process: it has no entitlements, is not
 //    app-sandboxed, and was not launched for an XPC event; no configuration
 //    profile plist is parsed (xpc_create_from_plist() answers NULL, which
-//    Libinfo takes as no profile).
+//    Libinfo takes as no profile);
+//  - libSystem's initializer and fork hooks (_libxpc_initializer(),
+//    xpc_atfork_prepare/parent/child()). Apple's initializer caches the
+//    bootstrap port and the process's launchd context; the stand-in has no
+//    connection or cache to set up, and holds no lock a fork must take, so
+//    all four do nothing.
 // More of libxpc is added as NeoDarwin libraries come to need it
 // (docs/base/libsystem.md).
 
@@ -33,6 +40,7 @@
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vproc_priv.h>
 #include <xpc/private.h>
 #include <xpc/xpc.h>
 
@@ -506,4 +514,48 @@ bootstrap_strerror(kern_return_t r)
 	case BOOTSTRAP_NO_MEMORY: return "Out of memory";
 	default: return mach_error_string(r);
 	}
+}
+
+#pragma mark - libSystem's initializer and fork hooks
+
+// Declared by Libsystem's init.c, which calls them; no header publishes them.
+void _libxpc_initializer(void);
+void xpc_atfork_prepare(void);
+void xpc_atfork_parent(void);
+void xpc_atfork_child(void);
+
+void
+_libxpc_initializer(void)
+{
+}
+
+void
+xpc_atfork_prepare(void)
+{
+}
+
+void
+xpc_atfork_parent(void)
+{
+}
+
+void
+xpc_atfork_child(void)
+{
+}
+
+#pragma mark - launchd's vproc interface
+
+// libdyld asks whether launchd manages the process (VPROC_GSK_IS_MANAGED).
+// With no launchd, no key has a value: every call fails, as launchd-842
+// answers for a process it doesn't know, by returning the function's own
+// address as the error token.
+vproc_err_t
+vproc_swap_integer(vproc_t vp, vproc_gsk_t key, int64_t *inval, int64_t *outval)
+{
+	(void)vp;
+	(void)key;
+	(void)inval;
+	(void)outval;
+	return (vproc_err_t)vproc_swap_integer;
 }

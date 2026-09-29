@@ -1,6 +1,6 @@
 # The userland base built from Apple source: docs/base/libsystem.md.
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
-load("//rules:base.bzl", "base_library", "base_sysroot")
+load("//rules:base.bzl", "base_library", "base_root", "base_sysroot")
 load("//rules:cc.bzl", "lang_audit_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -204,7 +204,8 @@ base_library(
 )
 
 # Stand-ins for closed libraries: libcorecrypto, libxpc, libsystem_trace,
-# libsystem_sandbox.
+# libsystem_sandbox, libsystem_sanitizers, libsystem_featureflags, and
+# libsystem_configuration until configd is built.
 base_library(
     name = "standin_libs",
     data = ["//base/standins:srcs"],
@@ -212,6 +213,70 @@ base_library(
     script = "//base/standins:build.sh",
     srcs = "//base/standins:srcs",
     sysroot = ":sysroot",
+)
+
+# dyld and libdyld. The libraries below libdyld in the build (kernel through
+# libdispatch and the stand-ins) link it through the SDK's .tbd stub, which
+# has the same install name; NeoDarwin's libdyld exports what they import.
+base_library(
+    name = "dyld_images",
+    data = glob(["dyld/**"]) + ["//kernel/neodarwin/crypto:kernel_srcs", "@apple_xnu//:all", "@freebsd_crypto//:all"],
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c",
+            ":libsystem_blocks", ":libdispatch_dylib", ":llvm_runtimes", ":standin_libs"],
+    script = "dyld/build.sh",
+    srcs = "@apple_dyld//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libsystem_b",
+    data = glob(["libsystem/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c",
+            ":libsystem_blocks", ":libdispatch_dylib", ":libmacho", ":libsystem_asl", ":libsystem_notify", ":libsystem_info",
+            ":libsystem_m", ":libsystem_darwin", ":libsystem_collections", ":libcopyfile", ":libremovefile",
+            ":libsystem_dnssd", ":llvm_runtimes", ":standin_libs", ":dyld_images"],
+    script = "libsystem/build.sh",
+    srcs = "@apple_libsystem//:all",
+    sysroot = ":sysroot",
+)
+
+sh_test(
+    name = "libsystem_reexports_test",
+    size = "small",
+    srcs = ["libsystem/reexports_test.sh"],
+    args = ["$(rootpath :libsystem_b)", "usr/lib/libSystem.B.dylib", "$(rootpath libsystem/reexports.txt)"],
+    data = [":libsystem_b", "libsystem/reexports.txt"],
+)
+
+# The runtime root: every library above at its install path, for the HFS+
+# image (//images:hello_root) and for linking programs against
+# (rules/darwin_executable.bzl).
+base_root(
+    name = "root",
+    libraries = [
+        ":libsystem_kernel",
+        ":libsystem_platform",
+        ":libsystem_pthread",
+        ":libsystem_malloc",
+        ":libsystem_c",
+        ":libsystem_blocks",
+        ":libmacho",
+        ":libdispatch_dylib",
+        ":libsystem_asl",
+        ":libsystem_notify",
+        ":libsystem_info",
+        ":libobjc",
+        ":llvm_runtimes",
+        ":libsystem_m",
+        ":libsystem_darwin",
+        ":libsystem_collections",
+        ":libcopyfile",
+        ":libremovefile",
+        ":libsystem_dnssd",
+        ":standin_libs",
+        ":libsystem_b",
+        ":dyld_images",
+    ],
 )
 
 [sh_test(
@@ -261,6 +326,8 @@ base_library(
 ) for name, target, path, listed in [
     ("libdispatch", ":libdispatch_dylib", "usr/lib/system/libdispatch.dylib", "libdispatch/exports.txt"),
     ("libobjc", ":libobjc", "usr/lib/libobjc.A.dylib", "objc4/exports.txt"),
+    ("libdyld", ":dyld_images", "usr/lib/system/libdyld.dylib", "dyld/exports.txt"),
+    ("libsystem", ":libsystem_b", "usr/lib/libSystem.B.dylib", "libsystem/exports.txt"),
     ("libcompiler_rt", ":llvm_runtimes", "usr/lib/system/libcompiler_rt.dylib", "llvm/exports/libcompiler_rt.txt"),
     ("libunwind", ":llvm_runtimes", "usr/lib/system/libunwind.dylib", "llvm/exports/libunwind.txt"),
     ("libc++abi", ":llvm_runtimes", "usr/lib/libc++abi.dylib", "llvm/exports/libc++abi.txt"),
@@ -288,7 +355,10 @@ lang_audit_test(
         "libdispatch/src/nd_work_interval_instance.c",
         "libplatform/src/nd_bitops.c",
         "llvm/src/nd_chkstk_darwin.c",
+        "llvm/src/nd_typed_new_delete.cpp",
     ] + glob([
+        "dyld/src/*.c",
+        "dyld/sdk/*.h",
         "libdispatch/sdk/**/*.h",
         "libinfo/include/**/*.h",
         "libm/src/*.c",

@@ -156,6 +156,14 @@ http_archive(
 )
 
 http_archive(
+    name = "apple_libsystem",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "4bc7151681df1ef1aa2328ee533d62ec10eb7f94912902d25fec772febd9353c",
+    strip_prefix = "Libsystem-Libsystem-1356",
+    urls = ["https://github.com/apple-oss-distributions/Libsystem/archive/refs/tags/Libsystem-1356.tar.gz"],
+)
+
+http_archive(
     name = "apple_objc4",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
     sha256 = "acd6e36cd8df5c7a5a78fe45adc7749da26b5e414986968c7aebeab22a75933b",

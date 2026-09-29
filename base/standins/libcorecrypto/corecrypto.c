@@ -5,10 +5,14 @@
 // interface headers, in xnu's EXTERNAL_HEADERS/corecrypto). Libc uses its
 // random-number generator: ccrng() for arc4random's seed and ccrng_uniform()
 // for arc4random_uniform. Both draw from the kernel's entropy (getentropy),
-// the source Libc's own static build uses. Other corecrypto interfaces are
+// the source Libc's own static build uses. libSystem's fork handlers call
+// cc_atfork_prepare/parent/child() (corecrypto/cc_priv.h), which reset
+// corecrypto's stateful generators in the child; the stand-in's generator
+// keeps no state, so they do nothing. Other corecrypto interfaces are
 // added as NeoDarwin libraries come to need them (docs/base/libsystem.md).
 
 #include <corecrypto/cc_error.h>
+#include <corecrypto/cc_priv.h>
 #include <corecrypto/ccrng.h>
 #include <stdint.h>
 #include <sys/random.h>
@@ -57,4 +61,19 @@ ccrng_uniform(struct ccrng_state *rng, uint64_t bound, uint64_t *rand)
 	} while (x < threshold);
 	*rand = x % bound;
 	return CCERR_OK;
+}
+
+void
+cc_atfork_prepare(void)
+{
+}
+
+void
+cc_atfork_parent(void)
+{
+}
+
+void
+cc_atfork_child(void)
+{
 }

@@ -48,8 +48,8 @@ Every component comes from the macOS 26.0 release set (`distribution-macOS` tag 
 |---|---|---|---|
 | 1 | `//base:sysroot`; `libsystem_kernel`, `libsystem_platform`, `libsystem_pthread`, `libsystem_malloc` with their dyld archives | each links with no undefined symbols outside its declared dependencies; `//base:*_exports_test` records each export list | done |
 | 2 | `libsystem_c` and `libc.a` (dyld), `libsystem_blocks`, libobjc with the C++ runtime and libunwind it needs (LLVM), the other open libraries Libc imports from, and the stand-ins | same | done |
-| 3 | dyld and `libdyld` | same; dyld's closed headers replaced by stand-ins, corecrypto's digests by a small SHA implementation | todo |
-| 4 | `libSystem.B`; a hello world linked against it; an HFS+ image holding all of it | `//kernel:sbsa_boot_test` runs the hello world through dyld | todo |
+| 3 | dyld and `libdyld` | same; dyld's closed headers replaced by stand-ins, corecrypto's digests by a small SHA implementation | done |
+| 4 | `libSystem.B`; a hello world linked against it; an HFS+ image holding all of it | `//kernel:sbsa_dyld_boot_test` runs the hello world through dyld | done |
 
 ## 4. Findings
 
@@ -159,3 +159,51 @@ The stand-ins now cover every symbol the built libraries import from libxpc and 
 | mDNSResponder-2881 publishes no `mDNSMacOSX/`, so there's no Xcode project and no Apple client stub. The tree is Apple's non-Apple configuration | the settings of 1310.140.1's libsystem_dnssd target and the published client library (`mDNSPosix` CLIENTLIBOBJS), with `MDNS_NO_STRICT=1`; the closed links are dropped |
 | The published `dns_sd_private.h` lacks its private API section, and `kDNSServiceAttrAllowFailover` (Libinfo) exists only in Apple's stub | mDNSResponder patches 0001 (export the four private calls the sources define) and 0002 (the failover attribute, sent in the published TLV form). The sysroot stages both headers; Libinfo's header stand-in is gone |
 | NeoDarwin has no mDNSResponder daemon (the macOS one isn't published) | DNS-SD calls fail to connect and Libinfo's mdns module gets no answer; a daemon built from `mDNSPosix` is later work |
+
+### Checkpoint 3: dyld and libdyld
+
+`//base:dyld_images` builds `/usr/lib/dyld` and `/usr/lib/system/libdyld.dylib` from dyld-1323.3. It replays the dyld, libdyld and libmach_o targets for plain arm64.
+- **dyld** is an `MH_DYLINKER` with no undefined symbols, entered at `__dyld_start` through `LC_UNIXTHREAD`. It exports only what Apple's does and uses chained fixups. Its load commands match the host's dyld, less arm64e's `__AUTH_CONST`.
+- **libdyld** exports 207 symbols against Apple's 228. The 29 it lacks are newer than 1323.3 (HWTrace, `macho_*`, the Rosetta subcache calls); 8 deprecated `NS*ObjectFileImage` calls that macOS 27 dropped are extra.
+
+The libraries below libdyld in the build (kernel through libdispatch, and the stand-ins) link it through the SDK's `.tbd` stub, which carries the same install name; NeoDarwin's libdyld exports everything they import.
+
+| Finding | Resolution |
+|---|---|
+| The published `dyld.h` uses `DYLD_EXCLAVEKIT_UNAVAILABLE` with its definition scrubbed; `DyldProcessConfig.cpp` needs the internal SDK's `<fcntl.h>` include and `PLATFORM_IOSMAC`; `LinkerOptimizationHints::valid()`'s body is scrubbed; `libdyld/utils.cpp` includes `Fixup.h`, which doesn't exist | dyld patches 0001–0004 |
+| Xcode's header maps resolve quoted includes across the project's directories | `-iquote` on every source directory |
+| dyld links closed static archives: corecrypto, libamfi, the sandbox archive, libclang_rt | `base/dyld/src` supplies each: an all-allow `amfi_check_dyld_policy_self` (`base/dyld/sdk/libamfi.h`), an allowing `sandbox_check`, and `___chkstk_darwin`. The digests follow the reuse order in `repository.md` §3.1: SHA-256 and the ccdigest framework come from xnu's own corecrypto subset (`osfmk/corecrypto`); SHA-1 and SHA-384 come from FreeBSD's through ndcrypto's adapters (`kernel/neodarwin/crypto`) |
+| libdyld asks launchd whether it manages the process (`vproc_swap_integer`); launchd's `vproc_priv.h` isn't published | `base/sdk`'s `vproc_priv.h` has launchd-842's keys. The libxpc stand-in answers every key with an error, as launchd does for a process it doesn't know |
+| LLVM 19's libc++ headers call `__libcpp_verbose_abort`, which Apple's Release libdyld doesn't need | a hidden definition in libdyld, so it doesn't link libc++ |
+| TPRO, MTE and pointer authentication are arm64e-only | compiled out; `__TPRO_CONST` is protected with `vm_protect` instead |
+| `PrebuiltLoader_version.h` is generated from a hash of record layouts | build.sh replays Apple's script with clang's `-fdump-record-layouts` |
+
+The AMFI stand-in allows everything, so a restricted (setuid) process can use `DYLD_*` variables. That's acceptable until P1-15 brings code-signing policy.
+
+### Checkpoint 4: libSystem.B, the runtime root and the first dynamic program
+
+`//base:libsystem_b` builds `/usr/lib/libSystem.B.dylib` from Libsystem-1356. It compiles `init.c` and `CompatibilityHacks.c` and runs two of Apple's scripts:
+- `linker_arguments.sh` decides the reexports and `init.c`'s `HAVE_*` switches. It reexports every library in Apple's list that NeoDarwin builds or stands in for: 27 of Apple's 39 (`libsystem/reexports.txt`, `//base:libsystem_reexports_test`). The 12 left out are closed and have no calls in NeoDarwin's configuration: cache, commonCrypto, keymgr, quarantine, containermanager, coreservices, darwindirectory, eligibility, networkextension, secinit, symptoms, trial.
+- `create_dylib_symlinks.sh` makes `libSystem.dylib` and the BSD names (`libc`, `libm`, `libpthread`, `libdl` and so on).
+
+Every initializer and fork hook `init.c` calls resolves to a NeoDarwin library or stand-in. Its exports are Apple's three.
+
+`//base:root` (`tools/base/stage_root.sh`) merges every library's install tree into the runtime root, without the build-only `usr/local`. Bazel stores a tree's relative symbolic links as copies. The script turns a dylib stored under a name other than its install name back into a link to it (`libSystem.dylib`, `libc++.dylib`, `libobjc.dylib`, the BSD names).
+
+`//tests/qemu/hello` is an Embedded Swift program linked against that root by Xcode's `ld` (`rules/darwin_executable.bzl`, `-syslibroot`). Its stdlib runtime calls (`putchar`, `posix_memalign`, `free`) bind to libSystem like any other import. `//images:hello_root` puts it on the HFS+ root as `/sbin/launchd`, next to the runtime root. `//kernel:sbsa_dyld_boot_test` boots it. dyld loads 32 images, and the program passes all five checks: stdio on the console, malloc, a pthread, dyld's `dlopen`/`dlsym`, and a function on a libdispatch global queue (the kernel's pthread workqueue).
+
+| Finding | Resolution |
+|---|---|
+| `init.c` calls `_sanitizers_init` and `_libSC_info_fork_*` with no switch around them, and libmalloc upward-links libsystem_featureflags, which dyld must be able to load | stand-ins for libsystem_sanitizers, libsystem_configuration (until configd-1385 is built) and libsystem_featureflags. Their initializers and fork hooks have no state to set up or reset |
+| libxpc, libsystem_trace and corecrypto have initializers and fork hooks too (`_libxpc_initializer`, `_libtrace_init`, `xpc_atfork_*`, `cc_atfork_*`) | added to those stand-ins |
+| **When a main executable has weak definitions (any Embedded Swift program does), dyld binds every `operator new` and `delete` it may override, and fails the launch if one is missing. The list includes Apple's typed `operator new(size_t, std::__type_descriptor_t)`**, which LLVM's libc++abi lacks | `base/llvm/src/nd_typed_new_delete.cpp` implements all 20 of Apple's typed operators on libmalloc's `malloc_type_*` calls, so allocations keep their type IDs. libc++abi exports them and libc++ reexports them, as on macOS |
+| Swift can't call `open(2)` (variadic), `stdout` (a macro) or libdispatch's C API (marked unavailable in favour of the Dispatch overlay, which Embedded Swift lacks) | three small functions in the test's justified C file |
+| Libraries linked against the SDK resolve libSystem's reexports to the SDK's `.tbd` files | programs link with `-syslibroot` pointing at `//base:root` |
+| The sysroot's libc++ and libunwind headers were absolute links into Bazel's execroot | `base/llvm/install_headers.sh` copies them dereferenced (`tar h`) |
+
+To verify on the kernel as the userland grows:
+- `fork` with the stand-ins' empty hooks;
+- `dyld_get_program_sdk_version`;
+- the plain-arm64 objc4 isa layout, once an Objective-C program runs;
+- running with no shared cache: `__shared_region_check_np` currently fails cleanly and dyld loads every image from disk.
+

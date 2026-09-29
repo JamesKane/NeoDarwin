@@ -1,0 +1,30 @@
+From: NeoDarwin
+Subject: [PATCH] DyldProcessConfig: build against the public SDK
+
+DyldProcessConfig.cpp takes open(2)'s flags and PLATFORM_IOSMAC from
+Apple's internal SDK: none of the file's includes brings in <fcntl.h> from
+the published headers, and PLATFORM_IOSMAC is the internal <mach-o/loader.h>'s
+name for platform 6, which the public header calls PLATFORM_MACCATALYST.
+Include <fcntl.h> itself and use the public name.
+
+Rebase-risk: low (an include and one case label).
+---
+--- a/dyld/DyldProcessConfig.cpp
++++ b/dyld/DyldProcessConfig.cpp
+@@ -34,6 +34,7 @@
+   #include <sys/syscall.h>
+   #if BUILDING_DYLD
+     #include <sys/types.h>
++    #include <fcntl.h>
+     #include <sys/sysctl.h>
+     #include <sys/socket.h>
+     #include <sys/syslog.h>
+@@ -939,7 +940,7 @@
+     // env vars are only pruned on macOS
+     switch ( process.platform.value() ) {
+         case PLATFORM_MACOS:
+-        case PLATFORM_IOSMAC:
++        case PLATFORM_MACCATALYST:
+         case PLATFORM_DRIVERKIT:
+             break;
+         default:

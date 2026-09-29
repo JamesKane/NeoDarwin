@@ -20,3 +20,4 @@ msun                 freebsd-src 050683bb8e13      lib/msun (+4 lib/libc files);
 copyfile             copyfile-230.0.1.0.1          sha256:8a8e07899674300769ea70c41890b6fa36d60fb2158fb9cb480ff036899ccaf7
 removefile           removefile-84                 sha256:d46ecb6af445dc6faba262fab39dc6550eaf89dff601225e56ea6d47a8fd0ae9
 mDNSResponder        mDNSResponder-2881.0.25       sha256:aa6718b757dcccb9fc6549e0f566cd03eaa7314426f2856e0da08c966d7da41c  (client library only; no Xcode project published)
+Libsystem            Libsystem-1356                sha256:4bc7151681df1ef1aa2328ee533d62ec10eb7f94912902d25fec772febd9353c

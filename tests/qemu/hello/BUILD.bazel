@@ -1,0 +1,26 @@
+load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:darwin_executable.bzl", "swift_embedded_executable")
+
+package(default_visibility = ["//visibility:public"])
+
+# The first dynamically linked program (P1-08b): /sbin/launchd on the HFS+
+# root of //images:hello_root, started through dyld and linked against
+# NeoDarwin's libSystem. Booted by //kernel:sbsa_boot_test.
+swift_embedded_executable(
+    name = "hello",
+    srcs = ["Sources/Main.swift"],
+    c_srcs = ["runtime/libsystem.c"],
+    hdrs = [
+        "LibSystem/libsystem.h",
+        "LibSystem/module.modulemap",
+    ],
+    root = "//base:root",
+)
+
+lang_audit_test(
+    name = "hello_lang_audit",
+    srcs = [
+        "LibSystem/libsystem.h",
+        "runtime/libsystem.c",
+    ],
+)

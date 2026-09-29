@@ -231,6 +231,38 @@ sh_test(
     tags = ["manual", "kernel", "qemu"],
 )
 
+# P1-08b: the same boot with the userland base on the HFS+ root. PID 1 is a
+# dynamically linked program that dyld starts with NeoDarwin's libSystem.
+sh_test(
+    name = "sbsa_dyld_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:hello_root)",
+        "--until-lines",
+        "$(rootpath //boot/neoboot)",
+        "180",
+        "'Darwin Kernel Version 25.0.0'",
+        "'BSD root: md0'",
+        "'hfs: mounted NeoDarwin on device'",
+        "'hello: hello, world from dyld and libSystem, as PID 1'",
+        "'hello: malloc: allocated, filled and freed'",
+        "'hello: pthread: created and joined'",
+        "'hello: dyld: dlopen and dlsym answer'",
+        "'hello: dispatch: ran a function on a global queue'",
+        "'hello: all checks passed'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:hello_root",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
 # P1-07: the same boot with PID 1 itself as the ramdisk, rooted on mockfs
 # (patches 0011-0013).
 sh_test(

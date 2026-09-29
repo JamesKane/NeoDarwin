@@ -23,7 +23,12 @@
 //    standard error is always available;
 //  - os_activity: _os_activity_current (OS_ACTIVITY_CURRENT) and
 //    os_activity_get_identifier(). There are no activities, so every
-//    identifier is 0, os_activity's "none".
+//    identifier is 0, os_activity's "none";
+//  - libSystem's initializer and fork hook (_libtrace_init(),
+//    _libtrace_fork_child()). Apple's initializer reads the process's logging
+//    preferences and connects to logd; the stand-in's settings are fixed and
+//    it writes to standard error with no lock or connection, so both do
+//    nothing.
 // Privacy annotations ("%{private}s") are honoured by the log store, which
 // NeoDarwin lacks; arguments are always shown. More of libsystem_trace is
 // added as NeoDarwin libraries come to need it (docs/base/libsystem.md).
@@ -514,4 +519,20 @@ os_activity_get_identifier(os_activity_t activity, os_activity_id_t *parent_id)
 		*parent_id = 0;
 	}
 	return 0;
+}
+
+#pragma mark - libSystem's initializer and fork hook
+
+// Declared by Libsystem's init.c, which calls them; no header publishes them.
+void _libtrace_init(void);
+void _libtrace_fork_child(void);
+
+void
+_libtrace_init(void)
+{
+}
+
+void
+_libtrace_fork_child(void)
+{
 }

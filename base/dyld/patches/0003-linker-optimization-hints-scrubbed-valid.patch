@@ -1,0 +1,25 @@
+From: NeoDarwin
+Subject: [PATCH] LinkerOptimizationHints: complete the scrubbed valid()
+
+The published mach_o/LinkerOptimizationHints.cpp has the body of
+LinkerOptimizationHints::valid() removed down to its return statement, which
+names a variable that no longer exists, so libmach_o doesn't compile. The
+check only matters to the linker and verification tools; neither dyld nor
+libdyld calls it. Return no error, as a binary without hints would.
+
+Rebase-risk: low (one function; drop the patch when the body is published).
+---
+--- a/mach_o/LinkerOptimizationHints.cpp
++++ b/mach_o/LinkerOptimizationHints.cpp
+@@ -121,8 +121,9 @@
+ 
+ Error LinkerOptimizationHints::valid(std::span<const MappedSegment> segments, uint64_t loadAddress) const
+ {
+-
+-    return std::move(lohErr);
++    // NeoDarwin: the published source has this function's body removed; no
++    // check is made.
++    return Error::none();
+ }
+ 
+ } // namespace mach_o

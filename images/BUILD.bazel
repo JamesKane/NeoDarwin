@@ -10,3 +10,14 @@ hfs_ramdisk(
     dirs = ["dev"],
     files = {"//tests/qemu/pid1": "sbin/launchd"},
 )
+
+# The HFS+ root of P1-08b: the userland base built from Apple source
+# (//base:root: dyld, libSystem and the libraries under it) and the
+# dynamically linked hello world as /sbin/launchd. Booted by
+# //kernel:sbsa_dyld_boot_test.
+hfs_ramdisk(
+    name = "hello_root",
+    dirs = ["dev"],
+    files = {"//tests/qemu/hello": "sbin/launchd"},
+    trees = ["//base:root"],
+)

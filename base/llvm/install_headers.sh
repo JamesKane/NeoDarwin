@@ -18,7 +18,7 @@ mkdir -p "$V1"
 # libcxx/include/CMakeLists.txt installs every header in the directory: its
 # file list is all of it but CMakeLists.txt and __config_site.in.
 (cd "$L/libcxx/include" && find -L . -type f ! -name CMakeLists.txt ! -name __config_site.in -print0 |
-	xargs -0 tar cf -) | (cd "$V1" && tar xf -)
+	xargs -0 tar chf -) | (cd "$V1" && tar xf -)
 cp "$L/libcxxabi/include/cxxabi.h" "$L/libcxxabi/include/__cxxabi_config.h" "$V1/"
 
 # __assertion_handler: LIBCXX_ASSERTION_HANDLER_FILE's default, copied as is.
@@ -45,7 +45,7 @@ if grep -q '@\|#cmakedefine' "$V1/__config_site"; then
 fi
 
 # libunwind/include/CMakeLists.txt's file list, into usr/include.
-(cd "$L/libunwind/include" && tar cf - __libunwind_config.h libunwind.h libunwind.modulemap \
+(cd "$L/libunwind/include" && tar chf - __libunwind_config.h libunwind.h libunwind.modulemap \
 	mach-o/compact_unwind_encoding.h unwind_arm_ehabi.h unwind_itanium.h unwind.h) |
 	(cd "$DEST/usr/include" && tar xf -)
 chmod -R u+w,a+r "$DEST/usr/include"

@@ -65,7 +65,7 @@ CXX=("${TARGET_FLAGS[@]}" "${LLVM_DEFS[@]}" -Os -DNDEBUG -std=c++23 -nostdinc++ 
 	-DLIBCXX_BUILDING_LIBCXXABI -D_LIBCPP_BUILDING_LIBRARY -D_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 write_rsp "$B/abi.rsp" "${CXX[@]}" -D_LIBCXXABI_BUILDING_LIBRARY -D_LIBCXXABI_FORGIVING_DYNAMIC_CAST \
 	-fstrict-aliasing -funwind-tables -I"$L/libcxx/src" -I"$V1" -I"$L/libcxxabi/include" "${SYS[@]}"
-compile "$B/abi" "$B/abi.rsp" $(srcs libcxxabi)
+compile "$B/abi" "$B/abi.rsp" $(srcs libcxxabi) "$ME/src/nd_typed_new_delete.cpp"
 write_rsp "$B/cxx.rsp" "${CXX[@]}" -D_LIBCPP_REMOVE_TRANSITIVE_INCLUDES -fPIC -faligned-allocation \
 	-fvisibility=hidden -fsized-deallocation -I"$L/libcxx/src" -I"$V1" -I"$L/libcxxabi/include" "${SYS[@]}"
 compile "$B/cxx" "$B/cxx.rsp" $(srcs libcxx)
@@ -86,17 +86,18 @@ xcrun clang "${LINK[@]}" -install_name /usr/lib/system/libcompiler_rt.dylib -cur
 link_unwind -L"$OUT/usr/lib/system" -Wl,-upward-lcompiler_rt -L"$SDK/usr/lib/system" -ldyld
 
 # libc++abi exports the symbols of libcxxabi/lib/*.exp that CMake selects on
-# arm64; libc++ re-exports all but symbols-not-reexported.exp. Both link
+# arm64, and Apple's typed operator new and delete (typed-new-delete.exp);
+# libc++ re-exports all but symbols-not-reexported.exp. Both link
 # libSystem, as Apple's do (host SDK stub).
 EXP=(cxxabiv1 fundamental-types itanium-base std-misc new-delete std-exceptions itanium-exceptions personality-v0)
 xcrun clang "${LINK[@]}" -install_name /usr/lib/libc++abi.dylib -current_version "$LLVM_VERSION" "$B"/abi/*.o \
 	-Wl,-exported_symbols_list,"$L/libcxxabi/lib/symbols-not-reexported.exp" \
 	$(for e in "${EXP[@]}"; do printf -- '-Wl,-exported_symbols_list,%s\n' "$L/libcxxabi/lib/$e.exp"; done) \
-	-lSystem -o "$OUT/usr/lib/libc++abi.dylib"
+	-Wl,-exported_symbols_list,"$ME/typed-new-delete.exp" -lSystem -o "$OUT/usr/lib/libc++abi.dylib"
 xcrun clang "${LINK[@]}" -install_name /usr/lib/libc++.1.dylib -current_version "$LLVM_VERSION" "$B"/cxx/*.o \
 	-Wl,-unexported_symbols_list,"$L/libcxx/lib/libc++unexp.exp" \
 	-Wl,-force_symbols_not_weak_list,"$L/libcxx/lib/notweak.exp" -Wl,-force_symbols_weak_list,"$L/libcxx/lib/weak.exp" \
 	"$OUT/usr/lib/libc++abi.dylib" \
 	$(for e in "${EXP[@]}"; do printf -- '-Wl,-reexported_symbols_list,%s\n' "$L/libcxxabi/lib/$e.exp"; done) \
-	-lSystem -o "$OUT/usr/lib/libc++.1.dylib"
+	-Wl,-reexported_symbols_list,"$ME/typed-new-delete.exp" -lSystem -o "$OUT/usr/lib/libc++.1.dylib"
 ln -sf libc++.1.dylib "$OUT/usr/lib/libc++.dylib"

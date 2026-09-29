@@ -191,8 +191,15 @@ Iterating on kernel sources: `ND_XNU_KEEP_WORK=DIR` makes `tools/xnu/kernel.sh` 
 
 Debugging: QEMU's gdbstub (`-s`) with `lldb`, loading `kernel.release.sbsa.unstripped` with `--slide 0x8000` (the kernel's offset inside the collection at slide 0) and hardware breakpoints (`breakpoint set -H`). Panic `caller` and `pc` values minus 0x8000 symbolise with `atos` against the unstripped kernel. The kernel has no line tables, so a hardware breakpoint on `os_reason_create` or on a return site, plus `bt` and a register read, is the quickest way to place an exec failure. Exit-reason namespaces are in `bsd/sys/reason.h`: 9 is `OS_REASON_EXEC`, not codesigning (3).
 
+### 2.1.5 A dynamically linked PID 1 through dyld (P1-08b)
+
+`//kernel:sbsa_dyld_boot_test` boots `//images:hello_root`: the HFS+ root with the userland base built from Apple source, and a dynamically linked hello world as `/sbin/launchd`. The base is dyld, libSystem.B and the 27 libraries it reexports (`docs/base/libsystem.md`). The kernel execs it and maps `/usr/lib/dyld`. dyld loads libSystem and the libraries under it (32 images, with no shared cache) and runs libSystem's initializer. The program then prints from stdio, allocates, runs a pthread, calls `dlopen` and `dlsym`, and runs a function on a libdispatch global queue through the kernel's pthread workqueue. The kernel needed no changes for any of this: the exec, dyld and workqueue paths are xnu's own.
+
+A launch failure is visible: dyld's error goes into the exit reason, which the "initproc failed to start" panic prints ("Symbol not found: ..."). That panic then takes a nested kernel data abort (FAR 0xc) inside the panic path. It doesn't affect a successful boot, but it hides the backtrace.
+
 **Open threads (parked 2026-09-28).** In order of the boot path:
-- **P1-08b, the next userland step.** A cross SDK and libSystem from Apple source: libsyscall, Libc, libplatform, libpthread, libmalloc and dyld. The exit is a dynamically linked hello world running through dyld from the HFS+ root. P1-08 then brings launchd-842, getty and a shell. Patch 0013's static-PID-1 allowance stays for init shims.
+- **P1-08, the next userland step.** launchd-842, getty and a shell on the P1-08b base (§2.1.5). launchd replaces the libxpc stand-in's "no service" answers with a real bootstrap namespace. Patch 0013's static-PID-1 allowance stays for init shims.
+- **The nested panic on a failed PID 1 launch** (§2.1.5): a data abort at FAR 0xc in the panic path after "initproc failed to start".
 - **P1-06, SMP half (status `doing`).** The boot CPU is done. Still to do: bringing up secondaries through `NeoDarwinPSCI` (`CPU_ON`), per-CPU GIC redistributor init and IPI measurement. The exit is `hw.ncpu` equal to the MADT count.
   - **PSCI conduit:** QEMU `virt` without EL3 firmware uses `hvc`, but `sbsa_isa_audit` forbids `hvc` in the kernel, so the conduit choice (take it from the FADT/DT, and how the audit treats it) comes first.
   - **Testing:** `tools/efi/qemu_efi_test.sh --smp N` runs SMP boots.

@@ -1,0 +1,20 @@
+From: NeoDarwin
+Subject: [PATCH] libdyld utils: include mach_o's Fixups.h
+
+libdyld/utils.cpp includes "Fixup.h", which the published tree doesn't have:
+mach_o::Fixup is declared in mach_o/Fixups.h, which every other user
+includes. Include that.
+
+Rebase-risk: low (one include).
+---
+--- a/libdyld/utils.cpp
++++ b/libdyld/utils.cpp
+@@ -41,7 +41,7 @@
+ // mach_o
+ #include "Architecture.h"
+ #include "Error.h"
+-#include "Fixup.h"
++#include "Fixups.h"
+ #include "GradedArchitectures.h"
+ #include "Header.h"
+ #include "Image.h"

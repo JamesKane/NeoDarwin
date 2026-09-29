@@ -155,7 +155,7 @@ epics:
     title: "Cross SDK and libSystem from Apple source: libsyscall, Libc, libplatform, libpthread, libmalloc, dyld"
     phase: 1
     owner: userland
-    status: doing
+    status: done
     depends: [P1-08a]
     exit: "a dynamically linked hello world runs through dyld from the HFS+ root"
     doc: docs/kernel/arm64-sbsa-bringup.md

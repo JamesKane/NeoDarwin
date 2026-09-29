@@ -102,3 +102,27 @@ base_library = rule(
         "_tools": attr.label(default = "//tools/base:scripts"),
     },
 )
+
+def _root_impl(ctx):
+    out = ctx.actions.declare_directory(ctx.label.name)
+    trees = [d.files.to_list()[0] for d in ctx.attr.libraries]
+    ctx.actions.run(
+        executable = ctx.file._script,
+        arguments = [out.path] + [t.path for t in trees],
+        inputs = trees,
+        outputs = [out],
+        mnemonic = "BaseRoot",
+        progress_message = "Assembling the base root %{label}",
+        execution_requirements = _XCODE_REQS,
+        use_default_shell_env = True,
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+base_root = rule(
+    implementation = _root_impl,
+    doc = "The runtime root of the userland base: the base_library install trees merged, without their build-only usr/local.",
+    attrs = {
+        "libraries": attr.label_list(mandatory = True, doc = "base_library targets."),
+        "_script": attr.label(default = "//tools/base:stage_root.sh", allow_single_file = True),
+    },
+)

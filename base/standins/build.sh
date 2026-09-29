@@ -23,3 +23,6 @@ standin libcorecrypto -lsystem_kernel
 standin libxpc -lsystem_kernel -lsystem_malloc -lsystem_c -lsystem_blocks
 standin libsystem_trace -lsystem_kernel -lsystem_malloc -lsystem_c
 standin libsystem_sandbox
+standin libsystem_sanitizers
+standin libsystem_configuration
+standin libsystem_featureflags
