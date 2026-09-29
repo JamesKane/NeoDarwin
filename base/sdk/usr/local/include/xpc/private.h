@@ -8,7 +8,10 @@
  *  - XPC pipes (libsystem_asl): a synchronous request/reply channel to a
  *    launchd-registered service;
  *  - the event publisher and token queries (libsystem_notify);
- *  - xpc_create_from_plist (libsystem_info's configuration profiles).
+ *  - xpc_create_from_plist (libsystem_info's configuration profiles,
+ *    libsystem_darwin's os_variant);
+ *  - _xpc_runtime_is_app_sandboxed (copyfile's xattr_flags.c picks its
+ *    table of attribute properties by whether the caller is app-sandboxed).
  * The pipe flag values are the ones Apple's libsystem_asl passes.
  */
 #ifndef __XPC_PRIVATE_H__
@@ -16,6 +19,7 @@
 
 #include <bsm/audit.h>
 #include <errno.h>   /* xpc_pipe_routine() returns errno values (EPIPE: re-create the pipe) */
+#include <stdbool.h>
 #include <stddef.h>
 #include <xpc/xpc.h>
 
@@ -42,6 +46,8 @@ xpc_object_t xpc_copy_entitlement_for_token(const char *key, audit_token_t *toke
 
 XPC_EXPORT XPC_RETURNS_RETAINED XPC_WARN_RESULT
 xpc_object_t _Nullable xpc_create_from_plist(const void *_Nonnull data, size_t len);
+
+bool _xpc_runtime_is_app_sandboxed(void);
 
 __END_DECLS
 

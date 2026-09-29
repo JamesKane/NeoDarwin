@@ -1,0 +1,12 @@
+# libsystem_dnssd's sources in mDNSResponder-2881.0.25. The release publishes
+# no Xcode project (mDNSMacOSX/mDNSResponder.xcodeproj was last published in
+# 1310.140.1, and 2881 drops mDNSMacOSX/ altogether), so the list is the
+# client library the published tree builds: mDNSPosix/Makefile's CLIENTLIBOBJS.
+# Of the 1310 libsystem_dnssd target's sources, these are the published ones
+# (dnssd_errstring.c was split out of dnssd_clientstub.c since); the Apple-only
+# ones (dnssd_clientstub_apple.c, DNSServiceDiscovery.c, mdns_tlv.c,
+# bundle_utilities.m) are not published. No file has per-file COMPILER_FLAGS.
+mDNSShared/dnssd_clientlib.c
+mDNSShared/dnssd_clientstub.c
+mDNSShared/dnssd_ipc.c
+mDNSShared/dnssd_errstring.c

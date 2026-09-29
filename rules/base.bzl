@@ -19,13 +19,18 @@ def _sysroot_impl(ctx):
     repos = [ctx.attr.xnu, ctx.attr.libplatform, ctx.attr.libpthread, ctx.attr.libmalloc,
              ctx.attr.availability, ctx.attr.dyld, ctx.attr.libc, ctx.attr.libinfo, ctx.attr.libclosure,
              ctx.attr.libdispatch, ctx.attr.objc4, ctx.attr.llvm]
-    inputs = ctx.files.xnu_headers + ctx.files.shims + [ctx.file.dispatch_headers_script, ctx.file.llvm_headers_script]
+    inputs = ctx.files.xnu_headers + ctx.files.shims + ctx.files.mdns_patches + ctx.attr.mdnsresponder.files.to_list() + [
+        ctx.file.dispatch_headers_script,
+        ctx.file.llvm_headers_script,
+        ctx.file.mdns_headers_script,
+    ]
     for r in repos:
         inputs += r.files.to_list()
     ctx.actions.run(
         executable = ctx.file._script,
         arguments = [out.path, ctx.files.xnu_headers[0].path] + [_root(r) for r in repos] +
-                    [ctx.file.dispatch_headers_script.path, ctx.file.llvm_headers_script.path, ctx.attr.shims_root],
+                    [ctx.file.dispatch_headers_script.path, ctx.file.llvm_headers_script.path, ctx.attr.shims_root,
+                     _root(ctx.attr.mdnsresponder), ctx.file.mdns_headers_script.path],
         inputs = inputs,
         outputs = [out],
         tools = ctx.files._tools,
@@ -57,6 +62,10 @@ base_sysroot = rule(
                                           doc = "base/llvm/install_headers.sh."),
         "dispatch_headers_script": attr.label(mandatory = True, allow_single_file = True,
                                               doc = "base/libdispatch/install_headers.sh."),
+        "mdnsresponder": attr.label(mandatory = True, doc = "@apple_mdnsresponder (libsystem_dnssd's headers)."),
+        "mdns_headers_script": attr.label(mandatory = True, allow_single_file = True,
+                                          doc = "base/mdnsresponder/install_headers.sh."),
+        "mdns_patches": attr.label_list(allow_files = [".patch"], doc = "base/mdnsresponder/patches, which it applies."),
         "shims": attr.label(mandatory = True, doc = "base/sdk's headers."),
         "shims_root": attr.string(mandatory = True, doc = "Their directory, e.g. base/sdk."),
         "_script": attr.label(default = "//tools/base:stage_sysroot.sh", allow_single_file = True),

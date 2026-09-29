@@ -132,6 +132,30 @@ http_archive(
 )
 
 http_archive(
+    name = "apple_copyfile",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "8a8e07899674300769ea70c41890b6fa36d60fb2158fb9cb480ff036899ccaf7",
+    strip_prefix = "copyfile-copyfile-230.0.1.0.1",
+    urls = ["https://github.com/apple-oss-distributions/copyfile/archive/refs/tags/copyfile-230.0.1.0.1.tar.gz"],
+)
+
+http_archive(
+    name = "apple_removefile",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "d46ecb6af445dc6faba262fab39dc6550eaf89dff601225e56ea6d47a8fd0ae9",
+    strip_prefix = "removefile-removefile-84",
+    urls = ["https://github.com/apple-oss-distributions/removefile/archive/refs/tags/removefile-84.tar.gz"],
+)
+
+http_archive(
+    name = "apple_mdnsresponder",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "aa6718b757dcccb9fc6549e0f566cd03eaa7314426f2856e0da08c966d7da41c",
+    strip_prefix = "mDNSResponder-mDNSResponder-2881.0.25",
+    urls = ["https://github.com/apple-oss-distributions/mDNSResponder/archive/refs/tags/mDNSResponder-2881.0.25.tar.gz"],
+)
+
+http_archive(
     name = "apple_objc4",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
     sha256 = "acd6e36cd8df5c7a5a78fe45adc7749da26b5e414986968c7aebeab22a75933b",

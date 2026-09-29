@@ -15,6 +15,9 @@ base_sysroot(
     libdispatch = "@apple_libdispatch//:all",
     llvm = "@llvm_project//:all",
     llvm_headers_script = "llvm/install_headers.sh",
+    mdns_headers_script = "mdnsresponder/install_headers.sh",
+    mdns_patches = glob(["mdnsresponder/patches/*.patch"]),
+    mdnsresponder = "@apple_mdnsresponder//:all",
     objc4 = "@apple_objc4//:all",
     libinfo = "@apple_libinfo//:all",
     libmalloc = "@apple_libmalloc//:all",
@@ -120,7 +123,8 @@ base_library(
 base_library(
     name = "libsystem_info",
     data = glob(["libinfo/**"]),
-    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c", ":libsystem_blocks"],
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c", ":libsystem_blocks",
+            ":llvm_runtimes", ":libdispatch_dylib", ":libsystem_dnssd", ":libsystem_notify", ":libsystem_darwin", ":standin_libs"],
     script = "libinfo/build.sh",
     srcs = "@apple_libinfo//:all",
     sysroot = ":sysroot",
@@ -151,12 +155,60 @@ base_library(
     sysroot = ":sysroot",
 )
 
+base_library(
+    name = "libsystem_darwin",
+    data = glob(["libdarwin/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c",
+            ":libsystem_blocks", ":libdispatch_dylib", ":libmacho", ":libsystem_m", ":llvm_runtimes", ":standin_libs"],
+    script = "libdarwin/build.sh",
+    srcs = "@apple_libc//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libsystem_collections",
+    data = glob(["libcollections/**"]),
+    deps = [":libsystem_kernel", ":libsystem_malloc", ":libsystem_c", ":libsystem_blocks", ":llvm_runtimes"],
+    script = "libcollections/build.sh",
+    srcs = "@apple_libc//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libcopyfile",
+    data = glob(["copyfile/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_malloc", ":libsystem_c", ":libsystem_blocks",
+            ":libsystem_asl", ":libsystem_info", ":libdispatch_dylib", ":llvm_runtimes", ":standin_libs"],
+    script = "copyfile/build.sh",
+    srcs = "@apple_copyfile//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libremovefile",
+    data = glob(["removefile/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_malloc", ":libsystem_c", ":llvm_runtimes"],
+    script = "removefile/build.sh",
+    srcs = "@apple_removefile//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libsystem_dnssd",
+    data = glob(["mdnsresponder/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c",
+            ":libsystem_blocks", ":libdispatch_dylib", ":libsystem_asl", ":llvm_runtimes"],
+    script = "mdnsresponder/build.sh",
+    srcs = "@apple_mdnsresponder//:all",
+    sysroot = ":sysroot",
+)
+
 # Stand-ins for closed libraries: libcorecrypto, libxpc, libsystem_trace,
 # libsystem_sandbox.
 base_library(
     name = "standin_libs",
     data = ["//base/standins:srcs"],
-    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_c"],
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_malloc", ":libsystem_c", ":libsystem_blocks"],
     script = "//base/standins:build.sh",
     srcs = "//base/standins:srcs",
     sysroot = ":sysroot",
@@ -186,6 +238,11 @@ base_library(
     ("libnotify", "libsystem_notify"),
     ("libinfo", "libsystem_info"),
     ("libm", "libsystem_m"),
+    ("libdarwin", "libsystem_darwin"),
+    ("libcollections", "libsystem_collections"),
+    ("copyfile", "libcopyfile"),
+    ("removefile", "libremovefile"),
+    ("mdnsresponder", "libsystem_dnssd"),
 ]]
 
 [sh_test(

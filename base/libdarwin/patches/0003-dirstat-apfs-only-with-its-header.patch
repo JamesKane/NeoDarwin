@@ -1,0 +1,22 @@
+From: NeoDarwin
+Subject: [PATCH] dirstat: use APFS's directory statistics only with its header
+
+dirstat.c asks APFS for directory sizes through apfs/apfs_fsctl.h, which
+Apple doesn't publish (APFS is closed). Without the header, take the path
+the simulator takes: the portable fallback that walks the directory, which
+dirstatat_np forces today anyway (rdar://32794924).
+
+Rebase-risk: low (one condition).
+---
+diff --git a/libdarwin/dirstat.c b/libdarwin/dirstat.c
+--- a/libdarwin/dirstat.c
++++ b/libdarwin/dirstat.c
+@@ -38,7 +38,7 @@
+ #include "dirstat.h"
+ #include "dirstat_collection.h"
+ 
+-#if !TARGET_OS_SIMULATOR
++#if !TARGET_OS_SIMULATOR && __has_include(<apfs/apfs_fsctl.h>)
+ #define HAS_APFS
+ #endif
+ 

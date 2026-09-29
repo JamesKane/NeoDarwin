@@ -1,0 +1,14 @@
+# libsystem_darwin.dylib's sources phase (Libc-1725.0.11 Libc.xcodeproj), relative to the Libc tree;
+# after a tab, the file's COMPILER_FLAGS (none in this target).
+libdarwin/mach.c
+libdarwin/variant.c
+libdarwin/stdlib.c
+libdarwin/dirstat.c
+libdarwin/ctl.c
+libdarwin/stdio.c
+libdarwin/exception.c
+libdarwin/init.c
+libdarwin/err.c
+libdarwin/bsd.c
+libdarwin/dirstat_collection.c
+libdarwin/string.c

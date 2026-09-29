@@ -1,0 +1,42 @@
+From: NeoDarwin
+Subject: [PATCH] copyfile: build without libquarantine
+
+copyfile.c takes its quarantine calls from libquarantine, a closed library
+with an unpublished quarantine.h, on every platform but iOS, where no-op
+versions stand in. Add a COPYFILE_NO_QUARANTINE switch that selects the no-op
+versions on macOS too. The com.apple.quarantine attribute is then copied like
+any other extended attribute, and COPYFILE_STATE_QUARANTINE reads as NULL.
+
+Rebase-risk: low (one preprocessor condition).
+---
+diff --git a/copyfile.c b/copyfile.c
+--- a/copyfile.c
++++ b/copyfile.c
+@@ -55,11 +55,16 @@
+ #endif
+ 
+ #include <TargetConditionals.h>
+-#if !TARGET_OS_IPHONE
++/*
++ * COPYFILE_NO_QUARANTINE: build without libquarantine (a closed library),
++ * with the no-op quarantine calls of the iOS build. The quarantine attribute
++ * is then copied like any other extended attribute.
++ */
++#if !TARGET_OS_IPHONE && !defined(COPYFILE_NO_QUARANTINE)
+ #include <quarantine.h>
+ 
+ #define	XATTR_QUARANTINE_NAME qtn_xattr_name
+-#else /* TARGET_OS_IPHONE */
++#else /* TARGET_OS_IPHONE || COPYFILE_NO_QUARANTINE */
+ #define qtn_file_t void *
+ #define QTN_SERIALIZED_DATA_MAX 0
+ static void * qtn_file_alloc(void) { return NULL; }
+@@ -75,7 +80,7 @@
+ static int qtn_file_set_flags(__unused void *x, __unused uint32_t flags) { return 0; }
+ #define	XATTR_QUARANTINE_NAME "figgledidiggledy"
+ #define QTN_FLAG_DO_NOT_TRANSLOCATE 0
+-#endif /* TARGET_OS_IPHONE */
++#endif /* TARGET_OS_IPHONE || COPYFILE_NO_QUARANTINE */
+ 
+ #include "copyfile.h"
+ #include "copyfile_private.h"

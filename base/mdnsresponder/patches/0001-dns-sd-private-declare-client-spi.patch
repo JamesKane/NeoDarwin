@@ -1,0 +1,65 @@
+From: NeoDarwin
+Subject: [PATCH] dns_sd_private.h: declare the private SPI the client library defines
+
+The published dns_sd_private.h is Apple's with its private API section
+removed, but dnssd_clientstub.c and dnssd_errstring.c still define four of
+the functions it declared: DNSServiceGetPID, DNSServiceSetDefaultDomainForUser,
+DNSServiceSleepKeepalive_sockaddr and DNSServiceErrorCodeToString. The
+library builds with -fvisibility=hidden (GCC_SYMBOLS_PRIVATE_EXTERN), so
+without a DNSSD_EXPORT declaration they come out hidden, though Apple's
+libsystem_dnssd exports all four. Declare them, with the signatures of the
+last full header (mDNSResponder-1310.140.1), and include the header in
+dnssd_clientstub.c.
+
+Rebase-risk: low (declarations only).
+---
+diff --git a/mDNSShared/dns_sd_private.h b/mDNSShared/dns_sd_private.h
+--- a/mDNSShared/dns_sd_private.h
++++ b/mDNSShared/dns_sd_private.h
+@@ -73,6 +73,35 @@
+     kDNSServiceValidationPolicyRequired DNS_SD_ENUM_SPI_AVAILABLE_FALL_2022 = 1
+ } DNSServiceValidationPolicy;
+ 
++// Private entry points that the client library defines (dnssd_clientstub.c,
++// dnssd_errstring.c). They are part of libsystem_dnssd's exported interface.
++
++DNSSD_EXPORT
++DNSServiceErrorType DNSSD_API DNSServiceGetPID
++(
++    uint16_t srcport,
++    int32_t *pid
++);
++
++DNSSD_EXPORT
++DNSServiceErrorType DNSSD_API DNSServiceSetDefaultDomainForUser(DNSServiceFlags flags, const char *domain);
++
++struct sockaddr;
++
++DNSSD_EXPORT
++DNSServiceErrorType DNSSD_API DNSServiceSleepKeepalive_sockaddr
++(
++    DNSServiceRef *                 sdRef,
++    DNSServiceFlags                 flags,
++    const struct sockaddr *         localAddr,
++    const struct sockaddr *         remoteAddr,
++    unsigned int                    timeout,
++    DNSServiceSleepKeepaliveReply   callBack,
++    void *                          context
++);
++
++DNSSD_EXPORT
++const char * DNSSD_API DNSServiceErrorCodeToString(DNSServiceErrorType error_code);
+ 
+ #define kDNSServiceCompPrivateDNS   "PrivateDNS"
+ #define kDNSServiceCompMulticastDNS "MulticastDNS"
+diff --git a/mDNSShared/dnssd_clientstub.c b/mDNSShared/dnssd_clientstub.c
+--- a/mDNSShared/dnssd_clientstub.c
++++ b/mDNSShared/dnssd_clientstub.c
+@@ -27,6 +27,7 @@
+  */
+ 
+ #include "dnssd_clientstub.h"
++#include "dns_sd_private.h"
+ 
+ #include <errno.h>
+ #include <stdlib.h>

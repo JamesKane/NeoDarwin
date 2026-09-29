@@ -20,6 +20,6 @@ standin() {  # standin LIBRARY LINK-FLAGS...
 		$(dep_libdirs "${DEPS[@]}") "$@" -o "$OUT/usr/lib/system/$lib.dylib"
 }
 standin libcorecrypto -lsystem_kernel
-standin libxpc -lsystem_kernel
-standin libsystem_trace -lsystem_kernel -lsystem_c
+standin libxpc -lsystem_kernel -lsystem_malloc -lsystem_c -lsystem_blocks
+standin libsystem_trace -lsystem_kernel -lsystem_malloc -lsystem_c
 standin libsystem_sandbox

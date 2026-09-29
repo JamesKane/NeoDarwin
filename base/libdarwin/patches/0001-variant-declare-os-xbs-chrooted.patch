@@ -1,0 +1,24 @@
+From: NeoDarwin
+Subject: [PATCH] variant: declare _os_xbs_chrooted
+
+variant.c reads _os_xbs_chrooted, which libsystem_kernel defines in
+wrappers/_libkernel_init.c, but no published header declares it: Apple's
+build takes the declaration from an internal header. Declare it where it is
+used, as libpthread patch 0001 does.
+
+Rebase-risk: low (one declaration).
+---
+diff --git a/libdarwin/variant.c b/libdarwin/variant.c
+--- a/libdarwin/variant.c
++++ b/libdarwin/variant.c
+@@ -40,6 +40,10 @@
+ #include <os/stdlib.h>
+ #include <os/variant_private.h>
+ #include <os/boot_mode_private.h>
++
++// Set by libsystem_kernel (_libkernel_init.c) when running chrooted in a build
++// environment; Apple declares it in an unpublished header.
++extern bool _os_xbs_chrooted;
+ 
+ /*
+  * Lists all properties overridden by an empty file

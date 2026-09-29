@@ -17,3 +17,6 @@ libdispatch          libdispatch-1542.0.4          pinned in kernel/upstream.loc
 objc4                objc4-950                     sha256:acd6e36cd8df5c7a5a78fe45adc7749da26b5e414986968c7aebeab22a75933b
 llvm-project         swift-6.2-RELEASE             sha256:394a5ac36216820031f5ab70d78eeb8cf466d868ce436b20e857282d6408c5bd  (swiftlang/llvm-project f403f108; LLVM 19.1.5, Xcode 26's Swift 6.2)
 msun                 freebsd-src 050683bb8e13      lib/msun (+4 lib/libc files); pinned per file in base/libm/freebsd.lock
+copyfile             copyfile-230.0.1.0.1          sha256:8a8e07899674300769ea70c41890b6fa36d60fb2158fb9cb480ff036899ccaf7
+removefile           removefile-84                 sha256:d46ecb6af445dc6faba262fab39dc6550eaf89dff601225e56ea6d47a8fd0ae9
+mDNSResponder        mDNSResponder-2881.0.25       sha256:aa6718b757dcccb9fc6549e0f566cd03eaa7314426f2856e0da08c966d7da41c  (client library only; no Xcode project published)

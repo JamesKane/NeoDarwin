@@ -1,0 +1,48 @@
+From: NeoDarwin
+Subject: [PATCH] removefile: build without APFS's private fsctl header
+
+REMOVEFILE_CLEAR_PURGEABLE clears APFS's purgeable flag on each directory
+with fsctl(APFSIOC_MARK_PURGEABLE), from apfs/apfs_fsctl.h, a header of the
+closed APFS project. The simulator build leaves the call out. Add a
+REMOVEFILE_NO_APFS switch that leaves it out on macOS too; the flag is then
+accepted and does nothing, which is also what the call does on a volume that
+isn't APFS.
+
+Rebase-risk: low (the three preprocessor conditions around the call).
+---
+diff --git a/removefile_tree_walker.c b/removefile_tree_walker.c
+--- a/removefile_tree_walker.c
++++ b/removefile_tree_walker.c
+@@ -43,7 +43,13 @@
+ #include "removefile.h"
+ #include "removefile_priv.h"
+ 
+-#if __APPLE__ && !TARGET_OS_SIMULATOR
++/*
++ * REMOVEFILE_NO_APFS: build without APFS's private fsctl interface (an
++ * unpublished header), as the simulator build does; REMOVEFILE_CLEAR_PURGEABLE
++ * then does nothing.
++ */
++#if __APPLE__ && !TARGET_OS_SIMULATOR && !defined(REMOVEFILE_NO_APFS)
++#define REMOVEFILE_APFS 1
+ #include <apfs/apfs_fsctl.h>
+ #endif
+ 
+@@ -85,7 +91,7 @@
+ 				fts_set(stream, current_file, FTS_SKIP);
+ 				break;
+ 			}
+-#if __APPLE__ && !TARGET_OS_SIMULATOR
++#if REMOVEFILE_APFS
+ 			else if (state->unlink_flags & REMOVEFILE_CLEAR_PURGEABLE) {
+ 				uint64_t cp_flags = APFS_CLEAR_PURGEABLE;
+ 				(void)fsctl(path, APFSIOC_MARK_PURGEABLE, &cp_flags, 0);
+@@ -522,7 +528,7 @@
+ 					continue;
+ 				}
+ 			}
+-#if __APPLE__ && !TARGET_OS_SIMULATOR
++#if REMOVEFILE_APFS
+ 			if (state->unlink_flags & REMOVEFILE_CLEAR_PURGEABLE) {
+ 				uint64_t cp_flags = APFS_CLEAR_PURGEABLE;
+ 				(void)fsctl(cur_path, APFSIOC_MARK_PURGEABLE, &cp_flags, 0);

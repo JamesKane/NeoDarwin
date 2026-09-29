@@ -47,7 +47,7 @@ Every component comes from the macOS 26.0 release set (`distribution-macOS` tag 
 | # | Deliverable | Check | Status |
 |---|---|---|---|
 | 1 | `//base:sysroot`; `libsystem_kernel`, `libsystem_platform`, `libsystem_pthread`, `libsystem_malloc` with their dyld archives | each links with no undefined symbols outside its declared dependencies; `//base:*_exports_test` records each export list | done |
-| 2 | `libsystem_c` and `libc.a` (dyld), `libsystem_blocks`, libobjc with the C++ runtime and libunwind it needs (LLVM), the other open libraries Libc imports from, and the stand-ins | same | doing: all but libsystem_darwin, libsystem_collections, libcopyfile, libsystem_dnssd and the full libxpc and libsystem_trace stand-ins |
+| 2 | `libsystem_c` and `libc.a` (dyld), `libsystem_blocks`, libobjc with the C++ runtime and libunwind it needs (LLVM), the other open libraries Libc imports from, and the stand-ins | same | done |
 | 3 | dyld and `libdyld` | same; dyld's closed headers replaced by stand-ins, corecrypto's digests by a small SHA implementation | todo |
 | 4 | `libSystem.B`; a hello world linked against it; an HFS+ image holding all of it | `//kernel:sbsa_boot_test` runs the hello world through dyld | todo |
 
@@ -120,7 +120,7 @@ Built, each with an export test:
 | `libc++abi` | 368 | 388 | Apple's typed `operator new`/`delete` extension |
 | `libc++.1` | 1,899 | 1,973 | LLVM 20–21 additions (the SDK is newer than macOS 26.0) |
 
-Stand-ins built so far: libcorecrypto (`ccrng`), libxpc (`bootstrap_parent`), libsystem_trace (the three log calls Libc uses) and libsystem_sandbox (`sandbox_check`, always allowed).
+At this stage the stand-ins were: libcorecrypto (`ccrng`), libxpc (`bootstrap_parent`), libsystem_trace (the three log calls Libc uses) and libsystem_sandbox (`sandbox_check`, always allowed).
 
 | Finding | Resolution |
 |---|---|
@@ -134,3 +134,28 @@ Stand-ins built so far: libcorecrypto (`ccrng`), libxpc (`bootstrap_parent`), li
 | `___chkstk_darwin` isn't in compiler-rt | `base/llvm/src/nd_chkstk_darwin.c` branches to libpthread's published `thread_chkstk_darwin`, as Apple's libcompiler_rt links libsystem_pthread |
 | Darwin's arm64 `fenv_t` is `{fpsr, fpcr}`; FreeBSD packs both into one word, and its classification constants differ | `base/libm/src/nd_fenv.c` implements Darwin's layout; classification compiles against Darwin's `math.h`. msun patch 0001 fixes `sinpi`/`cospi` signs where arm64's `fcvtzu` saturates |
 | Source trees reach build actions as symlinks inside Bazel's sandbox | the sysroot stage copies with `cp -RL` and `find -L`, so it holds files |
+
+### Checkpoint 2 closed: Libc's other libraries, copyfile, removefile, dnssd and the stand-ins
+
+| Library | Exports | Apple's (macOS 27 SDK) | Gaps |
+|---|---|---|---|
+| `libsystem_darwin` | 75 | 76 | `os_lockdown_mode_enabled` (newer than Libc-1725) |
+| `libsystem_collections` | 57 | 65 | the eight `os_set_128_ptr_*` (newer than Libc-1725) |
+| `libcopyfile` | 11 | 11 | none |
+| `libremovefile` | 14 | 14 | none |
+| `libsystem_dnssd` | 46 | 61 | Apple-only client calls (`*Ex`, the `DNSServiceAttr*` setters, delegate connections, validation data) |
+
+The stand-ins now cover every symbol the built libraries import from libxpc and libsystem_trace:
+- **libxpc:** reference-counted XPC objects (null, bool, int64, uint64, string, date, uuid, array, dictionary) and the `bootstrap_*` calls. With no launchd until P1-08, no service can be looked up: `bootstrap_look_up2` answers `BOOTSTRAP_UNKNOWN_SERVICE`, pipes aren't created, and connections answer `XPC_ERROR_CONNECTION_INVALID`. The process has no entitlements and isn't sandboxed, and `xpc_create_from_plist` parses nothing, which `os_variant` and Libinfo take as no file.
+- **libsystem_trace:** `os_log` to standard error. The stand-in decodes the argument buffer `__builtin_os_log_format` encodes (clang's `OSLogBufferLayout`), so messages come out as `os_log` would format them. Info and debug are off, as by default. The syslog shim is on, so syslog(3) and asl(3) print too. There are no activities.
+- **Still outside NeoDarwin's builds:** libdyld (checkpoint 3), libSystem (checkpoint 4; libc++, libc++abi and libobjc link it), and libobjc's weak `swift_retain`/`swift_release` (`LC_LOAD_WEAK_DYLIB`, absent at runtime).
+
+| Finding | Resolution |
+|---|---|
+| libsystem_darwin and libsystem_collections are Libc targets without per-file flags; collections builds with its own `collections.xcconfig` (hidden visibility) | `base/libdarwin` and `base/libcollections` replay each target |
+| libdarwin's `variant.c` reads the undeclared `_os_xbs_chrooted`, `internal.h` includes libxpc's unpublished `os/transaction_private.h` unused, and `dirstat.c` includes the closed `apfs/apfs_fsctl.h` | libdarwin patches 0001–0003; `dirstatat_np` already takes the portable path |
+| copyfile links libquarantine (closed) except on iOS, and includes xnu's `<Kernel/sys/decmpfs.h>` | copyfile patch 0001 (`COPYFILE_NO_QUARANTINE`) selects iOS's no-op calls; Kernel.framework goes on a framework path of the build's own |
+| removefile's `REMOVEFILE_CLEAR_PURGEABLE` uses the closed APFS fsctl header | removefile patch 0001 (`REMOVEFILE_NO_APFS`): accepted and ignored, as on HFS+ |
+| mDNSResponder-2881 publishes no `mDNSMacOSX/`, so there's no Xcode project and no Apple client stub. The tree is Apple's non-Apple configuration | the settings of 1310.140.1's libsystem_dnssd target and the published client library (`mDNSPosix` CLIENTLIBOBJS), with `MDNS_NO_STRICT=1`; the closed links are dropped |
+| The published `dns_sd_private.h` lacks its private API section, and `kDNSServiceAttrAllowFailover` (Libinfo) exists only in Apple's stub | mDNSResponder patches 0001 (export the four private calls the sources define) and 0002 (the failover attribute, sent in the published TLV form). The sysroot stages both headers; Libinfo's header stand-in is gone |
+| NeoDarwin has no mDNSResponder daemon (the macOS one isn't published) | DNS-SD calls fail to connect and Libinfo's mdns module gets no answer; a daemon built from `mDNSPosix` is later work |

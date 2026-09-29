@@ -1,0 +1,64 @@
+From: NeoDarwin
+Subject: [PATCH] dnssd_clientstub: the kDNSServiceAttrAllowFailover query attribute
+
+Libinfo's mdns module (Libinfo-600 lookup.subproj/mdns_module.c) queries
+with DNSServiceQueryRecordWithAttribute(..., &kDNSServiceAttrAllowFailover,
+...). Apple's libsystem_dnssd exports that attribute, but its definition is
+in the unpublished Apple client stub. The published IPC protocol already has
+its wire form (dnssd_ipc.h IPC_TLV_TYPE_SERVICE_ATTR_FAILOVER_POLICY, a
+uint32 DNSServiceFailoverPolicy), and dns_sd_private.h the policy enum.
+Add a failover policy to DNSServiceAttribute, the constant attribute that
+allows failover, and send the TLV when the policy is set. A daemon that
+doesn't know the TLV ignores it.
+
+Rebase-risk: low (one field, one constant, one TLV).
+---
+diff --git a/mDNSShared/dns_sd_private.h b/mDNSShared/dns_sd_private.h
+--- a/mDNSShared/dns_sd_private.h
++++ b/mDNSShared/dns_sd_private.h
+@@ -103,6 +103,11 @@
+ DNSSD_EXPORT
+ const char * DNSSD_API DNSServiceErrorCodeToString(DNSServiceErrorType error_code);
+ 
++// A query attribute that lets the query fail over to another DNS service
++// (IPC_TLV_TYPE_SERVICE_ATTR_FAILOVER_POLICY, kDNSServiceFailoverPolicyAllow).
++DNSSD_EXPORT
++extern const DNSServiceAttribute kDNSServiceAttrAllowFailover;
++
+ #define kDNSServiceCompPrivateDNS   "PrivateDNS"
+ #define kDNSServiceCompMulticastDNS "MulticastDNS"
+ 
+diff --git a/mDNSShared/dnssd_clientstub.c b/mDNSShared/dnssd_clientstub.c
+--- a/mDNSShared/dnssd_clientstub.c
++++ b/mDNSShared/dnssd_clientstub.c
+@@ -248,6 +248,7 @@
+ 
+ struct DNSServiceAttribute_s {
+     DNSServiceAAAAPolicy aaaa_policy;
++    DNSServiceFailoverPolicy failover_policy;
+     uint32_t hostkeyhash;
+     uint32_t timestamp;    //Timestamp in seconds since epoch time to indicate when the service/record is registered.
+     bool hostkeyhash_is_set;
+@@ -258,7 +259,11 @@
+     .aaaa_policy = kDNSServiceAAAAPolicyFallback
+ };
+ 
++const DNSServiceAttribute kDNSServiceAttrAllowFailover = {
++    .failover_policy = kDNSServiceFailoverPolicyAllow
++};
+ 
++
+ DNSServiceErrorType DNSSD_API DNSServiceQueryRecordWithAttribute
+ (
+     DNSServiceRef * const sdRef,
+@@ -362,6 +367,10 @@
+ {
+     size_t required_len = 0;
+     required_len += put_tlv_uint32(IPC_TLV_TYPE_SERVICE_ATTR_AAAA_POLICY, attr->aaaa_policy, ptr, limit);
++    if (attr->failover_policy != kDNSServiceFailoverPolicyNone)
++    {
++        required_len += put_tlv_uint32(IPC_TLV_TYPE_SERVICE_ATTR_FAILOVER_POLICY, attr->failover_policy, ptr, limit);
++    }
+     if (attr->timestamp_is_set)
+     {
+         required_len += put_tlv_uint32(IPC_TLV_TYPE_SERVICE_ATTR_TIMESTAMP, attr->timestamp, ptr, limit);

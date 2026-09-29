@@ -5,7 +5,8 @@
 # source list is sources.txt, taken from the project (no file has per-file
 # COMPILER_FLAGS). The headers the project installs are already in the
 # sysroot (its install_files.sh runs in the sysroot stage).
-#   build.sh OUT LIBINFO_SRC SYSROOT DEPROOT...   (DEPROOT: kernel, platform, pthread, malloc, libc, blocks)
+#   build.sh OUT LIBINFO_SRC SYSROOT DEPROOT...   (DEPROOT: kernel, platform, pthread, malloc, libc, blocks, llvm_runtimes,
+#   libdispatch, libsystem_dnssd, libsystem_notify, libsystem_darwin, standin_libs)
 # OUT receives usr/lib/system/libsystem_info.dylib.
 #
 # Configuration. The xcconfig's macOS defines are CONFIG_MAC, SYNTH_ROOTFS,
@@ -26,14 +27,12 @@
 #
 # Headers: the sysroot's, which include libdispatch's private headers and
 # libsystem_darwin's (Libc's os/variant_private.h) and base/sdk's xpc/private.h;
-# and include/: stand-ins, for this library only, for two headers of projects
-# NeoDarwin doesn't pin yet (mDNSResponder's dns_sd_private.h, configd's
-# dnsinfo.h).
+# and include/: a stand-in, for this library only, for a header of a project
+# NeoDarwin doesn't pin yet (configd's dnsinfo.h).
 #
-# libdyld, libcompiler_rt, libdispatch, libsystem_dnssd, libsystem_notify,
-# libxpc, libsystem_trace and libsystem_darwin aren't built yet; until they
-# are, the dylib links them through the host SDK's .tbd stubs, which carry
-# Apple's install names, and is relinked when NeoDarwin's exist.
+# libxpc and libsystem_trace are NeoDarwin's stand-ins. libdyld isn't built
+# yet; until it is, the dylib links it through the host SDK's .tbd stub, which
+# carries Apple's install name, and is relinked when NeoDarwin's exists.
 source "$(dirname "$0")/../../tools/base/common.sh"
 OUT="$(abspath "$1")"; I="$(abspath "$2")"; SYSROOT="$(abspath "$3")"; shift 3
 DEPS=(); for d in "$@"; do DEPS+=("$(abspath "$d")"); done
@@ -62,6 +61,6 @@ mkdir -p "$OUT/usr/lib/system"
 xcrun clang "${TARGET_FLAGS[@]}" -dynamiclib -nostdlib -install_name /usr/lib/system/libsystem_info.dylib \
 	-current_version 600 -compatibility_version 1 -Wl,-umbrella,System "$B"/obj/*.o \
 	$(dep_libdirs "${DEPS[@]}") -lsystem_kernel -lsystem_malloc -lsystem_platform -lsystem_pthread -lsystem_c \
-	-lsystem_blocks -L"$SDK/usr/lib/system" -lcompiler_rt -ldyld -ldispatch -lsystem_dnssd \
-	-lsystem_notify -lxpc -lsystem_trace -lsystem_darwin \
+	-lsystem_blocks -lcompiler_rt -ldispatch -lsystem_dnssd -lsystem_notify -lxpc -lsystem_trace -lsystem_darwin \
+	-L"$SDK/usr/lib/system" -ldyld \
 	-o "$OUT/usr/lib/system/libsystem_info.dylib"
