@@ -94,12 +94,15 @@ SBSA_PATCHES = [
     "patches/0012-iokit-publish-hidden-media-without-iomedia.patch",
     "patches/0013-mach-loader-static-pid1-on-sbsa.patch",
     "patches/0014-sleh-ack-group0-on-generic-gicv3.patch",
+    "patches/0015-libkern-build-hfs.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
 SBSA_OVERLAYS = {
     "//kernel/neodarwin/amfi:kernel_srcs": "bsd/ndamfi",
     "//kernel/neodarwin/crypto:kernel_srcs": "libkern/ndcrypto",
+    "//kernel/neodarwin/hfs:kernel_srcs": "libkern/ndhfs",
+    "@apple_hfs//:kernel_srcs": "libkern/ndhfs/hfs",
     "//kernel/neodarwin/platform:kernel_srcs": "iokit/ndplatform",
     "//kernel/neodarwin/pthread:kernel_srcs": "libkern/ndpthread",
     "@apple_libpthread//:kernel_srcs": "libkern/ndpthread/libpthread",
@@ -192,6 +195,46 @@ sh_test(
 # neoverse-v1 models do not, so this uses neoverse-n2.
 sh_test(
     name = "sbsa_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+        "--until-lines",
+        "$(rootpath //boot/neoboot)",
+        "120",
+        "'Darwin Kernel Version 25.0.0'",
+        "'iBoot version: neoboot-0.1'",
+        # Printed after ndcrypto has installed the crypto table and the kernel PRNG (P1-13).
+        "'lockdown_mode: lockdown mode in nvram is off'",
+        # After ndamfi has registered the AMFI and Image4 interfaces (P1-14).
+        "'no external trust caches found'",
+        # BSD initialisation, reached through the platform expert (P1-06).
+        "'MAC Framework successfully initialized'",
+        # Past bsd_init's pthread check, with libpthread's kern/ built in (P1-16).
+        "'ifnet_attach: All kernel threads created for interface lo0'",
+        # Rooted on HFS+ over the ramdisk (P1-08a), with PID 1 checking
+        # syscalls, VM, Mach IPC and the calendar from userland (P1-07).
+        "'BSD root: md0'",
+        "'hfs: mounted NeoDarwin on device'",
+        "'pid1: hello from userland: PID 1 on /dev/console'",
+        "'pid1: mach: message round trip through mach_msg2'",
+        "'pid1: all checks passed'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pid1_root",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P1-07: the same boot with PID 1 itself as the ramdisk, rooted on mockfs
+# (patches 0011-0013).
+sh_test(
+    name = "sbsa_mockfs_boot_test",
     size = "medium",
     srcs = ["//tools/efi:qemu_efi_test.sh"],
     args = [

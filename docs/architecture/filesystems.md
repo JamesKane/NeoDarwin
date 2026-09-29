@@ -43,7 +43,7 @@ Plan:
 
 | Kext | Source | Role | Roadmap |
 |---|---|---|---|
-| `hfs.kext` | Apple open source | bootstrap root during Phase 1; read HFS+ media | P1 |
+| `hfs.kext` | Apple open source | bootstrap root during Phase 1; read HFS+ media. Built into the kernel until `kcgen` links kexts (M5): patch 0015, P1-08a | P1 |
 | `msdosfs` | FreeBSD `sys/fs/msdosfs` (BSD) | ESP maintenance from userland (write kernel collections, `boot.cfg`) | P2 |
 | `ndfuse.kext` | port of FreeBSD `sys/fs/fuse` (BSD-2) | FUSE protocol for userland filesystems (SMB/NFS/S3 gateways, experimental formats) | P3 |
 | `nd9p.kext` | port of FreeBSD `sys/fs/p9fs` (BSD-2) | mounts `/n` (namespaces design); virtio-9p shared folders for development | P3/P5 |

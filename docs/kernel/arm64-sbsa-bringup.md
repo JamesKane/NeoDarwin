@@ -162,10 +162,37 @@ A failed check exits with its number, which the kernel's "initproc exited" panic
 
 Xcode's `ld` links it: `-static`, an `LC_UNIXTHREAD` entry and an ad hoc linker signature, which the arm64 kernel requires of every executable page. The toolchain's `ld64.lld` implements neither `-static` nor `LC_UNIXTHREAD`.
 
+### 2.1.4 HFS+ ramdisk root (P1-08a)
+
+`//kernel:sbsa_boot_test` now roots on HFS+. `//images:pid1_root` (`rules/ramdisk.bzl`) is a raw HFS+ volume with no partition map, since md0 is the whole device. It holds the PID 1 test program as `/sbin/launchd` and an empty `/dev` for devfs. Phase 1 builds it with the host's `hdiutil`, not journaled. neoboot loads it as `\NeoDarwin\ramdisk` exactly as before. `//kernel:sbsa_mockfs_boot_test` keeps the P1-07 boot, with PID 1 itself as the ramdisk.
+
+HFS+ is Apple's `hfs-704.0.3.0.2` (the macOS 26.0 release, APSL), built into the kernel by patch 0015 rather than as `hfs.kext`, because `kcgen` links no kexts until M5 (`filesystems.md` §4). It compiles as the hfs and HFSEncodings kexts do, as libpthread's `kern/` already does:
+- the kext target's 38 published sources and HFSEncodings' two C files;
+- the kexts' prefix header `core/kext-config.h`, which picks the macOS feature set;
+- the exported-header view of the kernel.
+
+`bsd_init()` calls `nd_hfs_start()` (`kernel/neodarwin/hfs`) right after `bsd_autoconf()`. It does what the two kexts' `start()` routines do: it initialises the encoding converters and calls `vfs_fsadd()`. A kext matched through IOKit would start asynchronously and race `vfs_mountroot()`.
+
+What the port needed:
+
+| Finding | Fix |
+|---|---|
+| Kext code sees none of the kernel's `CONFIG_*` options. With them, `CONFIG_PROTECT` built iOS content protection (AppleKeyStore, unpublished) and `CONFIG_MACF` built MAC checks that read `struct vnode` | patch 0015 undefines both for the HFS objects |
+| `hfs_iokit.h` includes `AppleKeyStore/AppleKeyStoreFSServices.h` for types only | a NeoDarwin compat header (`kernel/neodarwin/hfs/compat`) with opaque key types. The key-wrapping helpers return `ENXIO`, and nothing calls them |
+| `sys/cprotect.h` includes `crypto/aes.h`, which kexts get from Kernel.framework | `-idirafter $(SRCROOT)/bsd`: found after every exported header |
+| xnu names C++ objects `.cpo`, so per-object flags for `hfs_iokit.o` never applied | the flags name `hfs_iokit.cpo` |
+| `OSKextGetCurrentLoadTag` is undefined: a kext gets its own from its build | `nd_hfs.c` returns 0, the kernel's load tag |
+| `hfs_allocated` is defined by both kexts | HFSEncodings' copy is renamed |
+| `ENOEXEC` from `/sbin/launchd`: `vfstable_add` links a run-time filesystem after the static entries, so after mockfs, which then claimed the HFS+ ramdisk as its executable | patch 0011: mockfs declines a device that doesn't start with a Mach-O magic number (Apple's own TODO in `mockfs_mountroot`) |
+
+`hfs_key_roll.c` is listed in the kext target but not published. It serves content protection, which macOS HFS+ leaves off.
+
+Iterating on kernel sources: `ND_XNU_KEEP_WORK=DIR` makes `tools/xnu/kernel.sh` build in DIR and keep it, and writes the make command to `DIR/make.sh`. Run the action's command from `bazel aquery 'mnemonic("XnuKernel", //kernel:sbsa_release)'` outside Bazel with it set, then rerun `make.sh` after each edit: only what changed recompiles. The per-object compile commands are in the objects' `.o.json` and `.cpo.json` files.
+
 Debugging: QEMU's gdbstub (`-s`) with `lldb`, loading `kernel.release.sbsa.unstripped` with `--slide 0x8000` (the kernel's offset inside the collection at slide 0) and hardware breakpoints (`breakpoint set -H`). Panic `caller` and `pc` values minus 0x8000 symbolise with `atos` against the unstripped kernel. The kernel has no line tables, so a hardware breakpoint on `os_reason_create` or on a return site, plus `bt` and a register read, is the quickest way to place an exec failure. Exit-reason namespaces are in `bsd/sys/reason.h`: 9 is `OS_REASON_EXEC`, not codesigning (3).
 
 **Open threads (parked 2026-09-28).** In order of the boot path:
-- **P1-08, the next userland step.** Cross SDK, an HFS+ ramdisk root, launchd-842, getty and a shell. It replaces mockfs's single executable. Patch 0013's static-PID-1 allowance stays for init shims.
+- **P1-08b, the next userland step.** A cross SDK and libSystem from Apple source: libsyscall, Libc, libplatform, libpthread, libmalloc and dyld. The exit is a dynamically linked hello world running through dyld from the HFS+ root. P1-08 then brings launchd-842, getty and a shell. Patch 0013's static-PID-1 allowance stays for init shims.
 - **P1-06, SMP half (status `doing`).** The boot CPU is done. Still to do: bringing up secondaries through `NeoDarwinPSCI` (`CPU_ON`), per-CPU GIC redistributor init and IPI measurement. The exit is `hw.ncpu` equal to the MADT count.
   - **PSCI conduit:** QEMU `virt` without EL3 firmware uses `hvc`, but `sbsa_isa_audit` forbids `hvc` in the kernel, so the conduit choice (take it from the FADT/DT, and how the audit treats it) comes first.
   - **Testing:** `tools/efi/qemu_efi_test.sh --smp N` runs SMP boots.

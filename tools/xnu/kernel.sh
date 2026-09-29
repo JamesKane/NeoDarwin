@@ -14,7 +14,14 @@ PATCHES=(); EXTRA=()
 while [ $# -gt 0 ] && [ "$1" != "--" ]; do PATCHES+=("$1"); shift; done
 [ "${1:-}" = "--" ] && shift
 EXTRA=("$@")
-WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
+# ND_XNU_KEEP_WORK=DIR (debugging, outside Bazel): build in DIR and keep it, so
+# `make` there with the same arguments recompiles only what changed.
+if [ -n "${ND_XNU_KEEP_WORK:-}" ]; then
+	WORK="$ND_XNU_KEEP_WORK"; rm -rf "$WORK"; mkdir -p "$WORK"
+	echo "kernel.sh: keeping the work tree in $WORK" >&2
+else
+	WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
+fi
 stage_tree "$SRC" "$WORK/src"
 assemble_sdk "$SDK" "$WORK/MacOSX.sdk"; SDK="$WORK/MacOSX.sdk"
 if [ "$OVERLAY" != "-" ]; then
@@ -30,6 +37,7 @@ MAKEARGS=("${SDKVARS[@]}" ARCH_CONFIGS="$ARCH" MACHINE_CONFIGS="$MACHINE" KERNEL
 	"LDFLAGS_KERNEL_SDK=-L$WORK/lib"
 	OBJROOT="$WORK/obj" SYMROOT="$WORK/sym" DSTROOT="$WORK/dst" ${EXTRA[@]+"${EXTRA[@]}"})
 # Parallel pass, then a serial pass so the final diagnostics are not interleaved.
+[ -n "${ND_XNU_KEEP_WORK:-}" ] && printf '%q ' make -C "$WORK/src" "${MAKEARGS[@]}" > "$WORK/make.sh"
 make -C "$WORK/src" -j"$(/usr/sbin/sysctl -n hw.ncpu)" -k "${MAKEARGS[@]}" > "$WORK/log.parallel" 2>&1 || true
 status=0; make -C "$WORK/src" "${MAKEARGS[@]}" MAKEJOBS=-j1 > "$WORK/log" 2>&1 || status=$?
 

@@ -143,12 +143,28 @@ epics:
     depends: [P1-06]
     exit: "static test binary prints from userland; //kernel:sbsa_boot_test reaches 'pid1: all checks passed'"
     doc: docs/kernel/arm64-sbsa-bringup.md
-  - id: P1-08
-    title: "Cross SDK + HFS+ ramdisk root + launchd-842 + getty + shell"
+  - id: P1-08a
+    title: "HFS+ ramdisk root: Apple's hfs-715 compiled into the SBSA kernel (the kext form waits for kcgen's kext linking, M5), an HFS+ image builder, root on md0"
+    phase: 1
+    owner: userland
+    status: done
+    depends: [P1-07]
+    exit: "//kernel:sbsa_boot_test roots on an HFS+ ramdisk and runs the static PID 1 from /sbin/launchd"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-08b
+    title: "Cross SDK and libSystem from Apple source: libsyscall, Libc, libplatform, libpthread, libmalloc, dyld"
     phase: 1
     owner: userland
     status: todo
-    depends: [P1-07]
+    depends: [P1-08a]
+    exit: "a dynamically linked hello world runs through dyld from the HFS+ root"
+    doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-08
+    title: "launchd-842 + getty + shell on the HFS+ root"
+    phase: 1
+    owner: userland
+    status: todo
+    depends: [P1-08b]
     exit: "interactive shell over serial"
     doc: docs/kernel/arm64-sbsa-bringup.md
   - id: P1-09

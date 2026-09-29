@@ -59,6 +59,20 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/libpthread/archive/refs/tags/libpthread-539.tar.gz"],
 )
 
+# Apple's HFS+ (hfs-704.0.3.0.2, the macOS 26.0 release; APSL): the hfs and
+# HFSEncodings kexts' sources, built into the SBSA kernel (kernel/neodarwin/hfs).
+http_archive(
+    name = "apple_hfs",
+    build_file_content = """filegroup(
+    name = "kernel_srcs",
+    srcs = glob(["core/*.c", "core/*.cpp", "core/*.h", "hfs_encodings/*.c", "hfs_encodings/*.h"]),
+    visibility = ["//visibility:public"],
+)""",
+    sha256 = "95e2508b9f38091f505111fd2154c97c8b1b13a8f01f0b61a1353b0fcfb80958",
+    strip_prefix = "hfs-hfs-704.0.3.0.2",
+    urls = ["https://github.com/apple-oss-distributions/hfs/archive/refs/tags/hfs-704.0.3.0.2.tar.gz"],
+)
+
 # xnu's corecrypto subset and headers, for ndcrypto's host tests: the same
 # archive as apple_xnu (the repository cache serves it once), with its own
 # BUILD file so the kernel's inputs are untouched.

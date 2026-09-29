@@ -1,0 +1,12 @@
+load("//rules:ramdisk.bzl", "hfs_ramdisk")
+
+package(default_visibility = ["//visibility:public"])
+
+# The HFS+ root of P1-08a: the static PID 1 test program as /sbin/launchd,
+# and /dev for devfs. neoboot loads it as \NeoDarwin\ramdisk; the kernel
+# roots on it as md0 (//kernel:sbsa_boot_test).
+hfs_ramdisk(
+    name = "pid1_root",
+    dirs = ["dev"],
+    files = {"//tests/qemu/pid1": "sbin/launchd"},
+)

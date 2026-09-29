@@ -1,0 +1,21 @@
+# HFS+: Apple's hfs-704 kext sources (@apple_hfs, APSL), built into the SBSA
+# kernel, and the glue that starts them (patch 0015).
+load("//rules:cc.bzl", "lang_audit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Overlaid at libkern/ndhfs (kernel/BUILD.bazel).
+SRCS = [
+    "compat/AppleKeyStore/AppleKeyStoreFSServices.h",
+    "nd_hfs.c",
+]
+
+filegroup(
+    name = "kernel_srcs",
+    srcs = SRCS,
+)
+
+lang_audit_test(
+    name = "hfs_lang_audit",
+    srcs = SRCS,
+)

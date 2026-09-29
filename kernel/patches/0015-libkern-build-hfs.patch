@@ -1,0 +1,125 @@
+From: NeoDarwin
+Subject: [PATCH] libkern: build HFS+ from Apple's hfs into the kernel
+
+The first disk-format root is HFS+ on a ramdisk (P1-08a). HFS+ ships as
+two kexts, hfs and HFSEncodings, and the SBSA kernel loads no kexts yet
+(kcgen links only the kernel until M5), so it builds Apple's hfs-704 (APSL,
+the macOS 26.0 release) into libkern, as it does libpthread (patch 0010):
+the kext target's 38 published sources (hfs_key_roll.c is listed but not
+published; it serves content protection, which macOS HFS+ leaves off) and
+HFSEncodings' two C files, with the kexts' prefix header and search paths
+and the exported-header view of the kernel.
+
+bsd_init() calls NeoDarwin's nd_hfs_start() (kernel/neodarwin/hfs) right
+after bsd_autoconf(). It does what the two kexts' start() routines do:
+initialise the encoding converters and register the filesystem with
+vfs_fsadd(), before vfs_mountroot() runs. A kext started through IOKit
+matching would race the root mount.
+
+Rebase-risk: low (appended blocks; applies after 0010; one call in
+bsd_init).
+---
+diff --git a/libkern/conf/files b/libkern/conf/files
+--- a/libkern/conf/files
++++ b/libkern/conf/files
+@@ -145,6 +145,49 @@
+ libkern/ndpthread/libpthread/kern/kern_init.c	standard
+ libkern/ndpthread/libpthread/kern/kern_support.c	standard
+ libkern/ndpthread/libpthread/kern/kern_synch.c	standard
++# HFS+: Apple's hfs-704 kext sources and NeoDarwin's start glue
++# (kernel/neodarwin/hfs; the build adds libkern/ndhfs before patching).
++libkern/ndhfs/nd_hfs.c	standard
++libkern/ndhfs/hfs/core/BTree.c	standard
++libkern/ndhfs/hfs/core/BTreeAllocate.c	standard
++libkern/ndhfs/hfs/core/BTreeMiscOps.c	standard
++libkern/ndhfs/hfs/core/BTreeNodeOps.c	standard
++libkern/ndhfs/hfs/core/BTreeNodeReserve.c	standard
++libkern/ndhfs/hfs/core/BTreeScanner.c	standard
++libkern/ndhfs/hfs/core/BTreeTreeOps.c	standard
++libkern/ndhfs/hfs/core/BTreeWrapper.c	standard
++libkern/ndhfs/hfs/core/CatalogUtilities.c	standard
++libkern/ndhfs/hfs/core/FileExtentMapping.c	standard
++libkern/ndhfs/hfs/core/FileIDsServices.c	standard
++libkern/ndhfs/hfs/core/MacOSStubs.c	standard
++libkern/ndhfs/hfs/core/UnicodeWrappers.c	standard
++libkern/ndhfs/hfs/core/VolumeAllocation.c	standard
++libkern/ndhfs/hfs/core/hfs_attrlist.c	standard
++libkern/ndhfs/hfs/core/hfs_btreeio.c	standard
++libkern/ndhfs/hfs/core/hfs_catalog.c	standard
++libkern/ndhfs/hfs/core/hfs_chash.c	standard
++libkern/ndhfs/hfs/core/hfs_cnode.c	standard
++libkern/ndhfs/hfs/core/hfs_cprotect.c	standard
++libkern/ndhfs/hfs/core/hfs_endian.c	standard
++libkern/ndhfs/hfs/core/hfs_extents.c	standard
++libkern/ndhfs/hfs/core/hfs_fsinfo.c	standard
++libkern/ndhfs/hfs/core/hfs_hotfiles.c	standard
++libkern/ndhfs/hfs/core/hfs_iokit.cpp	standard
++libkern/ndhfs/hfs/core/hfs_journal.c	standard
++libkern/ndhfs/hfs/core/hfs_link.c	standard
++libkern/ndhfs/hfs/core/hfs_lookup.c	standard
++libkern/ndhfs/hfs/core/hfs_notification.c	standard
++libkern/ndhfs/hfs/core/hfs_quota.c	standard
++libkern/ndhfs/hfs/core/hfs_readwrite.c	standard
++libkern/ndhfs/hfs/core/hfs_resize.c	standard
++libkern/ndhfs/hfs/core/hfs_search.c	standard
++libkern/ndhfs/hfs/core/hfs_vfsops.c	standard
++libkern/ndhfs/hfs/core/hfs_vfsutils.c	standard
++libkern/ndhfs/hfs/core/hfs_vnops.c	standard
++libkern/ndhfs/hfs/core/hfs_xattr.c	standard
++libkern/ndhfs/hfs/core/rangelist.c	standard
++libkern/ndhfs/hfs/hfs_encodings/hfs_encodinghint.c	standard
++libkern/ndhfs/hfs/hfs_encodings/hfs_encodings.c	standard
+ 
+ 
+ libkern/coretrust/coretrust.c   standard
+diff --git a/libkern/conf/Makefile.template b/libkern/conf/Makefile.template
+--- a/libkern/conf/Makefile.template
++++ b/libkern/conf/Makefile.template
+@@ -56,6 +56,26 @@
+ $(foreach o,$(ND_PTHREAD_OBJS),$(eval $(o)_CFLAGS_ADD += -I$(ND_PTHREAD)/private -I$(ND_PTHREAD)/include \
+ 	-I$(ND_PTHREAD) -I$(SRCROOT)/libkern/ndpthread/compat -D__PTHREAD_EXPOSE_INTERNALS__ \
+ 	-Dcurrent_uthread=nd_pthread_current_uthread -Dpthread_kern=nd_pthread_kern -Wno-int-conversion))
++# HFS+ is kext code too (hfs.kext and HFSEncodings.kext): the same view of
++# the exported headers as libpthread above, the kext's prefix header
++# (core/kext-config.h, which chooses the macOS feature set) and search paths,
++# and the compat TargetConditionals.h. A kext sees none of the kernel's
++# configuration options; two of them change HFS's code: CONFIG_PROTECT would
++# build iOS content protection (AppleKeyStore, unpublished), CONFIG_MACF the
++# MAC checks that reach into struct vnode. NeoDarwin's compat directory
++# stands in for AppleKeyStoreFSServices.h, which hfs_iokit.h includes for
++# types only. Kernel.framework carries bsd's crypto/aes.h, which
++# sys/cprotect.h includes; -idirafter finds it after every exported header.
++# -w: upstream warnings are not NeoDarwin's to fix here (BUILD_WERROR is
++# off for xnu anyway).
++ND_HFS = $(SRCROOT)/libkern/ndhfs/hfs
++ND_HFS_OBJS = nd_hfs.o BTree.o BTreeAllocate.o BTreeMiscOps.o BTreeNodeOps.o BTreeNodeReserve.o BTreeScanner.o BTreeTreeOps.o BTreeWrapper.o CatalogUtilities.o FileExtentMapping.o FileIDsServices.o MacOSStubs.o UnicodeWrappers.o VolumeAllocation.o hfs_attrlist.o hfs_btreeio.o hfs_catalog.o hfs_chash.o hfs_cnode.o hfs_cprotect.o hfs_endian.o hfs_extents.o hfs_fsinfo.o hfs_hotfiles.o hfs_iokit.cpo hfs_journal.o hfs_link.o hfs_lookup.o hfs_notification.o hfs_quota.o hfs_readwrite.o hfs_resize.o hfs_search.o hfs_vfsops.o hfs_vfsutils.o hfs_vnops.o hfs_xattr.o rangelist.o hfs_encodinghint.o hfs_encodings.o
++$(foreach o,$(ND_HFS_OBJS),$(eval $(o)_CFLAGS_RM += -DXNU_KERNEL_PRIVATE -DLIBKERN_KERNEL_PRIVATE))
++$(foreach o,$(ND_HFS_OBJS),$(eval $(o)_CFLAGS_ADD += -include $(ND_HFS)/core/kext-config.h -I$(ND_HFS)/core \
++	-I$(ND_HFS)/hfs_encodings -I$(SRCROOT)/libkern/ndhfs/compat -I$(SRCROOT)/libkern/ndpthread/compat \
++	-idirafter $(SRCROOT)/bsd -UCONFIG_PROTECT -UCONFIG_MACF -w))
++# HFSEncodings was its own kext with its own hfs_allocated counter.
++$(foreach o,hfs_encodings.o hfs_encodinghint.o,$(eval $(o)_CFLAGS_ADD += -Dhfs_allocated=nd_hfs_encodings_allocated))
+ 
+ 
+ #
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -323,6 +323,7 @@
+ extern int customnbuf;
+ 
+ kern_return_t bsd_autoconf(void);
++extern void nd_hfs_start(void);
+ void bsd_utaskbootstrap(void);
+ 
+ #if CONFIG_DEV_KMEM
+@@ -806,6 +807,9 @@
+ 
+ 	bsd_init_kprintf("calling bsd_autoconf\n");
+ 	bsd_autoconf();
++
++	/* NeoDarwin: HFS+ is built in (patch 0015); register it before mountroot. */
++	nd_hfs_start();
+ 
+ #if CONFIG_DTRACE
+ 	dtrace_postinit();

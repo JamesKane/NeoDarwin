@@ -27,6 +27,13 @@ No shipping Apple config builds mockfs, and it has rotted in two places
   the device's full address from mdevgetrange(), as IOKitBSDInit does, and
   pages the file from the block device if that fails.
 
+mockfs also now declines a root device that doesn't start with a Mach-O
+magic number, which Apple's TODO in mockfs_mountroot asks for. A
+filesystem registered at run time with vfs_fsadd(), such as the built-in
+HFS+ (patch 0015), is linked into vfsconf after the static entries, so
+after mockfs, and mockfs would otherwise claim an HFS+ ramdisk as its
+executable (found as ENOEXEC from /sbin/launchd, P1-08a).
+
 Rebase-risk: low (one configuration line; small, local mockfs changes).
 ---
 diff --git a/config/MASTER.arm64.MacOSX b/config/MASTER.arm64.MacOSX
@@ -91,7 +98,18 @@ diff --git a/bsd/miscfs/mockfs/mockfs_fsnode.c b/bsd/miscfs/mockfs/mockfs_fsnode
 diff --git a/bsd/miscfs/mockfs/mockfs_vfsops.c b/bsd/miscfs/mockfs/mockfs_vfsops.c
 --- a/bsd/miscfs/mockfs/mockfs_vfsops.c
 +++ b/bsd/miscfs/mockfs/mockfs_vfsops.c
-@@ -41,6 +41,8 @@
+@@ -33,14 +33,19 @@
+ #include <miscfs/mockfs/mockfs_fsnode.h>
+ #include <miscfs/mockfs/mockfs_vnops.h>
+ #include <miscfs/specfs/specdev.h>
++#include <sys/buf.h>
+ #include <sys/disk.h>
+ #include <sys/errno.h>
+ #include <sys/malloc.h>
+ #include <sys/mount_internal.h>
+ #include <sys/vnode_internal.h>
++#include <mach-o/fat.h>
++#include <mach-o/loader.h>
  
  static LCK_GRP_DECLARE(mockfs_mtx_grp, "mockfs-mutex");
  
@@ -100,7 +118,37 @@ diff --git a/bsd/miscfs/mockfs/mockfs_vfsops.c b/bsd/miscfs/mockfs/mockfs_vfsops
  int mockfs_mountroot(mount_t mp, vnode_t rvp, __unused vfs_context_t ctx);
  
  /*
-@@ -101,11 +103,18 @@
+@@ -72,10 +77,27 @@
+ 	dk_memdev_info_t memdev_info;
+ 
+ 	/*
+-	 * TODO: Validate that the device at least LOOKS like a mach-o (has a sane header); this would prevent us
+-	 *   from causing EBADMACHO panics further along the boot path.
++	 * Validate that the device at least LOOKS like a mach-o, so that mockfs declines any other root
++	 *   device. A filesystem registered at run time (vfs_fsadd) is linked after the static entries,
++	 *   and so after mockfs; without this check mockfs claimed every root device first. The block is
++	 *   invalidated so that the next filesystem reads the device afresh.
+ 	 */
++	{
++		buf_t bp = NULL;
++		uint32_t magic = 0;
+ 
++		if (!buf_meta_bread(rvp, 0, DEV_BSIZE, NOCRED, &bp)) {
++			magic = *(uint32_t *)buf_dataptr(bp);
++		}
++		if (bp) {
++			buf_markinvalid(bp);
++			buf_brelse(bp);
++		}
++		if (magic != MH_MAGIC_64 && magic != FAT_MAGIC && magic != FAT_CIGAM) {
++			return ENOTSUP;
++		}
++	}
++
+ 	/*
+ 	 * There are no M_MOCKFS* definitions at the moment, just use M_TEMP.
+ 	 */
+@@ -101,11 +123,18 @@
  		/*
  		 * For the moment, we won't try to optimize when mi_phys is true.
  		 */
