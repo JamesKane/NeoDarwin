@@ -202,7 +202,7 @@ A launch failure is visible: dyld's error goes into the exit reason, which the "
 - **The nested panic on a failed PID 1 launch** (§2.1.5): a data abort at FAR 0xc in the panic path after "initproc failed to start".
 - **P1-06 is done.** Secondaries start through PSCI, and the exit is met on QEMU: `//kernel:sbsa_smp_boot_test` (`virt`, `-smp 4`, PSCI over HVC) and `//kernel:sbsa_secure_smp_boot_test` (TF-A at EL3, PSCI over SMC, GIC DS=0) log in and read `hw.ncpu` and `hw.activecpu` as 4 and 4 with `sysctl` (system_cmds), and the platform expert logs `NeoDarwinPlatformExpert: 4 of 4 CPUs online` and one IPI round trip per CPU. The design is in §2.1.6.
 - **P1-15.** CoreEntitlements, static trust caches from neoboot, and signed trust-cache loads, replacing ndamfi's default deny.
-- **P1-04 (status `doing`, in review).** The device tree from ACPI, DT-ABI v1 (`dt-abi.md`), `dump-acpi` in neoboot and the `dtdump` host tool.
+- **P1-04 is done.** The device tree from ACPI, DT-ABI v1 (`dt-abi.md`), `dump-acpi` in neoboot and the `dtdump` host tool.
 
 Each probe build of `//kernel:sbsa_kc` takes about 9 minutes. Never run `bazel clean`: it throws the kernel build away.
 
