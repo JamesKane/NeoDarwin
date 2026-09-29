@@ -76,6 +76,14 @@ http_archive(
 )
 
 http_archive(
+    name = "apple_cctools",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "1867fa0204c139f8073689b0d0785454b152b367762ff07ec9f316c97da1969b",
+    strip_prefix = "cctools-cctools-1035.1.102",
+    urls = ["https://github.com/apple-oss-distributions/cctools/archive/refs/tags/cctools-1035.1.102.tar.gz"],
+)
+
+http_archive(
     name = "apple_dyld",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
     sha256 = "9696c72b4800da6941adc51f26cc40629ccb9f965e78c1324bebaf219c43be75",
@@ -105,6 +113,41 @@ http_archive(
     sha256 = "ea37be1f7876e8ca20761ab03f484f1cb0fa1ac15c437bb5615167c88529563b",
     strip_prefix = "Libinfo-Libinfo-600",
     urls = ["https://github.com/apple-oss-distributions/Libinfo/archive/refs/tags/Libinfo-600.tar.gz"],
+)
+
+http_archive(
+    name = "apple_libnotify",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "6e9b10d87d30c584038c8402ef0552e8b23d02d429dea21f810abc8d5a8c4c06",
+    strip_prefix = "Libnotify-Libnotify-344.0.1",
+    urls = ["https://github.com/apple-oss-distributions/Libnotify/archive/refs/tags/Libnotify-344.0.1.tar.gz"],
+)
+
+http_archive(
+    name = "apple_syslog",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "eac86bc0aa1b121054e2de7e42dc0cffc3b83498e494469b29f9b3dd1fe21501",
+    strip_prefix = "syslog-syslog-404",
+    urls = ["https://github.com/apple-oss-distributions/syslog/archive/refs/tags/syslog-404.tar.gz"],
+)
+
+http_archive(
+    name = "apple_objc4",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "acd6e36cd8df5c7a5a78fe45adc7749da26b5e414986968c7aebeab22a75933b",
+    strip_prefix = "objc4-objc4-950",
+    urls = ["https://github.com/apple-oss-distributions/objc4/archive/refs/tags/objc4-950.tar.gz"],
+)
+
+# LLVM's runtimes as Apple ships them (compiler-rt builtins, libunwind,
+# libc++abi, libc++): Apple's fork at the Swift 6.2 release, LLVM 19.1.5,
+# which Xcode 26 and macOS 26.0 carry (docs/base/libsystem.md).
+http_archive(
+    name = "llvm_project",
+    build_file_content = """filegroup(name = "all", srcs = glob(["compiler-rt/lib/builtins/**", "libunwind/include/**", "libunwind/src/**", "libcxxabi/include/**", "libcxxabi/src/**", "libcxxabi/lib/**", "libcxx/include/**", "libcxx/src/**", "libcxx/lib/**", "libcxx/vendor/**"]), visibility = ["//visibility:public"])""",
+    sha256 = "394a5ac36216820031f5ab70d78eeb8cf466d868ce436b20e857282d6408c5bd",
+    strip_prefix = "llvm-project-swift-6.2-RELEASE",
+    urls = ["https://github.com/swiftlang/llvm-project/archive/refs/tags/swift-6.2-RELEASE.tar.gz"],
 )
 
 http_archive(
@@ -142,6 +185,14 @@ http_archive(
 
 # FreeBSD kernel crypto for ndcrypto, file by file (kernel/neodarwin/crypto/freebsd.lock).
 pinned_files = use_repo_rule("//rules:pinned_files.bzl", "pinned_files")
+
+# FreeBSD's msun, libsystem_m's source (base/libm): Apple's Libm is unpublished since 2012.
+pinned_files(
+    name = "freebsd_msun",
+    build_file = "//base:libm/freebsd.BUILD",
+    lockfile = "//base:libm/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
 
 pinned_files(
     name = "freebsd_crypto",

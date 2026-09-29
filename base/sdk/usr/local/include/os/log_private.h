@@ -15,11 +15,17 @@
  * calling convention below only have to agree between them. As in Apple's
  * header, the macro calls a libsystem_trace function named with an _impl
  * suffix.
+ * libsystem_asl uses the syslog shim: syslog(3) and asl_log(3) ask
+ * os_log_shim_enabled() whether messages from the caller (addr, its return
+ * address) go to os_log, and if so send them with os_log_with_args_4syslog().
+ * These are libsystem_trace exports under Apple's names and signatures.
  */
 #ifndef __OS_LOG_PRIVATE_H__
 #define __OS_LOG_PRIVATE_H__
 
 #include <os/log.h>
+#include <stdarg.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <time.h>
 
@@ -43,6 +49,14 @@ __BEGIN_DECLS
  */
 extern char *_os_log_send_and_compose_impl(uint32_t flags, const char **fmt_out, char *buf, size_t bufsz,
     os_log_t log, os_log_type_t type, const char *fmt, ...) __attribute__((format(os_log, 7, 8)));
+
+/* The syslog shim: whether the image containing addr logs through os_log. */
+extern bool os_log_shim_enabled(void *addr);
+/* Logs fmt with args as if called from ret_addr. */
+extern void os_log_with_args(os_log_t log, os_log_type_t type, const char *fmt, va_list args, void *ret_addr);
+/* os_log_with_args() for messages that came in through syslog(3) and asl(3). */
+extern void os_log_with_args_4syslog(os_log_t log, os_log_type_t type, const char *fmt, va_list args,
+    void *ret_addr);
 __END_DECLS
 
 #define os_log_send_and_compose(flags, fmt_out, buf, bufsz, log, type, fmt, ...) \

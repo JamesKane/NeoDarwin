@@ -1,0 +1,40 @@
+# libcompiler_rt.dylib's sources, relative to the llvm-project tree: the
+# compiler-rt builtins that make up Apple's arm64 export list
+# (the SDK's usr/lib/system/libcompiler_rt.tbd). The other builtins are either
+# not needed on arm64 (64-bit arithmetic the instruction set does inline) or
+# absent from Apple's arm64 library. apple_versioning.c adds the $ld$hide
+# symbols; int_util.c has the (hidden) abort the others call. ___chkstk_darwin
+# is not in compiler-rt: base/llvm/src/nd_chkstk_darwin.c.
+compiler-rt/lib/builtins/apple_versioning.c
+compiler-rt/lib/builtins/atomic.c
+compiler-rt/lib/builtins/atomic_flag_clear.c
+compiler-rt/lib/builtins/atomic_flag_clear_explicit.c
+compiler-rt/lib/builtins/atomic_flag_test_and_set.c
+compiler-rt/lib/builtins/atomic_flag_test_and_set_explicit.c
+compiler-rt/lib/builtins/atomic_signal_fence.c
+compiler-rt/lib/builtins/atomic_thread_fence.c
+compiler-rt/lib/builtins/clear_cache.c
+compiler-rt/lib/builtins/clzti2.c
+compiler-rt/lib/builtins/divti3.c
+compiler-rt/lib/builtins/enable_execute_stack.c
+compiler-rt/lib/builtins/extendhfsf2.c
+compiler-rt/lib/builtins/fixdfti.c
+compiler-rt/lib/builtins/fixsfti.c
+compiler-rt/lib/builtins/fixunsdfti.c
+compiler-rt/lib/builtins/fixunssfti.c
+compiler-rt/lib/builtins/floattidf.c
+compiler-rt/lib/builtins/floattisf.c
+compiler-rt/lib/builtins/floatuntidf.c
+compiler-rt/lib/builtins/floatuntisf.c
+compiler-rt/lib/builtins/gcc_personality_v0.c
+compiler-rt/lib/builtins/int_util.c
+compiler-rt/lib/builtins/modti3.c
+compiler-rt/lib/builtins/muldc3.c
+compiler-rt/lib/builtins/mulsc3.c
+compiler-rt/lib/builtins/powidf2.c
+compiler-rt/lib/builtins/powisf2.c
+compiler-rt/lib/builtins/truncdfhf2.c
+compiler-rt/lib/builtins/truncsfhf2.c
+compiler-rt/lib/builtins/udivmodti4.c
+compiler-rt/lib/builtins/udivti3.c
+compiler-rt/lib/builtins/umodti3.c

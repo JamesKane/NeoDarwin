@@ -1,0 +1,31 @@
+From: NeoDarwin
+Subject: [PATCH] objc-config: let the build set OBJC_USE_ROSETTA
+
+OBJC_USE_ROSETTA turns on the Rosetta hooks in objc-cache.mm (the
+translated-process check and the cache-flush trap), which need Apple's
+unpublished <Rosetta/Rosetta.h> and <Rosetta/Traps.h> and libRosetta. It is
+derived from the target OS alone. NeoDarwin runs arm64 code only and has no
+Rosetta, so its build defines OBJC_USE_ROSETTA=0; the derivation stays the
+default for any build that doesn't. With it off the runtime behaves as it
+does on Apple's platforms without Rosetta (the simulators, visionOS).
+
+Rebase-risk: low (an #ifndef around the existing definition).
+---
+diff --git a/runtime/objc-config.h b/runtime/objc-config.h
+--- a/runtime/objc-config.h
++++ b/runtime/objc-config.h
+@@ -367,11 +367,14 @@
+ // Whether to use Rosetta APIs. macOS and iOS use it, but not simulators or
+ // other platforms. visionOS sets TARGET_OS_IOS in the internal SDK so we need
+ // to explicitly exclude that
++// NeoDarwin: a build may set it (a system without Rosetta sets it to 0).
++#ifndef OBJC_USE_ROSETTA
+ #if   (TARGET_OS_OSX || TARGET_OS_IOS) && !TARGET_OS_VISION && !TARGET_OS_SIMULATOR
+ #define OBJC_USE_ROSETTA 1
+ #else
+ #define OBJC_USE_ROSETTA 0
+ #endif
++#endif
+ 
+ 
+ #endif

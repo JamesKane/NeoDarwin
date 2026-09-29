@@ -1,0 +1,20 @@
+# libc++abi.dylib's sources, relative to the llvm-project tree: the cxxabi_shared
+# target of libcxxabi/src/CMakeLists.txt as it configures with
+# libcxx/cmake/caches/Apple.cmake (exceptions, new/delete definitions).
+libcxxabi/src/cxa_aux_runtime.cpp
+libcxxabi/src/cxa_default_handlers.cpp
+libcxxabi/src/cxa_demangle.cpp
+libcxxabi/src/cxa_exception_storage.cpp
+libcxxabi/src/cxa_guard.cpp
+libcxxabi/src/cxa_handlers.cpp
+libcxxabi/src/cxa_vector.cpp
+libcxxabi/src/cxa_virtual.cpp
+libcxxabi/src/stdlib_exception.cpp
+libcxxabi/src/stdlib_stdexcept.cpp
+libcxxabi/src/stdlib_typeinfo.cpp
+libcxxabi/src/abort_message.cpp
+libcxxabi/src/fallback_malloc.cpp
+libcxxabi/src/private_typeinfo.cpp
+libcxxabi/src/stdlib_new_delete.cpp
+libcxxabi/src/cxa_exception.cpp
+libcxxabi/src/cxa_personality.cpp

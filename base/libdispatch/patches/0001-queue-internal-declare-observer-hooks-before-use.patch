@@ -1,0 +1,42 @@
+From: NeoDarwin
+Subject: [PATCH] queue_internal: declare the observer hooks before their use
+
+dispatch_workloop_attr_s embeds a dispatch_pthread_root_queue_observer_hooks_s
+(dwla_observers), but the published queue_internal.h defines that type about
+two hundred lines later, so every file that includes internal.h fails to
+compile. Apple's build presumably gets the type earlier from an unpublished
+header. Move the definition ahead of the workloop attributes; nothing else
+changes.
+
+Rebase-risk: low (one typedef moved).
+---
+diff --git a/src/queue_internal.h b/src/queue_internal.h
+--- a/src/queue_internal.h
++++ b/src/queue_internal.h
+@@ -471,6 +471,12 @@
+ #define DISPATCH_WORKLOOP_ATTR_NEEDS_DESTROY     0x0010u
+ #define DISPATCH_WORKLOOP_ATTR_HAS_OBSERVERS     0x0020u
+ #define DISPATCH_WORKLOOP_ATTR_HAS_BOUND_THREAD  0x0040u
++typedef struct dispatch_pthread_root_queue_observer_hooks_s {
++	void (*queue_will_execute)(dispatch_queue_t queue);
++	void (*queue_did_execute)(dispatch_queue_t queue);
++} dispatch_pthread_root_queue_observer_hooks_s;
++typedef dispatch_pthread_root_queue_observer_hooks_s
++		*dispatch_pthread_root_queue_observer_hooks_t;
+ typedef struct dispatch_workloop_attr_s *dispatch_workloop_attr_t;
+ typedef struct dispatch_workloop_attr_s {
+ 	uint32_t dwla_flags;
+@@ -698,13 +704,6 @@
+ } DISPATCH_CACHELINE_ALIGN;
+ 
+ 
+-typedef struct dispatch_pthread_root_queue_observer_hooks_s {
+-	void (*queue_will_execute)(dispatch_queue_t queue);
+-	void (*queue_did_execute)(dispatch_queue_t queue);
+-} dispatch_pthread_root_queue_observer_hooks_s;
+-typedef dispatch_pthread_root_queue_observer_hooks_s
+-		*dispatch_pthread_root_queue_observer_hooks_t;
+-
+ #ifdef __APPLE__
+ #define DISPATCH_IOHID_SPI 1
+ 

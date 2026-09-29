@@ -15,10 +15,11 @@ DEPS=(); for d in "$@"; do DEPS+=("$(abspath "$d")"); done
 B="$(mktemp -d)"; trap 'rm -rf "$B"' EXIT
 cd "$C"
 
-# libc++ must precede the C headers for runtime.cpp, as clang orders them
-# itself when no sysroot headers are added ahead of the SDK's.
+# runtime.cpp compiles against the sysroot's libc++ headers (base/llvm's
+# LLVM 19, the libc++ NeoDarwin builds), which must precede the C headers, as
+# clang orders them itself when no sysroot headers are added ahead of the SDK's.
 write_rsp "$B/cflags" "${TARGET_FLAGS[@]}" -Os -fexceptions -DHAVE_OBJC=1 -DHAVE_UNWIND=1 -I"$C" \
-	-isystem "$SDK/usr/include/c++/v1" $(sysroot_flags "$SYSROOT")
+	-nostdinc++ -isystem "$SYSROOT/usr/include/c++/v1" $(sysroot_flags "$SYSROOT")
 compile "$B/obj" "$B/cflags" runtime.cpp data.c data.m generic_helpers.c
 
 mkdir -p "$OUT/usr/lib/system"

@@ -10,7 +10,12 @@ base_sysroot(
     availability = "@apple_availability_versions//:all",
     dyld = "@apple_dyld//:all",
     libc = "@apple_libc//:all",
+    dispatch_headers_script = "libdispatch/install_headers.sh",
     libclosure = "@apple_libclosure//:all",
+    libdispatch = "@apple_libdispatch//:all",
+    llvm = "@llvm_project//:all",
+    llvm_headers_script = "llvm/install_headers.sh",
+    objc4 = "@apple_objc4//:all",
     libinfo = "@apple_libinfo//:all",
     libmalloc = "@apple_libmalloc//:all",
     libplatform = "@apple_libplatform//:all",
@@ -74,6 +79,89 @@ base_library(
     sysroot = ":sysroot",
 )
 
+base_library(
+    name = "libmacho",
+    data = glob(["cctools/**"]),
+    deps = [":libsystem_kernel", ":libsystem_malloc", ":libsystem_c"],
+    script = "cctools/build.sh",
+    srcs = "@apple_cctools//:all",
+    sysroot = ":sysroot",
+)
+
+# Named for the image: a target named libdispatch would put its output where
+# the libdispatch/ sources are.
+base_library(
+    name = "libdispatch_dylib",
+    data = glob(["libdispatch/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c", ":libsystem_blocks"],
+    script = "libdispatch/build.sh",
+    srcs = "@apple_libdispatch//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libsystem_asl",
+    data = glob(["syslog/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c", ":libsystem_blocks"],
+    script = "syslog/build.sh",
+    srcs = "@apple_syslog//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libsystem_notify",
+    data = glob(["libnotify/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c", ":libsystem_blocks"],
+    script = "libnotify/build.sh",
+    srcs = "@apple_libnotify//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libsystem_info",
+    data = glob(["libinfo/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c", ":libsystem_blocks"],
+    script = "libinfo/build.sh",
+    srcs = "@apple_libinfo//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libobjc",
+    data = glob(["objc4/**"]),
+    script = "objc4/build.sh",
+    srcs = "@apple_objc4//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "llvm_runtimes",
+    data = glob(["llvm/**"]),
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc", ":libsystem_c"],
+    script = "llvm/build.sh",
+    srcs = "@llvm_project//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libsystem_m",
+    data = glob(["libm/**"]),
+    script = "libm/build.sh",
+    srcs = "@freebsd_msun//:all",
+    sysroot = ":sysroot",
+)
+
+# Stand-ins for closed libraries: libcorecrypto, libxpc, libsystem_trace,
+# libsystem_sandbox.
+base_library(
+    name = "standin_libs",
+    data = ["//base/standins:srcs"],
+    deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_c"],
+    script = "//base/standins:build.sh",
+    srcs = "//base/standins:srcs",
+    sysroot = ":sysroot",
+)
+
 [sh_test(
     name = lib + "_exports_test",
     size = "small",
@@ -94,9 +182,59 @@ base_library(
     ("libmalloc", "libsystem_malloc"),
     ("libc", "libsystem_c"),
     ("libclosure", "libsystem_blocks"),
+    ("syslog", "libsystem_asl"),
+    ("libnotify", "libsystem_notify"),
+    ("libinfo", "libsystem_info"),
+    ("libm", "libsystem_m"),
 ]]
+
+[sh_test(
+    name = name + "_exports_test",
+    size = "small",
+    srcs = ["//tools/base:exports_test.sh"],
+    args = [
+        "$(rootpath %s)" % target,
+        path,
+        "$(rootpath %s)" % listed,
+    ],
+    data = [
+        target,
+        listed,
+    ],
+) for name, target, path, listed in [
+    ("libdispatch", ":libdispatch_dylib", "usr/lib/system/libdispatch.dylib", "libdispatch/exports.txt"),
+    ("libobjc", ":libobjc", "usr/lib/libobjc.A.dylib", "objc4/exports.txt"),
+    ("libcompiler_rt", ":llvm_runtimes", "usr/lib/system/libcompiler_rt.dylib", "llvm/exports/libcompiler_rt.txt"),
+    ("libunwind", ":llvm_runtimes", "usr/lib/system/libunwind.dylib", "llvm/exports/libunwind.txt"),
+    ("libc++abi", ":llvm_runtimes", "usr/lib/libc++abi.dylib", "llvm/exports/libc++abi.txt"),
+    ("libc++.1", ":llvm_runtimes", "usr/lib/libc++.1.dylib", "llvm/exports/libc++.1.txt"),
+]]
+
+sh_test(
+    name = "libmacho_exports_test",
+    size = "small",
+    srcs = ["//tools/base:exports_test.sh"],
+    args = [
+        "$(rootpath :libmacho)",
+        "usr/lib/system/libmacho.dylib",
+        "$(rootpath cctools/exports.txt)",
+    ],
+    data = [
+        ":libmacho",
+        "cctools/exports.txt",
+    ],
+)
 
 lang_audit_test(
     name = "base_lang_audit",
-    srcs = ["libplatform/src/nd_bitops.c"],
+    srcs = [
+        "libdispatch/src/nd_work_interval_instance.c",
+        "libplatform/src/nd_bitops.c",
+        "llvm/src/nd_chkstk_darwin.c",
+    ] + glob([
+        "libdispatch/sdk/**/*.h",
+        "libinfo/include/**/*.h",
+        "libm/src/*.c",
+        "libm/compat/**/*.h",
+    ]),
 )

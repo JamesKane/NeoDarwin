@@ -1,0 +1,39 @@
+From: NeoDarwin
+Subject: [PATCH] msun: sinpi and cospi parity for |x| >= 2^32 on arm64
+
+sinpi() and cospi() take the parity of the integer part of |x| from
+(uint32_t)x, after subtracting 2^30 once. For |x| >= 2^32 + 2^30 the value
+is still out of uint32_t's range, which C leaves undefined: x86 keeps the
+low bits, but arm64's fcvtzu saturates to 0xffffffff, so every such
+argument counts as odd and the result has the wrong sign (sinpi(x) for
+x = -0x1.7762b5c12c71dp+47 returns +0.29 instead of -0.29). Converting
+through uint64_t, which holds any integer below 2^52 exactly, keeps the low
+bits on every architecture. The float versions are unaffected (|x| < 2^23
+there). FreeBSD/aarch64 has the same bug; candidate for upstreaming.
+
+Rebase-risk: low (one expression in each of two files).
+---
+diff --git a/lib/msun/src/s_cospi.c b/lib/msun/src/s_cospi.c
+--- a/lib/msun/src/s_cospi.c
++++ b/lib/msun/src/s_cospi.c
+@@ -124,7 +124,7 @@
+ 
+ 		if (j0 > 30)
+ 			x -= 0x1p30;
+-		j0 = (uint32_t)x;
++		j0 = (uint32_t)(uint64_t)x;	/* NeoDarwin: low bits, not saturation */
+ 		return (j0 & 1 ? -c : c);
+ 	}
+ 
+diff --git a/lib/msun/src/s_sinpi.c b/lib/msun/src/s_sinpi.c
+--- a/lib/msun/src/s_sinpi.c
++++ b/lib/msun/src/s_sinpi.c
+@@ -139,7 +139,7 @@
+ 
+ 			if (j0 > 30)
+ 				x -= 0x1p30;
+-			j0 = (uint32_t)x;
++			j0 = (uint32_t)(uint64_t)x;	/* NeoDarwin: low bits, not saturation */
+ 			if (j0 & 1) s = -s;
+ 		}
+ 

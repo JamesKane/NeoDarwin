@@ -17,14 +17,15 @@ def _root(target):
 def _sysroot_impl(ctx):
     out = ctx.actions.declare_directory(ctx.label.name)
     repos = [ctx.attr.xnu, ctx.attr.libplatform, ctx.attr.libpthread, ctx.attr.libmalloc,
-             ctx.attr.availability, ctx.attr.dyld, ctx.attr.libc, ctx.attr.libinfo, ctx.attr.libclosure]
-    inputs = ctx.files.xnu_headers + ctx.files.shims
+             ctx.attr.availability, ctx.attr.dyld, ctx.attr.libc, ctx.attr.libinfo, ctx.attr.libclosure,
+             ctx.attr.libdispatch, ctx.attr.objc4, ctx.attr.llvm]
+    inputs = ctx.files.xnu_headers + ctx.files.shims + [ctx.file.dispatch_headers_script, ctx.file.llvm_headers_script]
     for r in repos:
         inputs += r.files.to_list()
     ctx.actions.run(
         executable = ctx.file._script,
         arguments = [out.path, ctx.files.xnu_headers[0].path] + [_root(r) for r in repos] +
-                    [ctx.attr.shims_root],
+                    [ctx.file.dispatch_headers_script.path, ctx.file.llvm_headers_script.path, ctx.attr.shims_root],
         inputs = inputs,
         outputs = [out],
         tools = ctx.files._tools,
@@ -49,6 +50,13 @@ base_sysroot = rule(
         "libc": attr.label(mandatory = True),
         "libinfo": attr.label(mandatory = True),
         "libclosure": attr.label(mandatory = True),
+        "libdispatch": attr.label(mandatory = True),
+        "objc4": attr.label(mandatory = True),
+        "llvm": attr.label(mandatory = True, doc = "@llvm_project (libc++ and libunwind headers)."),
+        "llvm_headers_script": attr.label(mandatory = True, allow_single_file = True,
+                                          doc = "base/llvm/install_headers.sh."),
+        "dispatch_headers_script": attr.label(mandatory = True, allow_single_file = True,
+                                              doc = "base/libdispatch/install_headers.sh."),
         "shims": attr.label(mandatory = True, doc = "base/sdk's headers."),
         "shims_root": attr.string(mandatory = True, doc = "Their directory, e.g. base/sdk."),
         "_script": attr.label(default = "//tools/base:stage_sysroot.sh", allow_single_file = True),

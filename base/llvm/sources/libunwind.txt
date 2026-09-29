@@ -1,0 +1,13 @@
+# libunwind.dylib's sources, relative to the llvm-project tree: the unwind_shared
+# target of libunwind/src/CMakeLists.txt as it configures for arm64 Darwin
+# (Unwind-EHABI.cpp, Unwind-seh.cpp, Unwind-sjlj.c and Unwind-wasm.c compile to
+# nothing there, as in Apple's build).
+libunwind/src/libunwind.cpp
+libunwind/src/Unwind-EHABI.cpp
+libunwind/src/Unwind-seh.cpp
+libunwind/src/UnwindLevel1.c
+libunwind/src/UnwindLevel1-gcc-ext.c
+libunwind/src/Unwind-sjlj.c
+libunwind/src/Unwind-wasm.c
+libunwind/src/UnwindRegistersRestore.S
+libunwind/src/UnwindRegistersSave.S

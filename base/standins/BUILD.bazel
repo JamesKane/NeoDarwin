@@ -1,0 +1,17 @@
+# NeoDarwin's stand-ins for closed Apple libraries (docs/base/libsystem.md §1),
+# built by build.sh from the per-library directories here.
+load("//rules:cc.bzl", "lang_audit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "srcs",
+    srcs = glob(["*/**"]),
+)
+
+lang_audit_test(
+    name = "standins_lang_audit",
+    srcs = glob(["*/*.c"]),
+)
+
+exports_files(["build.sh"])
