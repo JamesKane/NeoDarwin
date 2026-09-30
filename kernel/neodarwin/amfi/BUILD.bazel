@@ -1,7 +1,7 @@
 # ndamfi: NeoDarwin's provider for XNU's AMFI and Image4 interfaces
 # (docs/kernel/amfi-provider.md). nd_amfi.c registers them in the kernel;
 # the trust-cache engine also builds on the host for its tests.
-load("//rules:cc.bzl", "nd_cc_library", "nd_cc_test")
+load("//rules:cc.bzl", "lang_audit_test", "nd_cc_library", "nd_cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -28,11 +28,50 @@ nd_cc_library(
     ],
 )
 
+# A module //tools/trustcache writes, listing the tool itself (an ad hoc,
+# linker-signed arm64 binary), and the tool's cdhash for it: trustcache_test
+# round-trips it through the engine.
+genrule(
+    name = "tc_fixture",
+    testonly = True,
+    outs = [
+        "tc_fixture.module",
+        "tc_fixture.cdhash",
+    ],
+    cmd = "mkdir -p $(@D)/tc_fixture_root && cp $(execpath //tools/trustcache) $(@D)/tc_fixture_root/tool && " +
+          "$(execpath //tools/trustcache) create $(execpath tc_fixture.module) $(@D)/tc_fixture_root > /dev/null && " +
+          "$(execpath //tools/trustcache) cdhash $(@D)/tc_fixture_root/tool > $(execpath tc_fixture.cdhash)",
+    tools = ["//tools/trustcache"],
+)
+
 nd_cc_test(
     name = "trustcache_test",
     size = "small",
     srcs = ["test/tc_test.c"],
+    args = [
+        "$(rootpath tc_fixture.module)",
+        "$(rootpath tc_fixture.cdhash)",
+    ],
+    data = [
+        "tc_fixture.cdhash",
+        "tc_fixture.module",
+    ],
     deps = [":trustcache_host"],
+)
+
+# The DER entitlements reader alone, for its host test.
+nd_cc_library(
+    name = "entitlements_host",
+    testonly = True,
+    srcs = ["nd_entitlements.c"],
+    hdrs = ["nd_entitlements.h"],
+)
+
+nd_cc_test(
+    name = "entitlements_test",
+    size = "small",
+    srcs = ["test/ent_test.c"],
+    deps = [":entitlements_host"],
 )
 
 # Overlaid at bsd/ndamfi by the kernel build (kernel/BUILD.bazel, patch 0005).
@@ -40,8 +79,25 @@ filegroup(
     name = "kernel_srcs",
     srcs = [
         "nd_amfi.c",
+        "nd_amfi_internal.h",
+        "nd_amfi_policy.c",
+        "nd_entitlements.c",
+        "nd_entitlements.h",
+        "nd_entitlements_os.cpp",
         "nd_tc_lookup.c",
         "nd_trustcache.c",
         "nd_trustcache.h",
+    ],
+)
+
+# The kernel-only sources' language justifications (the host libraries
+# audit the rest).
+lang_audit_test(
+    name = "kernel_srcs_lang_audit",
+    srcs = [
+        "nd_amfi.c",
+        "nd_amfi_internal.h",
+        "nd_amfi_policy.c",
+        "nd_entitlements_os.cpp",
     ],
 )

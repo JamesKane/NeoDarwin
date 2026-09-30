@@ -3,6 +3,13 @@
 hfs_ramdisk stages files at their paths in a directory tree and builds a
 raw HFS+ volume from it with tools/ramdisk/mkhfs.sh (host hdiutil in
 Phase 1). Used for the HFS+ root of P1-08a onward.
+
+Each volume also gets its static trust cache (P1-15,
+docs/kernel/amfi-provider.md): //tools/trustcache lists every signed arm64
+Mach-O staged in it, except trust_cache_exclude, in NAME.trustcache (a
+version 1 module, which neoboot loads from \\NeoDarwin\\trustcache), with
+NAME.trustcache.txt naming each listed file. The target NAME_trustcache is
+the module alone.
 """
 
 def _impl(ctx):
@@ -28,19 +35,28 @@ def _impl(ctx):
         args += ["--link", target, link]
     for path, mode in ctx.attr.tree_modes.items():
         args += ["--mode", path, mode]
+    tc = ctx.actions.declare_file(ctx.label.name + ".trustcache")
+    manifest = ctx.actions.declare_file(ctx.label.name + ".trustcache.txt")
+    args += ["--trust-cache", ctx.executable._trustcache.path, tc.path, manifest.path]
+    for path in ctx.attr.trust_cache_exclude:
+        args += ["--trust-cache-exclude", path]
     ctx.actions.run(
         executable = ctx.file._script,
         arguments = args,
         inputs = inputs,
-        outputs = [out],
+        tools = [ctx.executable._trustcache],
+        outputs = [out, tc, manifest],
         mnemonic = "HfsRamdisk",
         progress_message = "Building HFS+ ramdisk %{label}",
         execution_requirements = {"requires-darwin": "", "no-remote": "", "no-sandbox": ""},
         use_default_shell_env = True,
     )
-    return [DefaultInfo(files = depset([out]))]
+    return [
+        DefaultInfo(files = depset([out])),
+        OutputGroupInfo(trustcache = depset([tc]), trustcache_manifest = depset([manifest])),
+    ]
 
-hfs_ramdisk = rule(
+_hfs_ramdisk = rule(
     implementation = _impl,
     doc = "A raw HFS+ volume image holding the given files and directories.",
     attrs = {
@@ -53,6 +69,24 @@ hfs_ramdisk = rule(
         "volume_name": attr.string(default = "NeoDarwin"),
         "volume_size": attr.string(doc = "The volume's size (hdiutil's syntax, e.g. 256m); default: just big enough for its files."),
         "journaled": attr.bool(doc = "Journaled HFS+, for a writable root on a disk (rules/disk.bzl)."),
+        "trust_cache_exclude": attr.string_list(doc = "Paths (files or directories) whose Mach-Os the trust cache leaves out, e.g. a test binary that must be refused."),
         "_script": attr.label(default = "//tools/ramdisk:mkhfs.sh", allow_single_file = True),
+        "_trustcache": attr.label(default = "//tools/trustcache", executable = True, cfg = "exec"),
     },
 )
+
+def hfs_ramdisk(name, tags = [], **kwargs):
+    """An HFS+ volume (NAME, NAME.hfs) and its static trust cache (NAME_trustcache)."""
+    _hfs_ramdisk(name = name, tags = tags, **kwargs)
+    native.filegroup(
+        name = name + "_trustcache",
+        srcs = [":" + name],
+        output_group = "trustcache",
+        tags = tags,
+    )
+    native.filegroup(
+        name = name + "_trustcache_manifest",
+        srcs = [":" + name],
+        output_group = "trustcache_manifest",
+        tags = tags,
+    )

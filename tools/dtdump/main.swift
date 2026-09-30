@@ -18,6 +18,8 @@
 //     --seed HEX         random-seed generator seed (default 1)
 //     --acpi-base HEX    where the ACPI copy goes (default dram-base + 32 MiB)
 //     --ramdisk HEX,HEX  a ramdisk's address and length (default none)
+//     --trust-cache HEX,HEX  a static trust cache segment's address and length
+//                        (/chosen/memory-map TrustCache; default none)
 //     --gicd-ctlr HEX    the GICD_CTLR value neoboot reads, which chooses the
 //                        timer's group (default 0x40: DS=1, as QEMU virt without EL3)
 //     --timer-group N    force /arm-io/gic timer-group, as boot.cfg's timer-group=N
@@ -64,7 +66,7 @@ struct PrintReport: DTReport {
 
 // MARK: arguments
 
-let usage = "usage: dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--gop WxH] [--uart-off] [--boot-uuid UUID] [--write-dt FILE] ACPIDUMP | dtdump [--gop WxH] --dt TREE"
+let usage = "usage: dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--trust-cache HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--gop WxH] [--uart-off] [--boot-uuid UUID] [--write-dt FILE] ACPIDUMP | dtdump [--gop WxH] --dt TREE"
 var args = Array(CommandLine.arguments.dropFirst())
 var input: String?
 var treeInput: String?
@@ -76,6 +78,7 @@ var bootMPIDR: UInt64?
 var seed: UInt64 = 1
 var acpiBase: UInt64?
 var ramdisk: (UInt64, UInt64) = (0, 0)
+var trustCache: (UInt64, UInt64) = (0, 0)
 var gicdCTLR: UInt32 = Platform.gicdCTLRDS
 var forcedTimerGroup: UInt32?
 var el3 = false
@@ -107,6 +110,10 @@ while !args.isEmpty {
         let parts = value().split(separator: ",").map { number(String($0)) }
         guard parts.count == 2 else { fail(usage, code: 2) }
         ramdisk = (parts[0], parts[1])
+    case "--trust-cache":
+        let parts = value().split(separator: ",").map { number(String($0)) }
+        guard parts.count == 2 else { fail(usage, code: 2) }
+        trustCache = (parts[0], parts[1])
     case "--gicd-ctlr": gicdCTLR = UInt32(truncatingIfNeeded: number(value()))
     case "--timer-group":
         let g = number(value())
@@ -290,7 +297,8 @@ treeBuffer.initializeMemory(as: UInt8.self, repeating: 0, count: capacity)
 var writer = DeviceTreeWriter(base: treeBuffer, capacity: capacity)
 let loader = Platform.Facts(dramBase: dramBase, dramSize: dramSize, timebase: timebase, bootMPIDR: boot, seed: seed,
                             ramdiskBase: ramdisk.0, ramdiskSize: ramdisk.1, acpiBase: base, acpiLength: UInt64(copyLength),
-                            timerGroup: timerGroup, psciConduit: psci.conduit, bootUUID: bootUUID)
+                            timerGroup: timerGroup, psciConduit: psci.conduit, bootUUID: bootUUID,
+                            trustCacheBase: trustCache.0, trustCacheSize: trustCache.1)
 guard let treeLength = Platform.deviceTree(into: &writer, loader, facts, layout) else { fail("the tree does not fit in \(capacity) bytes") }
 
 // Checks that need the ACPI facts as well as the tree.

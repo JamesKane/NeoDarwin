@@ -367,3 +367,41 @@ sh_test(
         "//boot/neoboot:testdata/radxa-dragon-q8b.acpidump",
     ],
 )
+
+# P1-15: /chosen/memory-map TrustCache, the static trust cache segment
+# neoboot passes (docs/kernel/dt-abi.md): in the golden tree, and refused
+# when shorter than a segment header and a module header.
+sh_test(
+    name = "qemu_virt_smp1_trust_cache_test",
+    size = "small",
+    srcs = ["dtdump_test.sh"],
+    args = [
+        "ok",
+        "$(rootpath :dtdump)",
+        "$(rootpath //boot/neoboot:testdata/qemu-virt-smp1.acpidump)",
+        "$(rootpath testdata/qemu-virt-smp1-trust-cache.txt)",
+        "--trust-cache 0x43000000,0x62",
+    ],
+    data = [
+        ":dtdump",
+        "testdata/qemu-virt-smp1-trust-cache.txt",
+        "//boot/neoboot:testdata/qemu-virt-smp1.acpidump",
+    ],
+)
+
+sh_test(
+    name = "trust_cache_too_short_test",
+    size = "small",
+    srcs = ["dtdump_test.sh"],
+    args = [
+        "fail",
+        "$(rootpath :dtdump)",
+        "$(rootpath //boot/neoboot:testdata/qemu-virt-smp1.acpidump)",
+        "'/chosen/memory-map TrustCache is shorter than a segment with one module header'",
+        "--trust-cache 0x43000000,0x10",
+    ],
+    data = [
+        ":dtdump",
+        "//boot/neoboot:testdata/qemu-virt-smp1.acpidump",
+    ],
+)

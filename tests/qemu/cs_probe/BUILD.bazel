@@ -1,0 +1,65 @@
+load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:darwin_executable.bzl", "swift_embedded_executable")
+
+package(default_visibility = ["//visibility:public"])
+
+# cs_probe (P1-15): what the code-signing policy grants the process running
+# it; see Sources/Main.swift. //images:session_root and the session disk
+# carry the signed copies below under /usr/local/libexec/cs_probe.
+swift_embedded_executable(
+    name = "cs_probe_unsigned_entitlements",
+    srcs = ["Sources/Main.swift"],
+    c_srcs = ["runtime/probe.c"],
+    hdrs = [
+        "Probe/module.modulemap",
+        "Probe/probe.h",
+    ],
+    module_name = "cs_probe",
+    out = "cs_probe.linker-signed",
+    root = "//base:root",
+)
+
+# Listed in the images' trust caches.
+genrule(
+    name = "listed",
+    srcs = [
+        ":cs_probe_unsigned_entitlements",
+        "entitlements.plist",
+    ],
+    outs = ["listed"],
+    cmd = "$(location sign.sh) $(location :cs_probe_unsigned_entitlements) $@ org.neodarwin.cs-probe $(location entitlements.plist)",
+    tags = ["requires-darwin"],
+    tools = ["sign.sh"],
+)
+
+# The same code and entitlements under another identifier: another cdhash,
+# which the images' trust caches leave out.
+genrule(
+    name = "unlisted",
+    srcs = [
+        ":cs_probe_unsigned_entitlements",
+        "entitlements.plist",
+    ],
+    outs = ["unlisted"],
+    cmd = "$(location sign.sh) $(location :cs_probe_unsigned_entitlements) $@ org.neodarwin.cs-probe.unlisted $(location entitlements.plist)",
+    tags = ["requires-darwin"],
+    tools = ["sign.sh"],
+)
+
+# libutil re-signed: a library the trust caches leave out, for dlopen.
+genrule(
+    name = "unlisted_dylib",
+    srcs = ["//base:libutil_dylib"],
+    outs = ["unlisted.dylib"],
+    cmd = "$(location sign.sh) $(location //base:libutil_dylib)/usr/lib/libutil.dylib $@ org.neodarwin.cs-probe.unlisted-dylib",
+    tags = ["requires-darwin"],
+    tools = ["sign.sh"],
+)
+
+lang_audit_test(
+    name = "cs_probe_lang_audit",
+    srcs = [
+        "Probe/probe.h",
+        "runtime/probe.c",
+    ],
+)

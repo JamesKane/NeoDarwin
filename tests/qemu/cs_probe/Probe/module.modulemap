@@ -1,0 +1,4 @@
+module Probe {
+  header "probe.h"
+  export *
+}

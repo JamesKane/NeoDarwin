@@ -235,6 +235,7 @@ sh_test(
         "--mem 2G",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pid1_root_trustcache)",
         "--until-lines",
         "$(rootpath //boot/neoboot)",
         "120",
@@ -242,8 +243,13 @@ sh_test(
         "'iBoot version: neoboot-0.1'",
         # Printed after ndcrypto has installed the crypto table and the kernel PRNG (P1-13).
         "'lockdown_mode: lockdown mode in nvram is off'",
-        # After ndamfi has registered the AMFI and Image4 interfaces (P1-14).
-        "'no external trust caches found'",
+        # After ndamfi has registered the AMFI and Image4 interfaces (P1-14),
+        # the ramdisk's static trust cache from neoboot, and code signing
+        # enforced with it (P1-15): PID 1 is listed.
+        "'neoboot: trust cache: '",
+        "'ndamfi: code-signing enforcement on (a static trust cache from the loader)'",
+        "'ndamfi: static trust cache '",
+        "'loaded external trust cache module: 0'",
         # BSD initialisation, reached through the platform expert (P1-06).
         "'MAC Framework successfully initialized'",
         # Past bsd_init's pthread check, with libpthread's kern/ built in (P1-16).
@@ -270,6 +276,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:pid1_root",
+        "//images:pid1_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -291,6 +298,7 @@ sh_test(
         "--mem 2G",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
         "--send-after 'root@localhost ~ # ' 'zmodload zsh/datetime && t=$$EPOCHREALTIME && sleep 1 && echo slept-$$(( EPOCHREALTIME - t >= 1 ))\\n'",
@@ -310,6 +318,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:session_root",
+        "//images:session_root_trustcache",
         "//third_party/qemu_firmware:virt_secure_flash",
     ],
     tags = ["manual", "kernel", "qemu"],
@@ -404,6 +413,7 @@ sh_test(
         "--mem 2G",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pid1_root_trustcache)",
     ] + PCI_DEVICES + [
         "--until-lines",
         "$(rootpath //boot/neoboot)",
@@ -419,6 +429,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:pid1_root",
+        "//images:pid1_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -438,6 +449,7 @@ sh_test(
         "--mem 2G",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pid1_root_trustcache)",
     ] + PCI_DEVICES + [
         "--until-lines",
         "$(rootpath //boot/neoboot)",
@@ -452,6 +464,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:pid1_root",
+        "//images:pid1_root_trustcache",
         "//third_party/qemu_firmware:virt_secure_flash",
     ],
     tags = ["manual", "kernel", "qemu"],
@@ -469,6 +482,7 @@ sh_test(
         "--smp 4",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pid1_root_trustcache)",
     ] + PCI_DEVICES + [
         "--until-lines",
         "$(rootpath //boot/neoboot)",
@@ -485,6 +499,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:pid1_root",
+        "//images:pid1_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -505,6 +520,7 @@ sh_test(
         "--mem 2G",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pid1_root_trustcache)",
         "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/pci-its-nc-flat.cfg)",
     ] + PCI_DEVICES + [
         "--until-lines",
@@ -524,6 +540,7 @@ sh_test(
         "//boot/neoboot",
         "//boot/neoboot:testdata/pci-its-nc-flat.cfg",
         "//images:pid1_root",
+        "//images:pid1_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -539,6 +556,7 @@ sh_test(
         "--mem 2G",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pid1_root_trustcache)",
         "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/pci-msi-off.cfg)",
         "--absent 'NeoDarwinPCIMSI: 0000:'",
         "--absent 'NeoDarwinGICv3: LPIs:'",
@@ -560,6 +578,7 @@ sh_test(
         "//boot/neoboot",
         "//boot/neoboot:testdata/pci-msi-off.cfg",
         "//images:pid1_root",
+        "//images:pid1_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -843,6 +862,7 @@ sh_test(
         "--mem 2G",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
         "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/nvme-ro.cfg)",
         "--drive nvm0=$(rootpath //images:data_disk)",
         "--device nvme,serial=nd1,drive=nvm0",
@@ -868,6 +888,7 @@ sh_test(
         "//boot/neoboot:testdata/nvme-ro.cfg",
         "//images:data_disk",
         "//images:session_root",
+        "//images:session_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -883,6 +904,7 @@ sh_test(
         "--mem 2G",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:hello_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:hello_root_trustcache)",
         "--until-lines",
         "$(rootpath //boot/neoboot)",
         "180",
@@ -900,6 +922,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:hello_root",
+        "//images:hello_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -917,6 +940,7 @@ sh_test(
         "--mem 2G",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
         "--send-after 'root@localhost ~ # ' 'echo hi-$$((6*7))\\n'",
@@ -938,6 +962,98 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:session_root",
+        "//images:session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P1-15's exit (docs/kernel/amfi-provider.md §4): the session disk under
+# code-signing enforcement. neoboot passes the root's static trust cache
+# (\\NeoDarwin\\trustcache on the image's ESP); the kernel loads it and
+# enforces. The listed probe runs as a platform binary with the entitlements
+# its signature carries, which the kernel honours (as uid -2 it may force
+# case-sensitive lookups), and dlopens a listed library; the library and the
+# binary the trust cache leaves out are refused.
+CS_PROBE = "/usr/local/libexec/cs_probe"
+
+sh_test(
+    name = "sbsa_cs_enforcement_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--disk $(rootpath //images:session_disk)",
+        "--until-lines",
+        "--absent 'cs_probe: not a platform binary'",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' '" + CS_PROBE + "/listed --dlopen /usr/lib/libutil.dylib\\n'",
+        "--send-after 'root@localhost ~ # ' '" + CS_PROBE + "/listed --dlopen " + CS_PROBE + "/unlisted.dylib\\n'",
+        "--send-after 'root@localhost ~ # ' '" + CS_PROBE + "/unlisted; echo unlisted-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' 'sysctl security.codesigning.neodarwin security.codesigning.trustcaches.num_static\\n'",
+        "-",
+        "240",
+        "'neoboot: trust cache: '",
+        "'ndamfi: code-signing enforcement on (a static trust cache from the loader)'",
+        "'ndamfi: static trust cache '",
+        "'loaded external trust cache module: 0'",
+        "'BSD root: disk0s2, major'",
+        "'cs_probe: platform binary, valid, CS_KILL'",
+        "'cs_probe: entitlements granted: '",
+        "'com.apple.private.iopol.case_sensitivity among them'",
+        "'cs_probe: dlopen /usr/lib/libutil.dylib: loaded'",
+        "'cs_probe: case-sensitivity policy as uid -2: granted by the kernel'",
+        "'ndamfi: refused unlisted.dylib (cdhash '",
+        "'cs_probe: dlopen " + CS_PROBE + "/unlisted.dylib: refused: '",
+        "'ndamfi: refused unlisted (cdhash '",
+        # The exec fails past its point of no return: SIGKILL.
+        "'zsh: killed     " + CS_PROBE + "/unlisted'",
+        "'unlisted-status=137'",
+        "'security.codesigning.neodarwin.enforcement: 1'",
+        "'security.codesigning.trustcaches.num_static: 1'",
+    ],
+    data = ["//images:session_disk"],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# Enforcement off (boot.cfg nd_cs_enforcement=0) with the same trust cache:
+# the listed probe is still a platform binary with its entitlements; the
+# unlisted one runs, but ad hoc, with none, and the kernel denies it.
+sh_test(
+    name = "sbsa_cs_permissive_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
+        "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/cs-enforcement-off.cfg)",
+        "--until-lines",
+        "--absent 'ndamfi: refused'",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' '" + CS_PROBE + "/unlisted\\n'",
+        "--send-after 'root@localhost ~ # ' '" + CS_PROBE + "/listed\\n'",
+        "--send-after 'root@localhost ~ # ' 'echo probes-$$((6*7))\\n'",
+        "$(rootpath //boot/neoboot)",
+        "180",
+        "'ndamfi: code-signing enforcement off (nd_cs_enforcement=0): untrusted code runs without entitlements'",
+        "'ndamfi: static trust cache '",
+        "'cs_probe: not a platform binary, valid'",
+        "'cs_probe: entitlements granted: none'",
+        "'cs_probe: case-sensitivity policy as uid -2: denied (errno 1)'",
+        "'cs_probe: platform binary, valid'",
+        "'com.apple.private.iopol.case_sensitivity among them'",
+        "'cs_probe: case-sensitivity policy as uid -2: granted by the kernel'",
+        "'probes-42'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//boot/neoboot:testdata/cs-enforcement-off.cfg",
+        "//images:session_root",
+        "//images:session_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -958,6 +1074,7 @@ sh_test(
         "--mem 2G",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
         "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/timer-group1.cfg)",
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
@@ -975,6 +1092,7 @@ sh_test(
         "//boot/neoboot",
         "//boot/neoboot:testdata/timer-group1.cfg",
         "//images:session_root",
+        "//images:session_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -990,6 +1108,7 @@ sh_test(
         "--mem 2G",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:getty_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:getty_root_trustcache)",
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
         "--send-after '# ' 'echo hi-$$((6*7))\\n'",
@@ -1006,6 +1125,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:getty_root",
+        "//images:getty_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -1025,6 +1145,7 @@ sh_test(
         "--device ramfb",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:getty_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:getty_root_trustcache)",
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
         "--send-after '# ' 'echo fb-$$((6*7)); uname -sm\\n'",
@@ -1044,6 +1165,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:getty_root",
+        "//images:getty_root_trustcache",
         "@apple_xnu_corecrypto//:osfmk/console/iso_font.c",
     ],
     tags = ["manual", "kernel", "qemu"],
@@ -1068,6 +1190,7 @@ sh_test(
         "--device ramfb",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:getty_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:getty_root_trustcache)",
         "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/uart-off.cfg)",
         "--until-lines",
         "--until-screen",
@@ -1092,6 +1215,7 @@ sh_test(
         "//boot/neoboot",
         "//boot/neoboot:testdata/uart-off.cfg",
         "//images:getty_root",
+        "//images:getty_root_trustcache",
         "@apple_xnu_corecrypto//:osfmk/console/iso_font.c",
     ],
     tags = ["manual", "kernel", "qemu"],
@@ -1116,6 +1240,10 @@ sh_test(
         # Printed after ndcrypto has installed the crypto table and the kernel PRNG (P1-13).
         "'lockdown_mode: lockdown mode in nvram is off'",
         # After ndamfi has registered the AMFI and Image4 interfaces (P1-14).
+        # No trust cache on this ESP: neoboot passes none, and the kernel
+        # enforces no code signing (P1-15's default without one).
+        "'neoboot: no \\NeoDarwin\\trustcache: the kernel gets no static trust cache'",
+        "'ndamfi: code-signing enforcement off (no static trust cache): untrusted code runs without entitlements'",
         "'no external trust caches found'",
         # BSD initialisation, reached through the platform expert (P1-06).
         "'MAC Framework successfully initialized'",
@@ -1153,6 +1281,7 @@ sh_test(
         "--smp 4",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
         "--send-after 'root@localhost ~ # ' 'r=($$(/usr/sbin/sysctl -n hw.ncpu hw.activecpu)) && echo ncpu-$${r[1]}-$${r[2]}\\n'",
@@ -1172,6 +1301,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:session_root",
+        "//images:session_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -1194,6 +1324,7 @@ sh_test(
         "--smp 4",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
         "--send-after 'root@localhost ~ # ' 'r=($$(/usr/sbin/sysctl -n hw.ncpu hw.activecpu)) && echo ncpu-$${r[1]}-$${r[2]}\\n'",
@@ -1214,6 +1345,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:session_root",
+        "//images:session_root_trustcache",
         "//third_party/qemu_firmware:virt_secure_flash",
     ],
     tags = ["manual", "kernel", "qemu"],
@@ -1232,6 +1364,7 @@ sh_test(
         "--smp 8",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
         "--send-after 'root@localhost ~ # ' 'r=($$(/usr/sbin/sysctl -n hw.ncpu hw.activecpu)) && echo ncpu-$${r[1]}-$${r[2]}\\n'",
@@ -1247,6 +1380,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:session_root",
+        "//images:session_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -1268,6 +1402,7 @@ sh_test(
         "--smp 18",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
         "--send-after 'root@localhost ~ # ' 'r=($$(/usr/sbin/sysctl -n hw.ncpu hw.activecpu)) && echo ncpu-$${r[1]}-$${r[2]}\\n'",
@@ -1286,6 +1421,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:session_root",
+        "//images:session_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -1305,6 +1441,7 @@ sh_test(
         "--smp 8",
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
         "--send-after 'root@localhost ~ # ' 'r=($$(/usr/sbin/sysctl -n hw.ncpu hw.activecpu)) && echo ncpu-$${r[1]}-$${r[2]}\\n'",
@@ -1321,6 +1458,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:session_root",
+        "//images:session_root_trustcache",
         "//third_party/qemu_firmware:virt_secure_flash",
     ],
     tags = ["manual", "kernel", "qemu"],
@@ -1371,6 +1509,7 @@ sh_test(
     args = SBSA_REF + [
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
         "--send-after 'root@localhost ~ # ' 'r=($$(/usr/sbin/sysctl -n hw.ncpu hw.activecpu)) && echo ncpu-$${r[1]}-$${r[2]}\\n'",
@@ -1388,6 +1527,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:session_root",
+        "//images:session_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -1449,6 +1589,7 @@ sh_test(
     args = SBSA_REF + [
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pid1_root_trustcache)",
     ] + PCI_DEVICES + [
         "--until-lines",
         "$(rootpath //boot/neoboot)",
@@ -1460,6 +1601,7 @@ sh_test(
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:pid1_root",
+        "//images:pid1_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -1484,7 +1626,7 @@ SBSA_REF_NVME_LINES = [
 
 sh_test(
     name = "sbsa_ref_nvme_boot_test",
-    size = "medium",
+    size = "large",
     srcs = ["//tools/efi:qemu_disk_reboot_test.sh"],
     args = [
         "$(rootpath //images:session_disk)",
@@ -1495,7 +1637,7 @@ sh_test(
         "--send-after 'root@localhost ~ # ' 'df /\\n'",
         "--send-after 'root@localhost ~ # ' 'echo persisted-$$((6*7)) > /var/root/nvme-test && zmodload -F zsh/files b:sync && sync && echo synced-$$((6*7))\\n'",
         "-",
-        "140",
+        "300",
     ] + SBSA_REF_LINES + SBSA_REF_NVME_LINES + [
         "'NeoDarwinNVMeController: 00:03.0: 4 I/O queue pairs of 64 entries, 32 commands each, transfers up to 512 KiB; MSI-X 5 vectors (LPIs '",
         "', DeviceID 0x18 on ITS 0 via SMMUv3 at 0x60050000 as stream 0x18 (bypass)'",

@@ -8,12 +8,17 @@
 //
 // Physical layout, from the collection's (32 MiB-congruent) base:
 //
-//     kernelcache (flat, kcgen) | device tree (64 KiB) | ACPI tables | ramdisk | boot_args page | ← topOfKernelData
+//     [trust cache] | kernelcache (flat, kcgen) | device tree (64 KiB) | ACPI tables | ramdisk | boot_args page | ← topOfKernelData
 //
 // The ACPI tables are a copy, with their pointers rewritten, so that the
 // kernel reaches them through its physmap (/chosen/memory-map/ACPITables).
 // The ramdisk is optional. It lies below topOfKernelData because the kernel
-// maps it with ml_static_ptovirt() (IOKitBSDInit.cpp), and boot_args
+// maps it with ml_static_ptovirt() (IOKitBSDInit.cpp). The static trust
+// cache, also optional, goes just below the collection, where iBoot puts it:
+// arm_vm_init() requires /chosen/memory-map/TrustCache below the kernel's
+// lowest segment (it maps it read-only as EXTRADATA), so physBase and
+// virtBase then start at the trust cache rather than at the collection
+// (TrustCache.swift). boot_args
 // describes the DRAM window from that base to the end of the
 // largest hole-free run of memory the kernel may own.
 
@@ -22,6 +27,11 @@ import UEFI
 let kernelcachePath: StaticString = "\\NeoDarwin\\kernelcache"
 let bootConfigPath: StaticString = "\\NeoDarwin\\boot.cfg"
 let ramdiskPath: StaticString = "\\NeoDarwin\\ramdisk"
+/// One version 1 trust-cache module (//tools/trustcache): the kernel's
+/// static trust cache. With it the kernel enforces code signing (P1-15).
+let trustCachePath: StaticString = "\\NeoDarwin\\trustcache"
+/// Larger than any image's trust cache: 16 MiB is 760,000 binaries.
+let trustCacheLimit: UInt64 = 16 << 20
 /// Appended when a ramdisk is loaded and the command line names no root.
 let ramdiskRoot: StaticString = " rd=md0"
 /// -noprogress: with no framebuffer, PE_init_iokit()'s progress-bar
@@ -310,6 +320,35 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     let timerGroup = chooseTimerGroup(acpi, config, configLength)
     let psci = choosePSCIConduit(acpi, layout)
 
+    // The static trust cache, checked before anything is placed: the kernel
+    // panics on one it can't load, so a bad one stops the boot here.
+    var trustCache: (buffer: UInt64, pages: UInt64, size: UInt64)? = nil
+    if let tc = EFIFile(root: root, path: trustCachePath) {
+        let size = tc.size
+        let pages = roundUp(max(size, 1), uefiPage) / uefiPage
+        guard size <= trustCacheLimit, let buffer = fw.allocate(pages: pages) else {
+            return fail("\\NeoDarwin\\trustcache is too large")
+        }
+        let bytes = UnsafeMutableRawPointer(bitPattern: UInt(buffer))!
+        guard tc.read(at: 0, count: size, into: bytes) else { return fail("cannot read \\NeoDarwin\\trustcache") }
+        tc.close()
+        let (module, why) = TrustCache.check(bytes, Int(size))
+        guard let module else {
+            put("neoboot: \\NeoDarwin\\trustcache: ")
+            put(why)
+            put("\n")
+            return fail("the trust cache is not one the kernel can load; not booting without it")
+        }
+        put("neoboot: trust cache: ")
+        putDec(UInt64(module.entries))
+        put(" entries, UUID ")
+        putUUID(module.uuid)
+        put("\n")
+        trustCache = (buffer, pages, size)
+    } else {
+        put("neoboot: no \\NeoDarwin\\trustcache: the kernel gets no static trust cache\n")
+    }
+
     guard let file = EFIFile(root: root, path: kernelcachePath) else { return fail("no \\NeoDarwin\\kernelcache on the boot volume") }
     let fileSize = file.size
 
@@ -358,16 +397,18 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     let ramdiskOffset = acpiOffset + acpiCapacity
     let argsOffset = ramdiskOffset + ramdiskSize
     let span = argsOffset + kernelPage
+    // The trust cache region below the collection, in whole kernel pages.
+    let trustCacheLength = trustCache.map { roundUp(UInt64(TrustCache.segmentHeaderSize) + $0.size, kernelPage) } ?? 0
 
     // Slide 0 for first light: the lowest free address congruent to the link
     // address modulo 32 MiB. KASLR picks among the candidates later.
     let slide: UInt64 = 0
     let congruence = (kc.linkAddress + slide) % l2Block
     var candidate = window.start - window.start % l2Block + congruence
-    if candidate < window.start { candidate += l2Block }
+    while candidate < window.start + trustCacheLength { candidate += l2Block }
     var base: UInt64 = 0
     while candidate + span <= window.end {
-        if fw.allocate(pages: span / uefiPage, at: candidate) != nil { base = candidate; break }
+        if fw.allocate(pages: (trustCacheLength + span) / uefiPage, at: candidate - trustCacheLength) != nil { base = candidate; break }
         candidate += l2Block
     }
     guard base != 0 else { return fail("no free place for the kernelcache in the DRAM window") }
@@ -385,9 +426,17 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
         guard ramdisk.read(at: 0, count: ramdisk.size, into: at) else { return fail("cannot read the ramdisk") }
         ramdisk.close()
     }
+    let physBase = base - trustCacheLength
+    if let tc = trustCache {
+        let at = UnsafeMutableRawPointer(bitPattern: UInt(physBase))!
+        at.initializeMemory(as: UInt8.self, repeating: 0, count: Int(trustCacheLength))
+        TrustCache.writeSegmentHeader(at)
+        (at + TrustCache.segmentHeaderSize).copyMemory(from: UnsafeRawPointer(bitPattern: UInt(tc.buffer))!, byteCount: Int(tc.size))
+        fw.free(tc.buffer, pages: tc.pages)
+    }
 
-    let virtBase = kc.linkAddress + slide
-    let memSize = (window.end - base) & ~(kernelPage - 1)
+    let virtBase = kc.linkAddress + slide  // the collection's; boot_args' is physBase's
+    let memSize = (window.end - physBase) & ~(kernelPage - 1)
     let entry = base + (entryVA - kc.linkAddress)
 
     // The time of day, and the counter it was read at: the kernel has no RTC
@@ -413,10 +462,11 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     }
 
     var tree = DeviceTreeWriter(base: image + Int(dtOffset), capacity: Int(treeCapacity))
-    let facts = Platform.Facts(dramBase: base, dramSize: memSize, timebase: nd_cntfrq(), bootMPIDR: nd_mpidr(), seed: nd_cntpct(),
+    let facts = Platform.Facts(dramBase: physBase, dramSize: memSize, timebase: nd_cntfrq(), bootMPIDR: nd_mpidr(), seed: nd_cntpct(),
                                ramdiskBase: ramdiskSize == 0 ? 0 : base + ramdiskOffset, ramdiskSize: ramdiskSize,
                                utcSeconds: utc, utcCounter: utcCounter, acpiBase: acpiBase, acpiLength: UInt64(acpiLength),
-                               timerGroup: timerGroup, psciConduit: psci, bootUUID: bootUUID)
+                               timerGroup: timerGroup, psciConduit: psci, bootUUID: bootUUID,
+                               trustCacheBase: trustCacheLength == 0 ? 0 : physBase, trustCacheSize: trustCacheLength)
     guard let treeLength = Platform.deviceTree(into: &tree, facts, acpi, layout) else { return fail("the device tree does not fit") }
     var violations = ConsoleReport()
     guard DTCheck.check(image + Int(dtOffset), length: treeLength, framebuffer: framebuffer != nil, &violations) == 0 else {
@@ -444,8 +494,8 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     let commandLine = UnsafeRawBufferPointer(start: lineBuffer, count: lineLength)
 
     var bootArgs = BootArgs()
-    bootArgs.virtBase = virtBase
-    bootArgs.physBase = base
+    bootArgs.virtBase = virtBase - trustCacheLength
+    bootArgs.physBase = physBase
     bootArgs.memSize = memSize
     bootArgs.topOfKernelData = base + span
     bootArgs.deviceTree = virtBase + dtOffset
@@ -468,6 +518,10 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
         log("  ramdisk at         ", base + ramdiskOffset)
         log("  ramdisk bytes      ", ramdiskSize)
     }
+    if trustCacheLength != 0 {
+        log("  trust cache at     ", physBase)
+        log("  trust cache bytes  ", trustCacheLength)
+    }
     log("  boot_args at       ", base + argsOffset)
     if let fb = framebuffer { log("  framebuffer at     ", fb.base) }
     log("  memSize            ", memSize)
@@ -481,7 +535,7 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     // start.s reads all of this with the MMU and caches off. The kernel
     // maps the framebuffer uncached, so the firmware's last drawing goes to
     // memory too.
-    nd_dcache_clean_poc(base, span)
+    nd_dcache_clean_poc(physBase, trustCacheLength + span)
     if let fb = framebuffer { nd_dcache_clean_poc(fb.base, fb.size) }
     // SPCR: the console once the firmware's is gone, if it is a PL011. Any
     // other UART is left alone, and neoboot says nothing more after

@@ -18,7 +18,8 @@
 #     ndcrypto's SHA-1 and SHA-384 descriptors over FreeBSD's block functions,
 #     the kernel provider's code (docs/kernel/crypto-provider.md), compiled for
 #     userland; src/nd_digest_di.c selects them;
-#   - amfi_check_dyld_policy_self (libamfi): src/nd_amfi.c, all allowed;
+#   - amfi_check_dyld_policy_self (libamfi): src/nd_amfi.c, AMFI's rule for
+#     restricted processes over what the kernel reports (P1-15);
 #   - sandbox_check (libsystem_sandbox's dyld archive): src/nd_sandbox.c,
 #     allowed, as the libsystem_sandbox stand-in does;
 #   - compiler-rt's builtins (-fapple-link-rtlib, the toolchain's closed

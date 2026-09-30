@@ -219,6 +219,10 @@ enum DTCheck {
                 if let rd = map.property("RAMDisk"), rd.count == 16, rd.loadUnaligned(fromByteOffset: 8, as: UInt64.self) % 0x4000 != 0 {
                     r.violation("/chosen/memory-map RAMDisk length is not a multiple of 16 KiB")
                 }
+                if let tc = map.property("TrustCache"), tc.count == 16,
+                   tc.loadUnaligned(fromByteOffset: 8, as: UInt64.self) < UInt64(TrustCache.segmentHeaderSize + TrustCache.moduleHeaderSize) {
+                    r.violation("/chosen/memory-map TrustCache is shorter than a segment with one module header")
+                }
             } else {
                 r.violation("no /chosen/memory-map")
             }

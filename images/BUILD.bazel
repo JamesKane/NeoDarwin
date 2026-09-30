@@ -49,18 +49,33 @@ _SYSTEM_MODES = {
     "usr/bin/login": "4555",
 }
 
+# P1-15's code-signing probes (tests/qemu/cs_probe): `listed` is in the
+# image's trust cache; `unlisted` and `unlisted.dylib` are left out of it,
+# so under enforcement the kernel refuses them.
+_CS_PROBES = {
+    "//tests/qemu/cs_probe:listed": "usr/local/libexec/cs_probe/listed",
+    "//tests/qemu/cs_probe:unlisted": "usr/local/libexec/cs_probe/unlisted",
+    "//tests/qemu/cs_probe:unlisted_dylib": "usr/local/libexec/cs_probe/unlisted.dylib",
+}
+
+_CS_PROBES_UNLISTED = [
+    "usr/local/libexec/cs_probe/unlisted",
+    "usr/local/libexec/cs_probe/unlisted.dylib",
+]
+
 # launchd-842 as PID 1. It runs /bin/launchctl bootstrap -S System, which
 # loads com.apple.getty.plist. Booted by //kernel:sbsa_session_boot_test.
 hfs_ramdisk(
     name = "session_root",
     dirs = _SYSTEM_DIRS,
-    files = {"//base/launchctl": "bin/launchctl"},
+    files = {"//base/launchctl": "bin/launchctl"} | _CS_PROBES,
     links = _SYSTEM_LINKS,
     tree_modes = _SYSTEM_MODES,
     trees = [
         "//base:system_root",
         "//base:launchd_daemon",
     ],
+    trust_cache_exclude = _CS_PROBES_UNLISTED,
 )
 
 # The same system with a test-only PID 1 that runs getty itself, without
@@ -79,14 +94,15 @@ hfs_ramdisk(
 # (a writable root must be journaled: HFS won't mount a dirty volume
 # read-write without a journal), and a GPT disk image around it: partition 1
 # an EFI System Partition with neoboot and the kernel collection (no
-# ramdisk), partition 2 this volume. neoboot passes partition 2's unique
+# ramdisk; the volume's static trust cache), partition 2 this volume.
+# neoboot passes partition 2's unique
 # GUID as /chosen boot-uuid; the kernel roots on /dev/disk0s2. Booted from
 # virtio-blk by //kernel:sbsa_disk_boot_test. Manual: 230 MiB of image,
 # built when a disk test runs.
 hfs_ramdisk(
     name = "session_root_volume",
     dirs = _SYSTEM_DIRS,
-    files = {"//base/launchctl": "bin/launchctl"},
+    files = {"//base/launchctl": "bin/launchctl"} | _CS_PROBES,
     journaled = True,
     links = _SYSTEM_LINKS,
     volume_size = "192m",
@@ -96,13 +112,17 @@ hfs_ramdisk(
         "//base:system_root",
         "//base:launchd_daemon",
     ],
+    trust_cache_exclude = _CS_PROBES_UNLISTED,
 )
 
+# The ESP has the root's static trust cache (P1-15): neoboot passes it to
+# the kernel, which then enforces code signing.
 gpt_disk_image(
     name = "session_disk",
     esp = {
         "//boot/neoboot": "EFI/BOOT/BOOTAA64.EFI",
         "//kernel:sbsa_kc": "NeoDarwin/kernelcache",
+        ":session_root_volume_trustcache": "NeoDarwin/trustcache",
     },
     root = ":session_root_volume",
     tags = ["manual"],
@@ -127,6 +147,7 @@ gpt_disk_image(
         "//boot/neoboot": "EFI/BOOT/BOOTAA64.EFI",
         "//boot/neoboot:testdata/pci-msi-off.cfg": "NeoDarwin/boot.cfg",
         "//kernel:sbsa_kc": "NeoDarwin/kernelcache",
+        ":session_root_volume_trustcache": "NeoDarwin/trustcache",
     },
     root = ":session_root_volume",
     tags = ["manual"],

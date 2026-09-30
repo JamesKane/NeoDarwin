@@ -263,6 +263,56 @@ sh_test(
 # synthesis, writing and the DT-ABI check. dtdump compiles the same files
 # for the host (//tools/dtdump), so both build the same tree from the same
 # tables.
+# P1-15: \NeoDarwin\trustcache. A module //tools/trustcache wrote (one
+# entry) is checked and reported before the kernelcache is looked for; a
+# module the kernel would refuse (version 2) stops the boot, since the
+# kernel panics on a static trust cache it can't load.
+sh_test(
+    name = "neoboot_trust_cache_qemu_test",
+    size = "small",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--esp NeoDarwin/trustcache=$(rootpath //kernel/neodarwin/amfi:tc_fixture.module)",
+        "--until-lines",
+        "$(rootpath :neoboot)",
+        "45",
+        "'neoboot: trust cache: 1 entries, UUID '",
+        "'neoboot: no \\NeoDarwin\\kernelcache on the boot volume'",
+    ],
+    data = [
+        ":neoboot",
+        "//kernel/neodarwin/amfi:tc_fixture.module",
+    ],
+    tags = ["qemu"],
+)
+
+genrule(
+    name = "bad_trust_cache",
+    testonly = True,
+    outs = ["testdata/bad-trustcache.bin"],
+    # A version 2 header with no entries: 24 bytes.
+    cmd = "printf '\\002\\000\\000\\000' > $@ && head -c 20 /dev/zero >> $@",
+)
+
+sh_test(
+    name = "neoboot_bad_trust_cache_qemu_test",
+    size = "small",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--esp NeoDarwin/trustcache=$(rootpath :bad_trust_cache)",
+        "--until-lines",
+        "$(rootpath :neoboot)",
+        "45",
+        "'neoboot: \\NeoDarwin\\trustcache: not version 1'",
+        "'neoboot: the trust cache is not one the kernel can load; not booting without it'",
+    ],
+    data = [
+        ":bad_trust_cache",
+        ":neoboot",
+    ],
+    tags = ["qemu"],
+)
+
 filegroup(
     name = "portable_srcs",
     srcs = glob(["Sources/Portable/*.swift"]),

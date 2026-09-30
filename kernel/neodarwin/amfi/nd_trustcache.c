@@ -9,11 +9,14 @@
 // queries. Callers (bsd/kern/kern_trustcache.c) hold the trust-cache lock.
 //
 // Supported: version 1 modules, the format xnu publishes. Not supported:
-// Image4-manifested trust caches. NeoDarwin signs trust caches its own way
-// (ndsign, later), so load() declines them.
+// Image4-manifested trust caches. NeoDarwin signs trust caches its own way:
+// load() accepts a module only with a grant that a registered verifier
+// (nd_tc_set_grant_verifier, P2-01's ndsign) accepts, and none is registered
+// until ndsign exists, so runtime loads are refused. Static trust caches,
+// from the loader, go through loadModule().
 //
-// Loading is default deny: every trust-cache type requires an entitlement no
-// Apple binary carries, until NeoDarwin's policy grants it.
+// Runtime loading also requires, in XNU (load_trust_cache_with_type), the
+// entitlement com.apple.private.pmap.load-trust-cache with the value below.
 
 #include <string.h>
 #include <kern/trustcache.h>
@@ -144,12 +147,23 @@ nd_tc_load_module(TrustCacheRuntime_t *runtime, TCType_t type, TrustCache_t *tru
 	return ret(kTCReturnSuccess);
 }
 
+static nd_tc_grant_verifier_t grant_verifier;
+
+void
+nd_tc_set_grant_verifier(nd_tc_grant_verifier_t verifier)
+{
+	grant_verifier = verifier;
+}
+
 TCReturn_t
 nd_tc_load(TrustCacheRuntime_t *runtime, TCType_t type, TrustCache_t *trustCache, uintptr_t payloadAddr, size_t payloadSize,
     uintptr_t manifestAddr, size_t manifestSize)
 {
-	(void)runtime; (void)type; (void)trustCache; (void)payloadAddr; (void)payloadSize; (void)manifestAddr; (void)manifestSize;
-	return ret(kTCReturnNotPermitted);  // Image4-manifested: see the file header
+	if (is_static(type) || grant_verifier == NULL || manifestAddr == 0 || manifestSize == 0 ||
+	    !grant_verifier(type, (const uint8_t *)payloadAddr, payloadSize, (const uint8_t *)manifestAddr, manifestSize)) {
+		return ret(kTCReturnNotPermitted);  // no grant: see the file header
+	}
+	return nd_tc_load_module(runtime, type, trustCache, payloadAddr, payloadSize);
 }
 
 TCReturn_t

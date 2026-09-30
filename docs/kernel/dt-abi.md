@@ -26,7 +26,7 @@ Line numbers below refer to xnu-12377.1.9 as pinned (`@apple_xnu`) with NeoDarwi
 | SPCR | `ACPI.parse`, `ACPI.uartProblem`, `Platform.uartUse` | the console UART's interface type and base address. It becomes the kernel's serial console only if the kernel drives it (below); otherwise the framebuffer is the only console, if there is one. The Generic Address Structure's access size is recorded but never checked: the Q8B's firmware stores 0x20 there, the register width in bits, instead of an encoded size (0–4). Every UART the kernel drives has 32-bit registers, which its driver knows; Linux and FreeBSD fall back to the driver's width the same way |
 | FADT (`FACP`), else the XSDT header | `ACPI.parse`, `ACPI.copyOEM` | OEM ID and OEM table ID for `model`; hardware-reduced flag; ARM boot flags (`PSCI_COMPLIANT`, `PSCI_USE_HVC`), which choose the PSCI conduit |
 | `ID_AA64PFR0_EL1.EL3` (bits 15:12) | `Main.swift` `choosePSCIConduit` | whether the CPU implements EL3, where PSCI firmware lives: the conduit when the FADT reports no PSCI |
-| the loader | `Main.swift` | DRAM window, `CNTFRQ_EL0`, the boot CPU's `MPIDR_EL1`, the `CNTPCT` seed, UEFI `GetTime()`, ramdisk placement, where the ACPI copy goes, the exception level it runs at, whether a GOP framebuffer exists (`GOP.swift`), and `timer-group=0`/`timer-group=1`, `gop=off` and `uart=off` in `boot.cfg` |
+| the loader | `Main.swift` | DRAM window, `CNTFRQ_EL0`, the boot CPU's `MPIDR_EL1`, the `CNTPCT` seed, UEFI `GetTime()`, ramdisk and trust-cache placement (`\NeoDarwin\trustcache`, checked by `TrustCache.swift`), where the ACPI copy goes, the exception level it runs at, whether a GOP framebuffer exists (`GOP.swift`), and `timer-group=0`/`timer-group=1`, `gop=off` and `uart=off` in `boot.cfg` |
 
 Every table is checked for length and checksum. The FACS has no checksum; it's dumped but never parsed. Tables neoboot doesn't parse (DSDT, MCFG, IORT, PPTT, DBG2, …) are still copied for the kernel.
 
@@ -89,8 +89,9 @@ Types: `u32` and `u64` are little-endian. `string` is NUL-terminated. `(u64,u64)
 |---|---|---|---|
 | `RAMDisk` | (u64,u64), length a multiple of 16 KiB. Omitted without a ramdisk | loader | `IOKitBSDInit.cpp:766-826` → md0 |
 | `ACPITables` | (u64,u64), equal to `/chosen acpi-tables` | ACPI copy | `IODTGetLoaderInfo` (`IODeviceTreeSupport.cpp`) for the Tier 2 kext. `libsa/bootstrap.cpp:392` walks the node but takes only `Driver-*` entries |
+| `TrustCache` | (u64,u64): the static trust cache segment, in whole 16 KiB pages, just below the kernel collection: it starts at `physBase` and `dram-base`. Omitted without `\NeoDarwin\trustcache` | loader: iBoot's layout, `trust_cache_offsets_t` { `num_caches` 1, `offsets[0]` 8 } followed by the file, one version 1 module that neoboot checks as the kernel will (`TrustCache.swift`), zero-filled to the page | `arm_vm_init.c`: must lie below the kernel's lowest segment (a RELEASE kernel panics otherwise, before the console), and is mapped read-only as `EXTRADATA`. `kern_trustcache.c` `load_static_trust_cache` (a `DTTrustCacheRange`): the first module becomes the static trust cache, and a module that fails to load panics. `nd_amfi_policy.c`: its presence turns code-signing enforcement on (P1-15, `amfi-provider.md` §4) |
 
-Every entry lies inside `[dram-base, dram-base+dram-size)`, below `topOfKernelData`.
+Every entry lies inside `[dram-base, dram-base+dram-size)`, below `topOfKernelData`. With a trust cache, `boot_args` `physBase` and `virtBase` (and `dram-base`) are the trust cache's page rather than the collection's, as iBoot lays memory out: `virtBase` = link address − the trust cache's length.
 
 ### `/defaults`
 
@@ -239,7 +240,7 @@ A tree is DT-ABI v1 when:
    - `psci-conduit`, if present, is `"smc"` or `"hvc"`.
    - `boot-uuid`, if present, is a UUID string: 36 characters and a NUL.
    - `acpi-rsdp` is non-zero and lies inside `acpi-tables`, which is (u64,u64).
-   - `/chosen/memory-map` exists. Each entry is a non-empty (u64,u64) inside DRAM, `ACPITables` equals `acpi-tables`, and a `RAMDisk` length is a multiple of 16 KiB.
+   - `/chosen/memory-map` exists. Each entry is a non-empty (u64,u64) inside DRAM, `ACPITables` equals `acpi-tables`, a `RAMDisk` length is a multiple of 16 KiB, and a `TrustCache` is at least a segment header and a module header (32 bytes).
 5. **`/arm-io`.**
    - `device_type` is `"soc"`; `ranges` is three u64 with `ranges[1]` ≠ 0; the cell counts are 2 and 2.
    - Every child `reg` is non-empty (u64,u64) pairs inside `ranges`.
@@ -271,11 +272,12 @@ dtdump adds cross-checks against the tables:
 - `timer-group=1` (or `=0`) in `boot.cfg` chooses the timer's group instead of `GICD_CTLR.DS` (see `/arm-io/gic`). neoboot logs the choice: `neoboot: GIC: GICD_CTLR 0x…, DS=…; timer PPI 27 on Group 0 (FIQ)`.
 - `uart=off` in `boot.cfg` makes neoboot treat the SPCR UART as absent (see "The console").
 - `boot-uuid=<UUID>` in `boot.cfg` names the root (`/chosen boot-uuid`), even when there is a ramdisk; then no `rd=md0` is added (`storage.md`).
-- `dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--gop WxH] [--uart-off] [--boot-uuid UUID] [--write-dt FILE] ACPIDUMP` prints the tables' facts and the tree, then checks it, and exits 1 on any violation. `--gicd-ctlr` is the value neoboot would read (default 0x40, DS = 1, as on QEMU). `--el3` says the CPU implements EL3 and `--loader-el` is the EL neoboot runs at (default 1); with the FADT they choose the PSCI conduit. `--gop WxH` says neoboot found a framebuffer of that mode, and `--uart-off` models `uart=off`: together they choose the console. `--boot-uuid` adds `/chosen boot-uuid`. `dtdump [--gop WxH] --dt FILE` checks an existing binary tree. The tests are `//tools/dtdump:all`:
+- `dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--trust-cache HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--gop WxH] [--uart-off] [--boot-uuid UUID] [--write-dt FILE] ACPIDUMP` prints the tables' facts and the tree, then checks it, and exits 1 on any violation. `--gicd-ctlr` is the value neoboot would read (default 0x40, DS = 1, as on QEMU). `--el3` says the CPU implements EL3 and `--loader-el` is the EL neoboot runs at (default 1); with the FADT they choose the PSCI conduit. `--gop WxH` says neoboot found a framebuffer of that mode, and `--uart-off` models `uart=off`: together they choose the console. `--boot-uuid` adds `/chosen boot-uuid`, and `--trust-cache` a `/chosen/memory-map` `TrustCache` entry. `dtdump [--gop WxH] --dt FILE` checks an existing binary tree. The tests are `//tools/dtdump:all`:
   - golden trees: QEMU with one and four CPUs, one with a DS = 0 distributor, QEMU with TF-A and four CPUs (conduit SMC), and 18 `cortex-a76` CPUs;
   - the Radxa Dragon Q8B's own tables (`radxa-dragon-q8b.acpidump`): golden trees with eight CPUs (MPIDR 0x000–0x700), eight GICR frames at 0x17a60000, PPI 27, SMC and the GENI UART at 0x884000 (16 KiB), without and with `--gop 1920x1080`; with `--uart-off`, no UART with `--gop` and refused without;
   - `qemu-virt-spcr-geni.acpidump`, QEMU's single-CPU tables with the SPCR rewritten as the Q8B's (type 0x13 at 0x884000): golden trees with the GENI UART, without and with `--gop`; its `--uart-off` tree rejected by `--dt` without `--gop`; its tree with the UART's compatible renamed rejected by `--dt`;
-  - a truncated MADT, an MPIDR with Aff3 set, and a tree with a dangling `serial-device`.
+  - a truncated MADT, an MPIDR with Aff3 set, and a tree with a dangling `serial-device`;
+  - a golden tree with a `TrustCache` entry, and one too short for a segment refused.
 
 ## Versioning
 
@@ -287,3 +289,4 @@ Adding an optional property is backwards compatible and keeps v1, with a row her
 - P1-11 (added, v1.1): `/defaults serial-device` and the UART node are optional when `boot_args` carries a framebuffer. The Radxa Dragon Q8B boots this way, its console on HDMI.
 - P1-12 (v1.2, the Radxa Dragon Q8B): `/arm-io/uart0` may be `"qcom,geni-debug-uart"` with a 16 KiB `reg`, for SPCR types 0x11 and 0x13 (patch 0032, `serial.md`). A kernel without patch 0032 panics on such a tree (`Unable to find serial device driver`), hence the minor version. The Q8B's GIC is v3 with 128 KiB frames, so no stride change is needed there; GICv4 boards would need the stride in the tree.
 - P1-12, next: a 16550 serial node.
+- P1-15 (added): `/chosen/memory-map` `TrustCache`, the static trust cache from `\NeoDarwin\trustcache` (`amfi-provider.md` §4). A kernel without P1-15's ndamfi loads it too (XNU reads it), but enforces nothing.

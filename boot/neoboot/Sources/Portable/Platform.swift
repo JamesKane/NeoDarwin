@@ -64,6 +64,8 @@ enum Platform {
         var timerGroup: UInt32 = 0   // /arm-io/gic timer-group (Platform.timerGroup)
         var psciConduit = PSCIConduit.absent  // /chosen psci-conduit (Platform.psciConduit)
         var bootUUID: UUID16? = nil  // /chosen boot-uuid: the root's GPT partition GUID; none with a ramdisk
+        var trustCacheBase: UInt64 = 0  // physical: the static trust cache segment (TrustCache.swift); 0 when there is none
+        var trustCacheSize: UInt64 = 0
     }
 
     /// How the kernel reaches PSCI, /chosen psci-conduit: an SMC to EL3
@@ -229,6 +231,11 @@ enum Platform {
             w.property("RAMDisk", f.ramdiskBase, f.ramdiskSize)  // IOKitBSDInit.cpp: becomes md0
         }
         w.property("ACPITables", f.acpiBase, f.acpiLength)
+        if f.trustCacheSize != 0 {
+            // kern_trustcache.c load_static_trust_cache: a DTTrustCacheRange
+            // over iBoot's trust_cache_offsets_t segment (P1-15).
+            w.property("TrustCache", f.trustCacheBase, f.trustCacheSize)
+        }
         w.end()
         w.end()
 

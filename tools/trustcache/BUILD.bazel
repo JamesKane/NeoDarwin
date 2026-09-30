@@ -1,0 +1,44 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:swift.bzl", "nd_swift_binary", "nd_swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# trustcache: static trust caches for NeoDarwin images (P1-15,
+# docs/kernel/amfi-provider.md). The library reads arm64 code signatures as
+# XNU does and writes version 1 trust-cache modules; no Foundation. Optimised
+# even in fastbuild: it hashes every page of every binary in an image.
+nd_swift_library(
+    name = "trustcache_lib",
+    srcs = [
+        "CodeSignature.swift",
+        "SHA256.swift",
+        "TrustCacheModule.swift",
+    ],
+    copts = ["-O"],
+    module_name = "TrustCache",
+)
+
+nd_swift_binary(
+    name = "trustcache",
+    srcs = ["main.swift"],
+    deps = [":trustcache_lib"],
+)
+
+# Against the host's codesign(1), the reference: the cdhash of a linker-signed
+# binary (the tool itself) and of a copy re-signed with entitlements; a
+# module over a staged root, sorted, with a tampered binary refused unless
+# excluded, and its manifest.
+sh_test(
+    name = "trustcache_test",
+    size = "small",
+    srcs = ["trustcache_test.sh"],
+    args = [
+        "$(rootpath :trustcache)",
+        "$(rootpath testdata/entitlements.plist)",
+    ],
+    data = [
+        "testdata/entitlements.plist",
+        ":trustcache",
+    ],
+    tags = ["requires-darwin"],
+)

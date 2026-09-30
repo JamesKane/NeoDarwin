@@ -8,35 +8,42 @@
 //
 //  - amfi->TrustCache: NeoDarwin's libTrustCache (nd_trustcache.c) over
 //    Apple's published module format and lookup.
-//  - amfi entitlement members: default deny. Queries return KERN_DENIED and
-//    copies KERN_NOT_FOUND, and a code blob's entitlement context is accepted
-//    as empty, so a program runs with no entitlements. A CoreEntitlements
-//    implementation replaces this before anything needs one. CoreEntitlements
-//    itself is left unset: only the PPL pmap path, not built for SBSA,
-//    reaches it.
+//  - amfi entitlement members (P1-15): over NDEntitlements objects
+//    (nd_entitlements_os.cpp), which the code-signing policy (nd_amfi_policy.c)
+//    attaches only to binaries a trust cache lists. A process has exactly the
+//    entitlements its signature carries if it is trusted, none otherwise, and
+//    none from a blob that doesn't parse. amfi->CoreEntitlements itself is
+//    left unset: only the PPL pmap path, not built for SBSA, reaches it.
+//  - the code-signing policy: a MAC policy registered here, and the
+//    enforcement decision (nd_amfi_policy.c).
 //  - img4if: registered with a version below 15, so kern_trustcache.c
 //    declines Image4 objects itself; no Image4 function is ever called.
 
 #include <kern/startup.h>
 #include <libkern/amfi/amfi.h>
 #include <libkern/img4/interface.h>
+#include <kern/trustcache.h>
+#include <sys/systm.h>
+#include <uuid/uuid.h>
+#include "nd_amfi_internal.h"
 #include "nd_trustcache.h"
 
-// -- entitlements: default deny -------------------------------------------------
+// -- entitlements (P1-15): nd_entitlements_os.cpp ----------------------------------
 
 static void
 ent_invalidate(void *osentitlements)
 {
-	(void)osentitlements;
+	nd_osent_invalidate(osentitlements);
 }
 
 static void *
 ent_as_dict(void *osentitlements)
 {
-	(void)osentitlements;
-	return NULL;
+	return nd_osent_as_dict(osentitlements);
 }
 
+// DER transmuted from XML: not provided. csops(CS_OPS_DER_ENTITLEMENTS_BLOB)
+// returns a signature's own DER blob when it has one.
 static bool
 ent_get_transmuted(void *osentitlements, const CS_GenericBlob **blob)
 {
@@ -48,9 +55,7 @@ ent_get_transmuted(void *osentitlements, const CS_GenericBlob **blob)
 static bool
 ent_get_xml(void *osentitlements, CS_GenericBlob **blob)
 {
-	(void)osentitlements;
-	*blob = NULL;
-	return false;
+	return nd_osent_get_xml(osentitlements, blob);
 }
 
 static bool
@@ -84,55 +89,64 @@ adjust_with_monitor(void *os_entitlements, const CEQueryContext_t ce_ctx, const 
 	return KERN_NOT_SUPPORTED;  // SBSA has no code-signing monitor
 }
 
+// The signature's storage is final here: read its entitlements into the
+// object the policy attached (none for an untrusted binary).
 static kern_return_t
 adjust_without_monitor(void *os_entitlements, struct cs_blob *blob)
 {
-	(void)os_entitlements; (void)blob;
-	return KERN_SUCCESS;  // an empty entitlement context
+	unsigned count = 0;
+	return nd_osent_adopt(os_entitlements, blob, &count);
 }
 
 static kern_return_t
 query_boolean(const void *os_entitlements, const char *name)
 {
-	(void)os_entitlements; (void)name;
-	return KERN_DENIED;
+	return nd_osent_query_bool(os_entitlements, name);
 }
 
 static kern_return_t
 query_boolean_proc(const proc_t proc, const char *name)
 {
-	(void)proc; (void)name;
-	return KERN_DENIED;
+	return nd_osent_query_bool_proc(proc, name);
 }
 
 static kern_return_t
 query_string(const void *os_entitlements, const char *name, const char *value)
 {
-	(void)os_entitlements; (void)name; (void)value;
-	return KERN_DENIED;
+	return nd_osent_query_string(os_entitlements, name, value);
 }
 
 static kern_return_t
 query_string_proc(const proc_t proc, const char *name, const char *value)
 {
-	(void)proc; (void)name; (void)value;
-	return KERN_DENIED;
+	return nd_osent_query_string_proc(proc, name, value);
 }
 
 static kern_return_t
 copy_object(const void *os_entitlements, const char *name, void **object)
 {
-	(void)os_entitlements; (void)name;
-	*object = NULL;
-	return KERN_NOT_FOUND;
+	return nd_osent_copy_object(os_entitlements, name, object);
 }
 
 static kern_return_t
 copy_object_proc(const proc_t proc, const char *name, void **object)
 {
-	(void)proc; (void)name;
-	*object = NULL;
-	return KERN_NOT_FOUND;
+	return nd_osent_copy_object_proc(proc, name, object);
+}
+
+// -- trust caches: the engine, and a line per module loaded ----------------------
+
+static TCReturn_t
+load_module(TrustCacheRuntime_t *runtime, TCType_t type, TrustCache_t *trustCache, uintptr_t dataAddr, size_t dataSize)
+{
+	TCReturn_t r = nd_tc_load_module(runtime, type, trustCache, dataAddr, dataSize);
+	if (r.error == kTCReturnSuccess) {
+		const struct trust_cache_module1 *m = (const void *)trustCache->module;
+		uuid_string_t uuid;
+		uuid_unparse_upper(m->uuid, uuid);
+		printf("ndamfi: %s trust cache %s: %u entries\n", type == kTCTypeStatic ? "static" : "loadable", uuid, m->num_entries);
+	}
+	return r;
 }
 
 static const amfi_t nd_amfi = {
@@ -145,7 +159,7 @@ static const amfi_t nd_amfi = {
 	.query_context_to_object = no_context_object,
 	.TrustCache = {
 		.version = TRUST_CACHE_INTERFACE_VERSION,
-		.loadModule = nd_tc_load_module,
+		.loadModule = load_module,
 		.load = nd_tc_load,
 		.query = nd_tc_query,
 		.getCapabilities = nd_tc_get_capabilities,
@@ -184,6 +198,7 @@ ndamfi_register(void)
 {
 	img4_interface_register(&nd_img4);
 	amfi_interface_register(&nd_amfi);
+	nd_amfi_policy_init();
 }
 
 STARTUP(EARLY_BOOT, STARTUP_RANK_LAST, ndamfi_register);

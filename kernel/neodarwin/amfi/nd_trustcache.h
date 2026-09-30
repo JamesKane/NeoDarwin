@@ -37,4 +37,16 @@ TCReturn_t nd_tc_extract_module(TrustCache_t *trustCache, const uint8_t *dataAdd
 TCReturn_t nd_tc_get_module(const TrustCache_t *trustCache, const uint8_t **moduleAddrRet, size_t *moduleSizeRet);
 TCReturn_t nd_tc_get_uuid(const TrustCache_t *trustCache, uint8_t returnUUID[kUUIDSize]);
 
+// Runtime trust-cache loads (P2-01's hook). XNU's load_trust_cache*() hand
+// amfi->TrustCache.load a payload (here: a version 1 module) and a manifest
+// (with Image4, its signature). NeoDarwin's grant is an ndsign signature
+// over the module, checked against the package key chain; ndsign does not
+// exist yet, so no verifier is registered and every runtime load is refused.
+// P2-01 registers one: it returns true only for a manifest that grants
+// `payload` as a trust cache of `type`, after which the module is loaded as
+// a static one is (nd_tc_load_module's checks, the loadable list).
+typedef bool (*nd_tc_grant_verifier_t)(TCType_t type, const uint8_t *payload, size_t payloadSize,
+    const uint8_t *manifest, size_t manifestSize);
+void nd_tc_set_grant_verifier(nd_tc_grant_verifier_t verifier);
+
 #endif

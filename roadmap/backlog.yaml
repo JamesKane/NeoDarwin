@@ -220,7 +220,7 @@ epics:
     title: "Entitlements and trust-cache signing: a CoreEntitlements implementation behind amfi (replacing ndamfi's default deny), static trust caches from neoboot, and trust-cache load grants tied to ndsign and the package key chain"
     phase: 1
     owner: kernel-bridge
-    status: todo
+    status: doing
     depends: [P1-14]
     exit: "a platform binary listed in a neoboot-supplied trust cache runs with its entitlements; one not listed is refused under cs_enforcement"
     doc: docs/kernel/amfi-provider.md

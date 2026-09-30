@@ -9,19 +9,25 @@ trustCacheInitializeRuntime() and TCTypeConfig directly.
 
 ndamfi (kernel/neodarwin/amfi) provides all of it: NeoDarwin's
 libTrustCache over the version 1 module format and lookup Apple
-published in xnu, default-deny entitlements, and an Image4 interface
-that declines Image4 objects. The build overlays it at bsd/ndamfi; this
-patch adds it to bsd's file list. Design: docs/kernel/amfi-provider.md.
+published in xnu, an Image4 interface that declines Image4 objects, and
+(P1-15) the entitlement members over a DER entitlements reader and
+libkern OSObjects, and the code-signing MAC policy that makes
+trust-cached binaries platform binaries and, under enforcement, refuses
+the rest. The build overlays it at bsd/ndamfi; this patch adds it to
+bsd's file list. Design: docs/kernel/amfi-provider.md.
 
-Rebase-risk: low (three lines in bsd/conf/files).
+Rebase-risk: low (six lines in bsd/conf/files).
 ---
 --- a/bsd/conf/files	2026-09-28 10:04:30
 +++ b/bsd/conf/files	2026-09-28 10:04:30
-@@ -434,6 +434,9 @@
+@@ -434,6 +434,12 @@
  bsd/kern/kern_sfi.c			standard
  bsd/kern/kern_time.c			standard
  bsd/kern/kern_trustcache.c  standard
 +bsd/ndamfi/nd_amfi.c	standard
++bsd/ndamfi/nd_amfi_policy.c	standard
++bsd/ndamfi/nd_entitlements.c	standard
++bsd/ndamfi/nd_entitlements_os.cpp	standard
 +bsd/ndamfi/nd_trustcache.c	standard
 +bsd/ndamfi/nd_tc_lookup.c	standard
  bsd/kern/kern_codesigning.c standard

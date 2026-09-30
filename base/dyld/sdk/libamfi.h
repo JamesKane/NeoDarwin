@@ -10,9 +10,10 @@
  * (dyld/DyldProcessConfig.cpp); the two input values Apple doesn't publish
  * are NeoDarwin's, and only the stand-in reads them.
  *
- * NeoDarwin has no AMFI dyld policy, so the implementation
- * (base/dyld/src/nd_amfi.c, linked into dyld) allows everything, as AMFI
- * does for an unrestricted process on a system with SIP off.
+ * The implementation (base/dyld/src/nd_amfi.c, linked into dyld) applies
+ * AMFI's rule for restricted processes (setugid, __RESTRICT, CS_RESTRICT,
+ * or entitled: no DYLD_* variables) and allows the rest everything, as AMFI
+ * does for an unrestricted process on a system with SIP off (P1-15).
  */
 #ifndef _LIBAMFI_H_
 #define _LIBAMFI_H_
