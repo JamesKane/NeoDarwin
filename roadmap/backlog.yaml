@@ -217,10 +217,10 @@ epics:
     exit: "//kernel/neodarwin/amfi:trustcache_test passes; //kernel:sbsa_boot_test boots past trust-cache initialisation ('no external trust caches found') to IOKit platform matching (P1-06)"
     doc: docs/kernel/amfi-provider.md
   - id: P1-15
-    title: "Entitlements and trust-cache signing: a CoreEntitlements implementation behind amfi (replacing ndamfi's default deny), static trust caches from neoboot, and trust-cache load grants tied to ndsign and the package key chain"
+    title: "Entitlements and trust caches: a CoreEntitlements implementation behind amfi (replacing ndamfi's default deny), static trust caches from neoboot, and code-signing enforcement against them (signed runtime trust-cache loads moved to P2-01)"
     phase: 1
     owner: kernel-bridge
-    status: doing
+    status: done
     depends: [P1-14]
     exit: "a platform binary listed in a neoboot-supplied trust cache runs with its entitlements; one not listed is refused under cs_enforcement"
     doc: docs/kernel/amfi-provider.md
@@ -242,12 +242,12 @@ epics:
     doc: docs/kernel/arm64-sbsa-bringup.md
   # ---- Phase 2: Base system, packaging, updates ----
   - id: P2-01
-    title: "ndpkg format, manifest schema, nd_package rule, ndsign"
+    title: "ndpkg format, manifest schema, nd_package rule, ndsign; ndsign trust-cache load grants against the package key chain (from P1-15: the verifier behind ndamfi's nd_tc_set_grant_verifier)"
     phase: 2
     owner: packaging
     status: todo
-    depends: [P0-02]
-    exit: "a package builds, signs, verifies offline"
+    depends: [P0-02, P1-15]
+    exit: "a package builds, signs, verifies offline; a package's ndsign-signed trust cache loads at run time and its binaries run under enforcement, while an unsigned or wrongly signed one is refused"
     doc: docs/architecture/packaging.md
   - id: P2-02
     title: "Content-addressed store + bind-mount activation + libsolv solver + JSON plans"
