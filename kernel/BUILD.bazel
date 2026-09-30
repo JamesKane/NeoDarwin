@@ -115,6 +115,7 @@ SBSA_PATCHES = [
     "patches/0030-generic-arm64-tcr-ips-from-parange.patch",
     "patches/0031-generic-arm64-secondary-entry-at-el2.patch",
     "patches/0032-pexpert-qcom-geni-uart-console.patch",
+    "patches/0033-iokit-build-console-usb-keyboard.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -134,6 +135,7 @@ SBSA_OVERLAYS = {
     "//kernel/neodarwin/platform:kernel_srcs": "iokit/ndplatform",
     "//kernel/neodarwin/pthread:kernel_srcs": "libkern/ndpthread",
     "//kernel/neodarwin/serial:kernel_srcs": "pexpert/arm/ndserial",
+    "//kernel/neodarwin/usb:kernel_srcs": "iokit/ndusb",
     "@apple_libpthread//:kernel_srcs": "libkern/ndpthread/libpthread",
     "@freebsd_crypto//:all": "libkern/ndcrypto/freebsd",
 }
@@ -1658,6 +1660,215 @@ sh_test(
     data = SBSA_REF_FIRMWARE + [
         "//images:session_disk",
         "//tools/efi:qemu_efi_test.sh",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# ---------------------------------------------------------------------------
+# P1-18: the console USB keyboard (docs/kernel/usb-console.md). QEMU's xHCI
+# with a usb-kbd; the tests type only on the USB keyboard (QEMU monitor
+# sendkey, --sendkey-after), never on serial, and read the console's output
+# on serial (or on the framebuffer alone).
+
+# virt, qemu-xhci on PCI with MSI-X: log in and use zsh's line editor
+# (Backspace, the arrows, history), each result upper-cased by zsh so that
+# only the edited line can produce it.
+sh_test(
+    name = "sbsa_usb_kbd_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--device qemu-xhci,id=xhci",
+        "--device usb-kbd,bus=xhci.0",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
+        "--until-lines",
+        "--sendkey-after 'login: ' 'root\\n'",
+        "--sendkey-after 'root@localhost ~ # ' 'echo usb-$$((6*7))\\n'",
+        "--sendkey-after 'root@localhost ~ # ' 'x=abx\\bc; echo bs-$${(U)x}\\n'",
+        "--sendkey-after 'root@localhost ~ # ' 'echo ARROWS-XZ{left}Y\\n'",
+        "--sendkey-after 'root@localhost ~ # ' 'echo hist-7\\n'",
+        "--sendkey-after 'root@localhost ~ # ' '{up}\\b8\\n'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'NeoDarwinXHCI: 00:02.0: xHCI 1.0, 1b36:000d; 64 slots (32 enabled), 8 ports (USB 3.0: 1-4, USB 2.0: 5-8), 32-byte contexts, 0 scratchpad buffers'",
+        "'NeoDarwinXHCI: 00:02.0: MSI-X vector 0 (LPI '",
+        "'; DMA coherent, 64 address bits'",
+        "'NeoDarwinXHCI: 00:02.0: port 5: high-speed device 0627:0001 \"QEMU USB Keyboard\", USB 2.00, on slot 1'",
+        "'NeoDarwinXHCI: 00:02.0: port 5: slot 1: HID boot keyboard (interface 0, endpoint 1 IN, 8 bytes every 8000 us); SET_PROTOCOL boot, SET_IDLE 0: console input'",
+        "'NeoDarwinXHCI: 00:02.0: first event by interrupt (MSI-X vector 0, LPI '",
+        "'NeoDarwinXHCI: 00:02.0: port 5: slot 1: first keyboard report (8 bytes, by interrupt)'",
+        "'usb-42'",
+        "'bs-ABC'",
+        "'ARROWS-XYZ'",
+        "'hist-8'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:session_root",
+        "//images:session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# virt, the paths QEMU's defaults leave out: INTx (nd_pci_msi=0), the
+# non-coherent DMA path the Q8B's controllers (_CCA 0) take
+# (nd_xhci_coherent=0: every ring, context and buffer cleaned or
+# invalidated), memory below 4 GiB (nd_xhci_dma_bits=32), and the keyboard
+# behind a hub (QEMU's usb-hub, full speed, on its USB port 2: xHCI root port 6, QEMU numbering its four USB 3 ports first).
+sh_test(
+    name = "sbsa_usb_kbd_hub_intx_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--device qemu-xhci,id=xhci",
+        "--device usb-hub,bus=xhci.0,port=2",
+        "--device usb-kbd,bus=xhci.0,port=2.3",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:getty_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:getty_root_trustcache)",
+        "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/usb-intx-nc.cfg)",
+        "--until-lines",
+        "--sendkey-after 'login: ' 'root\\n'",
+        "--sendkey-after '# ' 'echo hub-$$((6*7)); uname -sm\\n'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'NeoDarwinXHCI: 00:02.0: INTx (GSIV '",
+        "'; DMA not coherent, 32 address bits'",
+        "'NeoDarwinXHCI: 00:02.0: port 6: full-speed device 0409:55aa \"QEMU USB Hub\", USB 1.10, on slot 1'",
+        "'NeoDarwinXHCI: 00:02.0: port 6: slot 1: hub, 8 ports; ports powered'",
+        "'NeoDarwinXHCI: 00:02.0: port 6.3: full-speed device 0627:0001 \"QEMU USB Keyboard\", USB 2.00, on slot 2'",
+        "'NeoDarwinXHCI: 00:02.0: port 6.3: slot 2: HID boot keyboard '",
+        "'NeoDarwinXHCI: 00:02.0: first event by interrupt (INTx, GSIV '",
+        "'hub-42'",
+        "'Darwin arm64'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//boot/neoboot:testdata/usb-intx-nc.cfg",
+        "//images:getty_root",
+        "//images:getty_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# virt, polled (nd_xhci_poll=1): no interrupt at all, the event ring read
+# every 10 ms; the fallback the watchdog switches to when interrupts don't
+# arrive.
+sh_test(
+    name = "sbsa_usb_kbd_poll_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--device qemu-xhci,id=xhci",
+        "--device usb-kbd,bus=xhci.0",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:getty_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:getty_root_trustcache)",
+        "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/usb-poll.cfg)",
+        "--until-lines",
+        "--sendkey-after 'login: ' 'root\\n'",
+        "--sendkey-after '# ' 'echo poll-$$((6*7))\\n'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'NeoDarwinXHCI: 00:02.0: polling every 10 ms; DMA coherent, 64 address bits'",
+        "'NeoDarwinXHCI: 00:02.0: first event by polling'",
+        "'NeoDarwinXHCI: 00:02.0: port 5: slot 1: first keyboard report (8 bytes, polled)'",
+        "'poll-42'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//boot/neoboot:testdata/usb-poll.cfg",
+        "//images:getty_root",
+        "//images:getty_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# The Q8B's situation on virt: the framebuffer as the only console
+# (uart=off, ramfb) and a USB keyboard as the only input, here on MSI
+# (qemu-xhci with MSI-X off). Keys are typed when the screen's last line is
+# the prompt; the command's output must be on the screen, and nothing after
+# ExitBootServices on serial.
+sh_test(
+    name = "sbsa_usb_kbd_fb_only_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--device ramfb",
+        "--device qemu-xhci,id=xhci,msi=on,msix=off",
+        "--device usb-kbd,bus=xhci.0",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:getty_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:getty_root_trustcache)",
+        "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/uart-off.cfg)",
+        "--until-lines",
+        "--until-screen",
+        "--screendump screen.ppm",
+        "--screen-font $(rootpath @apple_xnu_corecrypto//:osfmk/console/iso_font.c)",
+        "--sendkey-on-screen 'login:' 'root\\n'",
+        "--sendkey-on-screen '#' 'echo fb-usb-$$((6*7)); uname -sm\\n'",
+        "--screen-line 'fb-usb-42'",
+        "--screen-line 'Darwin arm64'",
+        "--absent 'Darwin Kernel Version'",
+        "$(rootpath //boot/neoboot)",
+        "300",
+        "'neoboot: SPCR UART not used (uart=off); console on the framebuffer only'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//boot/neoboot:testdata/uart-off.cfg",
+        "//images:getty_root",
+        "//images:getty_root_trustcache",
+        "@apple_xnu_corecrypto//:osfmk/console/iso_font.c",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# sbsa-ref's platform xHCI (SbsaQemu's \_SB.USB0, PNP0D10 at 0x60110000,
+# GSIV 43, _CCA 1): the ACPI attach and a GIC SPI, as on the Q8B.
+sh_test(
+    name = "sbsa_ref_usb_kbd_boot_test",
+    size = "large",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = SBSA_REF + [
+        "--device usb-kbd",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
+        "--until-lines",
+        "--sendkey-after 'login: ' 'root\\n'",
+        "--sendkey-after 'root@localhost ~ # ' 'echo sbsa-usb-$$((6*7))\\n'",
+        "--sendkey-after 'root@localhost ~ # ' 'x=abx\\bc; echo bs-$${(U)x}\\n'",
+        "$(rootpath //boot/neoboot)",
+        "420",
+    ] + SBSA_REF_LINES + [
+        "'NeoDarwinXHCI: \\_SB.USB0: xHCI 1.0, PNP0D10 at 0x60110000; '",
+        "'NeoDarwinXHCI: \\_SB.USB0: GSIV 43 (level); DMA coherent, 64 address bits'",
+        "'NeoDarwinXHCI: \\_SB.USB0: port 5: high-speed device 0627:0001 \"QEMU USB Keyboard\"'",
+        "'NeoDarwinXHCI: \\_SB.USB0: port 5: slot 1: HID boot keyboard '",
+        "'NeoDarwinXHCI: \\_SB.USB0: first event by interrupt (GSIV 43)'",
+        "'sbsa-usb-42'",
+        "'bs-ABC'",
+    ],
+    data = SBSA_REF_FIRMWARE + [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:session_root",
+        "//images:session_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )

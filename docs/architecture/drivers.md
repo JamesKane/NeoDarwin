@@ -22,7 +22,7 @@ Dexts are the default for anything new after the base storage and display path e
 | virtio (bus, blk, net, console, gpu, input, 9p) | new | P1-M5 (blk, console), P3 (net, gpu, input) | `sys/dev/virtio/*` (derive) | `drivers/virtio` |
 | NVMe | new | P1-M5; P1-10 checkpoint 2: `NeoDarwinNVMeController` written from the NVMe 1.4 specification, built into the kernel, read-only on real controllers by default (`docs/kernel/storage.md`) | `sys/dev/nvme` (derive) | `drivers/nvme` |
 | AHCI/SATA | new | P3 | `sys/dev/ahci` (derive) | `drivers/ata` |
-| USB host (XHCI) + USB core | new (`NDUSBFamily`; modern IOUSBHostFamily is closed) | P3 | `sys/dev/usb/controller/xhci*.c`, `sys/dev/usb/usb_*.c` (derive) | `drivers/usb/host/xhci*` |
+| USB host (XHCI) + USB core | new (`NDUSBFamily`; modern IOUSBHostFamily is closed) | P3 (P3-07); until then P1-18's in-kernel `NeoDarwinXHCI` drives HID boot keyboards and USB 2 hubs for console input only (`docs/kernel/usb-console.md`), and is removed when P3-07 lands | `sys/dev/usb/controller/xhci*.c`, `sys/dev/usb/usb_*.c` (derive) | `drivers/usb/host/xhci*` |
 | USB HID, mass storage | new dexts | P3/P4 | `sys/dev/usb/input`, `sys/dev/usb/storage` | `drivers/hid` |
 | Ethernet: virtio-net, e1000/igb, Realtek `re` | new dexts | P3 | `sys/dev/e1000`, `sys/dev/re` (derive) | `drivers/net/ethernet/{intel,realtek}` |
 | Wi-Fi | deferred | — | `sys/dev/rtwn`, `sys/dev/iwlwifi` (firmware licensing per device) | — |

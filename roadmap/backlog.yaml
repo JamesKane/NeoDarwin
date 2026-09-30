@@ -240,6 +240,14 @@ epics:
     depends: [P1-06]
     exit: "the SBSA kernel boots to the session on QEMU cortex-a76 (Armv8.2) with -smp 8, and with Aff1-numbered CPUs (-smp 18: QEMU virt numbers 16 CPUs per Aff1); the ISA audit enforces the Armv8.2 baseline"
     doc: docs/kernel/arm64-sbsa-bringup.md
+  - id: P1-18
+    title: "Console USB keyboard (bring-up aid): a minimal in-kernel XHCI driver, over PCI and as an ACPI platform device, with a boot-protocol HID keyboard feeding the console like the serial keyboard; replaced by P3-07's USB stack"
+    phase: 1
+    owner: kernel-bridge
+    status: doing
+    depends: [P1-09]
+    exit: "a qemu-xhci + usb-kbd keyboard logs in at the console on QEMU virt and sbsa-ref (platform XHCI); on the Q8B, typing at login: on HDMI works"
+    doc: docs/kernel/usb-console.md
   # ---- Phase 2: Base system, packaging, updates ----
   - id: P2-01
     title: "ndpkg format, manifest schema, nd_package rule, ndsign; ndsign trust-cache load grants against the package key chain (from P1-15: the verifier behind ndamfi's nd_tc_set_grant_verifier)"

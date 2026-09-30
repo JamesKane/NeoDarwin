@@ -45,6 +45,19 @@
 #                     would; "\n" in TEXT is Enter. Steps run in order. The
 #                     kernel drops input typed before the console is open, so
 #                     LINE should be a prompt
+#   --sendkey-after LINE TEXT
+#                     the same, but TEXT is typed on the guest's keyboard
+#                     (a USB keyboard: --device usb-kbd) through QEMU's
+#                     monitor, one sendkey per character, not on serial.
+#                     In TEXT, "\n" is Enter, "\b" Backspace, "\t" Tab,
+#                     "\e" Esc, and {NAME} a QEMU key name, e.g. {left},
+#                     {up}, {ctrl-c}
+#   --sendkey-on-screen TEXT KEYS
+#                     type KEYS on the guest's keyboard once the screen's
+#                     last line (the cursor dropped) ends with TEXT, read
+#                     from a screendump every few seconds (needs
+#                     --screendump and --screen-font): for a console on the
+#                     framebuffer alone. Steps of both kinds run in order
 #   --device DEV      add a QEMU device, e.g. ramfb (a GOP framebuffer under EDK2)
 #   --drive ID=IMAGE  add a raw block backend named ID for a --device to use
 #                     (drive=ID), e.g. --drive disk0=16M --device
@@ -93,7 +106,9 @@ while [ $# -gt 0 ]; do
 		--firmware) firmware="$2"; shift 2 ;;
 		--firmware-ns) firmware_ns="$2"; shift 2 ;;
 		--until-lines) until_lines=1; shift ;;
-		--send-after) sends+=("$2" "$3"); shift 3 ;;
+		--send-after) sends+=(serial "$2" "$3"); shift 3 ;;
+		--sendkey-after) sends+=(key "$2" "$3"); shift 3 ;;
+		--sendkey-on-screen) sends+=(screen "$2" "$3"); shift 3 ;;
 		--device) devices+=(-device "$2"); shift 2 ;;
 		--drive) drives+=("$2"); shift 2 ;;
 		--disk) disk="$2"; disk_in_place=0; shift 2 ;;
@@ -159,7 +174,7 @@ fi
 # read as "?". With a third argument, a file of lines, it prints nothing
 # and exits 3 unless each of them is on the screen.
 cat > "$work/screen.pl" <<'SCREEN_PL'
-my ($ppm, $font, $need) = @ARGV; my $screen = "";
+my ($ppm, $font, $need, $mode) = @ARGV; my $screen = "";
 open(my $ff, "<", $font) or die "$font: $!"; my $src = do { local $/; <$ff> };
 $src =~ /iso_font\[[^\]]*\]\s*=\s*\{(.*?)\};/s or die "no iso_font in $font";
 my @b = map { hex } ($1 =~ /0x([0-9a-fA-F]{2})/g); @b == 4096 or die "iso_font has " . @b . " bytes";
@@ -183,7 +198,13 @@ for my $r (0 .. int($h / 16) - 1) {
 	}
 	$line =~ s/\s+$//; $screen .= "$line\n";
 }
-if (defined $need) {
+if (defined $mode && $mode eq "last") {
+	# Exit 0 if the last non-blank line, less the cursor ("?") and
+	# spaces, ends with the text in the file $need.
+	open(my $nf, "<", $need) or die "$need: $!"; my $want = <$nf>; chomp $want; $want =~ s/\s+$//;
+	my ($last) = grep { /\S/ } reverse split /\n/, $screen; $last //= ""; $last =~ s/[\s?]+$//;
+	exit(length($last) >= length($want) && substr($last, -length($want)) eq $want ? 0 : 3);
+} elsif (defined $need) {
 	open(my $nf, "<", $need) or die "$need: $!";
 	for my $want (grep { length } map { chomp; $_ } <$nf>) { exit 3 if index($screen, $want) < 0 }
 } else {
@@ -227,12 +248,24 @@ fi
 # The serial port is a pair of named pipes (QEMU's pipe chardev): QEMU writes
 # the guest's output to ser.out and reads its input from ser.in.
 steps="$work/sends"; : > "$steps"
-i=0; while [ $i -lt ${#sends[@]} ]; do printf '%s\t%s\n' "${sends[$i]}" "${sends[$((i + 1))]}" >> "$steps"; i=$((i + 2)); done
+has_keys=0; has_screen_keys=0
+i=0; while [ $i -lt ${#sends[@]} ]; do
+	printf '%s\t%s\t%s\n' "${sends[$i]}" "${sends[$((i + 1))]}" "${sends[$((i + 2))]}" >> "$steps"
+	[ "${sends[$i]}" = serial ] || has_keys=1
+	[ "${sends[$i]}" = screen ] && has_screen_keys=1
+	i=$((i + 3))
+done
+if [ "$has_screen_keys" -eq 1 ] && { [ -z "$screendump" ] || [ -z "$screen_font" ]; }; then
+	echo "--sendkey-on-screen needs --screendump and --screen-font"; exit 1
+fi
 mkfifo "$work/ser.in" "$work/ser.out"
-# With a screendump, the monitor is a Unix socket the watchdog talks to.
+# With a screendump or keys to type, the monitor is a Unix socket the
+# watchdog talks to.
 monitor=(-monitor none); dump=""
 if [ -n "$screendump" ]; then
 	dump="${TEST_UNDECLARED_OUTPUTS_DIR:-$logdir}/$screendump"; mkdir -p "$(dirname "$dump")"; rm -f "$dump"
+fi
+if [ -n "$screendump" ] || [ "$has_keys" -eq 1 ]; then
 	# A short path: Unix socket names are limited to about 100 bytes, and
 	# Bazel's TMPDIR is long.
 	mon_dir="$(mktemp -d /tmp/ndmon.XXXXXX)"; trap 'rm -rf "$work" "$mon_dir"' EXIT
@@ -248,7 +281,7 @@ perl -e '
 	use Fcntl; use Time::HiRes qw(time); use IO::Socket::UNIX;
 	my ($t, $until, $log, $pat, $steps, $ser, $mon, $dump, $until_screen, $screen_pl, $font, $need, @cmd) = @ARGV;
 	open(my $pf, "<", $pat) or die; my @want = grep { length } map { chomp; $_ } <$pf>;
-	open(my $sf, "<", $steps) or die; my @send = map { chomp; [split /\t/, $_, 2] } <$sf>;
+	open(my $sf, "<", $steps) or die; my @send = map { chomp; [split /\t/, $_, 3] } <$sf>;
 	sysopen(my $out, "$ser.out", O_RDWR | O_NONBLOCK) or die "ser.out: $!";
 	sysopen(my $in, "$ser.in", O_RDWR) or die "ser.in: $!";
 	open(my $lf, ">>", $log) or die; $lf->autoflush(1);
@@ -277,17 +310,73 @@ perl -e '
 		unlink $dump; screendump(); $next_look = time + 3;
 		return system("perl", $screen_pl, $dump, $font, $need) == 0;
 	}
+	# Keys through the monitor: one sendkey per key, held 20 ms, 100 ms
+	# apart so that a key is up again before it is pressed twice.
+	my %named = (" " => "spc", "-" => "minus", "=" => "equal", "[" => "bracket_left", "]" => "bracket_right",
+		"\\" => "backslash", ";" => "semicolon", "\x27" => "apostrophe", "`" => "grave_accent", "," => "comma",
+		"." => "dot", "/" => "slash");
+	my %shifted = ("!" => "1", "@" => "2", "#" => "3", "\$" => "4", "%" => "5", "^" => "6", "&" => "7", "*" => "8",
+		"(" => "9", ")" => "0", "_" => "minus", "+" => "equal", "{" => "bracket_left", "}" => "bracket_right",
+		"|" => "backslash", ":" => "semicolon", "\"" => "apostrophe", "~" => "grave_accent", "<" => "comma",
+		">" => "dot", "?" => "slash");
+	my %escapes = ("n" => "ret", "b" => "backspace", "t" => "tab", "e" => "esc");
+	sub keynames {
+		my ($text) = @_; my @k;
+		while (length $text) {
+			if ($text =~ s/^\\(.)//s) { push @k, $escapes{$1} // die "unknown escape \\$1" }
+			elsif ($text =~ s/^\{([a-z0-9_-]+)\}//) { push @k, $1 }
+			else {
+				my $c = substr($text, 0, 1, "");
+				if ($c =~ /^[a-z0-9]$/) { push @k, $c }
+				elsif ($c =~ /^[A-Z]$/) { push @k, "shift-" . lc $c }
+				elsif (exists $named{$c}) { push @k, $named{$c} }
+				elsif (exists $shifted{$c}) { my $b = $shifted{$c}; push @k, "shift-" . ($named{$b} // $b) }
+				else { die "no key for " . sprintf("0x%02x", ord $c) }
+			}
+		}
+		return @k;
+	}
+	sub typekeys {
+		my @k = keynames($_[0]);
+		my $m = IO::Socket::UNIX->new(Type => SOCK_STREAM(), Peer => $mon) or die "monitor: $!";
+		$m->blocking(0);
+		for my $k (@k) {
+			print $m "sendkey $k 20\n";
+			my $until = time + 0.1; while (time < $until) { drain(); my $junk; sysread($m, $junk, 4096); select(undef, undef, undef, 0.02) }
+		}
+		my $until = time + 0.3; while (time < $until) { drain(); my $junk; sysread($m, $junk, 4096); select(undef, undef, undef, 0.05) }
+		close $m;
+	}
+	# A --sendkey-on-screen step: the last line of the screen, every few seconds.
+	my $next_key_look = 0;
+	sub screen_prompt {
+		my ($want) = @_;
+		return 0 if time < $next_key_look;
+		$next_key_look = time + 3;
+		open(my $wf, ">", "$need.last") or die; print $wf "$want\n"; close $wf;
+		unlink $dump; screendump();
+		return system("perl", $screen_pl, $dump, $font, "$need.last", "last") == 0;
+	}
 	my $pid = fork(); if (!$pid) { exec @cmd or die "exec: $!" }
 	my $deadline = time + $t;
 	while (1) {
 		drain();
 		if (waitpid($pid, 1) > 0) { drain(); exit($? >> 8) }
-		if (@send && !defined $due && (my $at = index($text, $send[0][0], $pos)) >= 0) {
-			$pos = $at + length($send[0][0]); $due = time + 0.5;
+		if (@send && !defined $due && $send[0][0] ne "screen" && (my $at = index($text, $send[0][1], $pos)) >= 0) {
+			$pos = $at + length($send[0][1]); $due = time + 0.5;
+		}
+		if (@send && !defined $due && $send[0][0] eq "screen" && screen_prompt($send[0][1])) {
+			$pos = length($text); $due = time + 0.5;
 		}
 		if (defined $due && time >= $due) {
-			(my $keys = $send[0][1]) =~ s/\\n/\r/g;
-			syswrite($in, $keys); shift @send; undef $due;
+			if ($send[0][0] eq "serial") {
+				(my $keys = $send[0][2]) =~ s/\\n/\r/g;
+				syswrite($in, $keys);
+			} else {
+				typekeys($send[0][2]);
+				$next_key_look = time + 3;
+			}
+			shift @send; undef $due;
 		}
 		if ($until && !@send && !grep({ index($text, $_) < 0 } @want) && screen_ready()) {
 			screendump() unless $until_screen; kill 9, $pid; waitpid($pid, 0); exit 0

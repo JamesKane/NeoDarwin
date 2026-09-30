@@ -37,7 +37,7 @@ The edk2-platforms commit is the last before its platforms dropped the unified G
 | PSCI | SMC, as SbsaQemu's FADT says |
 | UEFI | at **EL2** (`current EL 0x2`); PSCI `CPU_ON` enters secondaries at EL2 too |
 | Counter | 1 GHz |
-| Platform devices (DSDT) | AHCI `LNRO001E` at 0x60100000 (irq 42), XHCI `PNP0D10` at 0x60110000 (irq 43); no drivers in NeoDarwin yet |
+| Platform devices (DSDT) | AHCI `LNRO001E` at 0x60100000 (irq 42), XHCI `PNP0D10` at 0x60110000 (irq 43, `_CCA` 1); no AHCI driver in NeoDarwin yet, the XHCI is the console USB keyboard's since P1-18 (`usb-console.md`) |
 | PCIe | ECAM 0xf0000000 (`_CBA`, MCFG), windows 0x80000000+0x70000000, 0x1_0000_0000+0xff_0000_0000, I/O at 0x7fff0000; `_PRT` through link devices `\_SB.PCI0.GSI0`–`GSI3` (GSIV 35–38) |
 | On bus 0 | 00:00.0 host bridge 1b36:0008, 00:01.0 e1000e 8086:10d3, 00:02.0 bochs-display 1234:1111 (the GOP framebuffer, BAR 0 at 0x80000000); `-device` adds from 00:03.0 |
 | IORT | root complex → SMMUv3 at 0x60050000 → ITS. The firmware doesn't enable the SMMU (`SMMU_CR0.SMMUEN` = 0), so QEMU passes DMA and MSIs through untranslated; `NeoDarwinPCIMSI` reads that and logs `(bypass)` |
@@ -57,7 +57,7 @@ SbsaQemu's console wraps lines at 80 columns, so neoboot's longer lines arrive i
 | With `-smp 4`, `CPU_ON` returned SUCCESS but no secondary came up; the kernel panicked "cpu 1 failed to boot for the first time" when the scheduler first needed one | Two causes. TF-A v2.15.0's `qemu_sbsa` hold-pen mismatch (above: upstream fix applied). Then, the secondaries entered the kernel's reset vector at EL2, since UEFI runs at EL2 and PSCI enters at the highest Non-secure EL, while `start.s` programs EL1 only: patch 0031 leaves EL2 at the top of `reset_vector` as neoboot does for the boot CPU |
 | neoboot's EL2 exit didn't set `VPIDR_EL2`/`VMPIDR_EL2` (what EL1 reads as MIDR and MPIDR; UNKNOWN at reset) or `ICC_SRE_EL2` (EL1's GIC system registers). QEMU and EDK2 happened to leave usable values | `nd_enter_kernel` sets both from the real registers and ORs in `ICC_SRE_EL2.SRE|Enable`, as patch 0031 does for the secondaries |
 | With four CPUs and several PCI devices, every device was `INTA unrouted`: the host bridge driver matched `\_SB.PCI0` and enumerated while the namespace walk had yet to publish PCI0's children `GSI0`–`GSI3`, the link devices its `_PRT` names. On `virt` the same race was lost less often | `NeoDarwinACPIPlatform` registers the service-plane nubs only after the whole walk (`acpi.md`) |
-| `GTDT` platform timers, the SBSA watchdog, AHCI and XHCI are described but unused | Nothing needed: NeoDarwin uses the virtual timer PPI and has no drivers for them |
+| `GTDT` platform timers, the SBSA watchdog and AHCI are described but unused | Nothing needed: NeoDarwin uses the virtual timer PPI and has no drivers for them (the XHCI has one since P1-18) |
 
 Nothing was needed for GICD/GICR at 0x4006_0000 with a 64 MiB GICR range, the ITS, the PL011 at 0x60000000, PSCI over SMC or DS=0: the ACPI-driven paths of P1-04–P1-09 took the new addresses as they come.
 
@@ -69,6 +69,7 @@ Nothing was needed for GICD/GICR at 0x4006_0000 with a 64 MiB GICR range, the IT
 | `//tools/dtdump:qemu_sbsa_ref_smp4_test` | — | the tree neoboot builds from the captured tables, byte for byte (DRAM at 1 TiB, 1 GHz, DS=0, loader at EL2) |
 | `//kernel:sbsa_ref_boot_test` (manual) | the session from the HFS+ ramdisk | the DRAM window at 1 TiB, EL2, PSCI over SMC, 4 of 4 CPUs online with IPIs, the timer on Group 1, root's shell, `ncpu-4-4`, a timed `sleep 1` |
 | `//kernel:sbsa_ref_pci_boot_test` (manual) | `pid1_root` with `PCI_DEVICES` (virtio-blk, NVMe, edu, two root ports) | the ACPI summary and nubs (COM0, AHC0, USB0, PCI0 and its links), the host bridge, e1000e, bochs-display, the added devices and bridges, INTx through the link devices (SPI 36, shared SPI 38), MSI and MSI-X through the ITS via the SMMUv3 in bypass, both virtio-blk disks and the NVMe namespace — **P1-09's exit** |
+| `//kernel:sbsa_ref_usb_kbd_boot_test` (manual) | the session, a `usb-kbd` on the platform XHCI | `NeoDarwinXHCI` on `\_SB.USB0` (PNP0D10, GSIV 43), the keyboard's first event by the SPI; login and commands typed on the USB keyboard only (P1-18, `usb-console.md`) |
 | `//kernel:sbsa_ref_nvme_boot_test` (manual) | the GPT `session_disk` on QEMU's NVMe controller, twice | EDK2 boots neoboot from the disk's ESP over NVMe, root on `disk0s2` by boot-uuid, four I/O queue pairs on MSI-X through the ITS; a file written in the first boot is read in the second — **P1-10's exit** |
 
 ## For the Radxa Dragon Q8B

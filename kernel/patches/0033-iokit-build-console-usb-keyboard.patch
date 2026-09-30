@@ -1,0 +1,64 @@
+From: NeoDarwin
+Subject: [PATCH] iokit: build the console USB keyboard's xHCI driver
+
+P1-18: NeoDarwinXHCI (kernel/neodarwin/usb, overlaid at iokit/ndusb;
+docs/kernel/usb-console.md), a minimal xHCI host controller driver with
+USB 2 hubs and HID boot keyboards, whose reports become console input
+(cons_cinput) as the serial keyboard's characters do: a bring-up aid for
+boards whose only input is USB (the Radxa Dragon Q8B at its HDMI
+console), replaced by P3-07's USB stack.
+
+Two personalities for the one class: an IOPCIDevice of class 0C0330
+(IOPCIClassMatch 0x0c033000&0xffffff00), and an IOACPIPlatformDevice
+named PNP0D10 or PNP0D15 (xHCI) or PNP0CA1 (a USB Role Switch, whose
+host-role child holds the interrupt; the driver's probe declines one
+without such a child). The driver's object sees its own directory, the
+storage drivers' DMA policy header (NeoDarwinStorageDMA.h), and the PCI
+and ACPI headers.
+
+Rebase-risk: low (entries appended; applies after 0032).
+---
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -72,6 +72,16 @@ const char * gIOKernelConfigTables =
+     "     'IOPCIMatch'      = '0x10421af4 0x10011af4';"
+     "   },"
+     "   {"
++    "     'IOClass'         = NeoDarwinXHCI;"
++    "     'IOProviderClass' = IOPCIDevice;"
++    "     'IOPCIClassMatch' = '0x0c033000&0xffffff00';"
++    "   },"
++    "   {"
++    "     'IOClass'         = NeoDarwinXHCI;"
++    "     'IOProviderClass' = IOACPIPlatformDevice;"
++    "     'IONameMatch'     = ('PNP0D10', 'PNP0D15', 'PNP0CA1');"
++    "   },"
++    "   {"
+     "     'IOClass'         = IOBlockStorageDriver;"
+     "     'IOProviderClass' = IOBlockStorageDevice;"
+     "     'IOPropertyMatch' = { 'device-type' = 'Generic'; };"
+--- a/iokit/conf/Makefile.template
++++ b/iokit/conf/Makefile.template
+@@ -126,6 +126,12 @@ $(foreach o,NeoDarwinNVMeController.cpo NeoDarwinNVMeNamespace.cpo,$(eval $(o)_C
+ 	-I$(ND_STORAGE)/include -I$(ND_PCI) -I$(ND_IOPCI) -I$(ND_PCI)/compat -I$(SRCROOT)/libkern/ndpthread/compat \
+ 	-Wno-deprecated-declarations))
+ 
++# NeoDarwin's console USB keyboard (patch 0033): the xHCI driver on an
++# IOPCIDevice or an IOACPIPlatformDevice, with the PCI and ACPI headers and
++# the storage drivers' DMA policy header.
++NeoDarwinXHCI.cpo_CFLAGS_ADD += -I$(SRCROOT)/iokit/ndusb -I$(ND_STORAGE) -I$(ND_PCI) -I$(ND_IOPCI) -I$(ND_PCI)/compat \
++	-I$(SRCROOT)/libkern/ndpthread/compat -I$(ND_ACPI)/include -Wno-deprecated-declarations
++
+ #
+ # Diagnostic opt-outs.  We need to make this list empty.
+ #
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -219,6 +219,7 @@ iokit/ndstorage/AppleFileSystemDriver/AppleFileSystemDriver.cpp	optional iokitcp
+ iokit/ndstorage/NeoDarwinVirtioBlock.cpp	optional iokitcpp
+ iokit/ndstorage/NeoDarwinNVMeController.cpp	optional iokitcpp
+ iokit/ndstorage/NeoDarwinNVMeNamespace.cpp	optional iokitcpp
++iokit/ndusb/NeoDarwinXHCI.cpp	optional iokitcpp
+ 
+ # tightbeamc generated implementation files
+ ./Exclaves/IOService.tightbeam.c		optional iokitcpp config_exclaves

@@ -1,0 +1,45 @@
+# NeoDarwin's console USB keyboard (P1-18, docs/kernel/usb-console.md): a
+# minimal xHCI driver on PCI and ACPI, USB 2 hubs, and a HID boot keyboard
+# that feeds the console. A bring-up aid until P3-07's USB stack. The IOKit
+# class is C++; the register layouts, descriptor parsing, the keyboard's
+# state machine and the FreeBSD-derived DWC3 set-up are C headers that also
+# build on the host for their test.
+load("//rules:cc.bzl", "lang_audit_test", "nd_cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+SRCS = [
+    "NeoDarwinXHCI.cpp",
+    "NeoDarwinXHCI.h",
+    "nd_dwc3.h",
+    "nd_hid_kbd.h",
+    "nd_usb_desc.h",
+    "nd_xhci.h",
+]
+
+# Overlaid at iokit/ndusb (kernel/BUILD.bazel, patch 0033).
+filegroup(
+    name = "kernel_srcs",
+    srcs = SRCS,
+)
+
+lang_audit_test(
+    name = "usb_lang_audit",
+    srcs = SRCS,
+)
+
+# The keyboard's reports as terminal bytes, descriptor parsing (malformed
+# ones too), xHCI field calculations, and the DWC3 role-switch set-up
+# against a register model.
+nd_cc_test(
+    name = "usb_logic_test",
+    size = "small",
+    srcs = [
+        "nd_dwc3.h",
+        "nd_hid_kbd.h",
+        "nd_usb_desc.h",
+        "nd_xhci.h",
+        "test/usb_logic_test.c",
+    ],
+    includes = ["."],
+)
