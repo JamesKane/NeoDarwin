@@ -127,6 +127,8 @@ func reportACPI(_ a: ACPIFacts, _ l: Platform.Layout) {
             put("PL011")
         } else if ACPI.uartIsPL011(a.uartType) {
             put("SBSA generic")
+        } else if ACPI.uartIsGENI(a.uartType) {
+            put("Qualcomm GENI")
         } else {
             put("type ")
             putHex(UInt64(a.uartType))

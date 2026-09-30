@@ -3,14 +3,18 @@
 # dtdump fixture tests.
 #   dtdump_test.sh ok DTDUMP ACPIDUMP EXPECTED [OPTION...]
 #       passes, and prints EXPECTED exactly (OPTIONs go to dtdump)
-#   dtdump_test.sh fail DTDUMP ACPIDUMP LINE       exits 1 and prints LINE
+#   dtdump_test.sh fail DTDUMP ACPIDUMP LINE [OPTION...]
+#       exits 1 and prints LINE
 #   dtdump_test.sh broken-tree DTDUMP ACPIDUMP LINE
 #       writes the tree, points /defaults serial-device at phandle 9 (no
 #       node), and checks that dtdump --dt rejects it with LINE
-#   dtdump_test.sh needs-gop DTDUMP ACPIDUMP LINE
-#       writes the tree with --gop (no UART the kernel drives), and checks
-#       that dtdump --dt rejects it with LINE without --gop and accepts it
-#       with --gop
+#   dtdump_test.sh needs-gop DTDUMP ACPIDUMP LINE [OPTION...]
+#       writes the tree with --gop and the OPTIONs (no UART the kernel
+#       drives, e.g. --uart-off), and checks that dtdump --dt rejects it with
+#       LINE without --gop and accepts it with --gop
+#   dtdump_test.sh bad-compatible DTDUMP ACPIDUMP LINE
+#       writes the tree, whose UART is a GENI, renames its compatible to
+#       "xcom,geni-debug-uart", and checks that dtdump --dt rejects it with LINE
 set -euo pipefail
 mode="$1"; dtdump="$2"; input="$3"; want="$4"; shift 4
 out="$(mktemp -d)"; trap 'rm -rf "$out"' EXIT
@@ -22,7 +26,7 @@ ok)
 	diff -u "$want" "$out/got" || { echo "FAIL: output differs from $want (regenerate it if the change is intended)"; exit 1; }
 	;;
 fail)
-	if "$dtdump" "$input" > "$out/stdout" 2>&1; then cat "$out/stdout"; echo "FAIL: dtdump accepted $input"; exit 1; fi
+	if "$dtdump" "$@" "$input" > "$out/stdout" 2>&1; then cat "$out/stdout"; echo "FAIL: dtdump accepted $input"; exit 1; fi
 	grep -qF -- "$want" "$out/stdout" || { cat "$out/stdout"; echo "FAIL: missing: $want"; exit 1; }
 	;;
 broken-tree)
@@ -34,9 +38,16 @@ broken-tree)
 	grep -qF -- "$want" "$out/stdout" || { cat "$out/stdout"; echo "FAIL: missing: $want"; exit 1; }
 	;;
 needs-gop)
-	"$dtdump" --gop 1920x1080 --write-dt "$out/tree" "$input" > /dev/null
+	"$dtdump" --gop 1920x1080 "$@" --write-dt "$out/tree" "$input" > /dev/null
 	"$dtdump" --gop 1920x1080 --dt "$out/tree" > /dev/null || { echo "FAIL: dtdump --gop rejected the tree"; exit 1; }
 	if "$dtdump" --dt "$out/tree" > "$out/stdout" 2>&1; then cat "$out/stdout"; echo "FAIL: dtdump accepted a tree without a UART or a framebuffer"; exit 1; fi
+	grep -qF -- "$want" "$out/stdout" || { cat "$out/stdout"; echo "FAIL: missing: $want"; exit 1; }
+	;;
+bad-compatible)
+	"$dtdump" --write-dt "$out/tree" "$input" > /dev/null
+	"$dtdump" --dt "$out/tree" > /dev/null
+	perl -0777 -pi -e 's/qcom,geni-debug-uart\x00/xcom,geni-debug-uart\x00/ or die "no GENI compatible\n"' "$out/tree"
+	if "$dtdump" --dt "$out/tree" > "$out/stdout" 2>&1; then cat "$out/stdout"; echo "FAIL: dtdump accepted a UART no kernel driver matches"; exit 1; fi
 	grep -qF -- "$want" "$out/stdout" || { cat "$out/stdout"; echo "FAIL: missing: $want"; exit 1; }
 	;;
 *) echo "unknown mode $mode"; exit 2 ;;

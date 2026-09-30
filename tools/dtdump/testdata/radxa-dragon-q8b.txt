@@ -11,7 +11,6 @@ acpi: MADT: GICC uid 6 MPIDR 0x600 flags 0x1 PMU GSIV 23
 acpi: MADT: GICC uid 7 MPIDR 0x700 flags 0x1 PMU GSIV 23
 acpi: GTDT: virtual timer GSIV 27 flags 0x0
 acpi: SPCR: interface type 0x13 at 0x884000, access size 0x20 (not an encoded size; ignored)
-video: 1920x1080 framebuffer in boot_args.Video
 gic: GICD_CTLR 0x40 (DS=1): timer on Group 0
 psci: conduit SMC, as the FADT says
 acpi: relocated copy: 193392 bytes at 0x42000000

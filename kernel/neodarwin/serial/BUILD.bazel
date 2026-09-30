@@ -1,0 +1,38 @@
+# NeoDarwin's pexpert serial drivers beside xnu's PL011: the Qualcomm QUPv3
+# GENI UART, the Radxa Dragon Q8B's console (patch 0032, docs/kernel/serial.md).
+# The driver is a header of polled register sequences that pe_serial.c
+# includes; the same header builds on the host against a model of the
+# serial engine.
+load("//rules:cc.bzl", "lang_audit_test", "nd_cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+SRCS = [
+    "nd_geni_uart.h",
+]
+
+# Overlaid at pexpert/arm/ndserial (kernel/BUILD.bazel).
+filegroup(
+    name = "kernel_srcs",
+    srcs = SRCS,
+)
+
+lang_audit_test(
+    name = "serial_lang_audit",
+    srcs = SRCS,
+)
+
+# The driver's transmit, receive and init sequences against a simulated
+# GENI register block: bytes in order, one character per START_TX command,
+# no TX FIFO overrun, reception one character per word with UEFI's packed
+# leftovers drained, the read command restarted, stuck sequencers cancelled
+# or aborted, and no write to a clock or bit-rate register.
+nd_cc_test(
+    name = "geni_uart_sim_test",
+    size = "small",
+    srcs = [
+        "nd_geni_uart.h",
+        "test/geni_uart_sim_test.c",
+    ],
+    includes = ["."],
+)

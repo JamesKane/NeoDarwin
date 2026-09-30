@@ -202,21 +202,22 @@ sh_test(
 
 # The single-CPU tables with the SPCR rewritten as the Radxa Dragon Q8B's:
 # interface type 0x13, a Qualcomm GENI UART, at 0x884000 (the checksum fixed
-# up). The kernel has no driver for it until P1-12. Without a framebuffer
-# neoboot refuses; with one (--gop, as boot_args.Video) the tree leaves the
-# UART out and the kernel's console is the framebuffer (DT-ABI v1.1).
+# up). The kernel drives it since P1-12 (patch 0032): the tree has
+# /arm-io/uart0 "qcom,geni-debug-uart" with the serial engine's 16 KiB
+# window, without a framebuffer and, both consoles, with one (--gop).
 sh_test(
-    name = "spcr_geni_no_gop_test",
+    name = "spcr_geni_test",
     size = "small",
     srcs = ["dtdump_test.sh"],
     args = [
-        "fail",
+        "ok",
         "$(rootpath :dtdump)",
         "$(rootpath //boot/neoboot:testdata/qemu-virt-spcr-geni.acpidump)",
-        "'ACPI: SPCR names a UART the kernel has no driver for; interface type [SPCR] 0x13'",
+        "$(rootpath testdata/qemu-virt-spcr-geni.txt)",
     ],
     data = [
         ":dtdump",
+        "testdata/qemu-virt-spcr-geni.txt",
         "//boot/neoboot:testdata/qemu-virt-spcr-geni.acpidump",
     ],
 )
@@ -240,9 +241,28 @@ sh_test(
     ],
 )
 
-# Negative: that UART-less tree is DT-ABI v1.1 only with a framebuffer.
+# Negative: a serial device no kernel driver matches (the GENI node's
+# compatible renamed) fails the check.
 sh_test(
-    name = "spcr_geni_tree_needs_gop_test",
+    name = "spcr_geni_bad_compatible_test",
+    size = "small",
+    srcs = ["dtdump_test.sh"],
+    args = [
+        "bad-compatible",
+        "$(rootpath :dtdump)",
+        "$(rootpath //boot/neoboot:testdata/qemu-virt-spcr-geni.acpidump)",
+        "'DT-ABI v1 violation: the serial device is neither \"arm,pl011\" nor \"qcom,geni-debug-uart\"'",
+    ],
+    data = [
+        ":dtdump",
+        "//boot/neoboot:testdata/qemu-virt-spcr-geni.acpidump",
+    ],
+)
+
+# Negative: with uart=off the tree has no UART, which is DT-ABI v1.1 only
+# with a framebuffer.
+sh_test(
+    name = "spcr_geni_uart_off_tree_needs_gop_test",
     size = "small",
     srcs = ["dtdump_test.sh"],
     args = [
@@ -250,6 +270,7 @@ sh_test(
         "$(rootpath :dtdump)",
         "$(rootpath //boot/neoboot:testdata/qemu-virt-spcr-geni.acpidump)",
         "'DT-ABI v1 violation: no /defaults serial-device and no framebuffer in boot_args (the kernel would have no console)'",
+        "--uart-off",
     ],
     data = [
         ":dtdump",
@@ -260,22 +281,27 @@ sh_test(
 # The Radxa Dragon Q8B's own tables (boot/neoboot/testdata/radxa-dragon-q8b.md):
 # eight DynamIQ CPUs, MPIDR 0x000-0x700, in one cluster; GICv3 with eight
 # 128 KiB redistributor frames; the virtual timer on PPI 27; PSCI over SMC,
-# as the FADT says. Its SPCR UART is a Qualcomm GENI (type 0x13), so neoboot
-# refuses the board without a framebuffer and, with one, boots it with no
-# UART in the tree. The counter runs at 19.2 MHz. GICD_CTLR is not in the
-# tables; the default (DS=1) is QEMU's, and the board's is still to read.
+# as the FADT says. Its SPCR UART is a Qualcomm GENI (type 0x13) at 0x884000,
+# whose access size reads 0x20 (bits, not an encoded size; ignored). Since
+# P1-12 it is the kernel's serial console: /arm-io/uart0 with or without a
+# framebuffer, which is then a second console (HDMI). The counter runs at
+# 19.2 MHz. GICD_CTLR is not in the tables; the default (DS=1) is QEMU's,
+# and the board's is still to read.
 sh_test(
-    name = "radxa_dragon_q8b_no_gop_test",
+    name = "radxa_dragon_q8b_test",
     size = "small",
     srcs = ["dtdump_test.sh"],
     args = [
-        "fail",
+        "ok",
         "$(rootpath :dtdump)",
         "$(rootpath //boot/neoboot:testdata/radxa-dragon-q8b.acpidump)",
-        "'ACPI: SPCR names a UART the kernel has no driver for; interface type [SPCR] 0x13'",
+        "$(rootpath testdata/radxa-dragon-q8b.txt)",
+        "--timebase",
+        "19200000",
     ],
     data = [
         ":dtdump",
+        "testdata/radxa-dragon-q8b.txt",
         "//boot/neoboot:testdata/radxa-dragon-q8b.acpidump",
     ],
 )
@@ -297,6 +323,47 @@ sh_test(
     data = [
         ":dtdump",
         "testdata/radxa-dragon-q8b-gop.txt",
+        "//boot/neoboot:testdata/radxa-dragon-q8b.acpidump",
+    ],
+)
+
+# uart=off on the Q8B: the framebuffer alone (DT-ABI v1.1), and refused
+# without one.
+sh_test(
+    name = "radxa_dragon_q8b_uart_off_gop_test",
+    size = "small",
+    srcs = ["dtdump_test.sh"],
+    args = [
+        "ok",
+        "$(rootpath :dtdump)",
+        "$(rootpath //boot/neoboot:testdata/radxa-dragon-q8b.acpidump)",
+        "$(rootpath testdata/radxa-dragon-q8b-uart-off-gop.txt)",
+        "--gop",
+        "1920x1080",
+        "--uart-off",
+        "--timebase",
+        "19200000",
+    ],
+    data = [
+        ":dtdump",
+        "testdata/radxa-dragon-q8b-uart-off-gop.txt",
+        "//boot/neoboot:testdata/radxa-dragon-q8b.acpidump",
+    ],
+)
+
+sh_test(
+    name = "radxa_dragon_q8b_uart_off_no_gop_test",
+    size = "small",
+    srcs = ["dtdump_test.sh"],
+    args = [
+        "fail",
+        "$(rootpath :dtdump)",
+        "$(rootpath //boot/neoboot:testdata/radxa-dragon-q8b.acpidump)",
+        "'no UART the kernel can drive, and no framebuffer (--gop): the kernel would have no console'",
+        "--uart-off",
+    ],
+    data = [
+        ":dtdump",
         "//boot/neoboot:testdata/radxa-dragon-q8b.acpidump",
     ],
 )

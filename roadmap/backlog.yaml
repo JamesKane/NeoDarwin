@@ -196,7 +196,7 @@ epics:
     title: "Qualcomm QUPv3 GENI UART pexpert serial driver (SPCR type 0x13, the Q8B console); 16550 after it"
     phase: 1
     owner: kernel-bridge
-    status: todo
+    status: doing
     depends: [P1-04]
     exit: "neoboot accepts SPCR 0x13 and the kernel console runs on the Q8B's GENI UART"
     doc: docs/kernel/arm64-sbsa-bringup.md

@@ -484,9 +484,12 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     nd_dcache_clean_poc(base, span)
     if let fb = framebuffer { nd_dcache_clean_poc(fb.base, fb.size) }
     // SPCR: the console once the firmware's is gone, if it is a PL011. Any
-    // other UART (the Q8B's GENI) is left alone, and neoboot says nothing
-    // more after ExitBootServices.
-    Console.pl011Base = layout.uart ? UInt(acpi.uartBase) : 0
+    // other UART is left alone, and neoboot says nothing more after
+    // ExitBootServices. That includes the kernel's GENI console (the Q8B's):
+    // its first touch after UEFI's is the kernel driver's init, and the one
+    // line it would carry, "entering the kernel", isn't worth an untested
+    // transmit path in the loader (docs/kernel/serial.md).
+    Console.pl011Base = layout.uart && ACPI.uartIsPL011(acpi.uartType) ? UInt(acpi.uartBase) : 0
     guard fw.exitBootServices(&map) else { return fail("ExitBootServices failed") }
     Console.detach()
     put("neoboot: entering the kernel\n")

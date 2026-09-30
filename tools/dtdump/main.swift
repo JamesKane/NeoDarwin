@@ -248,7 +248,9 @@ for i in 0..<facts.cpuEntries {
           + (c.gicrBase != 0 ? " GICR \(hex(c.gicrBase))" : "") + (i == layout.bootIndex ? " (boot)" : ""))
 }
 print("acpi: GTDT: virtual timer GSIV \(facts.timerGSIV) flags \(hex(UInt64(facts.timerFlags)))")
-print(facts.hasSPCR ? "acpi: SPCR: interface type \(hex(UInt64(facts.uartType))) at \(hex(facts.uartBase))" : "acpi: no SPCR")
+print(facts.hasSPCR ? "acpi: SPCR: interface type \(hex(UInt64(facts.uartType))) at \(hex(facts.uartBase))"
+      + (facts.uartAccessSize > 4 ? ", access size \(hex(UInt64(facts.uartAccessSize))) (not an encoded size; ignored)" : "")
+      : "acpi: no SPCR")
 if let gop { print("video: \(gop.width)x\(gop.height) framebuffer in boot_args.Video") }
 switch uartUse {
 case .console: break

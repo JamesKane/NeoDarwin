@@ -4,7 +4,6 @@ acpi: MADT: GICv3 GICD 0x8000000; GICR 0x80a0000, 1 frame(s) of 0xf60000 reserve
 acpi: MADT: GICC uid 0 MPIDR 0x0 flags 0x1 PMU GSIV 23 (boot)
 acpi: GTDT: virtual timer GSIV 27 flags 0x0
 acpi: SPCR: interface type 0x13 at 0x884000
-video: 1920x1080 framebuffer in boot_args.Video
 gic: GICD_CTLR 0x40 (DS=1): timer on Group 0
 psci: conduit HVC, as the FADT says
 acpi: relocated copy: 6576 bytes at 0x42000000

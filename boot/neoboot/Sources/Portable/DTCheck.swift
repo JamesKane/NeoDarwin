@@ -296,16 +296,24 @@ enum DTCheck {
             r.violation("no /arm-io")
         }
 
-        // The console: /defaults serial-device → a PL011 under /arm-io, or
-        // none when boot_args carries a framebuffer (DT-ABI v1.1).
+        // The console: /defaults serial-device → a UART the kernel drives
+        // under /arm-io (a PL011 or a GENI serial engine), or none when
+        // boot_args carries a framebuffer (DT-ABI v1.1).
         if let defaults = root.child(named: "defaults") {
             if let p = defaults.u32("serial-device") {
                 let (uart, n) = findPhandle(root, p)
                 if n != 1 || uart == nil {
                     r.violation("/defaults serial-device names no node; phandle", UInt64(p))
                 } else if let uart {
-                    if !uart.string("compatible", is: "arm,pl011") { r.violation("the serial device is not compatible \"arm,pl011\", the kernel's only UART driver") }
-                    if uart.property("reg")?.count != 16 { r.violation("the serial device reg is not one (offset, size) pair (pe_serial.c asserts)") }
+                    let geni = uart.string("compatible", is: Platform.geniCompatible)
+                    if !geni && !uart.string("compatible", is: Platform.pl011Compatible) {
+                        r.violation("the serial device is neither \"arm,pl011\" nor \"qcom,geni-debug-uart\", the kernel's UART drivers")
+                    }
+                    if uart.property("reg")?.count != 16 {
+                        r.violation("the serial device reg is not one (offset, size) pair (pe_serial.c asserts)")
+                    } else if let size = uart.u64("reg", 1), size < (geni ? 0x4000 : 0x1000) {
+                        r.violation("the serial device reg is smaller than its register window; size", size)
+                    }
                 }
             } else if defaults.property("serial-device") != nil {
                 r.violation("/defaults serial-device is not a u32 phandle")

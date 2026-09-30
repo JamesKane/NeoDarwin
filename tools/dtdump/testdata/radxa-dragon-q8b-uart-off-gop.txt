@@ -12,10 +12,11 @@ acpi: MADT: GICC uid 7 MPIDR 0x700 flags 0x1 PMU GSIV 23
 acpi: GTDT: virtual timer GSIV 27 flags 0x0
 acpi: SPCR: interface type 0x13 at 0x884000, access size 0x20 (not an encoded size; ignored)
 video: 1920x1080 framebuffer in boot_args.Video
+console: the SPCR UART is not used (--uart-off); the framebuffer only
 gic: GICD_CTLR 0x40 (DS=1): timer on Group 0
 psci: conduit SMC, as the FADT says
 acpi: relocated copy: 193392 bytes at 0x42000000
-device tree: 5872 bytes
+device tree: 5584 bytes
 /
     compatible = "NeoDarwin,sbsa"
     model = "QCOM,QCOMEDK2"
@@ -36,7 +37,6 @@ device tree: 5872 bytes
 /chosen/memory-map
     ACPITables = <0x42000000 0x2f370> (u64)
 /defaults
-    serial-device = <0x3>
 /cpus
     #address-cells = <0x1>
     #size-cells = <0x0>
@@ -122,13 +122,13 @@ device tree: 5872 bytes
     AAPL,phandle = <0x17>
 /arm-io
     device_type = "soc"
-    ranges = <0x0 0x880000 0x172e0000> (u64)
+    ranges = <0x0 0x17a00000 0x160000> (u64)
     #address-cells = <0x2>
     #size-cells = <0x2>
     AAPL,phandle = <0x4>
 /arm-io/gic
     compatible = "arm,gic-v3"
-    reg = <0x17180000 0x10000 0x171e0000 0x100000> (u64)
+    reg = <0x0 0x10000 0x60000 0x100000> (u64)
     interrupt-controller = "gic"
     #interrupt-cells = <0x1>
     #address-cells = <0x0>
@@ -137,15 +137,10 @@ device tree: 5872 bytes
     AAPL,phandle = <0x5>
 /arm-io/interrupt-controller
     interrupt-controller = "master"
-    reg = <0x17180000 0x10000> (u64)
+    reg = <0x0 0x10000> (u64)
     AAPL,phandle = <0x6>
 /arm-io/timer
     device_type = "timer"
-    reg = <0x171e0000 0x10000> (u64)
+    reg = <0x60000 0x10000> (u64)
     AAPL,phandle = <0x7>
-/arm-io/uart0
-    device_type = "serial"
-    compatible = "qcom,geni-debug-uart"
-    reg = <0x4000 0x4000> (u64)
-    AAPL,phandle = <0x3>
-dtdump: DT-ABI v1: ok (18 nodes)
+dtdump: DT-ABI v1: ok (17 nodes)

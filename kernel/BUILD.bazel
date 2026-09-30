@@ -114,6 +114,7 @@ SBSA_PATCHES = [
     "patches/0029-iokit-build-nvme-driver.patch",
     "patches/0030-generic-arm64-tcr-ips-from-parange.patch",
     "patches/0031-generic-arm64-secondary-entry-at-el2.patch",
+    "patches/0032-pexpert-qcom-geni-uart-console.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -132,6 +133,7 @@ SBSA_OVERLAYS = {
     "@apple_hfs//:kernel_srcs": "libkern/ndhfs/hfs",
     "//kernel/neodarwin/platform:kernel_srcs": "iokit/ndplatform",
     "//kernel/neodarwin/pthread:kernel_srcs": "libkern/ndpthread",
+    "//kernel/neodarwin/serial:kernel_srcs": "pexpert/arm/ndserial",
     "@apple_libpthread//:kernel_srcs": "libkern/ndpthread/libpthread",
     "@freebsd_crypto//:all": "libkern/ndcrypto/freebsd",
 }

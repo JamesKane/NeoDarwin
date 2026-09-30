@@ -94,6 +94,7 @@ struct ACPIFacts {
     var hasSPCR = false
     var uartType: UInt8 = 0xff
     var uartSpace: UInt8 = 0             // GAS address space: 0 is system memory
+    var uartAccessSize: UInt8 = 0        // GAS access size, as the table says; never checked (ACPI.parse)
     var uartBase: UInt64 = 0
 
     // FADT.
@@ -129,12 +130,29 @@ enum ACPI {
     // SPCR interface types (the DBG2 port subtypes).
     static let uart16550: UInt8 = 0x00, uart16450: UInt8 = 0x01, uartPL011: UInt8 = 0x03
     static let uartSBSA32: UInt8 = 0x0d, uartSBSA: UInt8 = 0x0e, uart16550GAS: UInt8 = 0x12
+    // Qualcomm's (the DBG2 table's "SDM845" types, by the serial engine's
+    // clock: 1.8432 MHz and 7.372 MHz): a QUPv3 GENI serial engine in UART
+    // mode. The Radxa Dragon Q8B's SPCR says 0x13. FreeBSD's
+    // uart_dev_qcom_geni takes both.
+    static let uartGENI18432: UInt8 = 0x11, uartGENI7372: UInt8 = 0x13
 
-    /// Whether the kernel has a driver for an SPCR interface type: its PL011
-    /// driver (pe_serial.c), which also drives the SBSA Generic UART, a
-    /// register subset of the PL011. The 16550 family waits for P1-12.
+    /// Whether the kernel's PL011 driver (pe_serial.c) drives an SPCR
+    /// interface type: the PL011, and the SBSA Generic UART, a register
+    /// subset of it.
     static func uartIsPL011(_ type: UInt8) -> Bool {
         type == uartPL011 || type == uartSBSA32 || type == uartSBSA
+    }
+
+    /// Whether the kernel's GENI driver (patch 0032, docs/kernel/serial.md)
+    /// drives an SPCR interface type.
+    static func uartIsGENI(_ type: UInt8) -> Bool {
+        type == uartGENI18432 || type == uartGENI7372
+    }
+
+    /// Whether the kernel has a driver for an SPCR interface type. The 16550
+    /// family waits for the rest of P1-12.
+    static func uartHasDriver(_ type: UInt8) -> Bool {
+        uartIsPL011(type) || uartIsGENI(type)
     }
 
     static func sum(_ p: UnsafeRawPointer, _ n: Int) -> UInt8 {
@@ -270,6 +288,12 @@ enum ACPI {
                 f.hasSPCR = true
                 f.uartType = p.load(fromByteOffset: 36, as: UInt8.self)
                 f.uartSpace = p.load(fromByteOffset: 40, as: UInt8.self)
+                // Recorded, never checked: the Q8B's firmware stores 0x20,
+                // the register width in bits, where an encoded access size
+                // (0-4) belongs. Every UART the kernel drives has 32-bit
+                // registers, and its driver knows that; Linux and FreeBSD
+                // (24c9d8d2e6) fall back to the driver's width the same way.
+                f.uartAccessSize = p.load(fromByteOffset: 43, as: UInt8.self)
                 f.uartBase = u64(p, 44)
             default:
                 break
@@ -389,15 +413,15 @@ enum ACPI {
     }
 
     /// Why the SPCR UART can't be the kernel's serial console, or nil if it
-    /// can: a PL011 or SBSA Generic UART in system memory. The loader then
+    /// can: a PL011, SBSA Generic or Qualcomm GENI UART in system memory. The loader then
     /// boots with the framebuffer as the only console if there is one, and
     /// refuses otherwise (Platform.uartUse).
     static func uartProblem(_ f: ACPIFacts) -> ACPIError? {
         guard f.hasSPCR else { return ACPIError("no SPCR: the console UART is described nowhere") }
         guard f.uartSpace == 0 else { return ACPIError("SPCR UART not in system memory; address space", spcr, UInt64(f.uartSpace)) }
-        guard uartIsPL011(f.uartType) else {
+        guard uartHasDriver(f.uartType) else {
             if f.uartType == uart16550 || f.uartType == uart16450 || f.uartType == uart16550GAS {
-                return ACPIError("SPCR names a 16550-family UART, which the kernel has no driver for until P1-12; interface type", spcr, UInt64(f.uartType))
+                return ACPIError("SPCR names a 16550-family UART, which the kernel has no driver for yet (P1-12); interface type", spcr, UInt64(f.uartType))
             }
             return ACPIError("SPCR names a UART the kernel has no driver for; interface type", spcr, UInt64(f.uartType))
         }

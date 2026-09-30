@@ -1,0 +1,140 @@
+From: NeoDarwin
+Subject: [PATCH] pexpert: a Qualcomm QUPv3 GENI UART serial console
+
+The Radxa Dragon Q8B's (Qualcomm SC8280XP) firmware console, the one its
+SPCR names (interface type 0x13, at 0x884000), is a QUPv3 GENI serial
+engine in UART mode, which none of pe_serial.c's drivers can drive: the
+board booted with its console on HDMI alone (DT-ABI v1.1).
+
+For SBSA, pe_serial.c gains a serial_functions driver for it, matched by
+the device tree compatible "qcom,geni-debug-uart" (Linux's name for the
+debug UART) in driver_setup_functions. Like the PL011 it is polled, with
+input through serial_keyboard_poll. The register sequences live in
+NeoDarwin's ndserial/nd_geni_uart.h (kernel/neodarwin/serial, overlaid at
+pexpert/arm/ndserial), ported from FreeBSD's uart_dev_qcom_geni.c, which
+runs on the board: FIFO mode with one character per FIFO word, a
+one-character START_TX command per character, and a START_READ command
+left running for input. The bit rate stays the one UEFI set: it comes from
+the engine's clock, which belongs to the global clock controller. The
+setup function registers nothing when the engine's protocol firmware isn't
+the UART's. SBSA.h defines QCOM_GENI_UART beside PL011_UART. The driver
+has no serial_device_t of its own (SERIAL_UNKNOWN): the id only selects a
+device for interrupts, which it doesn't use.
+
+Rebase-risk: low (a block after the PL011 driver and a line in the
+compatible table, under QCOM_GENI_UART; one line in SBSA.h).
+---
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -733,6 +733,91 @@
+ 
+ /*****************************************************************************/
+ 
++#ifdef QCOM_GENI_UART
++
++/*
++ * NeoDarwin: the Qualcomm QUPv3 GENI UART, the Radxa Dragon Q8B's SPCR
++ * console (SPCR types 0x11 and 0x13). The register sequences are in
++ * ndserial/nd_geni_uart.h (kernel/neodarwin/serial, ported from FreeBSD's
++ * uart_dev_qcom_geni.c); this is the serial_functions glue. Polled, like
++ * the PL011: no interrupts, input through serial_keyboard_poll. The bit
++ * rate is UEFI's (docs/kernel/serial.md).
++ */
++#define ND_GENI_READ(base, off)         (*(volatile uint32_t *)((base) + (off)))
++#define ND_GENI_WRITE(base, off, v)     (*(volatile uint32_t *)((base) + (off)) = (uint32_t)(v))
++#include "ndserial/nd_geni_uart.h"
++
++static struct nd_geni_uart geni_uart;
++
++static void
++geni_uart_init(void)
++{
++	nd_geni_uart_init(&geni_uart);
++}
++
++static unsigned int
++geni_uart_transmit_ready(void)
++{
++	return nd_geni_uart_transmit_ready(&geni_uart);
++}
++
++static void
++geni_uart_transmit_data(uint8_t c)
++{
++	nd_geni_uart_transmit(&geni_uart, c);
++}
++
++static unsigned int
++geni_uart_receive_ready(void)
++{
++	return nd_geni_uart_receive_ready(&geni_uart);
++}
++
++static uint8_t
++geni_uart_receive_data(void)
++{
++	return nd_geni_uart_receive(&geni_uart);
++}
++
++/* No serial_device_t of its own: the id only selects a device for IRQs, which this one has none of. */
++SECURITY_READ_ONLY_LATE(static struct pe_serial_functions) geni_uart_serial_functions =
++{
++	.init = geni_uart_init,
++	.transmit_ready = geni_uart_transmit_ready,
++	.transmit_data = geni_uart_transmit_data,
++	.receive_ready = geni_uart_receive_ready,
++	.receive_data = geni_uart_receive_data,
++	.device = SERIAL_UNKNOWN
++};
++
++static void
++geni_uart_setup(const DeviceTreeNode *const devicetree_node)
++{
++	const struct {
++		uint64_t block_offset;
++		uint64_t block_size;
++	} *reg;
++	unsigned int reg_size;
++	if (SecureDTGetProperty(devicetree_node, "reg", (const void **)&reg, &reg_size) != kSuccess) {
++		panic("Unable to find the 'reg' property on the GENI UART devicetree node");
++	}
++	assert(reg_size == sizeof(*reg));
++
++	const vm_offset_t soc_base_phys = pe_arm_get_soc_base_phys();
++	geni_uart.base = ml_io_map(soc_base_phys + reg->block_offset, reg->block_size);
++
++	// A serial engine running other protocol firmware (I2C, SPI) would take
++	// the UART commands for its own: no serial console rather than a hang.
++	if (!nd_geni_uart_probe(&geni_uart)) {
++		return;
++	}
++	register_serial_functions(&geni_uart_serial_functions);
++}
++
++#endif /* QCOM_GENI_UART */
++
++/*****************************************************************************/
++
+ /**
+  * Output @str onto every registered serial interface by polling.
+  *
+@@ -809,6 +894,9 @@
+ #ifdef PL011_UART
+ 	{ .compatible = "arm,pl011", .setup = pl011_uart_setup },
+ #endif // PL011_UART
++#ifdef QCOM_GENI_UART
++	{ .compatible = "qcom,geni-debug-uart", .setup = geni_uart_setup },
++#endif // QCOM_GENI_UART
+ };
+ 
+ /**
+--- a/pexpert/pexpert/arm64/SBSA.h
++++ b/pexpert/pexpert/arm64/SBSA.h
+@@ -35,6 +35,7 @@
+ 
+ #ifndef ASSEMBLER
+ #define PL011_UART
++#define QCOM_GENI_UART            /* NeoDarwin: pexpert/arm/ndserial, the Radxa Dragon Q8B console */
+ #define PLATFORM_PANIC_LOG_DISABLED
+ #endif /* ! ASSEMBLER */
+ 

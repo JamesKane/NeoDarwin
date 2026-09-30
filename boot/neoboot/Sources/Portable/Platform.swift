@@ -15,7 +15,19 @@ enum Platform {
     /// GICR_PE_SIZE (SBSA.h): one GICv3 redistributor, RD_base + SGI_base.
     static let gicrFrame: UInt64 = 0x2_0000
     static let gicdSize: UInt64 = 0x1_0000
-    static let uartSize: UInt64 = 0x1000
+    /// The UART's register window, /arm-io/uart0 reg's size: the PL011's
+    /// 4 KiB, or a GENI serial engine's 16 KiB (FreeBSD's uc_range).
+    static func uartSize(_ type: UInt8) -> UInt64 {
+        ACPI.uartIsGENI(type) ? 0x4000 : 0x1000
+    }
+
+    /// The kernel driver's DT compatible (pe_serial.c driver_setup_functions)
+    /// for an SPCR interface type it drives.
+    static func uartCompatible(_ type: UInt8) -> StaticString {
+        ACPI.uartIsGENI(type) ? geniCompatible : pl011Compatible
+    }
+    static let pl011Compatible: StaticString = "arm,pl011"
+    static let geniCompatible: StaticString = "qcom,geni-debug-uart"  // Linux's name for the GENI debug UART
     /// /arm-io ranges granularity.
     static let socAlignment: UInt64 = 0x1_0000
     /// GICD_CTLR.DS (Disable Security). It reads as 1 when the GIC has one
@@ -107,17 +119,17 @@ enum Platform {
     /// (/arm-io/uart0, /defaults serial-device); otherwise the kernel's
     /// console is the framebuffer alone, and without one the loader refuses.
     enum UARTUse: UInt8 {
-        case console      // a PL011 or SBSA Generic UART: the serial console
+        case console      // a PL011, SBSA Generic or Qualcomm GENI UART: the serial console
         case off          // boot.cfg says uart=off
         case missing      // no SPCR
-        case noDriver     // an interface type the kernel has no driver for (the Q8B's GENI, 0x13)
+        case noDriver     // an interface type the kernel has no driver for (the 16550 family)
         case unusable     // not in system memory, or at address 0
     }
 
     static func uartUse(_ a: ACPIFacts, off: Bool) -> UARTUse {
         if off { return .off }
         if !a.hasSPCR { return .missing }
-        if a.uartSpace == 0 && !ACPI.uartIsPL011(a.uartType) { return .noDriver }
+        if a.uartSpace == 0 && !ACPI.uartHasDriver(a.uartType) { return .noDriver }
         return ACPI.uartProblem(a) == nil ? .console : .unusable
     }
 
@@ -163,7 +175,7 @@ enum Platform {
         var lo = min(a.gicdBase, a.gicrBase), hi = max(a.gicdBase + gicdSize, a.gicrBase + l.gicrSize)
         if uart {
             lo = min(lo, a.uartBase)
-            hi = max(hi, a.uartBase + uartSize)
+            hi = max(hi, a.uartBase + uartSize(a.uartType))
         }
         lo &= ~(socAlignment - 1)
         guard lo != 0 else { throw ACPIError("a device at physical page 0 would make /arm-io ranges[1] zero, which the kernel reads as no SoC") }
@@ -296,11 +308,11 @@ enum Platform {
         w.end()
 
         if l.uart {
-            w.begin()  // /arm-io/uart0: the SPCR console, a polled PL011
+            w.begin()  // /arm-io/uart0: the SPCR console, polled (a PL011 or a GENI serial engine)
             w.property("name", string: "uart0")
             w.property("device_type", string: "serial")
-            w.property("compatible", string: "arm,pl011")
-            w.property("reg", a.uartBase - l.socBase, uartSize)
+            w.property("compatible", string: uartCompatible(a.uartType))  // pe_serial.c: selects the driver
+            w.property("reg", a.uartBase - l.socBase, uartSize(a.uartType))
             w.property("AAPL,phandle", u32: uartPhandle)
             w.end()
         }
