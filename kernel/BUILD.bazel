@@ -112,6 +112,8 @@ SBSA_PATCHES = [
     "patches/0027-iokit-build-virtio-blk.patch",
     "patches/0028-bsd-init-no-sealed-root-on-sbsa.patch",
     "patches/0029-iokit-build-nvme-driver.patch",
+    "patches/0030-generic-arm64-tcr-ips-from-parange.patch",
+    "patches/0031-generic-arm64-secondary-entry-at-el2.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -1318,6 +1320,200 @@ sh_test(
         "//boot/neoboot",
         "//images:session_root",
         "//third_party/qemu_firmware:virt_secure_flash",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# ---------------------------------------------------------------------------
+# QEMU sbsa-ref (docs/kernel/qemu-sbsa-ref.md): the SBSA reference machine,
+# booted by TF-A PLAT=qemu_sbsa and EDK2 SbsaQemu built from pinned source
+# (//third_party/qemu_firmware:sbsa_ref_flash), with its own ACPI tables.
+# DRAM at 1 TiB (patch 0030: TCR_EL1.IPS), UEFI at EL2 (patch 0031: the
+# secondaries' reset vector leaves EL2), GIC with an ITS at 0x40060000,
+# PL011 at 0x60000000, PSCI over SMC; four neoverse-n2 CPUs, as the machine
+# has by default.
+SBSA_REF = [
+    "--machine sbsa-ref",
+    "--firmware $(rootpath //third_party/qemu_firmware:sbsa_ref_flash0.fd)",
+    "--firmware-ns $(rootpath //third_party/qemu_firmware:sbsa_ref_flash1.fd)",
+    "--smp 4",
+]
+
+SBSA_REF_FIRMWARE = [
+    "//third_party/qemu_firmware:sbsa_ref_flash0.fd",
+    "//third_party/qemu_firmware:sbsa_ref_flash1.fd",
+]
+
+# What every sbsa-ref boot shows: the firmware, neoboot's reading of
+# SbsaQemu's tables and the DRAM window above 2^40, the kernel's PSCI over
+# SMC with the four CPUs up, and the timer on Group 1 (DS=0).
+SBSA_REF_LINES = [
+    "'NOTICE:  BL31: v2.15.0(release)'",
+    "'neoboot: ACPI: GICv3 GICD 0x40060000, GICR 0x40080000 (4 frames in a GICR range)'",
+    "'neoboot: ACPI: timer PPI 27 level, UART PL011 at 0x60000000, PSCI SMC'",
+    "'neoboot: PSCI conduit: SMC, as the FADT says'",
+    "'  DRAM window        0x10000000000'",
+    "'  current EL         0x2'",
+    "'NeoDarwinPSCI: PSCI 1.1 over SMC'",
+    "'NeoDarwinGICv3: timer PPI 27 on Group 1 (IRQ); '",
+    "'NeoDarwinPlatformExpert: 4 of 4 CPUs online'",
+    "'NeoDarwinPlatformExpert: IPI round trip from cpu 0 to cpu 3: median '",
+]
+
+# The session from the HFS+ ramdisk: root's shell, four CPUs, and a timed
+# sleep (the timer ticks as IRQs).
+sh_test(
+    name = "sbsa_ref_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = SBSA_REF + [
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'r=($$(/usr/sbin/sysctl -n hw.ncpu hw.activecpu)) && echo ncpu-$${r[1]}-$${r[2]}\\n'",
+        "--send-after 'root@localhost ~ # ' 'zmodload zsh/datetime && t=$$EPOCHREALTIME && sleep 1 && echo slept-$$(( EPOCHREALTIME - t >= 1 ))\\n'",
+        "$(rootpath //boot/neoboot)",
+        "300",
+    ] + SBSA_REF_LINES + [
+        "'BSD root: md0'",
+        "'hfs: mounted NeoDarwin on device'",
+        "'com.apple.launchd'",
+        "'ncpu-4-4'",
+        "'slept-1'",
+    ],
+    data = SBSA_REF_FIRMWARE + [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:session_root",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P1-09's exit on sbsa-ref: ACPICA on SbsaQemu's DSDT (the platform AHCI and
+# XHCI, the PCI host bridge with its link devices), and IOPCIFamily on the
+# machine's PCIe: its own e1000e (00:01.0) and bochs-display (00:02.0, the
+# GOP framebuffer, whose BAR stays where the firmware put it), with
+# PCI_DEVICES' disks, NVMe, root ports and edu devices after them. INTx
+# through the _PRT's link devices (GSI0-3, children of PCI0: the ACPI
+# platform registers nubs only after the whole walk, so the host bridge
+# finds them); MSI and MSI-X through the ITS at 0x44081000, the IORT
+# sending requester IDs through the SMMUv3, which the firmware leaves in
+# bypass.
+SBSA_REF_PCI_LINES = [
+    "'NeoDarwinACPIPlatform: ACPICA 20260408; 11 tables (FACP DSDT DBG2 MCFG SPCR IORT APIC SSDT PPTT GTDT BGRT); 13 devices published, 6 more in IOACPIPlane'",
+    "'NeoDarwinACPIPlatform: \\_SB.COM0 ARMH0011 uid 0 mem 0x60000000+0x1000 irq 33'",
+    "'NeoDarwinACPIPlatform: \\_SB.AHC0 LNRO001E mem 0x60100000+0x10000 irq 42'",
+    "'NeoDarwinACPIPlatform: \\_SB.USB0 PNP0D10 uid 0 mem 0x60110000+0x10000 irq 43'",
+    "'NeoDarwinACPIPlatform: \\_SB.PCI0 PNP0A08 (PNP0A03) uid PCI0 bus 0-255 memory 0x80000000+0x70000000 memory 0x100000000+0xff00000000 io 0x7fff0000+0x10000'",
+    "'NeoDarwinACPIPlatform: \\_SB.PCI0.GSI3 PNP0C0F uid 3 irq 38'",
+    "'NeoDarwinACPIPlatform: \\_SB.PCI0: PCI segment 0, bus 0, ECAM 0xf0000000 (_CBA); _PRT 128 routes'",
+    "'NeoDarwinPCIHostBridge: \\_SB.PCI0: segment 0, buses 0-255, ECAM 0xf0000000 (_CBA); mem 0x80000000+0x70000000, mem 0x100000000+0xff00000000, io 0x1000+0xf000 at 0x7fff1000'",
+    "'NeoDarwinPCIHostBridge: \\_SB.PCI0: _OSC control 0x1d of 0x3d with MSI; DMA coherent (_CCA); requester IDs to SMMUv3'",
+    "'NeoDarwinPCIHostBridge: 0000:00:00.0 1b36:0008 class 060000'",
+    "'NeoDarwinPCIHostBridge: 0000:00:01.0 8086:10d3 class 020000 '",
+    "' INTA gsiv 36 msi 1 msi-x 5'",
+    "'NeoDarwinPCIHostBridge: 0000:00:02.0 1234:1111 class 038000 bar0 mem 0x80000000+0x1000000 '",
+    "'NeoDarwinPCIHostBridge: 0000:00:03.0 1af4:1001 class 010000 bar0 io 0x7fff1000+0x80 '",
+    "'NeoDarwinPCIHostBridge: 0000:00:04.0 1b36:0010 class 010802 bar0 mem 0x1001'",
+    "'NeoDarwinPCIHostBridge: 0000:00:06.0 1b36:000c class 060400 bridge to buses 1-1'",
+    "'NeoDarwinPCIHostBridge: 0000:01:00.0 1af4:1042 class 010000'",
+    "'NeoDarwinPCIHostBridge: 0000:00:07.0 1b36:000c class 060400 bridge to buses 2-2'",
+    "'NeoDarwinGICv3: SPI 36: Group 1 Non-secure as the Secure firmware set it (DS=0), priority 0x80, level, routed to 0x0'",
+    "'NeoDarwinGICv3: SPI 38: shared for '",
+    "'NeoDarwinPCIEduTest: 00:05.0: edu 0x010000ed: INTA on GSIV 36 (level) reached its handler in '",
+    "'NeoDarwinPCIEduTest: 02:00.0: edu 0x010000ed: INTA on GSIV 38 (level) reached its handler in '",
+    "'NeoDarwinPCIHostBridge: \\_SB.PCI0: segment 0: 10 devices (2 PCI-to-PCI bridges) on buses 0-2, 8 with INTx, 8 capable of MSI or MSI-X'",
+    # MSIs: the ITS, a collection per CPU, DeviceIDs through the SMMUv3.
+    "'NeoDarwinPCIMSI: ITS 0 at 0x44081000 (IIDR 0x0000043b): 16 DeviceID bits, 16 EventID bits, ITT entries 12 bytes, two-level device table; 4 collections by processor number'",
+    "'enabled on 4 of 4 redistributors'",
+    "'NeoDarwinPCIMSI: 0000:00:04.0: MSI-X 5 of 65 vectors -> LPIs '",
+    "', DeviceID 0x20 on ITS 0 via SMMUv3 at 0x60050000 as stream 0x20 (bypass)'",
+    "'NeoDarwinPCIEduTest: 00:05.0: edu 0x010000ed: MSI on LPI '",
+    "'(DeviceID 0x28, EventID 0) reached its handler in '",
+    "'(DeviceID 0x200, EventID 0) reached its handler in '",
+    "'NeoDarwinVirtioBlock: 00:03.0: virtio-blk 1af4:1001: 32768 512-byte blocks (16 MiB); '",
+    "'NeoDarwinVirtioBlock: 01:00.0: virtio-blk 1af4:1042: 32768 512-byte blocks (16 MiB); '",
+    "'NeoDarwinNVMeController: 00:04.0: NVMe 1.4, 1b36:0010, model \"QEMU NVMe Ctrl\", serial \"nd0\", firmware '",
+    "'NeoDarwinNVMeController: 00:04.0: 4 I/O queue pairs of 64 entries'",
+    "'NeoDarwinNVMeNamespace: 00:04.0: namespace 1: 32768 512-byte blocks (16 MiB); read-write'",
+    "': first completion by its interrupt (MSI-X vector '",
+]
+
+sh_test(
+    name = "sbsa_ref_pci_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = SBSA_REF + [
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+    ] + PCI_DEVICES + [
+        "--until-lines",
+        "$(rootpath //boot/neoboot)",
+        "300",
+    ] + SBSA_REF_LINES + SBSA_REF_PCI_LINES + [
+        "'pid1: all checks passed'",
+    ],
+    data = SBSA_REF_FIRMWARE + [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pid1_root",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P1-10's exit, "boot from NVMe on sbsa-ref": EDK2 SbsaQemu boots neoboot
+# from the session disk's ESP on QEMU's NVMe controller, on the machine's
+# PCIe after its e1000e and bochs-display (00:03.0); the kernel roots on
+# disk0s2 by boot-uuid, an I/O queue pair per CPU, each on its MSI-X vector
+# through the ITS. The session writes a file; the second boot reads it back.
+SBSA_REF_NVME_LINES = [
+    # SbsaQemu's console wraps at 80 columns, so neoboot's line is cut
+    # before the UUID; the kernel's line has it whole.
+    "'neoboot: root: HFS+ partition 2 of the boot disk, boot-uuid '",
+    "'rooting via boot-uuid from /chosen: " + SESSION_DISK_ROOT_UUID + "'",
+    "'NeoDarwinNVMeController: 00:03.0: NVMe 1.4, 1b36:0010, model \"QEMU NVMe Ctrl\", serial \"nd0\", firmware '",
+    "'NeoDarwinNVMeNamespace: 00:03.0: namespace 1: '",
+    "'); read-write'",
+    "'AppleFileSystemDriver: publishing boot-uuid-media=disk0s2'",
+    "'BSD root: disk0s2, major'",
+    "'hfs: mounted NeoDarwin on device'",
+]
+
+sh_test(
+    name = "sbsa_ref_nvme_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_disk_reboot_test.sh"],
+    args = [
+        "$(rootpath //images:session_disk)",
+    ] + SBSA_REF + [
+        NVME_DISK,
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'df /\\n'",
+        "--send-after 'root@localhost ~ # ' 'echo persisted-$$((6*7)) > /var/root/nvme-test && zmodload -F zsh/files b:sync && sync && echo synced-$$((6*7))\\n'",
+        "-",
+        "140",
+    ] + SBSA_REF_LINES + SBSA_REF_NVME_LINES + [
+        "'NeoDarwinNVMeController: 00:03.0: 4 I/O queue pairs of 64 entries, 32 commands each, transfers up to 512 KiB; MSI-X 5 vectors (LPIs '",
+        "', DeviceID 0x18 on ITS 0 via SMMUv3 at 0x60050000 as stream 0x18 (bypass)'",
+        "'NeoDarwinNVMeController: 00:03.0: write cache on; DMA coherent, 48 address bits; read-write: QEMU'",
+        "'/dev/disk0s2 '",
+        "'synced-42'",
+        "--reboot",
+    ] + SBSA_REF + [
+        NVME_DISK,
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'cat /var/root/nvme-test\\n'",
+        "-",
+        "140",
+        "'BSD root: disk0s2, major'",
+        "'persisted-42'",
+    ],
+    data = SBSA_REF_FIRMWARE + [
+        "//images:session_disk",
+        "//tools/efi:qemu_efi_test.sh",
     ],
     tags = ["manual", "kernel", "qemu"],
 )

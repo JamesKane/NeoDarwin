@@ -98,6 +98,17 @@ void nd_dcache_clean_poc(uint64_t start, uint64_t length) {
 	    "mov x9, #0x33ff\n"         // CPTR_EL2: no FP/SIMD traps
 	    "msr cptr_el2, x9\n"
 	    "msr vttbr_el2, xzr\n"
+	    // EL1 reads VPIDR_EL2 and VMPIDR_EL2 as MIDR and MPIDR; they reset
+	    // to UNKNOWN values and the firmware at EL2 needn't have set them.
+	    "mrs x9, midr_el1\n"
+	    "msr vpidr_el2, x9\n"
+	    "mrs x9, mpidr_el1\n"
+	    "msr vmpidr_el2, x9\n"
+	    // EL1 uses the GIC's system registers: ICC_SRE_EL2.SRE | Enable.
+	    "mrs x9, icc_sre_el2\n"
+	    "orr x9, x9, #0x1\n"
+	    "orr x9, x9, #0x8\n"
+	    "msr icc_sre_el2, x9\n"
 	    "movz x9, #0x0800\n"       // SCTLR_EL1 = 0x30d00800: RES1 bits only,
 	    "movk x9, #0x30d0, lsl #16\n"  // MMU, caches and alignment checks off
 	    "msr sctlr_el1, x9\n"

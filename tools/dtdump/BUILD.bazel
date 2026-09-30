@@ -94,6 +94,39 @@ sh_test(
     ],
 )
 
+# QEMU sbsa-ref with four CPUs (--machine sbsa-ref, docs/kernel/qemu-sbsa-ref.md),
+# captured with dump-acpi under TF-A and EDK2 SbsaQemu: tables from SbsaQemu's
+# own ASL (OEM LINARO SBSAQEMU), not QEMU's generator. DRAM at 1 TiB, GICD at
+# 0x40060000 with 64 MiB of redistributor space, PL011 at 0x60000000, PSCI
+# over SMC as the FADT says, a 1 GHz counter; UEFI runs at EL2, and GICD_CTLR
+# reads DS=0, so the timer goes on Group 1.
+sh_test(
+    name = "qemu_sbsa_ref_smp4_test",
+    size = "small",
+    srcs = ["dtdump_test.sh"],
+    args = [
+        "ok",
+        "$(rootpath :dtdump)",
+        "$(rootpath //boot/neoboot:testdata/qemu-sbsa-ref-smp4.acpidump)",
+        "$(rootpath testdata/qemu-sbsa-ref-smp4.txt)",
+        "--dram-base",
+        "0x10000000000",
+        "--dram-size",
+        "0x7d7fc000",
+        "--timebase",
+        "1000000000",
+        "--gicd-ctlr",
+        "0x12",
+        "--loader-el",
+        "2",
+    ],
+    data = [
+        ":dtdump",
+        "testdata/qemu-sbsa-ref-smp4.txt",
+        "//boot/neoboot:testdata/qemu-sbsa-ref-smp4.acpidump",
+    ],
+)
+
 # Negative: a MADT cut short in the dump must be refused, not half-read.
 sh_test(
     name = "truncated_madt_test",

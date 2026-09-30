@@ -178,6 +178,41 @@ sh_test(
     tags = ["qemu"],
 )
 
+# QEMU sbsa-ref (docs/kernel/qemu-sbsa-ref.md): TF-A PLAT=qemu_sbsa and EDK2
+# SbsaQemu, which runs at EL2, with the machine's four neoverse-n2 CPUs.
+# SbsaQemu's own ACPI tables: the GIC at 0x40060000 with a redistributor
+# frame per CPU in its 64 MiB range, the PL011 at 0x60000000, PSCI over SMC
+# as the FADT says, DS=0 under TF-A; the DRAM window at 1 TiB. The tree is
+# checked by //tools/dtdump:qemu_sbsa_ref_smp4_test.
+sh_test(
+    name = "neoboot_sbsa_ref_qemu_test",
+    size = "small",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--machine sbsa-ref",
+        "--firmware $(rootpath //third_party/qemu_firmware:sbsa_ref_flash0.fd)",
+        "--firmware-ns $(rootpath //third_party/qemu_firmware:sbsa_ref_flash1.fd)",
+        "--smp 4",
+        "--until-lines",
+        "$(rootpath :neoboot)",
+        "90",
+        "'NOTICE:  BL31: v2.15.0(release)'",
+        "'neoboot 0.1: loading NeoDarwin'",
+        "'neoboot: ACPI: 4 CPUs enabled of 4 GICCs; boot CPU MPIDR 0x0'",
+        "'neoboot: ACPI: GICv3 GICD 0x40060000, GICR 0x40080000 (4 frames in a GICR range)'",
+        "'neoboot: ACPI: timer PPI 27 level, UART PL011 at 0x60000000, PSCI SMC'",
+        "'DS=0 (two security states; Group 0 is Secure)'",
+        "'neoboot: PSCI conduit: SMC, as the FADT says'",
+        "'neoboot: no \\NeoDarwin\\kernelcache on the boot volume'",
+    ],
+    data = [
+        ":neoboot",
+        "//third_party/qemu_firmware:sbsa_ref_flash0.fd",
+        "//third_party/qemu_firmware:sbsa_ref_flash1.fd",
+    ],
+    tags = ["qemu"],
+)
+
 # Four CPUs: one GICC and one redistributor frame each (the tree itself is
 # checked by //tools/dtdump:qemu_virt_smp4_test).
 sh_test(

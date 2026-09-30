@@ -121,6 +121,7 @@ Times run from the device's doorbell to the handler's first instruction, under T
 | `//kernel:sbsa_secure_pci_boot_test` | `virt,secure=on`, TF-A (DS = 0) | the same: Group 1 Non-secure LPIs |
 | `//kernel:sbsa_smp_pci_boot_test` | `virt`, `-smp 4` | LPIs enabled on 4 of 4 redistributors, 4 collections, MSIs delivered on the boot CPU's collection |
 | `//kernel:sbsa_pci_smmu_boot_test` | `virt,iommu=smmuv3`, `nd_gic_lpi_nc=1 nd_its_flat=1` | requester IDs through the SMMUv3 to the ITS; non-cacheable tables and command queue with cache maintenance; a flat 512 KiB device table; the same MSIs |
+| `//kernel:sbsa_ref_pci_boot_test` | `sbsa-ref` (`qemu-sbsa-ref.md`): ITS at 0x44081000, four CPUs | the ITS, a collection per CPU, LPIs on four redistributors; requester IDs through the IORT's SMMUv3 at 0x60050000, which the firmware leaves disabled (bypass); edu's MSIs and the NVMe and virtio-blk MSI-X vectors |
 | `//kernel:sbsa_pci_nomsi_boot_test` | `virt`, `nd_pci_msi=0` | no ITS or LPI set up, `_OSC` without MSI, both edus and every device on INTx |
 
 The harness grew `--machine-opt OPT` (appended to `-M`) for the SMMU test.

@@ -467,3 +467,18 @@ http_archive(
     strip_prefix = "pylibfdt-cfff805481bdea27f900c32698171286542b8d3c",
     urls = ["https://github.com/devicetree-org/pylibfdt/archive/cfff805481bdea27f900c32698171286542b8d3c.tar.gz"],
 )
+
+# QEMU sbsa-ref (docs/kernel/qemu-sbsa-ref.md): EDK2's SbsaQemu platform lives
+# in edk2-platforms (BSD-2-Clause-Patent). This commit is the last before the
+# platforms dropped the unified GIC driver that edk2-stable202608 still has.
+# Only Platform/Qemu and Silicon/Qemu are built. edk2-non-osi isn't needed:
+# SbsaQemu takes only TF-A's bl1.bin and fip.bin from it, and those are built
+# here from @arm_tf_a.
+http_archive(
+    name = "edk2_platforms",
+    build_file_content = """filegroup(name = "all", srcs = glob(["Platform/Qemu/**", "Silicon/Qemu/**"]), visibility = ["//visibility:public"])
+exports_files(["License.txt"])""",
+    sha256 = "8570fe707f44d12a00c20feb347aeb49a695d32d0c31e519dd87ba1f61a955df",
+    strip_prefix = "edk2-platforms-061beb4c4bd259c073743f5ac01b5a1da4ce2010",
+    urls = ["https://github.com/tianocore/edk2-platforms/archive/061beb4c4bd259c073743f5ac01b5a1da4ce2010.tar.gz"],
+)

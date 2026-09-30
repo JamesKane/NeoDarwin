@@ -1,0 +1,75 @@
+From: NeoDarwin
+Subject: [PATCH] generic arm64: leave EL2 in the reset vector
+
+PSCI CPU_ON starts a core at the highest Non-secure exception level that
+is implemented, so on a CPU with EL2 a secondary enters LowResetVectorBase
+at EL2, while start.s programs only EL1 registers and turns on the EL1 MMU.
+neoboot leaves EL2 for the boot CPU (nd_enter_kernel), but has no part in
+starting the others. On QEMU sbsa-ref, whose UEFI runs at EL2, TF-A's BL31
+entered each secondary at EL2 and none came up: "cpu 1 failed to boot for
+the first time" once the scheduler first needed it. The bring-up plan
+(docs/kernel/arm64-sbsa-bringup.md §2.1.6) left this open for EL2 boards.
+
+For GENERIC_ARM64_PLATFORM, reset_vector now starts with what neoboot
+does at EL2: HCR_EL2.RW with TSC clear (SMC still reaches EL3 for PSCI),
+EL1 access to the physical counter and timer, CNTVOFF_EL2 = 0, no FP or
+SIMD traps, no stage 2, VPIDR_EL2 and VMPIDR_EL2 from the real MIDR and
+MPIDR (EL1 reads those, and the reset vector matches the CPU by MPIDR),
+ICC_SRE_EL2.SRE and Enable (EL1's GIC system registers), SCTLR_EL1 with
+the MMU off, then an ERET to the next instruction at EL1h with DAIF
+masked. At EL1 it does nothing. x0, which start_first_cpu uses, is kept.
+
+Rebase-risk: low (a block at the top of reset_vector, under GENERIC_ARM64_PLATFORM).
+---
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -125,6 +125,49 @@ LEXT(LowResetVectorBase)
+ 	.align	7
+ 	.globl EXT(reset_vector)
+ LEXT(reset_vector)
++#if GENERIC_ARM64_PLATFORM
++	/*
++	 * Generic Arm: PSCI CPU_ON starts a secondary at the highest Non-secure
++	 * exception level, EL2 when the CPU has one (QEMU sbsa-ref, and any
++	 * board whose UEFI runs at EL2), while everything below programs EL1.
++	 * Leave EL2 as neoboot does for the boot CPU (nd_enter_kernel): EL1
++	 * AArch64 with the physical timer and FP untrapped, SMC reaching EL3
++	 * (HCR_EL2.TSC = 0), CNTVOFF_EL2 = 0, the ID registers EL1 reads
++	 * (VPIDR_EL2, VMPIDR_EL2) the real ones, the GIC's system registers
++	 * enabled for EL1 (ICC_SRE_EL2.SRE and Enable), the EL1 MMU off; then
++	 * continue here at EL1h with interrupts masked. x0 is preserved.
++	 */
++	mrs		x9, CurrentEL
++	cmp		x9, #(2 << 2)
++	b.ne	1f
++	mov		x9, #(1 << 31)					// HCR_EL2.RW
++	msr		HCR_EL2, x9
++	isb
++	mov		x9, #3						// CNTHCTL_EL2.EL1PCTEN | EL1PCEN
++	msr		CNTHCTL_EL2, x9
++	msr		CNTVOFF_EL2, xzr
++	mov		x9, #0x33ff					// CPTR_EL2: no FP/SIMD traps
++	msr		CPTR_EL2, x9
++	msr		VTTBR_EL2, xzr
++	mrs		x9, MIDR_EL1
++	msr		VPIDR_EL2, x9
++	mrs		x9, MPIDR_EL1
++	msr		VMPIDR_EL2, x9
++	mrs		x9, ICC_SRE_EL2
++	orr		x9, x9, #0x1					// SRE
++	orr		x9, x9, #0x8					// Enable
++	msr		ICC_SRE_EL2, x9
++	movz	x9, #0x0800					// SCTLR_EL1: RES1 bits only
++	movk	x9, #0x30d0, lsl #16
++	msr		SCTLR_EL1, x9
++	mov		x9, #0x3c5					// SPSR_EL2: EL1h, DAIF masked
++	msr		SPSR_EL2, x9
++	adr		x9, 1f
++	msr		ELR_EL2, x9
++	isb
++	eret
++1:
++#endif /* GENERIC_ARM64_PLATFORM */
+ 	// Preserve x0 for start_first_cpu, if called
+ 	// Unlock the core for debugging
+ 	msr		OSLAR_EL1, xzr

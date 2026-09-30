@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
 # Boot an EFI application as \EFI\BOOT\BOOTAA64.EFI on QEMU virt with EDK2 (and,
-# with --machine virt-secure, TF-A at EL3), or a disk image (--disk), and
+# with --machine virt-secure, TF-A at EL3; with --machine sbsa-ref, the SBSA
+# reference machine with TF-A and SbsaQemu), or a disk image (--disk), and
 # check the serial log.
 #   qemu_efi_test.sh [OPTIONS] EFI_FILE TIMEOUT_SECONDS EXPECTED_LINE...
 # Options:
 #   --esp PATH=FILE   also place FILE on the ESP at PATH (e.g. NeoDarwin/kernelcache=...)
 #   --mem SIZE        guest RAM (default 512M; 1G for virt-secure)
 #   --smp N           CPUs (default 1)
-#   --cpu MODEL       QEMU CPU (default cortex-a76, Armv8.2: the SBSA kernel's baseline)
+#   --cpu MODEL       QEMU CPU (default cortex-a76, Armv8.2: the SBSA kernel's
+#                     baseline; neoverse-n2, the machine's own, on sbsa-ref)
 #   --machine KIND    virt (default): QEMU virt without EL3, EDK2 from QEMU's
 #                     share/qemu, one GIC security state (GICD_CTLR.DS=1).
 #                     virt-secure: virt,secure=on with TrustZone firmware at
@@ -16,11 +18,24 @@
 #                     and the GIC's two security states (DS=0), as on SBSA
 #                     boards; RAM defaults to 1G, since TF-A loads BL33 at
 #                     0x60000000 (docs/kernel/qemu-secure.md)
+#                     sbsa-ref: QEMU's SBSA reference machine (RAM at 1 TiB,
+#                     GIC with ITS at 0x40060000, PL011 at 0x60000000, AHCI,
+#                     XHCI and a PCIe host), booted by TF-A PLAT=qemu_sbsa
+#                     (--firmware, Secure flash0) and EDK2 SbsaQemu
+#                     (--firmware-ns, Non-secure flash1): both from
+#                     //third_party/qemu_firmware:sbsa_ref_flash. RAM
+#                     defaults to 2G; the FAT ESP is an AHCI disk (the
+#                     machine's default interface), --disk-device and
+#                     --device go on the PCIe root bus (docs/kernel/qemu-sbsa-ref.md)
 #   --machine-opt OPT append OPT to -M (repeatable), e.g. iommu=smmuv3: an
 #                     SMMUv3 between PCIe and memory, which the IORT then
 #                     names on the requester IDs' way to the ITS
 #   --firmware FILE   virt: EDK2 code flash to use instead of QEMU's;
-#                     virt-secure: the secure flash image (BL1 + FIP), required
+#                     virt-secure: the secure flash image (BL1 + FIP), required;
+#                     sbsa-ref: SBSA_FLASH0 (BL1 + FIP), required
+#   --firmware-ns FILE
+#                     sbsa-ref: SBSA_FLASH1 (EDK2 and its variable store),
+#                     required; the guest writes to a copy
 #   --until-lines     pass as soon as every expected line has appeared, then stop
 #                     QEMU (for a kernel, which never powers off); default is to
 #                     require QEMU to exit by itself within the timeout
@@ -64,7 +79,7 @@
 #   ND_QEMU           qemu-system-aarch64 to use
 #   ND_QEMU_DEBUG=DIR keep serial.log there and add QEMU's exception trace (-d int)
 set -euo pipefail
-esp_files=(); mem=""; smp=1; cpu=cortex-a76; until_lines=0; sends=(); machine=virt; firmware=""
+esp_files=(); mem=""; smp=1; cpu=""; until_lines=0; sends=(); machine=virt; firmware=""; firmware_ns=""
 devices=(); drives=(); screendump=""; screen_font=""; screen_lines=(); until_screen=0; absent=(); mopts=""
 disk=""; disk_in_place=0; disk_device="virtio-blk-pci,disable-legacy=on"
 while [ $# -gt 0 ]; do
@@ -76,6 +91,7 @@ while [ $# -gt 0 ]; do
 		--machine) machine="$2"; shift 2 ;;
 		--machine-opt) mopts="$mopts,$2"; shift 2 ;;
 		--firmware) firmware="$2"; shift 2 ;;
+		--firmware-ns) firmware_ns="$2"; shift 2 ;;
 		--until-lines) until_lines=1; shift ;;
 		--send-after) sends+=("$2" "$3"); shift 3 ;;
 		--device) devices+=(-device "$2"); shift 2 ;;
@@ -120,9 +136,23 @@ virt-secure)
 	machine_args=(-M "virt,secure=on,gic-version=3$mopts" -bios "$firmware")
 	: "${mem:=1G}"
 	;;
-*) echo "unknown --machine $machine (virt, virt-secure)"; exit 1 ;;
+sbsa-ref)
+	# flash0 is Secure (TF-A's BL1 runs from it, the FIP follows); flash1
+	# holds SbsaQemu, which BL31 enters in place at Non-secure EL2, and
+	# its variables, so the guest gets a copy of it.
+	[ -n "$firmware" ] && [ -f "$firmware" ] && [ -n "$firmware_ns" ] && [ -f "$firmware_ns" ] ||
+		{ echo "--machine sbsa-ref needs --firmware SBSA_FLASH0 and --firmware-ns SBSA_FLASH1"; exit 1; }
+	machine_args=(-M "sbsa-ref$mopts" -drive if=pflash,unit=0,format=raw,readonly=on,file="$firmware")
+	: "${mem:=2G}"; : "${cpu:=neoverse-n2}"
+	;;
+*) echo "unknown --machine $machine (virt, virt-secure, sbsa-ref)"; exit 1 ;;
 esac
+: "${cpu:=cortex-a76}"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+if [ "$machine" = sbsa-ref ]; then
+	cp "$firmware_ns" "$work/flash1.fd"; chmod u+w "$work/flash1.fd"
+	machine_args+=(-drive if=pflash,unit=1,format=raw,file="$work/flash1.fd")
+fi
 # The screen's text: each 8x16 cell's foreground bits (anything but the
 # commonest colour) looked up in the font video_console.c draws with,
 # bit 0 leftmost (vc_render_char). Unknown cells, such as the cursor,

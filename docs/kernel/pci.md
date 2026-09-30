@@ -150,6 +150,7 @@ Bus-0 devices that match an `_ADR`-only child of the bridge in IOACPIPlane (QEMU
 |---|---|---|
 | `//kernel:sbsa_pci_boot_test` | `virt` (GIC DS = 1), `neoverse-n2` | the two host bridge lines; 1af4:1001 with its I/O BAR as MMIO and 1b36:0010 with its 64-bit BAR above 4 GiB on the root bus; both root ports and their bus numbers; 1af4:1042 on bus 1; SPI 35's configuration; both edu interrupts, the second on a shared SPI; the summary; PID 1 |
 | `//kernel:sbsa_secure_pci_boot_test` | `virt,secure=on` with TF-A (DS = 0) | the same, with the DS = 0 line for SPI 35 |
+| `//kernel:sbsa_ref_pci_boot_test` | `sbsa-ref` with TF-A and SbsaQemu, four CPUs (`qemu-sbsa-ref.md`) | the host bridge (ECAM 0xf0000000, windows at 0x80000000 and 4 GiB); the machine's own e1000e and bochs-display (the GOP framebuffer's BAR kept at 0x80000000) and the same added devices from 00:03.0; INTx through `_PRT` link devices under `PCI0`; MSI and MSI-X through the ITS at 0x44081000 via the SMMUv3 in bypass; the summary |
 
 Checkpoint 3 adds MSI lines to both and three more targets (`gic-its.md`, "Tests").
 
@@ -157,7 +158,6 @@ Both use the harness's new `--drive ID=SIZE|FILE` option (a blank sparse image o
 
 ## Open
 
-- **`sbsa-ref`.** P1-09's exit names it. It needs TF-A `qemu_sbsa` and edk2-platforms' SbsaQemu, and RAM at 1 TiB, which neoboot and the kernel haven't been tried on (`qemu-secure.md`). P1-09 stays open for it.
 - **More than one host bridge per segment** (QEMU's `pxb-pcie`) is expected to work, since each bridge has its own configurator and bus range, but isn't tested.
 - **Memory windows with a translation offset** are not used.
 - **Hot plug, AER, PME.** IOPCIFamily's root-port driver enables AER when `_OSC` grants it (QEMU does) and handles native hot plug on slots marked hot-pluggable; neither has been exercised. A root port gets an MSI only when it is a hot-plug port without an INTx line, so QEMU's stay on INTx.

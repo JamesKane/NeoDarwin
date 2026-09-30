@@ -24,7 +24,7 @@ NeoDarwin's own code is under the BSD 2-Clause licence (`LICENSE`). NeoDarwin al
 | ncurses | ncurses-79 (ncurses 6.0) | MIT/X11 | `libncurses` and the terminfo database |
 | zsh | zsh-110.1.1 (zsh 5.9) | the zsh licence (MIT-style) | `/bin/zsh` |
 | Swift Embedded standard library | swift.org toolchain 6.3.2 | Apache-2.0 WITH Swift runtime library exception | linked into neoboot and NeoDarwin's Swift programs |
-| TF-A, EDK2 | TF-A v2.15.0, edk2-stable202608 | BSD-3-Clause, BSD-2-Clause-Patent | test firmware for QEMU only (`third_party/qemu_firmware`); not part of NeoDarwin images |
+| TF-A, EDK2, edk2-platforms | TF-A v2.15.0 (with upstream fix 5c33fafc for `qemu_sbsa`), edk2-stable202608, edk2-platforms 061beb4c (SbsaQemu) | BSD-3-Clause, BSD-2-Clause-Patent | test firmware for QEMU `virt,secure=on` and `sbsa-ref` only (`third_party/qemu_firmware`); not part of NeoDarwin images |
 
 The authoritative licence of a component is the one in its pinned archive. This table summarises it; where they disagree, the archive wins.
 

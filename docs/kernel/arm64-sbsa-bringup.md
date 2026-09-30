@@ -100,7 +100,7 @@ The kernel creates a linear "physmap" of exactly `[physBase, physBase+memSize)` 
 | boot_args | `Revision=2 Version=2`; `virtBase = VM_KERNEL_LINK_ADDRESS + slide − (kernelcache_phys − physBase)`; pointers (`deviceTreeP`) are given in **virtual** terms (kernel uses them after MMU on via `PE_state.deviceTreeHead`, `pe_init.c:423`) | `boot.h:61-64`, `pe_init.c:412-444` |
 | Video | If GOP has a linear framebuffer: `v_baseAddr, v_rowBytes, v_width, v_height, v_depth=32`; always `v_display=0`, a text console (§2.1.7) | `pe_init.c:425-436, 536-548` |
 | CommandLine | `boot.cfg` contents, e.g. `serial=3 debug=0x14e rd=md0 -v cs_enforcement_disable=1` | `PE_boot_args()` in `pe_bootargs.c` |
-| EL | Enter kernel at **EL1**. If firmware hands off at EL2: `HCR_EL2 = RW`, `CNTHCTL_EL2 = EL1PCTEN|EL1PCEN`, `CNTVOFF_EL2 = 0`, `CPTR_EL2` no FP trap, `SCTLR_EL1 = RES1`, `SPSR_EL2 = EL1h + DAIF`, `ERET` | `start.s` never inspects `CurrentEL` and programs only `*_EL1` registers |
+| EL | Enter kernel at **EL1**. If firmware hands off at EL2: `HCR_EL2 = RW`, `CNTHCTL_EL2 = EL1PCTEN|EL1PCEN`, `CNTVOFF_EL2 = 0`, `CPTR_EL2` no FP trap, `VPIDR_EL2`/`VMPIDR_EL2` = MIDR/MPIDR, `ICC_SRE_EL2` SRE and Enable, `SCTLR_EL1 = RES1`, `SPSR_EL2 = EL1h + DAIF`, `ERET` | `start.s` programs only `*_EL1` registers; on `GENERIC_ARM64_PLATFORM` its `reset_vector` does the same EL2 exit for secondaries that PSCI starts at EL2 (patch 0031) |
 | Caches | Clean to PoC every byte the kernel will read with MMU off (image, DT, boot_args, ramdisk), invalidate I-cache, then disable MMU | `start.s` reads boot_args before enabling MMU |
 
 **Memory-map policy:** XNU cannot express holes. The loader selects the largest run of `EfiConventionalMemory` (plus `EfiBootServicesCode/Data` and `EfiLoaderData`, which are reclaimable after `ExitBootServices`) with no non-conventional descriptor inside it. `EfiACPIReclaim`, `EfiACPIMemoryNVS`, `EfiRuntimeServices*` and `EfiReserved` ranges must be *outside* the window; if firmware places one mid-DRAM the loader picks the larger side and logs the loss. ACPI table pages are copied into the window (into the DT-adjacent area, recorded in `/chosen/memory-map` as `ACPITables`) so the kernel-side ACPICA kext can reach them through the physmap.
@@ -244,7 +244,7 @@ What P1-06's SMP half found:
 | Firmware | Qualcomm UEFI BOOT.MXF.1.1, ACPI and a DTB; RSDP 0xffffd000; no RTC (`GetTime` fails) | neoboot omits `neodarwin,utc-seconds`; the clock needs NTP |
 
 Also still open from P1-06:
-- With EL2 present, `CPU_ON` enters a secondary at the highest Non-secure EL, while `start.s` assumes EL1. On the Q8B, Qualcomm's hypervisor normally owns EL2 and the OS runs at EL1; check which EL neoboot starts in.
+- With EL2 present, `CPU_ON` enters a secondary at the highest Non-secure EL, while `start.s` assumed EL1. Found on QEMU `sbsa-ref`, whose UEFI runs at EL2: patch 0031 leaves EL2 at the top of `reset_vector` as neoboot does for the boot CPU (`qemu-sbsa-ref.md`). On the Q8B, Qualcomm's hypervisor normally owns EL2 and the OS runs at EL1; check which EL neoboot starts in.
 - Caches are real: `ResetHandlerData`, `CpuDataEntries` and the reset vector are read with the MMU off. `cpu_start` cleans the per-CPU entries; the rest is cleaned at boot only by neoboot's image clean. QEMU TCG can't catch a miss.
 
 The Q8B's ACPI tables, as captured by the FreeBSD work, reconstructed into `acpidump` format (`boot/neoboot/testdata/radxa-dragon-q8b.acpidump`), reproduce these findings in `dtdump`: `//tools/dtdump:radxa_dragon_q8b_no_gop_test` and `radxa_dragon_q8b_gop_test`.
@@ -422,6 +422,7 @@ Agent messaging discipline: the DT-ABI table is the interface between A1 and A2/
 *Root causes grounded in code:* `boot_args` has one `{physBase, memSize}` (`boot.h:69-71`); physmap covers exactly that range (`arm_vm_init.c:1835-1869`); the kernel expects fixups applied and a 2 MiB-aligned base (`start.s:553-575`); everything read before the MMU is on must be clean to PoC.
 *Mitigation:*
 - Loader chooses the largest hole-free conventional run; refuses to boot below 512 MiB; logs the map. `memSizeActual` carries the full total.
+- *Measured on QEMU `sbsa-ref`* (DRAM at 1 TiB, `qemu-sbsa-ref.md`): the window, physmap and pmap needed nothing, but XNU's 40-bit `TCR_EL1.IPS` couldn't address the kernel's own tables (an address size fault on the first fetch with the MMU on). Patch 0030 makes it 48 bits, lowered to the CPU's `PARange` at every write.
 - Deterministic first-light mode: `slide=0`, KASLR off, `-noprogress`, `debug=0x14e`, so an early fault is reproducible; A7 keeps a golden `boot_args`+DT dump.
 - No loader-side fixup walker: the kernel applies its own chains. `kcheck` (P0-07) checks every chain against the rules of the kernel's walker, checks that every target lands inside the image, and round-trips the collection byte for byte against its source kernel.
 - Explicit cache clean + `dsb sy; ic iallu; tlbi vmalle1` before MMU-off; QEMU cannot catch this, so A7 runs the sequence on hardware early (M6 pre-work on any UEFI SBC).

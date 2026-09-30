@@ -23,7 +23,7 @@ It applies no fixups; the kernel does. Design: `docs/kernel/arm64-sbsa-bringup.m
 |---|---|
 | `Sources/` | Swift; builds with `-no-allocations` |
 | `Sources/Portable/` | the ACPI parser, tree synthesis, tree writer and DT-ABI check. They import nothing from UEFI, so `//tools/dtdump` compiles the same files for the host |
-| `testdata/` | QEMU `virt` ACPI tables captured with `dump-acpi` (1, 4 and 18 CPUs, and with TF-A), edited copies (a truncated MADT, an Aff3 MPIDR, the Q8B's GENI SPCR), the Radxa Dragon Q8B's own tables, and the `boot.cfg` files the tests use |
+| `testdata/` | QEMU `virt` ACPI tables captured with `dump-acpi` (1, 4 and 18 CPUs, and with TF-A), QEMU `sbsa-ref`'s (SbsaQemu, 4 CPUs), edited copies (a truncated MADT, an Aff3 MPIDR, the Q8B's GENI SPCR), the Radxa Dragon Q8B's own tables, and the `boot.cfg` files the tests use |
 | `UEFI/` | the UEFI 2.10 structures neoboot uses, as a C header and module map |
 | `runtime/mem.c` | `memset`, `memcpy`, `memmove` and `__chkstk`, which the compiler emits calls to |
 | `runtime/arm64.c` | system-register reads, cache cleaning, and the MMU-off/EL2-to-EL1 entry into the kernel (inline assembly; T4 with justification) |

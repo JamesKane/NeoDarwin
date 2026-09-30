@@ -121,7 +121,7 @@ One CPU: 44 devices published (47 with `-smp 4`: one `ACPI0007` per CPU), 3 more
 
 QEMU's `virt` DSDT has no PL031 RTC (`ARMH0031`) or PL061 GPIO (`ARMH0061`) devices; its RTC and GPIO keys are in the device tree only. `sbsa-ref` has them in its SbsaQemu ASL.
 
-`//kernel:sbsa_boot_test` (`virt`) asserts the summary and the lines for `PCI0` (with its windows), the host-bridge line, `COM0`, `VR31` and `GED`; `//kernel:sbsa_secure_boot_test` (`virt,secure=on`, TF-A) asserts the summary and the host-bridge line. **`sbsa-ref`** is not in the matrix yet (`qemu-secure.md`, alternatives): it needs TF-A `qemu_sbsa` and edk2-platforms' SbsaQemu, and RAM at 1 TiB, which neoboot and the kernel haven't been tried on. P1-09's exit names it, so it stays open.
+`//kernel:sbsa_boot_test` (`virt`) asserts the summary and the lines for `PCI0` (with its windows), the host-bridge line, `COM0`, `VR31` and `GED`; `//kernel:sbsa_secure_boot_test` (`virt,secure=on`, TF-A) asserts the summary and the host-bridge line. **`sbsa-ref`** (`qemu-sbsa-ref.md`): `//kernel:sbsa_ref_pci_boot_test` asserts the summary on SbsaQemu's own DSDT (11 tables, 13 devices with four CPUs) and the nubs for `COM0` (0x60000000), the platform AHCI `AHC0` and XHCI `USB0`, `PCI0` with its windows and its link devices `GSI0`–`GSI3`.
 
 `ioreg` isn't in the images yet (IOKitTools needs IOKit.framework in userland), so the tests read the kernel log. The nubs are in the registry for `ioreg -p IOACPIPlane` and `ioreg -c IOACPIPlatformDevice` once it is.
 
@@ -136,6 +136,7 @@ QEMU's `virt` DSDT has no PL031 RTC (`ARMH0031`) or PL061 GPIO (`ARMH0061`) devi
 | QEMU marks the ECAM in `PCI0.RES0` (PNP0C02) as a producer | the producer bit is read on host bridges only |
 | On one CPU the ACPI thread may run before or after BSD mounts its root, depending on the scheduler; either way within about 200 ms | nothing depends on it yet. Once a disk hangs off PCI, `IOFindBSDRoot` waits for the root device, and the nubs are published by then |
 | `ACPI0007` processor devices are published, one per CPU | harmless; the CPUs themselves come from the device tree (MADT), and nothing matches `ACPI0007` |
+| On `sbsa-ref` with four CPUs, every PCI device's INTx was unrouted: `registerService` on `\_SB.PCI0` started the host bridge driver on another CPU, which resolved `_PRT` entries naming `\_SB.PCI0.GSI0`–`GSI3` before the walk had reached those children and published their nubs | the walk only attaches nubs; the service-plane ones are registered, in walk order, once it has finished (`qemu-sbsa-ref.md`) |
 
 ## For checkpoint 2 (IOPCIFamily over ECAM)
 

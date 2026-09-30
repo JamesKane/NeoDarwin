@@ -1,4 +1,5 @@
-# TrustZone firmware for QEMU virt,secure=on (docs/kernel/qemu-secure.md).
+# TrustZone firmware for QEMU virt,secure=on (docs/kernel/qemu-secure.md) and
+# for QEMU sbsa-ref (docs/kernel/qemu-sbsa-ref.md).
 load("@nd_embedded_swift//:toolchain.bzl", "EMBEDDED_TOOLCHAIN")
 
 package(default_visibility = ["//visibility:public"])
@@ -33,6 +34,56 @@ genrule(
         "$$(dirname $(location @edk2_brotli//:README.md))",
         "$$(dirname $(location @edk2_libfdt//:README))",
         "$@",
+    ]),
+    tags = [
+        "no-remote",
+        "no-sandbox",
+        "requires-darwin",
+    ],
+    tools = ["//tools/efi:build_secure_firmware.sh"],
+)
+
+# The two flash images of QEMU sbsa-ref (docs/kernel/qemu-sbsa-ref.md):
+# sbsa_ref_flash0.fd (Secure: TF-A v2.15.0 PLAT=qemu_sbsa BL1, and its FIP of
+# BL2 and BL31) and sbsa_ref_flash1.fd (Non-secure: EDK2 SbsaQemu from
+# edk2-platforms on edk2-stable202608, which BL31 enters in place, and its
+# variable store), each padded to the machine's 256 MiB (sparse). TF-A takes
+# one upstream fix from after v2.15.0 (patches/), for secondary CPUs. Same
+# toolchain, host tools and reproducibility as virt_secure_flash; it builds at
+# its own fixed path, so the two can run at once.
+genrule(
+    name = "sbsa_ref_flash",
+    srcs = [
+        "@arm_tf_a//:all",
+        "@arm_tf_a//:Makefile",
+        "@tianocore_edk2//:all",
+        "@tianocore_edk2//:edksetup.sh",
+        "@edk2_openssl//:all",
+        "@edk2_openssl//:README.md",
+        "@edk2_brotli//:all",
+        "@edk2_brotli//:README.md",
+        "@edk2_libfdt//:all",
+        "@edk2_libfdt//:README",
+        "@edk2_platforms//:all",
+        "@edk2_platforms//:License.txt",
+        "patches/tf-a-qemu-sbsa-hold-pen.patch",
+    ],
+    outs = [
+        "sbsa_ref_flash0.fd",
+        "sbsa_ref_flash1.fd",
+    ],
+    cmd = " ".join([
+        "$(location //tools/efi:build_secure_firmware.sh)",
+        "--sbsa $$(dirname $(location @edk2_platforms//:License.txt))",
+        "--tfa-patch $(location patches/tf-a-qemu-sbsa-hold-pen.patch)",
+        "'%s'" % EMBEDDED_TOOLCHAIN,
+        "$$(dirname $(location @arm_tf_a//:Makefile))",
+        "$$(dirname $(location @tianocore_edk2//:edksetup.sh))",
+        "$$(dirname $(location @edk2_openssl//:README.md))",
+        "$$(dirname $(location @edk2_brotli//:README.md))",
+        "$$(dirname $(location @edk2_libfdt//:README))",
+        "$(location sbsa_ref_flash0.fd)",
+        "$(location sbsa_ref_flash1.fd)",
     ]),
     tags = [
         "no-remote",

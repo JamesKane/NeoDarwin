@@ -172,7 +172,7 @@ epics:
     title: "ndacpi kext — ACPICA runtime, IOACPIPlatformDevice nubs, MCFG ECAM, IOPCIFamily"
     phase: 1
     owner: acpi
-    status: doing
+    status: done
     depends: [P1-06, P0-07]
     exit: "ioreg shows PCI nubs on QEMU virt and sbsa-ref"
     doc: docs/kernel/arm64-sbsa-bringup.md
@@ -180,7 +180,7 @@ epics:
     title: "virtio-blk and NVMe kexts; root by boot-uuid from disk"
     phase: 1
     owner: storage
-    status: doing
+    status: done
     depends: [P1-09]
     exit: "boot from NVMe on sbsa-ref"
     doc: docs/kernel/storage.md

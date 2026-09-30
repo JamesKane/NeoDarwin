@@ -58,6 +58,7 @@ private:
 
 	OSDictionary *tables;
 	OSArray *hostBridges;           // during the walk
+	OSArray *toRegister;            // service-plane nubs, registered after the walk
 	IOLock *tablesLock;
 	const OSSymbol *gicName;
 	UInt32 gicPHandle;

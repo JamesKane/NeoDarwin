@@ -1,0 +1,112 @@
+NeoDarwin: an upstream TF-A fix, applied to @arm_tf_a (v2.15.0) for the
+sbsa-ref firmware only (//third_party/qemu_firmware:sbsa_ref_flash,
+docs/kernel/qemu-sbsa-ref.md). v2.15.0 moved the QEMU secondaries' hold pen
+to the common plat_hold_pen (magic tags and an entry point per 64-byte slot)
+in plat_helpers.S, which qemu_sbsa shares, but left qemu_sbsa's sbsa_pm.c
+writing the old 8-byte GO flags: PSCI CPU_ON returned SUCCESS and the
+secondary spun in BL1 forever. Upstream commit
+5c33fafcddc09543dbfff97cac991847e8e4fda9 (after v2.15.0), unchanged below.
+
+From 5c33fafcddc09543dbfff97cac991847e8e4fda9 Mon Sep 17 00:00:00 2001
+From: Kun Qin <kun.qin@microsoft.com>
+Date: Wed, 1 Apr 2026 23:34:18 +0000
+Subject: [PATCH] fix(qemu-sbsa): align hold pen implementation with qemu-virt
+
+Previous hold pen updates landed only in the integration branch for
+qemu-virt platform and were not applied to qemu-sbsa.
+
+This change brings qemu-sbsa to parity with qemu-virt in terms of the
+core hold pen logic.
+
+Change-Id: Ie3b89773346237ed930d31d825cf1eb6ab1dda65
+Signed-off-by: Kun Qin <kuqin@microsoft.com>
+---
+ plat/qemu/qemu_sbsa/include/platform_def.h | 15 ++++-----------
+ plat/qemu/qemu_sbsa/platform.mk            |  1 +
+ plat/qemu/qemu_sbsa/sbsa_pm.c              | 20 +++++++-------------
+ 3 files changed, 12 insertions(+), 24 deletions(-)
+
+diff --git a/plat/qemu/qemu_sbsa/include/platform_def.h b/plat/qemu/qemu_sbsa/include/platform_def.h
+index 07124cae33d..00416f9cca9 100644
+--- a/plat/qemu/qemu_sbsa/include/platform_def.h
++++ b/plat/qemu/qemu_sbsa/include/platform_def.h
+@@ -102,17 +102,10 @@
+  */
+ 
+ #define SHARED_RAM_BASE			SEC_SRAM_BASE
+-#define SHARED_RAM_SIZE			0x00002000
+-
+-#define PLAT_QEMU_TRUSTED_MAILBOX_BASE	SHARED_RAM_BASE
+-#define PLAT_QEMU_TRUSTED_MAILBOX_SIZE	(8 + PLAT_QEMU_HOLD_SIZE)
+-#define PLAT_QEMU_HOLD_BASE		(PLAT_QEMU_TRUSTED_MAILBOX_BASE + 8)
+-#define PLAT_QEMU_HOLD_SIZE		(PLATFORM_CORE_COUNT * \
+-					 PLAT_QEMU_HOLD_ENTRY_SIZE)
+-#define PLAT_QEMU_HOLD_ENTRY_SHIFT	3
+-#define PLAT_QEMU_HOLD_ENTRY_SIZE	(1 << PLAT_QEMU_HOLD_ENTRY_SHIFT)
+-#define PLAT_QEMU_HOLD_STATE_WAIT	0
+-#define PLAT_QEMU_HOLD_STATE_GO		1
++#define SHARED_RAM_SIZE			0x00008000
++
++#define PLAT_QEMU_HOLD_BASE		SHARED_RAM_BASE
++#define PLAT_QEMU_HOLD_SIZE		(PLATFORM_CORE_COUNT * HOLD_SLOT_SIZE)
+ 
+ #define BL_RAM_BASE			(SHARED_RAM_BASE + SHARED_RAM_SIZE)
+ #define BL_RAM_SIZE			(SEC_SRAM_SIZE - SHARED_RAM_SIZE)
+diff --git a/plat/qemu/qemu_sbsa/platform.mk b/plat/qemu/qemu_sbsa/platform.mk
+index d44946ea7d8..f99cde1e6c6 100644
+--- a/plat/qemu/qemu_sbsa/platform.mk
++++ b/plat/qemu/qemu_sbsa/platform.mk
+@@ -54,6 +54,7 @@ QEMU_GIC_SOURCES	:=	${GICV3_SOURCES}				\
+ 
+ BL31_SOURCES		+=	${PLAT_QEMU_PATH}/sbsa_gic.c 			\
+ 				${PLAT_QEMU_PATH}/sbsa_platform.c		\
++				plat/common/plat_hold_pen.c			\
+ 				${PLAT_QEMU_PATH}/sbsa_pm.c			\
+ 				${PLAT_QEMU_PATH}/sbsa_sip_svc.c		\
+ 				${PLAT_QEMU_PATH}/sbsa_topology.c
+diff --git a/plat/qemu/qemu_sbsa/sbsa_pm.c b/plat/qemu/qemu_sbsa/sbsa_pm.c
+index 7ce7beba951..6339dbc6a5b 100644
+--- a/plat/qemu/qemu_sbsa/sbsa_pm.c
++++ b/plat/qemu/qemu_sbsa/sbsa_pm.c
+@@ -10,6 +10,7 @@
+ #include <assert.h>
+ #include <lib/mmio.h>
+ #include <lib/psci/psci.h>
++#include <plat/common/plat_hold_pen.h>
+ #include <plat/common/platform.h>
+ 
+ #include <platform_def.h>
+@@ -132,16 +133,10 @@ static void qemu_cpu_standby(plat_local_state_t cpu_state)
+  ******************************************************************************/
+ static int qemu_pwr_domain_on(u_register_t mpidr)
+ {
+-	int pos = plat_core_pos_by_mpidr(mpidr);
+-	uint64_t *hold_base = (uint64_t *)PLAT_QEMU_HOLD_BASE;
++	unsigned int pos = plat_core_pos_by_mpidr(mpidr);
+ 
+-	if (pos < 0) {
+-		return PSCI_E_INVALID_PARAMS;
+-	}
+-
+-	hold_base[pos] = PLAT_QEMU_HOLD_STATE_GO;
+-	dsb();
+-	sev();
++	plat_hold_pen_signal((struct hold_slot *)PLAT_QEMU_HOLD_BASE,
++			     pos, secure_entrypoint);
+ 
+ 	return PSCI_E_SUCCESS;
+ }
+@@ -227,10 +222,9 @@ static const plat_psci_ops_t plat_qemu_psci_pm_ops = {
+ int plat_setup_psci_ops(uintptr_t sec_entrypoint,
+ 			const plat_psci_ops_t **psci_ops)
+ {
+-	uintptr_t *mailbox = (uintptr_t *)PLAT_QEMU_TRUSTED_MAILBOX_BASE;
+-
+-	*mailbox = sec_entrypoint;
+-	secure_entrypoint = (unsigned long)sec_entrypoint;
++	secure_entrypoint = sec_entrypoint;
++	plat_hold_pen_init((struct hold_slot *)PLAT_QEMU_HOLD_BASE,
++			   PLATFORM_CORE_COUNT);
+ 	*psci_ops = &plat_qemu_psci_pm_ops;
+ 
+ 	return 0;

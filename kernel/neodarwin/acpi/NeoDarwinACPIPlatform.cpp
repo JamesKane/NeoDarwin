@@ -7,7 +7,11 @@
 // Each present device (_STA bit 0, or no _STA) in \_SB becomes a nub in
 // IOACPIPlane, under the nub of its nearest ancestor device. A device with
 // a _HID or _CID is also published in the service plane (registerService),
-// where drivers match it by IONameMatch on those IDs. A device named only
+// where drivers match it by IONameMatch on those IDs. Registration waits
+// until the whole namespace has nubs: a driver that starts on one (the PCI
+// host bridge) may look up others (the _PRT's link devices, children of the
+// bridge that the walk reaches after it), and matching runs on other CPUs
+// while the walk goes on. A device named only
 // by _ADR (a PCI slot under a host bridge) stays in IOACPIPlane, for the
 // bus driver to find (P1-09 checkpoint 2). A device whose _STA says absent
 // but functioning is skipped and its children walked; absent and not
@@ -182,12 +186,19 @@ NeoDarwinACPIPlatform::start(IOService *provider)
 
 	attachToParent(getRegistryRoot(), gIOACPIPlane);
 	hostBridges = OSArray::withCapacity(1);
+	toRegister = OSArray::withCapacity(32);
 	publishDevices();
 	if (hostBridges != NULL) {
 		for (unsigned int i = 0; i < hostBridges->getCount(); i++) {
 			describeHostBridge(OSDynamicCast(IOACPIPlatformDevice, hostBridges->getObject(i)));
 		}
 		OSSafeReleaseNULL(hostBridges);
+	}
+	if (toRegister != NULL) {
+		for (unsigned int i = 0; i < toRegister->getCount(); i++) {
+			OSDynamicCast(IOService, toRegister->getObject(i))->registerService();
+		}
+		OSSafeReleaseNULL(toRegister);
 	}
 
 	uint64_t ns;
@@ -435,7 +446,9 @@ NeoDarwinACPIPlatform::publish(void *handle, UInt32 status)
 	if (hasHID || cidCount != 0) {
 		IOACPIPlatformDevice *serviceParent = acpi_ancestor_nub(handle, true);
 		nub->attach(serviceParent != NULL ? (IOService *)serviceParent : (IOService *)this);
-		nub->registerService();
+		if (toRegister == NULL || !toRegister->setObject(nub)) {
+			nub->registerService();
+		}
 		published++;
 		if (verbose) {
 			IOLog("NeoDarwinACPIPlatform: %s\n", summary);

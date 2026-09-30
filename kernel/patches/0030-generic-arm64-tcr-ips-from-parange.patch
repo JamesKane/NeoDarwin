@@ -1,0 +1,102 @@
+From: NeoDarwin
+Subject: [PATCH] generic arm64: TCR_EL1.IPS up to 48 bits, lowered to PARange
+
+XNU's TCR_EL1 values carry a compile-time intermediate physical address
+size: 40 bits, or 42 on Apple SoCs with __ARM_42BIT_PA_SPACE__. QEMU
+sbsa-ref's DRAM starts at 1 TiB (0x100_0000_0000), which a 40-bit IPS can't
+reach: the first instruction fetch after start.s turns the MMU on took an
+address size fault at level 0 (ESR 0x86000000), because the V=P table and
+the kernel's own tables live above 2^40. SBSA servers put DRAM higher still.
+
+For GENERIC_ARM64_PLATFORM the IPS is 48 bits, and each TCR_EL1 write
+(common_start in start.s, and set_tcr, which the pmap uses to switch page
+sizes) lowers it to the CPU's ID_AA64MMFR0_EL1.PARange: the Arm ARM lets a
+larger IPS behave as the implemented size today, but says software must
+not rely on it (Cortex-A76 and the Radxa Dragon Q8B's cores implement 40
+bits). get_tcr() reports the field as the compile-time value again, so the
+pmap's comparisons of TCR_EL1 with its page-size TCR values still hold.
+The identity map's T0SZ (17 with 16 KiB pages) already spans 47 bits.
+Other board configs are unchanged. Found at the first sbsa-ref boot
+(docs/kernel/qemu-sbsa-ref.md).
+
+Rebase-risk: low (one value, one assembler macro used twice, get_tcr).
+---
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -417,6 +417,10 @@ get_tcr(void)
+ 	uint64_t        value;
+ 
+ 	MRS(value, "TCR_EL1");
++#if GENERIC_ARM64_PLATFORM
++	/* The IPS every TCR_EL1 write lowered to PARange (CLAMP_TCR_IPS). */
++	value = (value & ~(TCR_IPS_MASK << TCR_IPS_SHIFT)) | TCR_IPS_VALUE;
++#endif
+ 	return value;
+ }
+ 
+--- a/osfmk/arm64/machine_routines_asm.s
++++ b/osfmk/arm64/machine_routines_asm.s
+@@ -358,6 +358,9 @@ LEXT(set_tcr)
+ 	cbnz	x1, L_set_tcr_panic
+ #endif /* DEBUG || DEVELOPMENT */
+ #endif /* defined(APPLE_ARM64_ARCH_FAMILY) */
++#if GENERIC_ARM64_PLATFORM
++	CLAMP_TCR_IPS x0, x1, x2
++#endif
+ #if defined(KERNEL_INTEGRITY_KTRR)
+ 	mov		x1, lr
+ 	bl		EXT(pinst_set_tcr)
+--- a/osfmk/arm64/proc_reg.h
++++ b/osfmk/arm64/proc_reg.h
+@@ -965,6 +965,22 @@
+ #define TCR_IPS_44BITS           (4ULL << TCR_IPS_SHIFT)
+ #define TCR_IPS_48BITS           (5ULL << TCR_IPS_SHIFT)
+ 
++#if defined(ASSEMBLER) && GENERIC_ARM64_PLATFORM
++/*
++ * CLAMP_TCR_IPS tcr, tmp1, tmp2: lower TCR_EL1.IPS in \tcr to the CPU's
++ * physical address size, ID_AA64MMFR0_EL1.PARange (the two fields share
++ * their encodings, 0 to 5 for 32 to 48 bits).
++ */
++.macro CLAMP_TCR_IPS tcr, tmp1, tmp2
++	mrs		\tmp1, ID_AA64MMFR0_EL1
++	and		\tmp1, \tmp1, #0xf
++	ubfx	\tmp2, \tcr, #32, #3
++	cmp		\tmp2, \tmp1
++	csel	\tmp2, \tmp1, \tmp2, hi
++	bfi		\tcr, \tmp2, #32, #3
++.endmacro
++#endif /* ASSEMBLER && GENERIC_ARM64_PLATFORM */
++
+ #define TCR_AS_16BIT_ASID        (1ULL << 36)
+ #define TCR_TBI0_TOPBYTE_IGNORED (1ULL << 37)
+ #define TCR_TBI1_TOPBYTE_IGNORED (1ULL << 38)
+@@ -1073,6 +1089,16 @@
+ 
+ #if __ARM_42BIT_PA_SPACE__
+ #define TCR_IPS_VALUE TCR_IPS_42BITS
++#elif GENERIC_ARM64_PLATFORM
++/*
++ * Generic Arm: DRAM may sit anywhere in a 48-bit physical address space
++ * (QEMU sbsa-ref's starts at 1 TiB, beyond a 40-bit IPS). Every write of
++ * TCR_EL1 lowers the field to the CPU's ID_AA64MMFR0_EL1.PARange
++ * (CLAMP_TCR_IPS), which software must do rather than rely on the CPU to,
++ * and get_tcr() reports it as this value again, so comparisons with the
++ * compile-time TCR values hold.
++ */
++#define TCR_IPS_VALUE TCR_IPS_48BITS
+ #else /* !__ARM_42BIT_PA_SPACE__ */
+ #define TCR_IPS_VALUE TCR_IPS_40BITS
+ #endif /* !__ARM_42BIT_PA_SPACE__ */
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -660,6 +660,9 @@ common_start:
+ 
+ 	// Set the translation control register.
+ 	MOV64	x1, TCR_EL1_BOOT
++#if GENERIC_ARM64_PLATFORM
++	CLAMP_TCR_IPS x1, x0, x2
++#endif
+ 	MSR_TCR_EL1_X1
+ 
+ 

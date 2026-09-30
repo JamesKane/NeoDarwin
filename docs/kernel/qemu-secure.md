@@ -70,5 +70,5 @@ TF-A's `NOTICE:` lines (BL1, BL2, BL31) come first on the same PL011, then EDK2,
 
 ## Alternatives considered
 
-- **`sbsa-ref`** (TF-A `qemu_sbsa` + EDK2 SbsaQemu from edk2-platforms). It is the SBSA reference machine, but the firmware needs edk2-platforms on top of EDK2. It would also test more than the GIC's security state: RAM at 1 TiB (`0x100_0000_0000`), GICD at `0x40060000`, GICR at `0x40080000` (a 64 MiB range), an ITS at `0x44081000`, the PL011 at `0x60000000`, and four `neoverse-n2` CPUs by default. The ACPI tables come from SbsaQemu's own ASL rather than from QEMU's generator, and they advertise PSCI over SMC. It's a good second matrix entry for A7, but neoboot and the kernel haven't been tried on its memory map.
+- **`sbsa-ref`** (TF-A `qemu_sbsa` + EDK2 SbsaQemu from edk2-platforms). Now a second configuration rather than an alternative: `qemu-sbsa-ref.md` builds its firmware from pinned source with this script (`--sbsa`) and boots NeoDarwin on it (DRAM at 1 TiB, UEFI at EL2, SbsaQemu's own ACPI tables).
 - **Prebuilt images.** Linaro's sbsa-ref CI keeps dated builds (artifacts.codelinaro.org `linaro-419-sbsa-ref`, the latest from 2024-11), with no source pin that can be checked. Distribution packages ship ArmVirtQemu rather than the Kernel variant, and no TF-A for `PLAT=qemu`. Building from source takes a minute and is reproducible, so it wins.

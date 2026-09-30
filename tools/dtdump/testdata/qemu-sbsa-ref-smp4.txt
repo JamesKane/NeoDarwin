@@ -1,0 +1,106 @@
+acpi: INPUT: 13 tables: RSDP XSDT FACP DSDT DBG2 MCFG SPCR IORT APIC SSDT PPTT GTDT BGRT
+acpi: OEM "LINARO" "SBSAQEMU", hardware-reduced true, PSCI SMC
+acpi: MADT: GICv3 GICD 0x40060000; GICR 0x40080000, 4 frame(s) of 0x4000000 reserved
+acpi: MADT: GICC uid 0 MPIDR 0x0 flags 0x1 PMU GSIV 23 (boot)
+acpi: MADT: GICC uid 1 MPIDR 0x1 flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 2 MPIDR 0x2 flags 0x1 PMU GSIV 23
+acpi: MADT: GICC uid 3 MPIDR 0x3 flags 0x1 PMU GSIV 23
+acpi: GTDT: virtual timer GSIV 27 flags 0x6
+acpi: SPCR: interface type 0x3 at 0x60000000
+gic: GICD_CTLR 0x12 (DS=0): timer on Group 1
+psci: conduit SMC, as the FADT says
+acpi: relocated copy: 5552 bytes at 0x10002000000
+device tree: 4164 bytes
+/
+    compatible = "NeoDarwin,sbsa"
+    model = "LINARO,SBSAQEMU"
+    target-type = "sbsa"
+    #address-cells = <0x2>
+    #size-cells = <0x2>
+    AAPL,phandle = <0x1>
+/chosen
+    dram-base = <0x10000000000> (u64)
+    dram-size = <0x7d7fc000> (u64)
+    debug-enabled = <0x1>
+    firmware-version = "neoboot-0.1"
+    random-seed = <0x40822041 0x100041060c011441 0x9b1e842f6e862629 0xf554f503555d8025 0x860c1fb090599265 0xf6b05302e5531801 0xa2460108ebbd9e71 0xc62c9fc114d9590d> (u64)
+    acpi-rsdp = <0x10002000000> (u64)
+    acpi-tables = <0x10002000000 0x15b0> (u64)
+    psci-conduit = "smc"
+    AAPL,phandle = <0x2>
+/chosen/memory-map
+    ACPITables = <0x10002000000 0x15b0> (u64)
+/defaults
+    serial-device = <0x3>
+/cpus
+    #address-cells = <0x1>
+    #size-cells = <0x0>
+/cpus/cpu0
+    device_type = "cpu"
+    reg = <0x0>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x0>
+    state = "running"
+    timebase-frequency = <0x3b9aca00>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x10>
+/cpus/cpu1
+    device_type = "cpu"
+    reg = <0x1>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x1>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca00>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x11>
+/cpus/cpu2
+    device_type = "cpu"
+    reg = <0x2>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x2>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca00>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x12>
+/cpus/cpu3
+    device_type = "cpu"
+    reg = <0x3>
+    die-cluster-id = <0x0>
+    cluster-core-id = <0x3>
+    state = "waiting"
+    timebase-frequency = <0x3b9aca00>
+    interrupt-parent = <0x5>
+    interrupts = <0x0 0x17 0x1>
+    AAPL,phandle = <0x13>
+/arm-io
+    device_type = "soc"
+    ranges = <0x0 0x40060000 0x1ffb0000> (u64)
+    #address-cells = <0x2>
+    #size-cells = <0x2>
+    AAPL,phandle = <0x4>
+/arm-io/gic
+    compatible = "arm,gic-v3"
+    reg = <0x0 0x10000 0x20000 0x80000> (u64)
+    interrupt-controller = "gic"
+    #interrupt-cells = <0x1>
+    #address-cells = <0x0>
+    timer-ppi = <0x1b>
+    timer-group = <0x1>
+    AAPL,phandle = <0x5>
+/arm-io/interrupt-controller
+    interrupt-controller = "master"
+    reg = <0x0 0x10000> (u64)
+    AAPL,phandle = <0x6>
+/arm-io/timer
+    device_type = "timer"
+    reg = <0x20000 0x10000> (u64)
+    AAPL,phandle = <0x7>
+/arm-io/uart0
+    device_type = "serial"
+    compatible = "arm,pl011"
+    reg = <0x1ffa0000 0x1000> (u64)
+    AAPL,phandle = <0x3>
+dtdump: DT-ABI v1: ok (14 nodes)
