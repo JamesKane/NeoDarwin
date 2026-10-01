@@ -207,3 +207,10 @@ To verify on the kernel as the userland grows:
 - the plain-arm64 objc4 isa layout, once an Objective-C program runs;
 - running with no shared cache: `__shared_region_check_np` currently fails cleanly and dyld loads every image from disk.
 
+
+### Later changes: crypt(3) with FreeBSD's schemes (2026-10-01)
+
+Libc-1725's `crypt(3)` (`gen/crypt.c`) has only traditional and BSDi extended DES. **Libc patch 0001** (`base/libc/patches`, the first Libc patch) renames that code's `crypt` to a static `__crypt_des_hash` and adds a `crypt()` that picks the scheme by the setting's prefix, as FreeBSD's `lib/libcrypt/crypt.c` does: `$1$` MD5, `$2` bcrypt, `$5$` SHA-256, `$6$` SHA-512, anything else DES as before (session.md, "passwd and chpass").
+- **Sources.** FreeBSD's `lib/libcrypt` (`crypt-md5.c`, `crypt-sha256.c`, `crypt-sha512.c`, `misc.c`, `crypt.h`), `secure/lib/libcrypt` (`crypt-blowfish.c`, `blowfish.c`, `blowfish.h`) and the digests (`sys/crypto/md5c.c`, `sys/sys/md5.h`, `sys/crypto/sha2/`), unmodified, pinned file by file in `base/libc/freebsd.lock` at the commit libm, libxo and dhclient use (`@freebsd_libcrypt`). `build.sh` compiles them as one more group with ndcrypto's prelude (`<sys/endian.h>`, `explicit_bzero`) and links the objects straight into the dylib, outside the archives that feed the interposable list.
+- **Exports.** Unchanged: the group is built with `-fvisibility=hidden`, so `crypt_sha512`, `_libmd_SHA512_Init` and the rest are local, and `libsystem_c_exports_test` still sees `crypt`, `encrypt` and `setkey`. Apple's SDK `.tbd` has no other crypt-related name (`crypt_r`, `crypt_get_format` and `crypt_set_format` are FreeBSD's alone), so none is added.
+- **Host test.** `//tests/crypt` builds the patched `gen/crypt.c` (`@apple_libc` exports that one file) with the same FreeBSD files for the host, under an `nd_libc_` prefix, and checks it against published vectors and macOS's own DES `crypt()`.

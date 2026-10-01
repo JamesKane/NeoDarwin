@@ -54,6 +54,13 @@ nd_cc_test(
     deps = [":ndcrypto_host"],
 )
 
+# The prelude and headers alone, for FreeBSD sources built into the userland
+# base (libsystem_c's crypt(3), base/libc/build.sh).
+filegroup(
+    name = "compat_headers",
+    srcs = glob(["compat/**/*.h"]),
+)
+
 # What the kernel build overlays at libkern/ndcrypto (kernel/BUILD.bazel,
 # patch 0008): ndcrypto's sources, headers and compat headers.
 filegroup(

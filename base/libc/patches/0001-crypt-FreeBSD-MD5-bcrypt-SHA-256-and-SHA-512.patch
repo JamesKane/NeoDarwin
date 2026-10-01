@@ -1,0 +1,87 @@
+From: NeoDarwin
+Subject: [PATCH] crypt: FreeBSD's MD5, bcrypt, SHA-256 and SHA-512 schemes
+
+Libc's crypt(3) (gen/crypt.c) has only DES: traditional DES (two salt
+characters, 25 rounds, the first eight characters of the password) and
+BSDi's extended DES ('_', rounds, salt). crypt() now chooses the scheme by
+the setting's prefix, as FreeBSD's libcrypt does (lib/libcrypt/crypt.c):
+"$1$" MD5, "$2" bcrypt ("$2a$", "$2b$", "$2y$"), "$5$" SHA-256 and "$6$"
+SHA-512. Those schemes are FreeBSD's (lib/libcrypt and
+secure/lib/libcrypt, with sys/crypto's MD5 and SHA-2), pinned by
+base/libc/freebsd.lock and linked in by base/libc/build.sh with hidden
+visibility, so libsystem_c exports the same symbols (crypt, encrypt,
+setkey). Any other setting goes to this file's DES code unchanged, renamed
+__crypt_des_hash, so existing hashes still match; setkey() and encrypt()
+are untouched. FreeBSD's NT-hash scheme ("$3$", MD4) is left out.
+
+--- a/gen/crypt.c
++++ b/gen/crypt.c
+@@ -65,6 +65,7 @@
+ #include <sys/types.h>
+ #include <pwd.h>
+ #include <stdlib.h>
++#include <string.h>
+ 
+ /*
+  * UNIX password, and DES, encryption.
+@@ -530,9 +531,10 @@
+ /*
+  * Return a pointer to static data consisting of the "setting"
+  * followed by an encryption produced by the "key" and "setting".
++ * NeoDarwin: the DES formats of crypt(), below.
+  */
+-char *
+-crypt(key, setting)
++static char *
++__crypt_des_hash(key, setting)
+ 	register const char *key;
+ 	register const char *setting;
+ {
+@@ -1046,5 +1048,47 @@
+ }
+ #endif
+ #endif /* BUILDING_VARIANT */
++
++/*
++ * NeoDarwin: crypt(3) chooses the scheme by the setting's prefix, as
++ * FreeBSD's libcrypt does (lib/libcrypt/crypt.c): "$1$" MD5, "$2" bcrypt
++ * ("$2a$", "$2b$", "$2y$"), "$5$" SHA-256 and "$6$" SHA-512 come from
++ * FreeBSD's libcrypt, linked into libsystem_c with hidden visibility; any
++ * other setting is DES, as before: "_" BSDi's extended DES, otherwise
++ * traditional DES, both by the code above, so existing hashes still match.
++ * Each scheme writes into one static buffer (FreeBSD's struct crypt_data
++ * is 256 bytes), so, as before, the result is overwritten by the next call.
++ */
++__private_extern__ int crypt_md5(const char *, const char *, char *);
++__private_extern__ int crypt_blowfish(const char *, const char *, char *);
++__private_extern__ int crypt_sha256(const char *, const char *, char *);
++__private_extern__ int crypt_sha512(const char *, const char *, char *);
++
++static const struct {
++	const char *magic;
++	int (*func)(const char *, const char *, char *);
++} __crypt_formats[] = {
++	{ "$1$", crypt_md5 },
++	{ "$2", crypt_blowfish },
++	{ "$5$", crypt_sha256 },
++	{ "$6$", crypt_sha512 },
++};
+ 
++char *
++crypt(const char *key, const char *setting)
++{
++	static char buf[256];
++	size_t i;
++
++	for (i = 0; i < sizeof(__crypt_formats) / sizeof(__crypt_formats[0]); i++) {
++		if (strncmp(setting, __crypt_formats[i].magic,
++		    strlen(__crypt_formats[i].magic)) == 0) {
++			if (__crypt_formats[i].func(key, setting, buf) != 0)
++				return (NULL);
++			return (buf);
++		}
++	}
++	return (__crypt_des_hash(key, setting));
++}
++
+ #pragma clang diagnostic pop

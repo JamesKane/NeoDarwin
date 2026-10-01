@@ -67,7 +67,10 @@ base_library(
 
 base_library(
     name = "libsystem_c",
-    data = glob(["libc/**"]),
+    data = glob(["libc/**"]) + [
+        "//kernel/neodarwin/crypto:compat_headers",
+        "@freebsd_libcrypt//:all",
+    ],
     deps = [":libsystem_kernel", ":libsystem_platform", ":libsystem_pthread", ":libsystem_malloc"],
     script = "libc/build.sh",
     srcs = "@apple_libc//:all",
@@ -479,8 +482,8 @@ base_library(
 
 # Loopback and sshd (docs/base/session.md, "Loopback and sshd"): ifconfig,
 # ping, netstat and route; launchproxy, which runs inetd-style launchd jobs;
-# libcrypto (LibreSSL); and OpenSSH, with sshd under launchd
-# (ssh.plist, Disabled as on macOS).
+# libcrypto and libssl (OpenSSL 3.5, with the openssl command); and OpenSSH,
+# with sshd under launchd (ssh.plist, Disabled as on macOS).
 base_library(
     name = "network_commands",
     data = glob(["network_cmds/**"]) + ["commands.sh"],
@@ -501,10 +504,10 @@ base_library(
 
 base_library(
     name = "libcrypto_dylib",
-    data = glob(["libressl/**"]) + ["commands.sh"],
+    data = glob(["openssl/**"]) + ["commands.sh"],
     deps = [":root"],
-    script = "libressl/build.sh",
-    srcs = "@libressl//:all",
+    script = "openssl/build.sh",
+    srcs = "@openssl//:all",
     sysroot = ":sysroot",
 )
 

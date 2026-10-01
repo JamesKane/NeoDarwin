@@ -1,0 +1,25 @@
+# FreeBSD sources libsystem_c's crypt(3) builds (base/libc/build.sh): libcrypt's
+# MD5, bcrypt, SHA-256 and SHA-512 schemes and the digests they use, fetched
+# unmodified by //rules:pinned_files.bzl.
+# Repository: https://github.com/freebsd/freebsd-src
+# commit: 050683bb8e136981e4a1f66e845ab05c135630f4
+# Format: shasum -a 256 (hash, two spaces, path). Regenerate with tools/pinned/lock.sh.
+40a4c6eeb2156def7a3223e4090f47a44759ef232eca34338fc9a7d46dceac16  lib/libcrypt/crypt-md5.c
+8e8ac7a99c19b43ba092091f077dfc814a29cc677af9bf768d3e177ee2bce3c1  lib/libcrypt/crypt-sha256.c
+899471e8ca92e76ba4afab27b1e304b9d8f3c5511f3a3f69df636dacf1fb7d16  lib/libcrypt/crypt-sha512.c
+512a8130fe81cfc8cf18689162e96079b910b5da65505010a6bd2cfe1e8df946  lib/libcrypt/crypt.h
+8cd3a95b6b45b818a5e5b7703b72a91a0f407df13490393a05ec97def328160b  lib/libcrypt/misc.c
+7cf932237a5cd163f5e29a42305897b9e25a927c9bf9cdfc8c0856fd22cad246  secure/lib/libcrypt/blowfish.c
+6f21e95e21ce8199c7fdc6c00e6b1d7ad18045cd551260a9827f9395e526823d  secure/lib/libcrypt/blowfish.h
+f459fdd7e457326db766d7e99ad31954132a546b5aecdeba7faffbd5f8b8ca75  secure/lib/libcrypt/crypt-blowfish.c
+13446b7f461ff69b6b77d87df414c91ac47290dc49cc8cae91a900a774738216  sys/crypto/md5c.c
+9f9fa89d056addadd23576d915c1c3a99bf72b64f6e00f259addc669fbcd3d80  sys/crypto/sha2/sha224.h
+10f3fd28a59056ad4701c58570d55cd4de4dcebfbaa490c154b7005f8e16dabe  sys/crypto/sha2/sha256.h
+9b252700a607753fc42b6a360c1dc248a521ad6b9fc5d6b1e51c51a4958bfffb  sys/crypto/sha2/sha256c_impl.h
+9eed9976f45476f7dd0dd452861416ff1f45b2a7035909171dc6fef836ba9b61  sys/crypto/sha2/sha256c.c
+481a07d350028e6df89d3feff7791dc0f69b0765994c05b819fbdfaf5f260364  sys/crypto/sha2/sha384.h
+b9cb2c524bae008bcdc6121d83340d62d93f1d8430dc5d993752aad025ae949b  sys/crypto/sha2/sha512.h
+91e6cefeecc56cbdd395edc3fc01bdd5de702d350d8a52978d3e23905224d9e7  sys/crypto/sha2/sha512c_impl.h
+5b123884021e86244b9eb99f81f1b6ea80a1a536e51420aa570ebd424895aaac  sys/crypto/sha2/sha512c.c
+0b5e37349d210dfab3e8aea25ef1a74c0d8bd68af248550819cd2f816f2b7d13  sys/crypto/sha2/sha512t.h
+f00c8b4a9f3c6c80cffe6a8e41fda8985218034429082f981a0d0435ec47c9d6  sys/sys/md5.h

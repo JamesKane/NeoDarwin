@@ -168,7 +168,7 @@ Not built: `quotacheck`, `fstyp`, `fdisk`, `vsdbutil`, `mount_devfs` (the kernel
 
 Modules are `MH_DYLIB`s named `pam_NAME.so.2` in `/usr/lib/pam`. A policy names `pam_NAME.so`, and OpenPAM's loader tries the `.so.2` first. Not built, for their closed dependencies: `pam_opendirectory`, `pam_krb5`, `pam_ntlm` and `pam_mount` (OpenDirectory, CoreFoundation, Heimdal, GSS, NetFS), `pam_smartcard` (CryptoTokenKit), `pam_localauthentication`, `pam_tid` and `pam_aks` (LocalAuthentication, AppleKeyStore), and `pam_basesystem` (CoreFoundation).
 
-**The password module is OpenPAM's `pam_unix`**, in place of macOS's `pam_opendirectory`. It compares `crypt(3)` of the typed password with `pw_passwd` from `getpwnam(3)`. login and su run as root, so Libinfo's file module answers from `/etc/master.passwd`. libc's `crypt` computes traditional DES hashes. `pam_unix` can't change a password (its `chauthtok` refuses), and its account check accepts everyone: the `change` and `expire` fields aren't enforced.
+**The password module is OpenPAM's `pam_unix`**, in place of macOS's `pam_opendirectory`. It compares `crypt(3)` of the typed password with `pw_passwd` from `getpwnam(3)`. login and su run as root, so Libinfo's file module answers from `/etc/master.passwd`. libc's `crypt` takes SHA-512, SHA-256, bcrypt, MD5 and DES hashes ("passwd and chpass", Hashes). `pam_unix` can't change a password (its `chauthtok` refuses), and its account check accepts everyone: the `change` and `expire` fields aren't enforced.
 
 **Policies.** Each project's pam.d file is patched where it names a closed module. OpenPAM fails a whole policy when one module doesn't load, even an `optional` one.
 
@@ -223,25 +223,40 @@ Accounts live in `/etc/master.passwd` alone, as on FreeBSD without `pwd.db`, and
 - **PW_FILES**, NeoDarwin's switch (system_cmds patches 0003 and 0004; without it upstream is unchanged), compiles out Open Directory, PAM and NIS. On macOS, passwd changes passwords through `pam_opendirectory` (the `passwd` PAM policy) or Open Directory directly as root, and chpass edits the record through Open Directory and CoreFoundation (`open_directory.c`). All of that is closed. OpenPAM's `pam_unix` can't change a password (`pam_sm_chauthtok` returns `PAM_SERVICE_ERR`), so passwd has no PAM path, and NeoDarwin installs no `passwd` policy.
 - **setuid.** passwd, chpass, chfn and chsh are setuid root (4555), as on FreeBSD (`images/BUILD.bazel`'s modes). A user changes their own password after giving the old one. chpass asks a user for their password too, and lets them change the full name, office, phones and shell (one of `/etc/shells`). root changes any record without a password. chpass runs `$EDITOR` (default `vi`, which the base doesn't have) as the user, on a temporary copy of the record. `chpass -s SHELL [user]` needs no editor.
 - **/etc/passwd** holds `*` for every password, as `pwd_mkdb -p` writes it, and the build now writes it so too (`base/etc/build.sh`). Libinfo's file module reads `master.passwd` only for euid 0, and login, su, passwd and chpass are setuid. Until now the build copied the hashes into the world-readable file.
-- **Hashes.** libc's `crypt(3)` (`gen/crypt.c`) has two formats, both DES:
-  - traditional DES: two salt characters and 25 rounds, and only the first eight characters of the password count;
-  - BSDi's extended DES: `_`, then four characters of rounds and four of salt, and every character counts.
+- **Hashes.** Libc-1725's `crypt(3)` (`gen/crypt.c`) has only DES: traditional DES (two salt characters, 25 rounds, only the first eight characters of the password count) and BSDi's extended DES (`_`, four characters of rounds, four of salt). Libc patch 0001 makes `crypt()` choose the scheme by the setting's prefix, as FreeBSD's libcrypt does:
 
-  There is no MD5, Blowfish or SHA-crypt. passwd made traditional hashes from `srandom(time())`. With `PW_FILES` it writes extended DES: 65537 rounds (`_/.E.`), and a 24-bit salt from `arc4random`. That is the strongest scheme NeoDarwin's libc has, but it is still DES: a 64-bit result and 56-bit keys, cheap to brute-force with modern hardware. A stronger scheme (SHA-512 crypt, bcrypt) would need a new `crypt` in libc, and pam_unix and login would use it through `crypt(3)` unchanged. It's not done here. In QEMU, 65537 rounds take well under a second.
+  | Prefix | Scheme | Code |
+  |---|---|---|
+  | `$6$` | SHA-512 crypt (Drepper), `rounds=` 1000 to 999999999, default 5000 | FreeBSD `lib/libcrypt/crypt-sha512.c`, `sys/crypto/sha2/sha512c.c` |
+  | `$5$` | SHA-256 crypt | `crypt-sha256.c`, `sha256c.c` |
+  | `$2a$`, `$2b$`, `$2y$` | bcrypt, cost 4 to 31 | `secure/lib/libcrypt/crypt-blowfish.c`, `blowfish.c` |
+  | `$1$` | MD5 crypt | `crypt-md5.c`, `sys/crypto/md5c.c` |
+  | `_` | extended DES | Libc's own, unchanged |
+  | anything else | traditional DES | Libc's own, unchanged |
+
+  The FreeBSD files are pinned one by one (`base/libc/freebsd.lock`, the commit libm uses) and built into libsystem_c with hidden visibility, so its exports stay `crypt`, `encrypt` and `setkey`, as in macOS's `.tbd` (no `crypt_r` or `crypt_set_format`). Existing DES hashes go through the same code as before. FreeBSD's NT hash (`$3$`, MD4) is left out. A malformed bcrypt setting makes `crypt()` return `NULL`, which pam_unix treats as a wrong password.
+
+  **passwd writes SHA-512 crypt** (system_cmds patch 0003, with `PW_FILES`): `$6$`, 16 salt characters (96 bits) from `arc4random`, and the default 5000 rounds. That is FreeBSD's default (`passwd_format=sha512` in `login.conf`); NeoDarwin has no `login.conf`, so the format is fixed. root can still install any hash `crypt(3)` takes with `chpass -p`. Before, passwd wrote extended DES (65537 rounds, a 24-bit salt): a 64-bit result from 56-bit keys. `//tests/crypt:crypt_test` checks every scheme on the host against published vectors (Drepper's SHA-crypt tests, Openwall's bcrypt ones, FreeBSD's and `openssl passwd`'s MD5) and DES against macOS's own `crypt()`; `//tests/crypt:crypt_hash PASSWORD SETTING` prints a hash as NeoDarwin's libc computes it.
 - **path_helper.** `/usr/libexec/path_helper` comes from shell_cmds-326 (`//base:shell_commands`). `/etc/zprofile` (zsh) and `/etc/profile` (bash, sh) run `eval $(path_helper -s)` when it's executable. It builds `PATH` from `/etc/paths` (files-968's, unmodified: `/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin`) and the files in `/etc/paths.d`, which the image doesn't have. Then it appends the inherited `PATH`'s other entries (login's `_PATH_DEFPATH`, all of them already listed). If `MANPATH` is set, it builds that from `/etc/manpaths` the same way.
 
 **The test:** `//kernel:sbsa_accounts_test` boots `//images:pam_session_root`, with code signing enforced:
 - `test` logs in to zsh, and `$PATH` is `/etc/paths`' entries in order.
 - `test` runs `passwd`: the old password, then the new one twice. After logout, the old password gets "Login incorrect", and the new one logs in.
 - `test` runs chpass with `EDITOR=/usr/local/bin/chpass_editor` (`tests/qemu/pam`, a sed script). chpass asks for test's password, then reports "user information updated". `id -F` (getpwuid from `/etc/passwd`, as test) answers with the new full name.
-- root runs `chpass -s /bin/bash test`. `id -P test` (from `master.passwd`) shows the new shell and an extended DES hash (`test:_/.E.`). `/etc/passwd` has `test:*:501:20:Neo Q42:/Users/test:/bin/bash`.
-- root sets its own password with `passwd`. No old password is asked: it was empty. From then on, login asks root for it.
+- root runs `chpass -s /bin/bash test`. `id -P test` (from `master.passwd`) shows the new shell and the SHA-512 crypt hash passwd wrote (`test:$6$`; split in zsh: `hash-6-16-86`, 16 salt characters and 86 of hash). `/etc/passwd` has `test:*:501:20:Neo Q42:/Users/test:/bin/bash`.
+- root sets its own password with `passwd`. No old password is asked: it was empty. From then on, login asks root for it, and the SHA-512 hash matches.
+
+`//kernel:sbsa_pam_session_test` logs in `test`, whose hash in `tests/qemu/pam` is SHA-512 crypt, and `guest`, whose hash is still traditional DES.
 
 | Finding | Resolution |
 |---|---|
 | passwd's `file_passwd.c` reads and rewrites `master.passwd` itself, without pwd_mkdb, and doesn't touch `/etc/passwd` | nothing to do once `/etc/passwd` holds `*`: only the hash changes |
 | chpass's FreeBSD path needs FreeBSD libutil's record functions (`pw_copy`, `pw_dup`, `pw_equal`, `pw_make`, `pw_scan`, `pw_tempname`). Apple's vipw `pw_util.c` has them, under `!__APPLE__`. Darwin's `struct passwd` has no `pw_fields` | patch 0004 builds them with `PW_FILES` and declares them in `pw_util.h`. The record's source is always the files |
 | `pw_copy` grows its buffer with `reallocarray`, which on Darwin is libmalloc's `reallocarray$DARWIN_EXTSN`, absent from the SDK headers | patch 0004: an overflow-checked `realloc` on Darwin |
+| Libc's `crypt(3)` has only DES, weak for passwords ("Hashes") | Libc patch 0001: FreeBSD's libcrypt schemes, chosen by prefix; passwd writes SHA-512 crypt |
+| FreeBSD's libcrypt and SHA-2 code use `<sys/endian.h>` and `explicit_bzero`, which Darwin lacks | built with ndcrypto's prelude (`kernel/neodarwin/crypto/compat`), as libresolv's MD5 is; the files stay unmodified |
+| passwd passed `crypt()`'s result for the old password straight to `strcmp`; `crypt()` can now return `NULL` (a malformed bcrypt hash) | patch 0003: `NULL` is a wrong password, and an error for the new hash |
+| The host toolchain's fastbuild defines `DEBUG`, and Libc's DES code then prints its tables (host test only) | `//tests/crypt` builds it with `-UDEBUG` |
 | chpass takes the record as edited only if the temporary file's modification time changed. HFS+ keeps it to the second, so an editor that finishes within the second changes nothing | the test's editor sleeps a second first. An interactive edit takes longer |
 | The test image has no `grep` | the test reads `/etc/passwd` with `cat` |
 
@@ -374,7 +389,7 @@ NeoDarwin configures the loopback interface at boot and runs OpenSSH's sshd unde
 | loopback | launchctl's bootstrap (`base/launchctl/Sources/Network.swift`) | lo0 up with 127.0.0.1/8 and ::1/128 |
 | network commands | network_cmds-726 (`//base:network_commands`) | `/sbin/ifconfig`, `/sbin/ping`, `/sbin/route`, `/usr/sbin/netstat` |
 | launchproxy | launchd-842.92.1 (`//base:launchproxy`) | `/usr/libexec/launchproxy` |
-| libcrypto | LibreSSL 3.3.6, upstream (`//base:libcrypto_dylib`) | `/usr/lib/libcrypto.46.dylib`; the headers are build-only, in `usr/local/libressl` |
+| libcrypto | OpenSSL 3.5.9, upstream (`//base:libcrypto_dylib`) | `/usr/lib/libcrypto.3.dylib` and `libssl.3.dylib`; the legacy provider in `/usr/lib/ossl-modules`, engines in `/usr/lib/engines-3`; `/usr/bin/openssl`; `/etc/ssl/openssl.cnf`. The headers are build-only, in `usr/local/openssl` |
 | OpenSSH | OpenSSH-354.0.3, OpenSSH 10.0p2 (`//base:openssh`) | `ssh`, `scp`, `sftp`, `ssh-add`, `ssh-agent`, `ssh-keygen`, `ssh-keyscan` and `slogin` in `/usr/bin`; `/usr/sbin/sshd`; `sshd-session`, `sshd-auth` and `sftp-server` in `/usr/libexec`; `/etc/ssh`; `/etc/pam.d/sshd`; `/System/Library/LaunchDaemons/ssh.plist` |
 | sshd-keygen-wrapper | NeoDarwin's, Embedded Swift (`//base/sshd_keygen_wrapper`) | `/usr/libexec/sshd-keygen-wrapper` |
 | `_sshd` | `base/etc` | the privilege-separation user and group, uid and gid 75 as on macOS, home `/var/empty` |
@@ -388,12 +403,13 @@ Swift can't call `ioctl`, which is variadic, or import the `_IOW` request macros
 
 **ifconfig and the others** build from network_cmds' Release settings, with xnu's private `net/` headers: the targets' `HEADER_SEARCH_PATHS` add System.framework's PrivateHeaders. network_cmds-726 knows two netem models ("iod", "fpd") that xnu-12377's `if_var_private.h` doesn't define, and network_cmds patch 0001 leaves them out. Apple signs ping and route with network-management entitlements. NeoDarwin has no sandbox or policy that reads them, so they're signed ad hoc without, as ps is. The rest of network_cmds is P4-24's.
 
-**libcrypto.** macOS links OpenSSH against `/usr/lib/libcrypto.46.dylib`, LibreSSL's libcrypto (macOS's `openssl version` and `ssh -V` say LibreSSL 3.3.6). Apple's LibreSSL project isn't in the macOS 26.0 release set: distribution-macOS `macos-260` has only `OpenSSL098-85`, the 0.9.8 library it keeps for old binaries. So NeoDarwin pins upstream LibreSSL 3.3.6 from ftp.openbsd.org, with the hash OpenBSD publishes (`SHA256`).
-- Its configure runs cross-compiling, as zsh's does, against NeoDarwin's sysroot and root. It has no run checks.
-- Assembly is off: 3.3.6 has none for arm64 Darwin.
-- Only `crypto/` is built: OpenSSH needs no libssl or libtls.
-- libtool's version 46:2:0 gives macOS's install name and versions (compatibility 47.0.0, current 47.2.0).
-- Its randomness is libc's `arc4random_buf`, and `OPENSSLDIR` is `/private/etc/ssl`.
+**libcrypto: OpenSSL 3.5, as FreeBSD's base has it.** macOS links OpenSSH against `/usr/lib/libcrypto.46.dylib`, LibreSSL 3.3.6's libcrypto (macOS's `openssl version` and `ssh -V` say LibreSSL 3.3.6), and Apple's LibreSSL project isn't in the macOS 26.0 release set (distribution-macOS `macos-260` has only `OpenSSL098-85`, the 0.9.8 library it keeps for old binaries). Until 2026-10-01 NeoDarwin pinned upstream LibreSSL 3.3.6 to match. That release is from 2022, with advisories fixed only in later ones. NeoDarwin now builds OpenSSL, the library FreeBSD's base ships:
+- **Version.** freebsd-src `050683bb8e13` (the commit NeoDarwin pins FreeBSD files at) has OpenSSL 3.5.8 in `crypto/openssl` (`VERSION.dat`). 3.5 is OpenSSL's current LTS line (supported to April 2030). NeoDarwin pins the newest 3.5 patch release, **3.5.9** (29 Sep 2026, a security release), from the openssl/openssl GitHub release, with the hash the release publishes (`openssl-3.5.9.tar.gz.sha256`). The tarball's bundled submodules (`oqs-provider`, `pkcs11-provider`, `cloudflare-quiche`) aren't built.
+- **Configure** is OpenSSL's own Perl script. It runs no compile, link or run checks, so the target (`darwin64-arm64`) and the options are its whole answer, pinned in `base/openssl/build.sh`: `--prefix=/usr --openssldir=/private/etc/ssl shared no-tests no-docs`, FreeBSD's choices (its `configuration.h`) `no-aria no-idea no-mdc2 no-sm2 no-sm3 no-sm4 enable-ec_nistp_64_gcc_128`, and `no-padlockeng` (x86 only; FreeBSD builds it only for amd64 and i386). The rest are OpenSSL's defaults, as on FreeBSD: engines, the legacy provider and the deprecated APIs on; SSLv3, MD2, RC5, zlib and KTLS off. Compile and link see NeoDarwin's sysroot and root, through links in the build directory, so the flags `openssl version -f` records name no sandbox path; `SOURCE_DATE_EPOCH` (the release date) gives `openssl version -b`.
+- **Assembly is on**, as FreeBSD's is for aarch64 (perlasm's `ios64` flavour; Xcode's clang assembles it). `armcap.c`'s Apple path assumes AES, PMULL, SHA-1 and SHA-256, which every Apple arm64 core, QEMU's CPUs and the Q8B's Cortex-X1C/A78C have, and asks `hw.optional.armv8_2_sha512` and `hw.optional.armv8_2_sha3` for the rest.
+- **Randomness.** On Darwin, OpenSSL seeds from CommonCrypto's `CCRandomGenerateBytes`, which the base doesn't have. `-DOPENSSL_NO_APPLE_CRYPTO_RANDOM` turns that off, and OpenSSL seeds from libSystem's `getentropy(2)`, found at run time.
+- **Install names** are OpenSSL's own, `/usr/lib/libcrypto.3.dylib` and `/usr/lib/libssl.3.dylib` (compatibility and current version 3.0.0). Keeping LibreSSL's `libcrypto.46.dylib` name would have promised LibreSSL's ABI, which OpenSSL 3 doesn't have. macOS ships no `libcrypto.3`, so nothing clashes, and no unversioned `libcrypto.dylib` is installed (macOS's is a stub that aborts any program that loads it). As on macOS, the system libcrypto is for the base's own programs: third-party software should bring its own OpenSSL rather than link it (Apple's policy for its libcrypto). The headers and `-lcrypto` links are build-only, in `usr/local/openssl`.
+- **What's installed** follows FreeBSD's `secure/` tree: `libssl` (nothing in the base links it but `openssl`), `/usr/bin/openssl`, the legacy provider (`/usr/lib/ossl-modules/legacy.dylib`: MD4, DES, RC4 and the other old algorithms, loaded on request), FreeBSD's aarch64 engines less `devcrypto` (no `/dev/crypto`): `capi` and `loader_attic` in `/usr/lib/engines-3`, and `openssl.cnf` in `/etc/ssl`. `c_rehash`, `CA.pl`, the static libraries, pkg-config and CMake files aren't installed.
 
 **OpenSSH** is built as Apple's Xcode project builds it, without configure: from the project's committed `openssh/config.h`, the `openbsd-compat` and `libssh` static libraries, then each tool target's own sources. openssh.xcconfig sets the feature macros:
 - Kept, because their code needs only libSystem: `clear_lv`, `display_var`, `membership` (`getgrouplist_2`), `nohostauthproxy`, `tmpdir` and `basesystem`. sshd's what string says "Apple modifications: clear_lv display_var membership nohostauthproxy tmpdir basesystem".
@@ -403,7 +419,8 @@ Swift can't call `ioctl`, which is variadic, or import the `_IOW` request macros
   - BSM audit (there was no libbsm when this was built);
   - zlib (not in the base), so compression is never negotiated;
   - Seatbelt's `sandbox_init()`: libsystem_sandbox is a stand-in without a policy. The pre-authentication process, `sshd-auth`, uses OpenSSH's rlimit sandbox instead (`SANDBOX_RLIMIT`: no new files, descriptors or processes), on top of privilege separation (chroot to `/var/empty`, user `_sshd`).
-- `getrrsetbyname()` (SSHFP records for `VerifyHostKeyDNS`) queries through libresolv-93 (`-lresolv`, as Apple links it). Until P1-19 checkpoint 2 built libresolv, patch 0003 made it fail with `ERRSET_FAIL`; that patch is gone.
+- `getrrsetbyname()` (SSHFP records for `VerifyHostKeyDNS`) queries through libresolv-93 (`-lresolv`, as Apple links it). Until P1-19 checkpoint 2 built libresolv, a patch 0003 made it fail with `ERRSET_FAIL`; that patch is gone.
+- openssh patch 0003 (since 2026-10-01) gives `config.h` OpenSSL 3.5's libcrypto answers where Apple's are LibreSSL's. These are the checks of OpenSSH's own configure that answer differently, run cross-compiling against OpenSSL 3.5.9: `EVP_CIPHER_CTX_get_updated_iv`, `EVP_CIPHER_CTX_iv` and `_iv_noconst` in place of LibreSSL's `EVP_CIPHER_CTX_get_iv` and `_set_iv`; no `EVP_MD_CTX_cleanup`, `EVP_MD_CTX_init` or `HMAC_CTX_init` (gone since OpenSSL 1.1); `EVP_PKEY_get_raw_private_key` and `_public_key`, and `OPENSSL_HAS_ED25519`. `ssh -V` says "OpenSSH_10.0p2, OpenSSL 3.5.9 29 Sep 2026".
 - Not built: `ssh-keysign` (setuid, host-based authentication), `ssh-pkcs11-helper` and `ssh-sk-helper` (libfido2), `ssh-apple-pkcs11`, `sshd-fvunlock`, `remote-login-status`, `slapconfig-keygen` and the regression tools. Without `ssh-sk-helper`, security-key (`-sk`) keys don't work.
 
 **Configuration** is make-config.zsh's:
@@ -428,7 +445,7 @@ Without `nullok`, an account with an empty password (root's) can't log in over s
 
 Apple's wrapper is Swift on Foundation, System and AppleKeyStore. NeoDarwin's is about 70 lines of Embedded Swift on libSystem. It leaves out the Recovery (base system) keys and banner, the preboot copy of the keys and `sshd-fvunlock`'s plist. It adds `-e -E /var/log/sshd.log`. Until NeoDarwin has a log store, `syslog(3)` writes to standard error (the libsystem_trace stand-in). `sshd -i` points standard error at `/dev/null`, and so does the plist. With `-e -E`, sshd logs to `/var/log/sshd.log` instead.
 
-**Code signing.** Every new Mach-O is in the image's trust cache: launchctl, the network commands, launchproxy, libcrypto, the OpenSSH tools and the wrapper (`//tools/trustcache` lists everything signed in the image). The test runs under enforcement with `--absent 'ndamfi: refused'`. Nothing is setuid.
+**Code signing.** Every new Mach-O is in the image's trust cache: launchctl, the network commands, launchproxy, libcrypto and libssl, OpenSSL's provider, engines and command, the OpenSSH tools and the wrapper (`//tools/trustcache` lists everything signed in the image). The test runs under enforcement with `--absent 'ndamfi: refused'`. Nothing is setuid.
 
 **The test:** `//kernel:sbsa_ssh_session_test` boots `//images:pam_session_root` (accounts `test` and `guest`, password `neodarwin`) with code signing enforced, and logs in as root:
 - `ifconfig lo0` shows `inet 127.0.0.1 netmask 0xff000000` and `inet6 ::1 prefixlen 128`. `ping -c 1 127.0.0.1` gets its reply.
@@ -436,10 +453,11 @@ Apple's wrapper is Swift on Foundation, System and AppleKeyStore. NeoDarwin's is
 - `ssh -o StrictHostKeyChecking=no test@127.0.0.1 id`: the first connection generates the host keys. ssh adds the ED25519 host key to root's `known_hosts`. PAM asks for test's password ("(test@127.0.0.1) Password:", keyboard-interactive), and the harness types it. It prints `uid=501(test) gid=20(staff)`.
 - The same with a wrong password and one prompt: "Permission denied", status 255.
 - root makes an ed25519 key with `ssh-keygen`, and copies the public key to `/Users/test/.ssh/authorized_keys`. `ssh -o BatchMode=yes` runs `echo key-$UID` as test (`key-501`), without a password.
+- The crypto library: `openssl version` says "OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)", and `ssh -V` names it. Known answers: `openssl dgst -sha256` of "abc" (FIPS 180-2's), the SHA-256 of four AES-128-ECB blocks of zeros under the key 00..0f (through the arm64 AES instructions), and `openssl dgst -provider legacy -md4` of "abc" (RFC 1320's), which dlopens the legacy provider under enforcement. root makes RSA and ECDSA keys too (`ssh-keygen -l` lists RSA, ECDSA and ED25519), adds them to test's `authorized_keys`, and logs in with each (`rsa-501`, `ecdsa-501`).
 - `/var/log/sshd.log` has "Accepted keyboard-interactive/pam for test from 127.0.0.1", "PAM: authentication error for test from 127.0.0.1" and "Accepted publickey for test from 127.0.0.1".
 - launchctl reports no loopback or socket errors (`--absent`).
 
-It passes in about 20 seconds.
+It passes in about 25 seconds.
 
 | Finding | Resolution |
 |---|---|
@@ -451,12 +469,15 @@ It passes in about 20 seconds.
 | `pam_sacl` denies everyone without a directory service (`mbr_check_service_membership` answers `EIO`) | left out of `pam.d/sshd` |
 | Libinfo's `getaddrinfo` logs "si_destination_compare: send failed: Invalid argument" for each passive address (`::`, `0.0.0.0`) when launchctl creates the sockets. Its RFC 6724 sort asks the kernel's netsrc control for a route to the unspecified address | expected, as Libinfo's own comment says ("no route to host"). The order of passive sockets doesn't matter |
 | `echo key-$((6*7))`, typed for the remote side, is a glob pattern in root's zsh ("no matches found") | the test sends `echo key-\$UID` |
+| OpenSSL on Darwin seeds its DRBG from CommonCrypto's `CCRandomGenerateBytes` (`include/crypto/rand.h`), and the base has no libcommonCrypto | `-DOPENSSL_NO_APPLE_CRYPTO_RANDOM`: `getentropy(2)` |
+| Apple's `config.h` answers OpenSSH's libcrypto checks for LibreSSL (`EVP_CIPHER_CTX_get_iv`/`_set_iv`, `EVP_MD_CTX_init`, `HMAC_CTX_init`), which OpenSSL 3 lacks | openssh patch 0003, from OpenSSH's configure run against OpenSSL 3.5.9 |
+| OpenSSL records its compiler flags (`openssl version -f`), which would name the build sandbox | the build compiles through `../root` and `../sysroot` links |
 
 **Security notes.**
 - Remote Login is off by default (`Disabled`), as on macOS. `load -w` doesn't persist yet (no overrides database), so sshd is off again after a reboot.
 - Root can't log in with a password (`PermitRootLogin prohibit-password`), and nobody can with an empty one.
-- Passwords are libc's DES `crypt(3)` hashes ("passwd and chpass"), weak against offline guessing if `master.passwd` leaks. Keys are the better way in.
+- Passwords are SHA-512 crypt hashes at the default 5000 rounds ("passwd and chpass"); accounts made before keep their DES hashes until the password is changed. Keys are still the better way in.
 - The pre-authentication sandbox is rlimit plus chroot and `_sshd`, weaker than macOS's Seatbelt profile.
-- LibreSSL 3.3.6 is the version macOS ships. It dates from 2022, and later LibreSSL releases fix known advisories. OpenSSH uses libcrypto only for its primitives (no TLS or X.509). Moving to a maintained LibreSSL is a decision for P4-25, before sshd runs on the board.
+- libcrypto is OpenSSL 3.5.9, a supported LTS release (since 2026-10-01; before, LibreSSL 3.3.6 from 2022, with unfixed advisories). Updates are patch releases of the 3.5 line, as FreeBSD takes them: a new pin in `MODULE.bazel` and `base/upstream.lock`. OpenSSH uses libcrypto only for its primitives (no TLS or X.509).
 - Without a log store or BSM audit, logins over ssh are recorded only in `/var/log/sshd.log` and utmpx. Now that the base has libbsm (OpenBSM, above), OpenSSH's `USE_BSM_AUDIT` can come back.
 - The wrapper creates the host keys on the first connection, as root, mode 0600.

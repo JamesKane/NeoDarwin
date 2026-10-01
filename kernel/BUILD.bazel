@@ -1089,7 +1089,9 @@ sh_test(
 # PAM (docs/base/session.md, "PAM"): login and su authenticate through
 # OpenPAM, its modules dlopened under code-signing enforcement. On
 # //images:pam_session_root (test accounts test, in group admin, and guest,
-# password "neodarwin"): a wrong password is refused; test logs in and su
+# password "neodarwin"; test's hash is SHA-512 crypt, guest's traditional
+# DES, so both of crypt(3)'s families log in): a wrong password is refused;
+# test logs in and su
 # makes it root without a password (root's is empty: pam_unix nullok, gated by
 # pam_group); as root it writes /etc/nologin, which pam_nologin shows and
 # enforces: guest is refused, root still logs in (empty password, no
@@ -1216,9 +1218,10 @@ sh_test(
 # is then refused, the new one accepted. test sets its full name with chpass
 # (EDITOR is tests/qemu/pam/chpass_editor; chpass asks for the password), and
 # getpwnam answers with it. root changes test's shell with chpass -s:
-# master.passwd has it, and test's extended DES hash, and pwd_mkdb has
-# written /etc/passwd ("*" for the password). root gives itself a password
-# with passwd, and login then asks root for it.
+# master.passwd has it, and the SHA-512 crypt hash passwd wrote ("$6$", a
+# 16-character salt, the 86-character hash), and pwd_mkdb has written
+# /etc/passwd ("*" for the password). root gives itself a password with
+# passwd, and login then asks root for it.
 sh_test(
     name = "sbsa_accounts_test",
     size = "medium",
@@ -1249,6 +1252,7 @@ sh_test(
         "--send-after 'login: ' 'root\\n'",
         "--send-after 'root@localhost ~ # ' 'chpass -s /bin/bash test\\n'",
         "--send-after 'root@localhost ~ # ' 'id -P test; cat /etc/passwd\\n'",
+        "--send-after 'root@localhost ~ # ' 'h=$${$${(s.:.)$$(id -P test)}[2]}; p=($${(s.$$.)h}); echo hash-$${p[1]}-$${#p[2]}-$${#p[3]}\\n'",
         "--send-after 'root@localhost ~ # ' 'passwd\\n'",
         "--send-after 'New password:' 'rootpw42\\n'",
         "--send-after 'Retype new password:' 'rootpw42\\n'",
@@ -1267,9 +1271,11 @@ sh_test(
         "'new-test'",
         "'chpass: user information updated'",
         "'fullname=Neo Q42'",
-        # root's chpass -s: getpwnam (master.passwd, an extended DES hash:
-        # '_', then 65537 rounds), and /etc/passwd.
-        "'test:_/.E.'",
+        # root's chpass -s: getpwnam (master.passwd, the SHA-512 crypt hash
+        # passwd wrote: "$6$", 16 salt characters, 86 of hash), and
+        # /etc/passwd.
+        "'test:$$6$$'",
+        "'hash-6-16-86'",
         "':501:20::0:0:Neo Q42:/Users/test:/bin/bash'",
         "'test:*:501:20:Neo Q42:/Users/test:/bin/bash'",
         "'Changing password for root.'",
@@ -1293,7 +1299,8 @@ sh_test(
 # connection. test logs in over ssh to 127.0.0.1 with its password
 # (keyboard-interactive through PAM's pam_unix) and runs id; a wrong
 # password is refused; root's new ed25519 key in test's authorized_keys
-# logs in without one. sshd's log has each attempt.
+# logs in without one. libcrypto (OpenSSL 3.5) gives its version and known
+# answers, and RSA and ECDSA keys log in too. sshd's log has each attempt.
 sh_test(
     name = "sbsa_ssh_session_test",
     size = "medium",
@@ -1318,6 +1325,13 @@ sh_test(
         "--send-after 'Password:' 'wrong\\n'",
         "--send-after 'root@localhost ~ # ' 'ssh-keygen -q -t ed25519 -N \"\" -f /var/root/.ssh/id_ed25519 && mkdir -p /Users/test/.ssh && cp /var/root/.ssh/id_ed25519.pub /Users/test/.ssh/authorized_keys\\n'",
         "--send-after 'root@localhost ~ # ' 'ssh -o BatchMode=yes test@127.0.0.1 echo key-\\$$UID; echo key-status=$$?\\n'",
+        # libcrypto (OpenSSL): the versions, known answers (SHA-256, AES-128
+        # through the arm64 assembly, MD4 from the legacy provider, which
+        # libcrypto dlopens), and RSA and ECDSA keys, which log in too.
+        "--send-after 'root@localhost ~ # ' 'openssl version; ssh -V; printf abc | openssl dgst -sha256; printf abc | openssl dgst -provider legacy -md4\\n'",
+        "--send-after 'root@localhost ~ # ' 'head -c 64 /dev/zero | openssl enc -aes-128-ecb -K 000102030405060708090a0b0c0d0e0f -nopad | openssl dgst -sha256\\n'",
+        "--send-after 'root@localhost ~ # ' 'for t in rsa ecdsa; do ssh-keygen -q -t $$t -N \"\" -f /var/root/.ssh/id_$$t && ssh-keygen -l -f /var/root/.ssh/id_$$t.pub && cat /var/root/.ssh/id_$$t.pub >> /Users/test/.ssh/authorized_keys; done; ssh-keygen -l -f /var/root/.ssh/id_ed25519.pub\\n'",
+        "--send-after 'root@localhost ~ # ' 'for t in rsa ecdsa; do ssh -o BatchMode=yes -i /var/root/.ssh/id_$$t test@127.0.0.1 echo $$t-\\$$UID; done\\n'",
         "--send-after 'root@localhost ~ # ' 'cat /var/log/sshd.log\\n'",
         "$(rootpath //boot/neoboot)",
         "240",
@@ -1332,6 +1346,16 @@ sh_test(
         "'ssh-status=255'",
         "'key-501'",
         "'key-status=0'",
+        "'OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)'",
+        "'OpenSSH_10.0p2, OpenSSL 3.5.9 29 Sep 2026'",
+        "'SHA2-256(stdin)= ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'",
+        "'MD4(stdin)= a448017aaf21d8525fc10ae87aa6729d'",
+        "'SHA2-256(stdin)= 8e1802533cd0c0f00ce645b44502c8bb664e7ed823fdd5271a1bfa26f57f12f2'",
+        "'root@localhost (RSA)'",
+        "'root@localhost (ECDSA)'",
+        "'root@localhost (ED25519)'",
+        "'rsa-501'",
+        "'ecdsa-501'",
         "'Accepted keyboard-interactive/pam for test from 127.0.0.1'",
         "'PAM: authentication error for test from 127.0.0.1'",
         "'Accepted publickey for test from 127.0.0.1'",
@@ -2299,7 +2323,7 @@ NET_SESSION = [
     "--send-after 'root@localhost ~ # ' 'launchctl load -w /System/Library/LaunchDaemons/ssh.plist\\n'",
     "--send-after 'root@localhost ~ # ' 'mkdir -p /Users/test/.ssh && echo \"{hostfile:id_ed25519.pub}\" > /Users/test/.ssh/authorized_keys && echo key-$$((6*7))\\n'",
     "--host-cmd-after 'key-42' '" + NET_SSH + " uname -a'",
-    "--host-cmd-after 'host: exit' 'f=/usr/lib/libcrypto.46.dylib; t=$$SECONDS; n=$$(" + NET_SSH + " cat $$f | wc -c); " +
+    "--host-cmd-after 'host: exit' 'f=/usr/lib/libcrypto.3.dylib; t=$$SECONDS; n=$$(" + NET_SSH + " cat $$f | wc -c); " +
     "m=$$(" + NET_SSH + " wc -c \\< $$f); echo \"copied $$((n)) of $$((m)) bytes in $$((SECONDS - t)) s\"; " +
     "[ $$((n)) -gt 1000000 ] && [ $$((n)) -eq $$((m)) ] && echo transfer-ok'",
     "--host-cmd-after 'host: exit' 'if ! host -W 5 " + NET_DNS_NAME + " > /dev/null 2>&1; then " +

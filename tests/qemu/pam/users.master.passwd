@@ -1,10 +1,14 @@
 ##
 # Test accounts for //kernel:sbsa_pam_session_test (docs/base/session.md,
 # "PAM"), added to base/etc's master.passwd in //images:pam_session_root
-# only; never in the system's own root. Both have the password "neodarwin"
-# (traditional DES crypt(3), salt "nd"; passwd(1) writes extended DES).
+# only; never in the system's own root. Both have the password "neodarwin".
+# test's hash is SHA-512 crypt, the format passwd(1) writes ("$6$", a
+# 16-character salt, 5000 rounds), made by //tests/crypt:crypt_hash:
+#   crypt_hash neodarwin '$6$K2DnKGs2OI7SVsY5'
+# guest's is traditional DES (salt "nd"), the format libc had before, kept
+# to show that such hashes still log in.
 # test is in group admin (tests/qemu/pam/BUILD.bazel), so su(1) lets it
 # become root; guest isn't.
 ##
-test:ndic/XPiorxqM:501:20::0:0:PAM Test User:/Users/test:/bin/zsh
+test:$6$K2DnKGs2OI7SVsY5$TWI4VPZYjNpKLP8DhaNm7pTdz6G7vHtXwRbQyjJPLTG6s7Mn3yQIfKTzfobAqRsF7SMUERPgdgJJEXdDJPuu50:501:20::0:0:PAM Test User:/Users/test:/bin/zsh
 guest:ndic/XPiorxqM:502:20::0:0:PAM Test Guest:/Users/guest:/bin/zsh

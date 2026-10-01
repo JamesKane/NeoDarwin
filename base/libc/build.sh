@@ -17,6 +17,11 @@ source "$(dirname "$0")/../../tools/base/common.sh"
 OUT="$(abspath "$1")"; L="$(abspath "$2")"; SYSROOT="$(abspath "$3")"; shift 3
 DEPS=(); for d in "$@"; do DEPS+=("$(abspath "$d")"); done
 PROJ="$(cd "$(dirname "$0")" && pwd)"
+# crypt(3)'s FreeBSD schemes (patch 0001): @freebsd_libcrypt, next to LIBC_SRC,
+# and ndcrypto's prelude for FreeBSD sources.
+FREEBSD=""; for d in "$(dirname "$L")"/*/; do [ -f "${d}lib/libcrypt/crypt-sha512.c" ] && FREEBSD="${d%/}"; done
+[ -n "$FREEBSD" ] || { echo "libc: no repository next to $L holds lib/libcrypt/crypt-sha512.c" >&2; exit 1; }
+NDCOMPAT="$(cd "$PROJ/../../kernel/neodarwin/crypto/compat" && pwd)"
 B="$(mktemp -d)"; trap 'rm -rf "$B"' EXIT
 L="$(stage_src "$L" "$B/src" "$PROJ/patches")"   # patches/ applied
 cd "$L"
@@ -107,6 +112,20 @@ build dyld -UBUILDING_VARIANT -DVARIANT_STATIC -DVARIANT_CANCELABLE -DVARIANT_DA
 	-D__DARWIN_NON_CANCELABLE=0 -fno-stack-check "${fbsd_paths[@]}" "${variant_system[@]}" "${srcroot_paths[@]}" -- "$B/lists/dyld"
 build dylib "${plain_system[@]}" "${srcroot_paths[@]}" -- "$B/lists/dylib"
 
+# crypt(3)'s "$1$", "$2", "$5$" and "$6$" schemes (patch 0001): FreeBSD's
+# libcrypt (crypt-md5.c, crypt-blowfish.c with blowfish.c, crypt-sha256.c,
+# crypt-sha512.c, misc.c) and sys/crypto's MD5 and SHA-2, unmodified, as
+# FreeBSD's userland builds them. Hidden visibility: libsystem_c exports none
+# of their names (the digests are FreeBSD's _libmd_ ones), and they stay out
+# of the interposable list. ndcrypto's prelude supplies <sys/endian.h> and
+# explicit_bzero, which Darwin lacks.
+write_rsp "$B/crypt.rsp" "${TARGET_FLAGS[@]}" -Os -std=gnu11 -fvisibility=hidden -w -include nd_freebsd.h \
+	-I"$NDCOMPAT" -I"$FREEBSD/lib/libcrypt" -I"$FREEBSD/sys" -I"$FREEBSD/sys/sys" -I"$FREEBSD/sys/crypto/sha2" \
+	"${plain_system[@]}"
+compile "$B/obj/crypt" "$B/crypt.rsp" "$FREEBSD"/lib/libcrypt/{crypt-md5,crypt-sha256,crypt-sha512,misc}.c \
+	"$FREEBSD"/secure/lib/libcrypt/{blowfish,crypt-blowfish}.c "$FREEBSD"/sys/crypto/md5c.c \
+	"$FREEBSD"/sys/crypto/sha2/{sha256c,sha512c}.c
+
 # build_linklists.sh: interposable text symbols and $VARIANT symbols to unexport.
 archives=(); for a in Platform Base FreeBSD NetBSD TRE vCancelable vDarwinExtsn FortifySource; do
 	[ -f "$B/lib$a.a" ] && archives+=("$B/lib$a.a"); done
@@ -118,7 +137,7 @@ done
 
 mkdir -p "$OUT/usr/lib/system" "$OUT/usr/local/lib/dyld"
 xcrun clang "${TARGET_FLAGS[@]}" -dynamiclib -nostdlib -install_name /usr/lib/system/libsystem_c.dylib \
-	-current_version 1725.0.11 -compatibility_version 1 -Wl,-umbrella,System "$B"/obj/dylib/*.o \
+	-current_version 1725.0.11 -compatibility_version 1 -Wl,-umbrella,System "$B"/obj/dylib/*.o "$B"/obj/crypt/*.o \
 	-Wl,-all_load "${archives[@]}" $(dep_libdirs "${DEPS[@]}") -lsystem_kernel -lsystem_malloc -lsystem_platform \
 	-lsystem_pthread -L"$SDK/usr/lib/system" -lcompiler_rt -ldyld -lsystem_m \
 	-Wl,-upward-ldispatch -Wl,-upward-lmacho -Wl,-upward-lsystem_asl -Wl,-upward-lsystem_blocks -Wl,-upward-lsystem_info \

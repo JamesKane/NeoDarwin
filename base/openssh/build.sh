@@ -20,7 +20,9 @@
 # the project's own, from configure-for-osx.sh. Patch 0001 turns off what
 # needs closed code (GSSAPI and Kerberos, BSM audit, Seatbelt's
 # sandbox_init) or a library the base doesn't have (zlib), and picks the
-# rlimit sandbox for sshd-auth, the pre-authentication process.
+# rlimit sandbox for sshd-auth, the pre-authentication process. Patch 0003
+# gives config.h's libcrypto answers for OpenSSL 3.5, NeoDarwin's libcrypto,
+# where Apple's are LibreSSL 3.3.6's (macOS's).
 # Apple's feature macros (openssh.xcconfig's AppleSshFeatures) are kept
 # where their code needs only libSystem: clear_lv, display_var, membership,
 # nohostauthproxy, tmpdir and basesystem. Left out, for closed code:
@@ -42,11 +44,11 @@ DEPS=(); for d in "$@"; do DEPS+=("$(abspath "$d")"); done
 ROOT="$(find_root "${DEPS[@]}")"
 CRYPTO=""; PAM=""; RESOLV=""
 for d in "${DEPS[@]}"; do
-	[ -f "$d/usr/lib/libcrypto.46.dylib" ] && CRYPTO="$d"
+	[ -f "$d/usr/lib/libcrypto.3.dylib" ] && CRYPTO="$d"
 	[ -f "$d/usr/lib/libpam.2.dylib" ] && PAM="$d"
 	[ -f "$d/usr/lib/libresolv.9.dylib" ] && RESOLV="$d"
 done
-[ -n "$CRYPTO" ] || { echo "openssh: no DEPROOT holds usr/lib/libcrypto.46.dylib (pass //base:libcrypto_dylib)" >&2; exit 1; }
+[ -n "$CRYPTO" ] || { echo "openssh: no DEPROOT holds usr/lib/libcrypto.3.dylib (pass //base:libcrypto_dylib)" >&2; exit 1; }
 [ -n "$PAM" ] || { echo "openssh: no DEPROOT holds usr/lib/libpam.2.dylib (pass //base:libpam_dylib)" >&2; exit 1; }
 [ -n "$RESOLV" ] || { echo "openssh: no DEPROOT holds usr/lib/libresolv.9.dylib (pass //base:libresolv_dylib)" >&2; exit 1; }
 PROJ="$(cd "$(dirname "$0")" && pwd)"
@@ -55,13 +57,13 @@ S="$(stage_src "$S" "$B/src" "$PROJ/patches")"   # patches/ applied
 cd "$S"
 
 # openssh.xcconfig: GCC_PREPROCESSOR_DEFINITIONS (the kept AppleSshFeatures)
-# and HEADER_SEARCH_PATHS (LibreSSL's headers, openssh/); base.xcconfig's
+# and HEADER_SEARCH_PATHS (libcrypto's headers, openssh/); base.xcconfig's
 # GCC_NO_COMMON_BLOCKS and -Os. libpam's and libresolv's headers come from
 # their build-only include directories. Warning flags are left out.
 FEATURES=(-D__APPLE_CLEAR_LV__ -D__APPLE_DISPLAY_VAR__ -D__APPLE_MEMBERSHIP__ -D__APPLE_NOHOSTAUTHPROXY__
 	-D__APPLE_TMPDIR__ -D__APPLE_BASESYSTEM__)
 write_rsp "$B/cflags" "${TARGET_FLAGS[@]}" -Os -fno-common "${FEATURES[@]}" \
-	-I"$CRYPTO/usr/local/libressl/include" -I"$S/openssh" -I"$S/EndpointSecurity" -I"$PAM/usr/local/include" \
+	-I"$CRYPTO/usr/local/openssl/include" -I"$S/openssh" -I"$S/EndpointSecurity" -I"$PAM/usr/local/include" \
 	-I"$RESOLV/usr/local/libresolv/include" $(cmd_sysroot_flags "$SYSROOT")
 cc_objs() { local d="$B/obj/$1"; shift; compile "$d" "$B/cflags" "$@"; }
 
@@ -93,7 +95,7 @@ libtool -static -no_warning_for_no_symbols -o "$B/libssh.a" "$B"/obj/libssh/*.o
 # OTHER_LDFLAGS, less the frameworks and libraries for what's left out:
 # -lbsm and -lz. -lresolv is libresolv-93 (getrrsetbyname's SSHFP lookups,
 # VerifyHostKeyDNS, through res_9_query).
-LINK=("$B/libssh.a" "$B/libopenbsd-compat.a" -L"$CRYPTO/usr/local/libressl/lib" -lcrypto -L"$PAM/usr/lib" -lpam
+LINK=("$B/libssh.a" "$B/libopenbsd-compat.a" -L"$CRYPTO/usr/local/openssl/lib" -lcrypto -L"$PAM/usr/lib" -lpam
 	-L"$RESOLV/usr/lib" -lresolv)
 prog() {  # prog INSTALL_PATH SRC...
 	local out="$OUT/$1"; shift

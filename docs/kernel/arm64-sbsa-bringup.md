@@ -207,7 +207,7 @@ A launch failure is visible: dyld's error goes into the exit reason, which the "
   - SMMUv3 translation is unhandled, bypass only (`gic-its.md`);
   - no `ioreg` userland yet: tests read the kernel log;
   - the nested panic after "initproc failed to start" (§2.1.5).
-- **Userland** (`docs/base/session.md`): since 2026-10-01 the base has mount and fsck, `/bin/sh` with line editing, bash 3.2, zsh, PAM login/su, passwd/chpass, path_helper, BSM audit, loopback networking and sshd (socket-activated, over 127.0.0.1). Every image is owned by root. Open: password hashes are DES crypt (libc has nothing stronger); LibreSSL is 3.3.6 (2022); virtio-net with static configuration since P1-19 checkpoint 1 (`network.md`), but no DHCP or resolver yet; per-user launchd stays off (PID 1 serves all users).
+- **Userland** (`docs/base/session.md`): since 2026-10-01 the base has mount and fsck, `/bin/sh` with line editing, bash 3.2, zsh, PAM login/su, passwd/chpass, path_helper, BSM audit, loopback networking and sshd (socket-activated, over 127.0.0.1), with OpenSSL 3.5 as libcrypto (FreeBSD's choice; LibreSSL 3.3.6 until 2026-10-01). Every image is owned by root. Password hashes are SHA-512 crypt (libc's `crypt(3)` with FreeBSD's libcrypt schemes, since 2026-10-01). Open: virtio-net with static configuration since P1-19 checkpoint 1 (`network.md`), but no DHCP or resolver yet; per-user launchd stays off (PID 1 serves all users).
 
 Each probe build of `//kernel:sbsa_kc` takes about 9 minutes. Never run `bazel clean`: it throws the kernel build away.
 

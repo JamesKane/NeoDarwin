@@ -6,7 +6,7 @@
 #   build.sh OUT LIBRESOLV_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root)
 # OUT receives usr/lib/libresolv.9.dylib and the libresolv.dylib link
 # (links.sh), and, build-only (in usr/local, which the image leaves out, as
-# LibreSSL's are), the headers the project installs, for the commands built
+# OpenSSL's are), the headers the project installs, for the commands built
 # against it (OpenSSH): usr/local/libresolv/include/{resolv.h,nameser.h,
 # dns.h,dns_util.h,dns_private.h} and arpa/nameser.h -> ../nameser.h
 # (headers.sh).

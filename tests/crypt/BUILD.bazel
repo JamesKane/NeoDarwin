@@ -1,0 +1,60 @@
+# libsystem_c's crypt(3) on the host (docs/base/session.md, "passwd and
+# chpass"): Libc's gen/crypt.c with base/libc's patch 0001, and FreeBSD's
+# libcrypt schemes from @freebsd_libcrypt, the sources base/libc/build.sh
+# compiles into libsystem_c. Its names take an nd_libc_ prefix so the host's
+# own crypt (macOS's, DES only) stays reachable for comparison.
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//rules:cc.bzl", "nd_cc_binary", "nd_cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+genrule(
+    name = "patched_crypt_c",
+    srcs = [
+        "@apple_libc//:gen/crypt.c",
+        "//base:libc/patches/0001-crypt-FreeBSD-MD5-bcrypt-SHA-256-and-SHA-512.patch",
+    ],
+    outs = ["gen/crypt.c"],
+    cmd = """
+set -e
+W=$$(mktemp -d)
+mkdir -p $$W/gen
+cp $(location @apple_libc//:gen/crypt.c) $$W/gen/crypt.c
+chmod u+w $$W/gen/crypt.c
+patch -d $$W -p1 --quiet < $(location //base:libc/patches/0001-crypt-FreeBSD-MD5-bcrypt-SHA-256-and-SHA-512.patch)
+cp $$W/gen/crypt.c $@
+rm -rf $$W
+""",
+)
+
+cc_library(
+    name = "libc_crypt",
+    srcs = [":patched_crypt_c"],
+    copts = [
+        "-Dcrypt=nd_libc_crypt",
+        "-Dencrypt=nd_libc_encrypt",
+        "-Dsetkey=nd_libc_setkey",
+        "-fvisibility=hidden",
+        "-w",
+        # The host toolchain's fastbuild defines DEBUG, which makes Libc's
+        # DES code print its tables.
+        "-UDEBUG",
+    ],
+    deps = ["@freebsd_libcrypt//:libcrypt"],
+)
+
+# Known answers for every scheme, and DES against the host's crypt.
+nd_cc_test(
+    name = "crypt_test",
+    size = "small",
+    srcs = ["crypt_test.c"],
+    deps = [":libc_crypt"],
+)
+
+# crypt_hash PASSWORD SETTING: prints crypt(3)'s hash, as NeoDarwin's libc
+# computes it (tests/qemu/pam's account hashes).
+nd_cc_binary(
+    name = "crypt_hash",
+    srcs = ["crypt_hash.c"],
+    deps = [":libc_crypt"],
+)

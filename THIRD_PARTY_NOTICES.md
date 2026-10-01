@@ -16,6 +16,7 @@ NeoDarwin's own code is under the BSD 2-Clause licence (`LICENSE`). NeoDarwin al
 | IONetworkingFamily | IONetworkingFamily-186 | APSL-2.0 (the archive's `APPLE_LICENSE`; the file headers name APSL 1.1, whose versions clause lets it be used under any later version) | Ethernet controllers and interfaces, built into the kernel (`kernel/neodarwin/network`) |
 | ACPICA | 20260408 | Intel dual licence; **used under BSD-3-Clause** (notice below) | ACPI in the kernel (`kernel/neodarwin/acpi`) |
 | FreeBSD crypto and `msun`, `libxo` | FreeBSD `freebsd-src` at the commits in the locks | BSD-2-Clause / BSD-3-Clause, per file | the kernel's crypto provider, `libsystem_m`, `libxo` |
+| FreeBSD `libcrypt` (`lib/libcrypt`: `crypt-md5.c`, `crypt-sha256.c`, `crypt-sha512.c`, `misc.c`, `crypt.h`; `secure/lib/libcrypt`: `crypt-blowfish.c`, `blowfish.c`, `blowfish.h`) and its digests (`sys/crypto/md5c.c`, `sys/sys/md5.h`, `sys/crypto/sha2`) | `freebsd-src` at the commit in `base/libc/freebsd.lock` | per file: BSD-2-Clause (`crypt-md5.c`, `crypt-sha256.c` and `crypt-sha512.c`, the last two based on Ulrich Drepper's public-domain SHA-crypt; `crypt.h`; `md5c.c`; the SHA-2 files), BSD-3-Clause (`misc.c`), BSD-4-Clause (bcrypt: Niels Provos, notice below), RSA-MD (`md5.h`, notice below) | `crypt(3)`'s MD5, bcrypt, SHA-256 and SHA-512 schemes in `libsystem_c` (Libc patch 0001) |
 | FreeBSD Qualcomm GENI UART driver (`sys/dev/uart/uart_dev_qcom_geni.c`, `sys/dev/qcom_geni/qcom_geni_reg.h`) | `freebsd-src` commit 124c151cbc (branch `radxa-dragon-q8b`), ported into `kernel/neodarwin/serial/nd_geni_uart.h` with its notice (`PROVENANCE.md` there) | BSD-2-Clause (notice below) | the kernel's serial console on the Radxa Dragon Q8B |
 | FreeBSD ACPI xHCI attachment and DWC3 registers (`sys/dev/usb/controller/generic_xhci_acpi.c`, `sys/dev/usb/controller/dwc3/dwc3.h`) | `freebsd-src` commit cbbcf73a5d (branch `radxa-dragon-q8b`), the DWC3 role-switch set-up ported into `kernel/neodarwin/usb/nd_dwc3.h` with its notices (`PROVENANCE.md` there) | BSD-2-Clause (notice below) | the console USB keyboard's USB-C controllers on the Radxa Dragon Q8B |
 | FreeBSD Toshiba TC956x Ethernet driver (`sys/dev/tcx/if_tcx.c`, `sys/dev/tcx/if_tcxreg.h`) | `freebsd-src` branch `radxa-dragon-q8b` at `4c5da483b9`, ported into `kernel/neodarwin/network/nd_tc956x.h` with its notice (`PROVENANCE.md` there) | BSD-2-Clause (notice below) | the kernel's Ethernet driver for the Radxa Dragon Q8B |
@@ -36,7 +37,7 @@ NeoDarwin's own code is under the BSD 2-Clause licence (`LICENSE`). NeoDarwin al
 | libedit | libedit-65 (NetBSD libedit 20121213-3.0) | BSD-3-Clause | `libedit.3.dylib`, which `/bin/sh` (ash) links for line editing and history |
 | bash | bash-140 (bash 3.2.57) | **GPL-2.0-or-later** (copyleft; the `lib/readline` and `lib/intl` it links statically are GPL and LGPL-2.0) | `/bin/bash`, a separate program: nothing else links it or its readline. Its complete corresponding source is the pinned archive (URL and hash in `MODULE.bazel` and `base/upstream.lock`) with NeoDarwin's build script (`base/bash`), which must be offered with any binary distribution |
 | network_cmds | network_cmds-726 | APSL-2.0 and BSD (the commands are BSD-derived; each file keeps its notice) | `ifconfig`, `ping`, `netstat`, `route` |
-| LibreSSL | libressl-3.3.6 (upstream, ftp.openbsd.org; the version macOS 26 ships) | the OpenSSL and original SSLeay licences (BSD-style, with advertising clauses) for code from OpenSSL, ISC for LibreSSL's own; per file (`COPYING`; acknowledgements below) | `libcrypto.46.dylib` |
+| OpenSSL | openssl-3.5.9 (upstream release; FreeBSD's base library, the 3.5 LTS line) | Apache-2.0 (`LICENSE.txt`; the archive has no `NOTICE` file) | `libcrypto.3.dylib`, `libssl.3.dylib`, the legacy provider (`/usr/lib/ossl-modules`), the `capi` and `loader_attic` engines (`/usr/lib/engines-3`), `/usr/bin/openssl` and `/etc/ssl/openssl.cnf` |
 | OpenSSH | OpenSSH-354.0.3 (OpenSSH 10.0p2) | BSD-style: the `LICENCE` file's terms (BSD-2-Clause and BSD-3-Clause, ISC, and public-domain parts, per file) | `ssh`, `sshd`, `sshd-session`, `sshd-auth`, `ssh-keygen`, `ssh-add`, `ssh-agent`, `ssh-keyscan`, `scp`, `sftp`, `sftp-server`, `/etc/ssh`, `/etc/pam.d/sshd` and `ssh.plist` |
 | Swift Embedded standard library | swift.org toolchain 6.3.2 | Apache-2.0 WITH Swift runtime library exception | linked into neoboot and NeoDarwin's Swift programs |
 | TF-A, EDK2, edk2-platforms | TF-A v2.15.0 (with upstream fix 5c33fafc for `qemu_sbsa`), edk2-stable202608, edk2-platforms 061beb4c (SbsaQemu) | BSD-3-Clause, BSD-2-Clause-Patent | test firmware for QEMU `virt,secure=on` and `sbsa-ref` only (`third_party/qemu_firmware`); not part of NeoDarwin images |
@@ -170,19 +171,9 @@ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 SUCH DAMAGE.
 ```
 
-## LibreSSL
-
-`libcrypto.46.dylib` is LibreSSL's libcrypto, which descends from OpenSSL and SSLeay. As their licences require:
-
-This product includes software developed by the OpenSSL Project for use in the OpenSSL Toolkit (http://www.openssl.org/).
-
-This product includes cryptographic software written by Eric Young (eay@cryptsoft.com).
-
-The full licence texts are in the pinned archive's `COPYING`.
-
 ## RSA Data Security MD5
 
-`libresolv.9.dylib` (and the kernel's and dyld's digest code) include FreeBSD's `sys/crypto/md5c.c`, which is "derived from the RSA Data Security, Inc. MD5 Message-Digest Algorithm". As its licence requires:
+`libresolv.9.dylib` and `libsystem_c.dylib` (and the kernel's and dyld's digest code) include FreeBSD's `sys/crypto/md5c.c`, which is "derived from the RSA Data Security, Inc. MD5 Message-Digest Algorithm". As its licence requires:
 
 > Copyright (C) 1991-2, RSA Data Security, Inc. Created 1991. All rights reserved.
 >
@@ -193,3 +184,39 @@ The full licence texts are in the pinned archive's `COPYING`.
 > RSA Data Security, Inc. makes no representations concerning either the merchantability of this software or the suitability of this software for any particular purpose. It is provided "as is" without express or implied warranty of any kind.
 >
 > These notices must be retained in any copies of any part of this documentation and/or software.
+
+## FreeBSD libcrypt's bcrypt (Niels Provos)
+
+`libsystem_c.dylib`'s bcrypt scheme (`crypt(3)` with a `$2a$`, `$2b$` or `$2y$` setting) is built from FreeBSD's `secure/lib/libcrypt/crypt-blowfish.c`, `blowfish.c` and `blowfish.h`, OpenBSD's bcrypt, under a four-clause BSD licence. This product includes software developed by Niels Provos.
+
+```
+Copyright 1997 Niels Provos <provos@physnet.uni-hamburg.de>
+All rights reserved.
+
+Implementation advice by David Mazieres <dm@lcs.mit.edu>.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. All advertising materials mentioning features or use of this software
+   must display the following acknowledgement:
+     This product includes software developed by Niels Provos.
+4. The name of the author may not be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```

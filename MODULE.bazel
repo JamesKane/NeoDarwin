@@ -101,7 +101,9 @@ http_archive(
 
 http_archive(
     name = "apple_libc",
-    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    # gen/crypt.c: //tests/crypt builds it for the host with base/libc's patch.
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])
+exports_files(["gen/crypt.c"])""",
     sha256 = "e5cb194a8017db90ee43e303e87bf7fe9b34245d0a94d0245cfedfa3ba012a3e",
     strip_prefix = "Libc-Libc-1725.0.11",
     urls = ["https://github.com/apple-oss-distributions/Libc/archive/refs/tags/Libc-1725.0.11.tar.gz"],
@@ -297,8 +299,7 @@ http_archive(
 
 # Loopback and sshd (docs/base/session.md, "Loopback and sshd"): network_cmds'
 # ifconfig, ping, netstat and route; OpenSSH 10.0p2; and its libcrypto,
-# LibreSSL 3.3.6, the version macOS 26 ships. Apple's LibreSSL project isn't
-# in the macOS 26.0 release set (only OpenSSL098), so it is upstream's.
+# OpenSSL 3.5, as FreeBSD's base ships it (below).
 http_archive(
     name = "apple_network_cmds",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
@@ -325,12 +326,15 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/libresolv/archive/refs/tags/libresolv-93.tar.gz"],
 )
 
+# OpenSSL: FreeBSD's base library (crypto/openssl is 3.5.8 at freebsd-src
+# 050683bb8e13), at the newest 3.5 LTS patch release. The hash is the one
+# the release publishes (openssl-3.5.9.tar.gz.sha256).
 http_archive(
-    name = "libressl",
+    name = "openssl",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
-    sha256 = "3f28849365e1190db2baf9014ff9686012c25b1ca6df8b3a085f789e24fe4b9a",
-    strip_prefix = "libressl-3.3.6",
-    urls = ["https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-3.3.6.tar.gz"],
+    sha256 = "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a",
+    strip_prefix = "openssl-3.5.9",
+    urls = ["https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz"],
 )
 
 http_archive(
@@ -526,6 +530,15 @@ pinned_files(
     name = "freebsd_dhclient",
     build_file = "//base:dhclient/freebsd.BUILD",
     lockfile = "//base:dhclient/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
+# FreeBSD's libcrypt schemes (MD5, bcrypt, SHA-256, SHA-512) for libsystem_c's
+# crypt(3) (base/libc): Libc has only DES.
+pinned_files(
+    name = "freebsd_libcrypt",
+    build_file = "//base:libc/freebsd.BUILD",
+    lockfile = "//base:libc/freebsd.lock",
     url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
 )
 
