@@ -508,10 +508,48 @@ base_library(
     sysroot = ":sysroot",
 )
 
+# DHCP and name resolution (docs/kernel/network.md, P1-19 checkpoint 2):
+# libresolv-93; FreeBSD's dhclient and dhclient-script; mDNSResponder's
+# daemon (mDNSPosix), behind libsystem_dnssd and Libinfo's lookups.
+# (Not named libresolv, dhclient or mdnsresponder: a target named like its
+# source directory hides that directory's files from tests' runfiles.)
+base_library(
+    name = "libresolv_dylib",
+    data = glob(["libresolv/**"]) + [
+        "commands.sh",
+        "//kernel/neodarwin/crypto:kernel_srcs",
+        "@apple_configd_dnsinfo//:all",
+        "@apple_libnotify//:all",
+        "@freebsd_crypto//:all",
+    ],
+    deps = [":root"],
+    script = "libresolv/build.sh",
+    srcs = "@apple_libresolv//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "dhcp_client",
+    data = glob(["dhclient/**"]) + ["commands.sh"],
+    deps = [":root", ":libutil_dylib"],
+    script = "dhclient/build.sh",
+    srcs = "@freebsd_dhclient//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "mdns_responder",
+    data = glob(["mdnsresponder/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "mdnsresponder/daemon.sh",
+    srcs = "@apple_mdnsresponder//:all",
+    sysroot = ":sysroot",
+)
+
 base_library(
     name = "openssh",
     data = glob(["openssh/**"]) + ["commands.sh"],
-    deps = [":root", ":libcrypto_dylib", ":libpam_dylib"],
+    deps = [":root", ":libcrypto_dylib", ":libpam_dylib", ":libresolv_dylib"],
     script = "openssh/build.sh",
     srcs = "@apple_openssh//:all",
     sysroot = ":sysroot",
@@ -544,6 +582,9 @@ base_root(
         ":launchproxy",
         ":libcrypto_dylib",
         ":openssh",
+        ":libresolv_dylib",
+        ":dhcp_client",
+        ":mdns_responder",
     ],
 )
 
@@ -604,6 +645,7 @@ base_root(
     ("libbsm", ":bsm_audit", "usr/lib/libbsm.0.dylib", "openbsm/exports/libbsm.0.txt"),
     ("libauditd", ":bsm_audit", "usr/lib/libauditd.0.dylib", "openbsm/exports/libauditd.0.txt"),
     ("libedit", ":libedit_dylib", "usr/lib/libedit.3.dylib", "libedit/exports.txt"),
+    ("libresolv", ":libresolv_dylib", "usr/lib/libresolv.9.dylib", "libresolv/exports.txt"),
     ("libsystem", ":libsystem_b", "usr/lib/libSystem.B.dylib", "libsystem/exports.txt"),
     ("libcompiler_rt", ":llvm_runtimes", "usr/lib/system/libcompiler_rt.dylib", "llvm/exports/libcompiler_rt.txt"),
     ("libunwind", ":llvm_runtimes", "usr/lib/system/libunwind.dylib", "llvm/exports/libunwind.txt"),
@@ -642,6 +684,7 @@ lang_audit_test(
         "libinfo/include/**/*.h",
         "libm/src/*.c",
         "libm/compat/**/*.h",
+        "dhclient/compat/**/*.h",
         "file_cmds/compat/*.h",
         "shell_cmds/compat/**/*.h",
         "system_cmds/compat/**/*.h",

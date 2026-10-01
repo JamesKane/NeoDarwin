@@ -95,9 +95,9 @@ func setUpLoopbackIPv6() {
 /// array of them) replaced by an array of the descriptors created for it,
 /// as launchctl-842's distill_config_file() does; nil if the job has none.
 /// launchd hands them to the job at check-in (or to launchproxy, for an
-/// inetdCompatibility job). Bonjour registration (the Bonjour key) needs
-/// mDNSResponder's daemon, which NeoDarwin doesn't run, and is skipped, as
-/// are SecureSocketWithKey and multicast groups.
+/// inetdCompatibility job). Bonjour registration (the Bonjour key, a
+/// DNSServiceRegister with mDNSResponder) isn't done yet, nor are
+/// SecureSocketWithKey and multicast groups.
 func socketsData(_ job: Plist, label: String) -> launch_data_t? {
     guard case .dictionary(let entries) = job[LAUNCH_JOBKEY_SOCKETS] ?? .boolean(false) else { return nil }
     let sockets = launch_data_alloc(LAUNCH_DATA_DICTIONARY)!

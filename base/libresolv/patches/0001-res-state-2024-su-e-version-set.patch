@@ -1,0 +1,34 @@
+From: NeoDarwin
+Subject: [PATCH] res_state: the 2024 SU E dyld version set
+
+res_state.c keeps the resolver state of every thread in the global _res
+unless the program was built for macOS 15.4 or later
+(dyld_program_minos_at_least(dyld_2024_SU_E_os_versions)). NeoDarwin's
+dyld_priv.h is generated from AvailabilityVersions-155, the kernel's pin,
+whose newest set is 2023_SU_D (as in 157.2, the newest published), so the
+name is undefined. Define it where it's missing. The value follows the
+published sets' pattern (fall .9.1, then SU_B .12.1, SU_C .13.1, SU_D .14.1;
+2023_SU_D is 0x007e70e01): 2024.15.1, 0x007e80f01. Every NeoDarwin program
+is built for macOS 26.0, so the test is true (per-thread state) for any
+2024 value. With a header that defines the set, its definition is used.
+
+Rebase-risk: low (one guarded definition).
+--- a/res_state.c
++++ b/res_state.c
+@@ -59,6 +59,16 @@
+ 
+ #include "res_private.h"
+ 
++#if defined(__APPLE__) && !defined(dyld_2024_SU_E_os_versions)
++/*
++ * The 2024 SU E version set (macOS 15.4), which a dyld_priv.h generated
++ * from an AvailabilityVersions that predates it doesn't define: 2024.15.1
++ * in dyld_priv.h's encoding (year << 16 | minor << 8 | patch), following
++ * the published sets (2023_SU_D is 2023.14.1, 0x007e70e01).
++ */
++#define dyld_2024_SU_E_os_versions ({ (dyld_build_version_t){0xffffffff, 0x007e80f01}; })
++#endif
++
+ #if 1
+ #undef _res
+ 

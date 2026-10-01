@@ -1,0 +1,32 @@
+# FreeBSD's sbin/dhclient (the OpenBSD-derived ISC DHCP client), which
+# base/dhclient/build.sh builds as /sbin/dhclient with dhclient-script and
+# dhclient.conf (docs/kernel/network.md, "DHCP"). Apple's DHCP client
+# (bootp's IPConfiguration) is a configd plugin. Fetched unmodified by
+# //rules:pinned_files.bzl; base/dhclient/patches applies NeoDarwin's changes.
+# Repository: https://github.com/freebsd/freebsd-src
+# commit: 050683bb8e136981e4a1f66e845ab05c135630f4
+# Format: shasum -a 256 (hash, two spaces, path). Regenerate with tools/pinned/lock.sh.
+7f2a7deb4e47efd4af2f4bd37918fa8116a3b9964c9a5fe15cbf5a3e6f9730af  sbin/dhclient/alloc.c
+8ae70fbddcda009d501185ebcd1cb3a882d13e1db1950633f25b431933a36e05  sbin/dhclient/bpf.c
+d0f8c9ac586f650fbb1824f4e164b929c7cf32dbf0cc08abd14a5e169ca42519  sbin/dhclient/clparse.c
+5812b2f32eb79e2baa7285d34c5ce50cf10893329b56a95e9b0ad9b93c9a8787  sbin/dhclient/conflex.c
+b90f590495e71e4ef06ba2000c8726acaf8c0bd35fa529b9caffd14e0f43720b  sbin/dhclient/convert.c
+b6d6cbec20bd371d0bad779b190b44a8b58072e626c8f9450ed0e8057f127d16  sbin/dhclient/dhclient-script
+878abbb5277c871073da276016381ae34d85c0946ad39c3a8c1c78e3387146d8  sbin/dhclient/dhclient.c
+f26929a9f0e50bf93ed6c14b6e3a29827c0ef21ab84f3bb3fc83e5e45c1facc9  sbin/dhclient/dhclient.conf
+d68cde4b45d7a408f1884ddaa33a2a2ed4624ffb702203083d7fa219eec3cc5f  sbin/dhclient/dhcp.h
+e66affd66fe87c728f4a74f10f0b633837f2ced59c9b1bbddb1b9d90f1ce1d73  sbin/dhclient/dhcpd.h
+fc0bfd941075945ed1ac3b917023dd18b33e8703f09296d41d20267b8d7ad088  sbin/dhclient/dhctoken.h
+43e98787b9d6940e50ff7193804b99369d01ea1fb13616648f41143907935c24  sbin/dhclient/dispatch.c
+8b6ec21fc8a70a76dccd62cda8dbbaea8628c7c6a6c84d0dd6bb2935c59fde23  sbin/dhclient/errwarn.c
+7e10924cd9ad6c55a80c5b8f09c6a3595da12bb9ed4a2ef668e431133d117101  sbin/dhclient/hash.c
+46d9dea46b5fc11477aa725d6c8b95e05d5a053cd6f037ff1f20a930b9de0931  sbin/dhclient/inet.c
+d29e47d4f5e06f496e352965c210606d8bba23cd3956c01e6440df6e870bbf8d  sbin/dhclient/inet6.c
+ea265fc5a2b7ed7f088e0b3b382cecb72ecce48507ffe849858ae507b158d039  sbin/dhclient/options.c
+7a91c754b5cf057e7332c0af9cc7f1afb7ceafe9e98db0b4498a2f0262504b89  sbin/dhclient/packet.c
+6ebf440d403a2c59a2a90a9d3814682c684b868fb1b3e2094a0632fc97638829  sbin/dhclient/parse.c
+562e649fde0871e3046c8d22220fcc704cca6129f3c31c8e665f64116fd817c1  sbin/dhclient/privsep.c
+2164741cfbb11d86af4e382b500292d9fd6dc1b22241c15c5d23936c4ce725a0  sbin/dhclient/privsep.h
+e5f43fb02046418ccfd13a86077f1c4a95eca66c76c648a7b39ab59b7ddbe8fc  sbin/dhclient/tables.c
+d7537f3ef6d46d1f3bddf62f8d25b78da323c41c86c91ad4b8148ecc3f7cc29f  sbin/dhclient/tree.c
+fbbb1f5e73cfece88fcbaa8692fbc6558d9400907f8653dd357b497aa765fa5a  sbin/dhclient/tree.h

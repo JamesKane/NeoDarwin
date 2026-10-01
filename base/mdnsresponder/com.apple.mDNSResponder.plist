@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SPDX-License-Identifier: BSD-2-Clause
+  NeoDarwin's job for mDNSResponder-2881.0.25's POSIX daemon (base/mdnsresponder/daemon.sh,
+  docs/kernel/network.md, "Name resolution"): macOS's label and program path. The POSIX
+  daemon makes its own client socket (/var/run/mDNSResponder) instead of checking in for
+  launchd's (macOS's job has a Sockets entry and MachServices), and runs in the foreground
+  for launchd. It logs to standard error until NeoDarwin has a log store.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.apple.mDNSResponder</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/sbin/mDNSResponder</string>
+		<string>-foreground</string>
+	</array>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/var/log/mDNSResponder.log</string>
+</dict>
+</plist>

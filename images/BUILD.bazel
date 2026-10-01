@@ -37,10 +37,27 @@ _SYSTEM_DIRS = [
     "private/var/tmp",
 ]
 
+# /etc/resolv.conf is macOS's link to /var/run/resolv.conf, which the DHCP
+# client writes (docs/kernel/network.md, "Name resolution"); it dangles
+# until then.
 _SYSTEM_LINKS = {
     "etc": "private/etc",
+    "private/etc/resolv.conf": "/var/run/resolv.conf",
     "tmp": "private/tmp",
     "var": "private/var",
+}
+
+# netconfigd and its job and configuration (docs/kernel/network.md,
+# "Bringing interfaces up"): every en* interface takes a DHCP lease at boot.
+_NETWORK_FILES = {
+    "//base/netconfigd": "usr/libexec/netconfigd",
+    "//base/netconfigd:com.neodarwin.netconfigd.plist": "System/Library/LaunchDaemons/com.neodarwin.netconfigd.plist",
+    "//base/netconfigd:netconfigd.conf": "private/etc/netconfigd.conf",
+}
+
+_NETWORK_MODES = {
+    "System/Library/LaunchDaemons/com.neodarwin.netconfigd.plist": "0644",
+    "private/etc/netconfigd.conf": "0644",
 }
 
 _SYSTEM_MODES = {
@@ -81,8 +98,9 @@ hfs_ramdisk(
     files = {
         "//base/launchctl": "bin/launchctl",
         "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
-    } | _CS_PROBES,
+    } | _NETWORK_FILES | _CS_PROBES,
     links = _SYSTEM_LINKS,
+    modes = _NETWORK_MODES,
     tree_modes = _SYSTEM_MODES,
     trees = [
         "//base:system_root",
@@ -120,14 +138,14 @@ hfs_ramdisk(
         "//tests/qemu/pam:group": "private/etc/group",
         "//tests/qemu/pam:master.passwd": "private/etc/master.passwd",
         "//tests/qemu/pam:passwd": "private/etc/passwd",
-    },
+    } | _NETWORK_FILES,
     links = _SYSTEM_LINKS,
     modes = {
         "private/etc/group": "0644",
         "private/etc/master.passwd": "0600",
         "private/etc/passwd": "0644",
         "usr/local/bin/chpass_editor": "0755",
-    },
+    } | _NETWORK_MODES,
     owners = {
         "Users/guest": "502:20",
         "Users/test": "501:20",
@@ -156,9 +174,10 @@ hfs_ramdisk(
     files = {
         "//base/launchctl": "bin/launchctl",
         "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
-    } | _CS_PROBES,
+    } | _NETWORK_FILES | _CS_PROBES,
     journaled = True,
     links = _SYSTEM_LINKS,
+    modes = _NETWORK_MODES,
     volume_size = "192m",
     tags = ["manual"],
     tree_modes = _SYSTEM_MODES,

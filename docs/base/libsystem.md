@@ -158,7 +158,7 @@ The stand-ins now cover every symbol the built libraries import from libxpc and 
 | removefile's `REMOVEFILE_CLEAR_PURGEABLE` uses the closed APFS fsctl header | removefile patch 0001 (`REMOVEFILE_NO_APFS`): accepted and ignored, as on HFS+ |
 | mDNSResponder-2881 publishes no `mDNSMacOSX/`, so there's no Xcode project and no Apple client stub. The tree is Apple's non-Apple configuration | the settings of 1310.140.1's libsystem_dnssd target and the published client library (`mDNSPosix` CLIENTLIBOBJS), with `MDNS_NO_STRICT=1`; the closed links are dropped |
 | The published `dns_sd_private.h` lacks its private API section, and `kDNSServiceAttrAllowFailover` (Libinfo) exists only in Apple's stub | mDNSResponder patches 0001 (export the four private calls the sources define) and 0002 (the failover attribute, sent in the published TLV form). The sysroot stages both headers; Libinfo's header stand-in is gone |
-| NeoDarwin has no mDNSResponder daemon (the macOS one isn't published) | DNS-SD calls fail to connect and Libinfo's mdns module gets no answer; a daemon built from `mDNSPosix` is later work |
+| NeoDarwin has no mDNSResponder daemon (the macOS one isn't published) | since P1-19 checkpoint 2, mDNSResponder-2881's published POSIX daemon (`mDNSPosix`) runs as `/usr/sbin/mDNSResponder`, so DNS-SD calls and Libinfo's mdns module get answers (`docs/kernel/network.md`, "Name resolution") |
 
 ### Checkpoint 3: dyld and libdyld
 

@@ -28,8 +28,9 @@ for f in afpovertcp.cfg ftpusers gettytab kern_loader.conf shells ttys hosts man
 	install -m 0644 "$f" "$E/$f"
 done
 for f in find.codes hosts.equiv rmtab xtab; do : > "$E/$f"; chmod 0644 "$E/$f"; done
-# The resolv.conf -> ../var/run/resolv.conf link is left out: it dangles
-# until a resolver writes it, which a Bazel tree artifact doesn't hold.
+# The resolv.conf -> /var/run/resolv.conf link is left out: it dangles
+# until the DHCP client writes it, which a Bazel tree artifact doesn't
+# hold; the images make it (images/BUILD.bazel, _SYSTEM_LINKS).
 # SRC_PASSWD and SRC_GROUP, NeoDarwin's; passwd as the Makefile derives it
 install -m 0600 "$PROJ/master.passwd" "$E/master.passwd"
 install -m 0644 "$PROJ/group" "$E/group"

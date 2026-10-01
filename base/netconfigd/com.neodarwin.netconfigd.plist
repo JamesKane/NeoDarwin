@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SPDX-License-Identifier: BSD-2-Clause
+  netconfigd (base/netconfigd, docs/kernel/network.md, "Bringing interfaces up"): configures
+  the Ethernet interfaces at boot and as they appear, by DHCP or from /etc/netconfigd.conf.
+  It and its dhclients log to standard error until NeoDarwin has a log store.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.neodarwin.netconfigd</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/libexec/netconfigd</string>
+	</array>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/var/log/netconfigd.log</string>
+</dict>
+</plist>

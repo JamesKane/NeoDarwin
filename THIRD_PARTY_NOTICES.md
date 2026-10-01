@@ -20,7 +20,10 @@ NeoDarwin's own code is under the BSD 2-Clause licence (`LICENSE`). NeoDarwin al
 | FreeBSD ACPI xHCI attachment and DWC3 registers (`sys/dev/usb/controller/generic_xhci_acpi.c`, `sys/dev/usb/controller/dwc3/dwc3.h`) | `freebsd-src` commit cbbcf73a5d (branch `radxa-dragon-q8b`), the DWC3 role-switch set-up ported into `kernel/neodarwin/usb/nd_dwc3.h` with its notices (`PROVENANCE.md` there) | BSD-2-Clause (notice below) | the console USB keyboard's USB-C controllers on the Radxa Dragon Q8B |
 | dyld, Libc, libplatform, libpthread, libmalloc, Libinfo, libclosure, Libnotify, syslog, copyfile, removefile, Libsystem, objc4, cctools (libmacho), AvailabilityVersions | per `base/upstream.lock` | APSL-2.0 (BSD-derived parts keep their BSD notices) | the userland base (libSystem and the libraries under it) |
 | libdispatch | libdispatch-1542.0.4 | Apache-2.0 | `libdispatch.dylib` |
-| mDNSResponder (client library) | mDNSResponder-2881.0.25 | Apache-2.0 | `libsystem_dnssd` |
+| mDNSResponder | mDNSResponder-2881.0.25 | Apache-2.0 | `libsystem_dnssd` (the client library) and `/usr/sbin/mDNSResponder` (the published POSIX daemon, mDNSPosix) |
+| libresolv | libresolv-93 | APSL-2.0, with the ISC and BSD notices of its BIND-derived files (per file) | `libresolv.9.dylib`. Its HMAC-MD5 uses FreeBSD's `sys/crypto/md5c.c` (RSA Data Security's MD5, notice below) |
+| configd's `dnsinfo.h` | configd-1385.0.7 (one header, `base/libresolv/configd.lock`) | APSL-2.0 | declarations libresolv builds against; configd isn't built |
+| FreeBSD `dhclient` | `freebsd-src` at the commit in `base/dhclient/freebsd.lock` | BSD-3-Clause (the ISC DHCP client's, OpenBSD's and FreeBSD's notices, per file); ISC (`dhclient-script`); BSD-2-Clause (`inet6.c`) | `/sbin/dhclient`, `/sbin/dhclient-script`, `/etc/dhclient.conf` |
 | launchd | launchd-842.92.1 | Apache-2.0 | `/sbin/launchd`, liblaunch in `libxpc`, `/usr/libexec/launchproxy` |
 | LLVM runtimes (libc++, libc++abi, libunwind, compiler-rt builtins) | swiftlang/llvm-project swift-6.2-RELEASE | Apache-2.0 WITH LLVM-exception | the C++ runtime and `libcompiler_rt` |
 | system_cmds, shell_cmds, file_cmds, text_cmds, adv_cmds, diskdev_cmds, libutil, files | per `base/upstream.lock` | APSL-2.0 and BSD (most commands are BSD-derived; each file keeps its notice) | commands and `/etc` |
@@ -146,3 +149,17 @@ This product includes software developed by the OpenSSL Project for use in the O
 This product includes cryptographic software written by Eric Young (eay@cryptsoft.com).
 
 The full licence texts are in the pinned archive's `COPYING`.
+
+## RSA Data Security MD5
+
+`libresolv.9.dylib` (and the kernel's and dyld's digest code) include FreeBSD's `sys/crypto/md5c.c`, which is "derived from the RSA Data Security, Inc. MD5 Message-Digest Algorithm". As its licence requires:
+
+> Copyright (C) 1991-2, RSA Data Security, Inc. Created 1991. All rights reserved.
+>
+> License to copy and use this software is granted provided that it is identified as the "RSA Data Security, Inc. MD5 Message-Digest Algorithm" in all material mentioning or referencing this software or this function.
+>
+> License is also granted to make and use derivative works provided that such works are identified as "derived from the RSA Data Security, Inc. MD5 Message-Digest Algorithm" in all material mentioning or referencing the derived work.
+>
+> RSA Data Security, Inc. makes no representations concerning either the merchantability of this software or the suitability of this software for any particular purpose. It is provided "as is" without express or implied warranty of any kind.
+>
+> These notices must be retained in any copies of any part of this documentation and/or software.

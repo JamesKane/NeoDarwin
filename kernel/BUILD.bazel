@@ -2249,10 +2249,12 @@ sh_test(
 )
 
 # ---------------------------------------------------------------------------
-# P1-19 checkpoint 1: bring-up Ethernet (docs/kernel/network.md).
-# IONetworkingFamily and NeoDarwinVirtioNet on QEMU's user-mode network
-# (slirp: the guest 10.0.2.15/24, the gateway 10.0.2.2), configured by hand
-# with ifconfig and route; no DHCP yet. The harness's --user-net puts the
+# P1-19 checkpoints 1 and 2: bring-up Ethernet, DHCP and name resolution
+# (docs/kernel/network.md). IONetworkingFamily and NeoDarwinVirtioNet on
+# QEMU's user-mode network (slirp: DHCP gives the guest 10.0.2.15/24, the
+# gateway 10.0.2.2 and the DNS proxy 10.0.2.3), configured at boot by
+# netconfigd and dhclient; names resolve through Libinfo, mDNSResponder and
+# /etc/hosts. The harness's --user-net puts the
 # NIC on it, --hostfwd forwards a free port on the host's 127.0.0.1 to the
 # guest's sshd, and --host-cmd-after runs the host's ssh against it with a
 # key it made for the run (--host-setup), which root installs for the
@@ -2260,41 +2262,67 @@ sh_test(
 
 NET_MAC = "52:54:00:12:34:56"
 
+# A name resolved through slirp's DNS proxy, which forwards to the host's
+# resolver: the guest's lookup is checked only when the host can resolve it.
+NET_DNS_NAME = "example.com"
+
 # The host's ssh: this run's key only, no user configuration, agent or
 # known hosts; BatchMode, so it never asks for anything.
 NET_SSH = ("ssh -F /dev/null -i id_ed25519 -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes " +
            "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=60 " +
            "-p $$ND_HOSTFWD_PORT test@127.0.0.1")
 
-# Log in as root, configure en0 statically, look at it, ping the gateway,
-# turn on Remote Login and install the run's key for test; then the host
-# runs uname over ssh, and copies a 1.5 MB file back through it.
+# Log in as root and wait for en0's DHCP lease: netconfigd runs dhclient
+# at boot, which configures en0 and the default route and writes
+# /var/run/resolv.conf (/etc/resolv.conf's target), and mDNSResponder
+# rereads it. Look at the interface, the routes and resolv.conf, ping the
+# gateway, and resolve names through Libinfo: localhost from /etc/hosts,
+# and nd-test.local, an address record dns-sd registers with mDNSResponder
+# (multicast DNS, answered inside the guest). A name through slirp's DNS
+# proxy (10.0.2.3, which asks the host's resolver) is looked up too, and
+# checked only if the host itself can resolve it (below). Then turn on
+# Remote Login and install the run's key for test; the host runs uname over
+# ssh, copies a 1.5 MB file back through it, and checks the guest's lookup.
 NET_SESSION = [
     "--hostfwd 22",
     "--host-setup 'ssh-keygen -q -t ed25519 -N \"\" -C nd-net-test -f id_ed25519'",
     "--send-after 'login: ' 'root\\n'",
-    "--send-after 'root@localhost ~ # ' 'ifconfig en0 inet 10.0.2.15/24 up && route -n add default 10.0.2.2\\n'",
-    "--send-after 'root@localhost ~ # ' 'ifconfig en0; netstat -rn -f inet\\n'",
+    "--send-after 'root@localhost ~ # ' 'until [ -s /var/run/resolv.conf ]; do sleep 1; done; cat /var/log/netconfigd.log; echo lease-$$((6*7))\\n'",
+    "--send-after 'lease-42' 'ifconfig en0; netstat -rn -f inet; cat /etc/resolv.conf\\n'",
     "--send-after 'root@localhost ~ # ' 'ping -c 2 10.0.2.2\\n'",
+    "--send-after 'root@localhost ~ # ' 'ping -c 1 localhost\\n'",
+    "--send-after 'root@localhost ~ # ' 'dns-sd -P nd-test _nd-test._tcp local 7 nd-test.local 10.0.2.15 > /dev/null & sleep 3; ping -c 1 -t 5 nd-test.local; kill %1\\n'",
+    "--send-after 'root@localhost ~ # ' 'ping -c 1 -t 5 " + NET_DNS_NAME + " > /tmp/dns.txt 2>&1; cat /tmp/dns.txt\\n'",
     "--send-after 'root@localhost ~ # ' 'launchctl load -w /System/Library/LaunchDaemons/ssh.plist\\n'",
     "--send-after 'root@localhost ~ # ' 'mkdir -p /Users/test/.ssh && echo \"{hostfile:id_ed25519.pub}\" > /Users/test/.ssh/authorized_keys && echo key-$$((6*7))\\n'",
     "--host-cmd-after 'key-42' '" + NET_SSH + " uname -a'",
     "--host-cmd-after 'host: exit' 'f=/usr/lib/libcrypto.46.dylib; t=$$SECONDS; n=$$(" + NET_SSH + " cat $$f | wc -c); " +
     "m=$$(" + NET_SSH + " wc -c \\< $$f); echo \"copied $$((n)) of $$((m)) bytes in $$((SECONDS - t)) s\"; " +
     "[ $$((n)) -gt 1000000 ] && [ $$((n)) -eq $$((m)) ] && echo transfer-ok'",
+    "--host-cmd-after 'host: exit' 'if ! host -W 5 " + NET_DNS_NAME + " > /dev/null 2>&1; then " +
+    "echo \"dns: skipped: the host resolves no names (no network?)\"; " +
+    "elif " + NET_SSH + " cat /tmp/dns.txt | grep -q \"^PING " + NET_DNS_NAME + " (\"; then echo \"dns: " + NET_DNS_NAME + " resolved\"; " +
+    "else echo \"dns: FAILED: the host resolves " + NET_DNS_NAME + ", the guest did not\"; fi'",
     "--send-after 'host: exit' 'netstat -I en0; cat /var/log/sshd.log\\n'",
 ]
 
 NET_SESSION_LINES = [
     "'NeoDarwinInterfaceNamer: en0: IOEthernetInterface of NeoDarwinVirtioNet'",
     "': en0: link up'",
+    "'netconfigd: en0: DHCP (dhclient -d en0, pid '",
+    "'DHCPACK from 10.0.2.2'",
+    "'bound to 10.0.2.15 -- renewal in '",
     "'ether " + NET_MAC + "'",
     "'inet 10.0.2.15 netmask 0xffffff00 broadcast 10.0.2.255'",
     "'status: active'",
     "'default            10.0.2.2           UGScg                 en0'",
+    "'nameserver 10.0.2.3'",
     "'2 packets transmitted, 2 packets received, 0.0% packet loss'",
+    "'PING localhost (127.0.0.1)'",
+    "'PING nd-test.local (10.0.2.15)'",
     "'host: Darwin localhost '",
     "'host: transfer-ok'",
+    "'host: dns: '",
     "'Accepted publickey for test from 10.0.2.2'",
 ]
 
@@ -2315,6 +2343,7 @@ sh_test(
         "--absent 'NeoDarwinInterfaceNamer: cannot'",
         "--absent 'is not a receive buffer'",
         "--absent 'host: timed out'",
+        "--absent 'host: dns: FAILED'",
     ] + NET_SESSION + [
         "$(rootpath //boot/neoboot)",
         "300",
@@ -2348,6 +2377,7 @@ sh_test(
         "--absent 'NeoDarwinInterfaceNamer: cannot'",
         "--absent 'is not a receive buffer'",
         "--absent 'host: timed out'",
+        "--absent 'host: dns: FAILED'",
     ] + NET_SESSION + [
         "$(rootpath //boot/neoboot)",
         "300",
@@ -2383,6 +2413,7 @@ sh_test(
         "--absent 'NeoDarwinInterfaceNamer: cannot'",
         "--absent 'is not a receive buffer'",
         "--absent 'host: timed out'",
+        "--absent 'host: dns: FAILED'",
     ] + NET_SESSION + [
         "$(rootpath //boot/neoboot)",
         "480",

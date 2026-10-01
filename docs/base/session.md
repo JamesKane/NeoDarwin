@@ -367,7 +367,7 @@ macOS hasn't worked this way since launchd 2.0 (OS X 10.10). There, one PID 1 se
 
 ### After P1-08: loopback and sshd
 
-NeoDarwin configures the loopback interface at boot and runs OpenSSH's sshd under launchd, as macOS does. Everything here is tested over 127.0.0.1 inside QEMU. Since P1-19 checkpoint 1 there is also a NIC (virtio-net, configured by hand) and the host logs in over it (`docs/kernel/network.md`); there is no DHCP or name service yet. Those are later items in `roadmap/backlog.yaml`: Ethernet dexts in Phase 3, P4-24 (the rest of the networking userland, `resolv.conf`, pf) and P4-25 (sshd on the board with a key, scp and sftp). This section is the loopback part of both, and sets no status.
+NeoDarwin configures the loopback interface at boot and runs OpenSSH's sshd under launchd, as macOS does. Everything here is tested over 127.0.0.1 inside QEMU. Since P1-19 checkpoint 1 there is also a NIC (virtio-net) and the host logs in over it, and since checkpoint 2 the NIC takes a DHCP lease at boot and names resolve (`docs/kernel/network.md`, "Checkpoint 2"): two more LaunchDaemons that `launchctl bootstrap` loads like getty's and auditd's, `com.neodarwin.netconfigd` (netconfigd and FreeBSD's dhclient) and `com.apple.mDNSResponder` (mDNSResponder's POSIX daemon), with libresolv-93 and `/etc/resolv.conf` -> `/var/run/resolv.conf`. The rest is in later items in `roadmap/backlog.yaml`: Ethernet dexts in Phase 3, P4-24 (the rest of the networking userland, `resolv.conf`, pf) and P4-25 (sshd on the board with a key, scp and sftp). This section is the loopback part of both, and sets no status.
 
 | Piece | From | Installed |
 |---|---|---|
@@ -403,7 +403,7 @@ Swift can't call `ioctl`, which is variadic, or import the `_IOW` request macros
   - BSM audit (there was no libbsm when this was built);
   - zlib (not in the base), so compression is never negotiated;
   - Seatbelt's `sandbox_init()`: libsystem_sandbox is a stand-in without a policy. The pre-authentication process, `sshd-auth`, uses OpenSSH's rlimit sandbox instead (`SANDBOX_RLIMIT`: no new files, descriptors or processes), on top of privilege separation (chroot to `/var/empty`, user `_sshd`).
-- Patch 0003: `getrrsetbyname()` (SSHFP records for `VerifyHostKeyDNS`) fails with `ERRSET_FAIL`. Apple links libresolv for it (`-lresolv`), which the base doesn't have; libresolv-93 is in the release set.
+- `getrrsetbyname()` (SSHFP records for `VerifyHostKeyDNS`) queries through libresolv-93 (`-lresolv`, as Apple links it). Until P1-19 checkpoint 2 built libresolv, patch 0003 made it fail with `ERRSET_FAIL`; that patch is gone.
 - Not built: `ssh-keysign` (setuid, host-based authentication), `ssh-pkcs11-helper` and `ssh-sk-helper` (libfido2), `ssh-apple-pkcs11`, `sshd-fvunlock`, `remote-login-status`, `slapconfig-keygen` and the regression tools. Without `ssh-sk-helper`, security-key (`-sk`) keys don't work.
 
 **Configuration** is make-config.zsh's:
@@ -421,7 +421,7 @@ Without `nullok`, an account with an empty password (root's) can't log in over s
 
 **The launch model is macOS's: socket-activated, inetd-style.** `ssh.plist` is Apple's `com.openssh.sshd.plist`, unmodified and `Disabled`. Remote Login is off until root runs `launchctl load -w /System/Library/LaunchDaemons/ssh.plist`. With launchd-842 this works as on Mac OS X 10.9:
 - launchctl, not launchd, creates a job's listening sockets. NeoDarwin's launchctl now does, as 842's `sock_dict_edit_entry()` does. For each `Sockets` entry it runs `getaddrinfo` with `AI_PASSIVE`. `SockServiceName` `ssh` gives port 22 from `/etc/services`, on 0.0.0.0 and ::, with `IPV6_V6ONLY`, `SO_REUSEADDR` and `listen(-1)`. It also handles `SockPathName` (Unix sockets), `SockType`, `SockFamily`, `SockProtocol` and `SockNodeName`. It sends the descriptors in the `SubmitJob` message (`launch_data_new_fd`; liblaunch passes them with `SCM_RIGHTS`).
-- Left out: `Bonjour` (no mDNSResponder daemon), `SecureSocketWithKey` and multicast groups.
+- Left out: `Bonjour` (launchctl doesn't register the socket with mDNSResponder; the daemon runs since P1-19 checkpoint 2), `SecureSocketWithKey` and multicast groups.
 - For an `inetdCompatibility` job, launchd watches the sockets and starts `/usr/libexec/launchproxy`. launchproxy checks in, accepts each connection and runs the job's program with the connection as standard input and output (`Wait` false, up to 42 instances).
 - The program, `sshd-keygen-wrapper`, generates any missing host key (ecdsa, ed25519, rsa: `ssh-keygen -q -t ALG -f /etc/ssh/ssh_host_ALG_key -N "" -C ""`, as Apple's `HostKeyManager` does). So the keys are made on the first connection after Remote Login is turned on. Then it execs `sshd -i`. sshd re-execs `sshd-session`, which runs `sshd-auth` for the pre-authentication phase.
 - A KeepAlive `sshd -D` would have needed none of this. But it would listen from boot, and the socket model is what macOS ships. Every part of it is open source (launchd-842, launchproxy), and only launchctl's half was missing.
@@ -446,7 +446,7 @@ It passes in about 20 seconds.
 | launchd-842 runs an `inetdCompatibility` job through `/usr/libexec/launchproxy` (`core.c`, `file2exec`), which wasn't built. launchctl, not launchd, creates the job's sockets | `//base:launchproxy` from 842's `support/launchproxy.c`, with launchd's patches. launchctl creates the `Sockets` descriptors (Network.swift) |
 | sshd in inetd mode points standard error at `/dev/null` unless it logs to stderr (`-e`), and NeoDarwin's `syslog(3)` is standard error | the wrapper passes `-e -E /var/log/sshd.log` |
 | network_cmds-726 names netem models that xnu-12377 lacks | network_cmds patch 0001 |
-| Apple's OpenSSH links libresolv (SSHFP lookups through `res_9_query`), which the base doesn't have | openssh patch 0003: the lookups fail. libresolv-93 can come with P4-24's name service |
+| Apple's OpenSSH links libresolv (SSHFP lookups through `res_9_query`), which the base didn't have | at first openssh patch 0003 (the lookups failed); since P1-19 checkpoint 2 libresolv-93 is built and OpenSSH links it (`docs/kernel/network.md`) |
 | Seatbelt (`sandbox_init`) is closed | `SANDBOX_RLIMIT` for sshd-auth |
 | `pam_sacl` denies everyone without a directory service (`mbr_check_service_membership` answers `EIO`) | left out of `pam.d/sshd` |
 | Libinfo's `getaddrinfo` logs "si_destination_compare: send failed: Invalid argument" for each passive address (`::`, `0.0.0.0`) when launchctl creates the sockets. Its RFC 6724 sort asks the kernel's netsrc control for a route to the unspecified address | expected, as Libinfo's own comment says ("no route to host"). The order of passive sockets doesn't matter |

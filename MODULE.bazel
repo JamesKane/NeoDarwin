@@ -315,6 +315,16 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/OpenSSH/archive/refs/tags/OpenSSH-354.0.3.tar.gz"],
 )
 
+# DHCP and name resolution (docs/kernel/network.md, P1-19 checkpoint 2):
+# libresolv-93, macOS 26.0's resolver library (/usr/lib/libresolv.9.dylib).
+http_archive(
+    name = "apple_libresolv",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "10841d9b6f1c60935f9ad2882ab27faa2bc26a4a01cc30318c05c592daf5f83e",
+    strip_prefix = "libresolv-libresolv-93",
+    urls = ["https://github.com/apple-oss-distributions/libresolv/archive/refs/tags/libresolv-93.tar.gz"],
+)
+
 http_archive(
     name = "libressl",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
@@ -508,6 +518,24 @@ pinned_files(
     build_file = "//base:libxo/freebsd.BUILD",
     lockfile = "//base:libxo/freebsd.lock",
     url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
+# FreeBSD's sbin/dhclient, NeoDarwin's DHCP client (base/dhclient): Apple's,
+# bootp's IPConfiguration, is a configd plugin.
+pinned_files(
+    name = "freebsd_dhclient",
+    build_file = "//base:dhclient/freebsd.BUILD",
+    lockfile = "//base:dhclient/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
+# configd-1385.0.7's dnsinfo.h, for libresolv (base/libresolv): configd
+# itself isn't built.
+pinned_files(
+    name = "apple_configd_dnsinfo",
+    build_file = "//base:libresolv/configd.BUILD",
+    lockfile = "//base:libresolv/configd.lock",
+    url_template = "https://raw.githubusercontent.com/apple-oss-distributions/configd/{commit}/{path}",
 )
 
 pinned_files(

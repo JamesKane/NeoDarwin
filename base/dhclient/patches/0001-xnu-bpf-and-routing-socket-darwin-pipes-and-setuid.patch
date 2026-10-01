@@ -1,0 +1,170 @@
+From: NeoDarwin
+Subject: [PATCH] dhclient: xnu's BPF and routing socket, Darwin's pipes and setuid
+
+xnu's BPF sends a frame written without "header complete" (BIOCSHDRCMPLT)
+through the interface's PF_INET protocol, which is attached only once the
+interface has an IPv4 address, so before a lease every write failed; the
+frames carry their own Ethernet header, and on Darwin the write descriptor
+is set header-complete, as macOS's IPConfiguration sets its own.
+xnu's BPF has no write filter (BIOCSETWF), no lock (BIOCLOCK) and no VLAN
+priority tagging (BIOCSETVLANPCP); its routing socket sends no interface
+announcements (RTM_IFANNOUNCE) and no 802.11 events (RTM_IEEE80211). Each
+use is compiled only where the kernel's headers define it, so upstream is
+unchanged on FreeBSD. On xnu the descriptors stay unlocked and the write
+side unfiltered (FreeBSD's hardening of the unprivileged process, as
+Capsicum is), a vlan-pcp setting fails as unsupported, and a departing
+interface is noticed when it goes down (RTM_IFINFO). The pid file goes in
+/var/run itself: /var/run/dhclient/ doesn't exist on Darwin, and launchctl's
+bootstrap empties /var/run. Darwin's setuid(2) without privilege takes only
+the real or saved user ID (FreeBSD's also takes the effective one), so
+dropping to the unprivileged user fails after seteuid(); on Darwin, setuid()
+as root sets all three IDs at once. The two processes talk over one
+channel in both directions (a request, then its reply); FreeBSD's pipes
+are bidirectional and Darwin's aren't, so on Darwin it is a socket pair
+(otherwise the first reply fails, EBADF). In the foreground (-d) the privileged
+process keeps standard error, so that its errors and dhclient-script's
+reach the log (NeoDarwin's syslog is standard error).
+
+Rebase-risk: low (preprocessor guards, one path).
+--- a/bpf.c
++++ b/bpf.c
+@@ -91,8 +91,10 @@
+ 
+ 	/* Tag the packets with the proper VLAN PCP setting. */
+ 	if (info->client->config->vlan_pcp != 0) {
++#ifdef BIOCSETVLANPCP
+ 		if (ioctl(sock, BIOCSETVLANPCP,
+ 		    &info->client->config->vlan_pcp) < 0)
++#endif
+ 			error( "Can't set the VLAN PCP tag on interface %s: %m",
+ 			    info->name);
+ 	}
+@@ -160,12 +162,30 @@
+ 	/* Set up the bpf write filter program structure. */
+ 	p.bf_insns = __DECONST(struct bpf_insn *, dhcp_bpf_wfilter);
+ 	p.bf_len = nitems(dhcp_bpf_wfilter);
++
++#ifdef __APPLE__
++	/*
++	 * The frames carry their own Ethernet header (assemble_hw_header()).
++	 * Without "header complete", xnu's BPF sends a write through the
++	 * interface's PF_INET protocol, which isn't attached until the
++	 * interface has an IPv4 address: before the lease, every DISCOVER
++	 * would fail (ENXIO).  macOS's IPConfiguration sets it too.
++	 */
++	if (ioctl(info->wfdesc, BIOCSHDRCMPLT, &on) < 0)
++		error("Can't set header complete on the bpf device: %m");
++#endif
+ 
++#ifdef BIOCSETWF
+ 	if (ioctl(info->wfdesc, BIOCSETWF, &p) < 0)
+ 		error("Can't install write filter program: %m");
++#else
++	(void)p;
++#endif
+ 
++#ifdef BIOCLOCK
+ 	if (ioctl(info->wfdesc, BIOCLOCK, NULL) < 0)
+ 		error("Cannot lock bpf");
++#endif
+ 
+ 	cap_rights_init(&rights, CAP_WRITE);
+ 	if (caph_rights_limit(info->wfdesc, &rights) < 0)
+@@ -296,8 +316,10 @@
+ 	if (ioctl(info->rfdesc, BIOCSETF, &p) < 0)
+ 		error("Can't install packet filter program: %m");
+ 
++#ifdef BIOCLOCK
+ 	if (ioctl(info->rfdesc, BIOCLOCK, NULL) < 0)
+ 		error("Cannot lock bpf");
++#endif
+ 
+ 	cap_rights_init(&rights, CAP_IOCTL, CAP_EVENT, CAP_READ);
+ 	if (caph_rights_limit(info->rfdesc, &rights) < 0)
+--- a/dhclient.c
++++ b/dhclient.c
+@@ -317,6 +317,7 @@
+ 				state_reboot(ifi);
+ 		}
+ 		break;
++#ifdef RTM_IFANNOUNCE
+ 	case RTM_IFANNOUNCE:
+ 		ifan = (struct if_announcemsghdr *)rtm;
+ 		if (ifan->ifan_what == IFAN_DEPARTURE &&
+@@ -326,6 +327,8 @@
+ 			goto die;
+ 		}
+ 		break;
++#endif
++#ifdef RTM_IEEE80211
+ 	case RTM_IEEE80211:
+ 		ifan = (struct if_announcemsghdr *)rtm;
+ 		if (ifan->ifan_index != ifi->index)
+@@ -347,6 +350,7 @@
+ 			break;
+ 		}
+ 		break;
++#endif
+ 	default:
+ 		break;
+ 	}
+@@ -432,7 +436,7 @@
+ 
+ 	if (path_dhclient_pidfile == NULL) {
+ 		asprintf(&path_dhclient_pidfile,
+-		    "%s/dhclient/dhclient.%s.pid", _PATH_VARRUN, *argv);
++		    "%sdhclient.%s.pid", _PATH_VARRUN, *argv);
+ 		if (path_dhclient_pidfile == NULL)
+ 			error("asprintf");
+ 	}
+@@ -512,8 +516,18 @@
+ 	/* set up the interface */
+ 	discover_interfaces(ifi);
+ 
++#ifdef __APPLE__
++	/*
++	 * Both processes read and write their end of the channel (a script
++	 * request, then its status). FreeBSD's pipes are bidirectional;
++	 * Darwin's aren't, so the channel is a socket pair.
++	 */
++	if (socketpair(AF_UNIX, SOCK_STREAM, 0, pipe_fd) == -1)
++		error("socketpair");
++#else
+ 	if (pipe(pipe_fd) == -1)
+ 		error("pipe");
++#endif
+ 
+ 	fork_privchld(pipe_fd[0], pipe_fd[1]);
+ 
+@@ -573,8 +587,16 @@
+ 			error("chdir(\"/\")");
+ 	}
+ 
++#ifdef __APPLE__
++	/*
++	 * Darwin's setuid() without privilege allows only the real or saved
++	 * user ID, so it fails after seteuid(); as root it sets all three.
++	 */
++	if (setegid(pw->pw_gid) || setgid(pw->pw_gid) || setuid(pw->pw_uid))
++#else
+ 	if (setegid(pw->pw_gid) || setgid(pw->pw_gid) ||
+ 	    seteuid(pw->pw_uid) || setuid(pw->pw_uid))
++#endif
+ 		error("can't drop privileges: %m");
+ 
+ 	if (immediate_daemon)
+@@ -3047,6 +3069,14 @@
+ 	setsid();
+ 	dup2(nullfd, STDIN_FILENO);
+ 	dup2(nullfd, STDOUT_FILENO);
++#ifdef __APPLE__
++	/*
++	 * In the foreground (-d), the privileged process's errors (a failed
++	 * send) and dhclient-script's go to standard error, as the other
++	 * process's do: NeoDarwin's syslog is standard error.
++	 */
++	if (!no_daemon)
++#endif
+ 	dup2(nullfd, STDERR_FILENO);
+ 	close(nullfd);
+ 	close(fd2);

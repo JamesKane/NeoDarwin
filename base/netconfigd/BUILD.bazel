@@ -1,0 +1,29 @@
+load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:darwin_executable.bzl", "swift_embedded_executable")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "com.neodarwin.netconfigd.plist",
+    "netconfigd.conf",
+])
+
+# /usr/libexec/netconfigd (docs/kernel/network.md, "Bringing interfaces up"):
+# NeoDarwin's launchd job that configures Ethernet interfaces at boot, by
+# DHCP (FreeBSD's dhclient, //base:dhcp_client) or statically
+# (/etc/netconfigd.conf). macOS does this in configd (IPConfiguration);
+# Embedded Swift on libSystem, as launchctl is.
+swift_embedded_executable(
+    name = "netconfigd",
+    srcs = glob(["Sources/*.swift"]),
+    hdrs = [
+        "NetConfig/module.modulemap",
+        "NetConfig/netconfig_shim.h",
+    ],
+    root = "//base:root",
+)
+
+lang_audit_test(
+    name = "netconfigd_lang_audit",
+    srcs = ["NetConfig/netconfig_shim.h"],
+)

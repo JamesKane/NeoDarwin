@@ -1,7 +1,9 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
-# Bring-up Ethernet: IONetworkingFamily and virtio-net (P1-19)
+# Bring-up Ethernet: IONetworkingFamily, virtio-net, DHCP and a resolver (P1-19)
 
-**P1-19, checkpoint 1.** The SBSA kernel has an Ethernet stack: Apple's open **IONetworkingFamily**, the family every macOS Ethernet driver publishes through, with a NeoDarwin **virtio-net** driver under it. Its interface attaches to the BSD stack as **en0**, root configures it by hand (`ifconfig en0 inet 10.0.2.15/24 up`, `route add default 10.0.2.2`), and on QEMU's user-mode network the gateway answers `ping`, and **the host logs in over ssh** with a key and copies a file back, on `virt` (MSI-X and INTx) and on `sbsa-ref`.
+**P1-19, checkpoint 2** ("Checkpoint 2: DHCP and name resolution", below): en0 takes a **DHCP lease at boot** (FreeBSD's `dhclient`, run by NeoDarwin's `netconfigd` launchd job), `/etc/resolv.conf` names the server the lease gives, and **names resolve** through Libinfo as on macOS: `/etc/hosts`, then **mDNSResponder** (the published POSIX daemon) for unicast DNS and `.local`; **libresolv-93** is built and OpenSSH links it again. On QEMU `virt` (MSI-X and INTx) and `sbsa-ref` the guest gets 10.0.2.15 from slirp, resolves a name and the host logs in over ssh.
+
+**Checkpoint 1.** The SBSA kernel has an Ethernet stack: Apple's open **IONetworkingFamily**, the family every macOS Ethernet driver publishes through, with a NeoDarwin **virtio-net** driver under it. Its interface attaches to the BSD stack as **en0**, root configures it by hand (`ifconfig en0 inet 10.0.2.15/24 up`, `route add default 10.0.2.2`), and on QEMU's user-mode network the gateway answers `ping`, and **the host logs in over ssh** with a key and copies a file back, on `virt` (MSI-X and INTx) and on `sbsa-ref`.
 
 It is a **bring-up aid**, kept small and easy to replace, as P1-18's console keyboard is (`usb-console.md`). P3-08's network dexts (virtio-net, e1000/igb, Realtek `re`, and `netd`; `docs/architecture/drivers.md`) replace the in-kernel drivers, and this checkpoint's patch 0036 goes with them. Whether IONetworkingFamily stays under the dexts (on macOS, DriverKit's Ethernet drivers reach the stack through the closed NetworkingDriverKit and Skywalk instead) is P3-08's decision. Checkpoint 2 adds DHCP and a resolver, checkpoint 3 the Radxa Dragon Q8B's Toshiba TC956x, a port of FreeBSD's `tcx` (below, "What checkpoints 2 and 3 need").
 
@@ -115,27 +117,29 @@ NeoDarwinVirtioNet: 00:01.0: rx queue: first completion by its interrupt (MSI-X 
 
 ## Configuration
 
-Static, by hand, for now. QEMU's user-mode network (slirp) is 10.0.2.0/24: the guest is 10.0.2.15, the gateway (and the host, as seen from the guest) 10.0.2.2, the DNS proxy 10.0.2.3.
+Checkpoint 1 configured en0 by hand. QEMU's user-mode network (slirp) is 10.0.2.0/24: the guest is 10.0.2.15, the gateway (and the host, as seen from the guest) 10.0.2.2, the DNS proxy 10.0.2.3.
 
 ```
 ifconfig en0 inet 10.0.2.15/24 up
 route -n add default 10.0.2.2
 ```
 
-`ifconfig en0 up` enables the interface (`IONetworkController::enable`), which starts the output queue and reports the link (`en0: link up`). Nothing configures en0 at boot yet: launchctl's bootstrap configures only lo0 (`docs/base/session.md`, "Loopback and sshd"). DHCP is checkpoint 2.
+`ifconfig en0 up` enables the interface (`IONetworkController::enable`), which starts the output queue and reports the link (`en0: link up`). Since checkpoint 2, netconfigd does this at boot and dhclient takes the lease (below); a static configuration is a line in `/etc/netconfigd.conf`.
 
 ## Tests
 
 | Target | Machine | Asserts |
 |---|---|---|
-| `//kernel:sbsa_net_test` | `virt`, `virtio-net-pci,disable-legacy=on` (1af4:1041) on the user network, MSI-X | the driver's line (MAC 52:54:00:12:34:56, three MSI-X vectors), en0 named, `ifconfig en0` (ether, inet 10.0.2.15/24, `status: active`), the default route, `ping -c 2 10.0.2.2` (2 of 2), the first receive and transmit completions on vectors 1 and 2; **ssh from the host**: `uname -a` says `Darwin`, a 1.5 MB file copies back whole; `netstat -I en0`; sshd logs the publickey login from 10.0.2.2 |
+| `//kernel:sbsa_net_test` | `virt`, `virtio-net-pci,disable-legacy=on` (1af4:1041) on the user network, MSI-X | the driver's line (MAC 52:54:00:12:34:56, three MSI-X vectors), en0 named; **the lease** (checkpoint 2): netconfigd starts `dhclient -d en0`, `DHCPACK from 10.0.2.2`, `bound to 10.0.2.15`; `ifconfig en0` (ether, inet 10.0.2.15/24, `status: active`), the default route via 10.0.2.2, `nameserver 10.0.2.3` in `/etc/resolv.conf`, `ping -c 2 10.0.2.2` (2 of 2); **names**: `localhost` (`/etc/hosts`), `nd-test.local` (mDNS, a record `dns-sd -P` registers) and, when the host can resolve it, `example.com` through slirp's DNS proxy; the first receive and transmit completions on vectors 1 and 2; **ssh from the host**: `uname -a` says `Darwin`, a 1.5 MB file copies back whole; `netstat -I en0`; sshd logs the publickey login from 10.0.2.2 |
 | `//kernel:sbsa_net_intx_test` | `virt`, `nd_pci_msi=0`, transitional `virtio-net-pci` (1af4:1000) | the same on INTx |
 | `//kernel:sbsa_ref_net_test` | `sbsa-ref` (TF-A, SbsaQemu, four CPUs), `virtio-net-pci,disable-legacy=on` on its PCIe root bus | the same, with MSI-X through the ITS via the SMMUv3 in bypass |
+
+Checkpoint 1's tests configured en0 by hand (`ifconfig`, `route`); since checkpoint 2 the same three tests take the lease at boot and resolve names ("Checkpoint 2", "Tests").
 
 **ssh from the host.** The harness runs the host's own `ssh`, and keeps the run sealed:
 
 - `--host-setup` makes an ed25519 key with `ssh-keygen` in a directory of the run's own (also `HOME` for host commands), deleted with the run.
-- In the guest, root runs `launchctl load -w /System/Library/LaunchDaemons/ssh.plist` (Remote Login, socket-activated) and writes the public key to `/Users/test/.ssh/authorized_keys`: the harness types it, from `{hostfile:id_ed25519.pub}`.
+- In the guest, root waits for the lease (`/var/run/resolv.conf` written), then runs `launchctl load -w /System/Library/LaunchDaemons/ssh.plist` (Remote Login, socket-activated) and writes the public key to `/Users/test/.ssh/authorized_keys`: the harness types it, from `{hostfile:id_ed25519.pub}`.
 - `--user-net ...` with `--hostfwd 22` adds `-netdev user,hostfwd=tcp:127.0.0.1:PORT-:22`. PORT is a free port the host's kernel picks for this run; the forward listens on the loopback only and closes with QEMU. No other host port is opened.
 - `--host-cmd-after 'key-42' 'ssh ... uname -a'` runs `ssh -F /dev/null -i id_ed25519 -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $ND_HOSTFWD_PORT test@127.0.0.1`: no user configuration, agent or known hosts, never a prompt. The first connection waits while `sshd-keygen-wrapper` makes the guest's host keys.
 - Its output joins the log as `host: ...` lines (`host: Darwin localhost 25.0.0 ...`, `host: exit 0`), which the test expects like serial lines. Commands are the test's own text; nothing the guest prints goes into them. Each has a time limit (180 s), and is killed with QEMU.
@@ -151,7 +155,7 @@ route -n add default 10.0.2.2
 |---|---|
 | IONetworkingFamily doesn't compile in xnu's iokit as-is: under `XNU_KERNEL_PRIVATE`, BSD's internal headers don't build as C++ there | the kext's view of the kernel (patch 0035, "What of IONetworkingFamily builds") |
 | Interfaces wait for a user-space namer that doesn't exist | `NeoDarwinInterfaceNamer` ("Naming") |
-| `netstat -I en0` reports 0 input packets while traffic flows. The SBSA kernel's Skywalk default (`IF_ATTACH_NX_DEFAULT` for a non-macOS target: `SKYWALK_NETWORKING_ENABLED`) attaches a netif *compat* nexus to every Ethernet interface, which sets `IFCAP_SKYWALK`; the DLIL input thread then skips its stats sync ("the stats are already incremented there", `dlil_input.c`), but IONetworkingFamily's input goes through `ifnet_input_extended` and that thread, so the counts are dropped. Output counts are unaffected. Confirmed: with the boot-arg `if_attach_nx=2` (flowswitch only, no compat netif) `netstat -I en0` counts input (4 packets after a 3-echo ping) | open, not NeoDarwin's code: the driver's `Statistics` has the real receive counts. Whether NeoDarwin's default should leave compat netif off (it buys nothing for legacy-TX interfaces, which get no flowswitch: "skip attaching fsw to en0 using legacy TX model") is for checkpoint 2 or P3-08 |
+| `netstat -I en0` reports 0 input packets while traffic flows. The SBSA kernel's Skywalk default (`IF_ATTACH_NX_DEFAULT` for a non-macOS target: `SKYWALK_NETWORKING_ENABLED`) attaches a netif *compat* nexus to every Ethernet interface, which sets `IFCAP_SKYWALK`; the DLIL input thread then skips its stats sync ("the stats are already incremented there", `dlil_input.c`), but IONetworkingFamily's input goes through `ifnet_input_extended` and that thread, so the counts are dropped. Output counts are unaffected. Confirmed: with the boot-arg `if_attach_nx=2` (flowswitch only, no compat netif) `netstat -I en0` counts input (4 packets after a 3-echo ping) | not NeoDarwin's code; the driver's `Statistics` has the real receive counts. **Decided in checkpoint 2: the default stays** ("Checkpoint 2", "Decisions") |
 | The harness's first host-command hook only looked at its child when the next step was due, so a step waiting for `host: exit` never fired | `host_poll` on every pass of the watchdog loop; a timed-out command reports `host: exit 124` |
 | Both `sbsa-ref`'s e1000e and `virt`'s default NIC vanish with `-netdev` | expected (QEMU's default NIC rule); the tests' PCI addresses are not asserted |
 
@@ -163,15 +167,123 @@ route -n add default 10.0.2.2
 - No KDP over Ethernet.
 - Interface units are not persistent (the namer).
 
-## What checkpoints 2 and 3 need
+## Checkpoint 2: DHCP and name resolution
 
-**Checkpoint 2, DHCP and a resolver.**
-- A DHCP client. macOS's is `IPConfiguration` in bootp-527 (macOS 26.0's `bootp`), a configd plugin, which needs configd; NeoDarwin has neither. Options: a small first-party client run by launchd (Embedded Swift, like launchctl), or FreeBSD's `dhclient` (BSD; needs BPF, which xnu has). It sets the address and route with the same ioctls as `ifconfig` and `route`, and writes `/etc/resolv.conf` (or `/var/run/resolv.conf`, as macOS links it).
-- What brings en0 up at boot: the DHCP client's launchd job, or launchctl's bootstrap next to the loopback set-up.
-- libresolv-93 (macOS 26.0's) for `res_query` and `getrrsetbyname`; Libinfo's `getaddrinfo` asks mDNSResponder on macOS (`DNSServiceGetAddrInfo` through `libsystem_dnssd`), so either mDNSResponder-2881 comes too or Libinfo's resolver falls back to libresolv and `/etc/hosts` (a Libinfo module). OpenSSH's patch 0003 (no `getrrsetbyname`) can then go.
-- QEMU's user network serves DHCP (10.0.2.15 from 10.0.2.2) and DNS (10.0.2.3, the host's resolver). The harness's user network lets the guest out through the host's NAT, as QEMU's default NIC always has (`restrict=on` would cut DNS too); the DNS proxy answers with the host's resolver, so a test can resolve `localhost` or a name in the host's own configuration without leaving the machine.
-- The exit's "accept ssh from the host" is already proven here.
-- Decide the `if_attach_nx` default ("Findings": input counters), and whether the namer moves to user space with the DHCP client.
+### Decisions
+
+| Question | Decision | Why |
+|---|---|---|
+| DHCP client | **FreeBSD's `dhclient`** (`sbin/dhclient`, pinned file by file at the commit libm and libxo use: `base/dhclient/freebsd.lock`), with its `dhclient-script` | The reuse order (`docs/repository.md` §3.1): Apple's client, `IPConfiguration` in bootp-527, is a configd plugin and needs configd and SystemConfiguration, which NeoDarwin doesn't build; FreeBSD's comes before new code. It is the OpenBSD-derived ISC client, in production for twenty years, with privilege separation, lease files, renewal and rebinding, classless static routes, and an exit-hook script for local policy. A first-party Swift client would be new protocol code to get right and keep right. Its needs are small: BPF (xnu has `/dev/bpf*`), a routing socket, `sh`, `ifconfig` and `route`, all in the base. The port is compat headers for Capsicum and Casper (`base/dhclient/compat`) and two patches |
+| What brings interfaces up | **`netconfigd`**, a small first-party Embedded Swift launchd job (`com.neodarwin.netconfigd`, KeepAlive), with `/etc/netconfigd.conf` (FreeBSD `rc.conf` style: `ifconfig_<if>="DHCP"`, a static `ifconfig` line, or `NONE`; `ifconfig_DEFAULT`; `defaultrouter`) | dhclient serves one interface per process and exits when it loses the interface; something has to find the interfaces, start a client for each and restart it. On macOS configd's IPConfiguration does this. A launchd job, loaded by `launchctl bootstrap` with the other LaunchDaemons, keeps launchctl's bootstrap to what launchctl-842's does (lo0 only), handles en* interfaces present at boot and those that appear later (a routing-socket message or a 5-second scan), and needs no boot-arg |
+| Resolver | **(a) mDNSResponder's daemon**, from the published `mDNSPosix` sources of mDNSResponder-2881.0.25, installed as `/usr/sbin/mDNSResponder` with `dns-sd`; plus **libresolv-93** (`/usr/lib/libresolv.9.dylib`) | macOS fidelity: on macOS every `getaddrinfo`, `gethostbyname` and Libinfo `res_query` goes to mDNSResponder through `libsystem_dnssd` (Libinfo's mdns module), and the client library was already built. The published POSIX daemon has the same core (`mDNSCore`), the same client server (`uds_daemon.c`) and wire protocol, does unicast DNS from `/etc/resolv.conf` and `.local` by multicast, and built with one patch. (b), a libresolv module patched into Libinfo, would be a NeoDarwin-only resolver path to maintain and would leave `libsystem_dnssd`, `dns-sd` and `.local` dead. libresolv is the macOS 26.0 library for the programs that call it directly (`res_9_query`, `dns_*`), OpenSSH's SSHFP lookups among them |
+| `/etc/resolv.conf` | macOS's: a link to `/var/run/resolv.conf` (the image's), written by `dhclient-script` and reread by mDNSResponder on `SIGHUP` | `/var/run` is emptied at boot, so a stale lease's servers never survive a reboot |
+| OpenSSH patch 0003 (SSHFP off) | **dropped**: OpenSSH links libresolv (`-lresolv`) as Apple's build does | libresolv exists now |
+| `if_attach_nx` default | **kept** (the kernel's Skywalk default, a compat netif on every Ethernet interface); `netstat -I` undercounts input packets on IONetworkingFamily interfaces, documented ("Findings") | The input-counter loss is cosmetic: the driver's `Statistics` and `netstat -I`'s output counts are right, and DHCP, BPF and the stack don't depend on it. The default is xnu's own for an arm64 non-macOS kernel (macOS's own default also attaches compat netifs), and changing it from neoboot would make NeoDarwin's stack differ from the one Apple tests, for one counter. P3-08 decides again, with its dexts, which on macOS reach the stack through Skywalk |
+| The interface namer | **stays in the kernel** (`NeoDarwinInterfaceNamer`) | Naming has to happen before anything in user space can see the interface; a user-space namer with a persistent table is a configd- or `netd`-sized job (P3-08). netconfigd only configures interfaces that already have names |
+
+### Pieces
+
+| Where | What |
+|---|---|
+| `//base:dhcp_client` (`base/dhclient`) | `/sbin/dhclient`, `/sbin/dhclient-script`, `/etc/dhclient.conf` from `@freebsd_dhclient` (`base/dhclient/freebsd.lock`). `compat/`: Capsicum and Casper as no-ops (`sys/capsicum.h`, `capsicum_helpers.h`, `libcasper.h`, `casper/cap_syslog.h`), `sys/endian.h`, and `nd_dhclient_compat.h` (nitems, timespec arithmetic, `setproctitle`, `daemonfd`, `reallocarray`). Patches 0001 (xnu's BPF and routing socket, Darwin's pipes and `setuid`) and 0002 (`dhclient-script`) |
+| `//base/netconfigd` | `/usr/libexec/netconfigd` (Embedded Swift), `com.neodarwin.netconfigd.plist`, `/etc/netconfigd.conf` (in the images: `images/BUILD.bazel`, `_NETWORK_FILES`) |
+| `//base:mdns_responder` (`base/mdnsresponder/daemon.sh`) | `/usr/sbin/mDNSResponder` (mDNSPosix's `mdnsd`: `PosixDaemon.c`, `mDNSPosix.c`, `mDNSCore`, `uds_daemon.c`, DSO), `/usr/bin/dns-sd`, `com.apple.mDNSResponder.plist` (KeepAlive, `-foreground`, log `/var/log/mDNSResponder.log`). `daemon-patches/0001` |
+| `//base:libresolv_dylib` (`base/libresolv`) | `/usr/lib/libresolv.9.dylib` (155 exports, the same as the macOS 26 SDK's `libresolv.9.tbd`), build-only headers in `usr/local/libresolv/include`. Patch 0001 |
+| `@apple_configd_dnsinfo` (`base/libresolv/configd.lock`) | configd-1385.0.7's `dnsinfo.h`, which libresolv's `dns.c` builds against |
+| `base/standins/libsystem_configuration` | `dns_configuration_copy()` (no configuration: `NULL`, as with no configd), `dns_configuration_free()`, `dns_configuration_notify_key()` |
+| `images/BUILD.bazel` | `/etc/resolv.conf` -> `/var/run/resolv.conf`; netconfigd in the session images |
+
+### The boot flow
+
+```
+launchd (PID 1)
+  launchctl bootstrap -S System            lo0 (127.0.0.1, ::1); empties /var/run
+    com.apple.mDNSResponder                /usr/sbin/mDNSResponder -foreground
+        reads /etc/resolv.conf (none yet), listens on /var/run/mDNSResponder, drops to nobody
+    com.neodarwin.netconfigd               /usr/libexec/netconfigd
+        en0: ifconfig en0 up; dhclient -d en0
+          dhclient [priv]                  BPF: DHCPDISCOVER, OFFER, REQUEST, ACK
+            dhclient-script BOUND          ifconfig en0 inet 10.0.2.15 netmask 255.255.255.0 ...
+                                           route add default 10.0.2.2
+                                           /var/run/resolv.conf: nameserver 10.0.2.3
+                                           kill -HUP mDNSResponder  -> rereads resolv.conf
+    com.apple.getty, ...
+```
+
+The lease log (`/var/log/netconfigd.log`, netconfigd's and dhclient's standard error):
+
+```
+netconfigd: en0: DHCP (dhclient -d en0, pid 12)
+no such user: _dhcp, falling back to "nobody"
+DHCPDISCOVER on en0 to 255.255.255.255 port 67 interval 6
+DHCPOFFER from 10.0.2.2
+DHCPREQUEST on en0 to 255.255.255.255 port 67
+DHCPACK from 10.0.2.2
+bound to 10.0.2.15 -- renewal in 43200 seconds.
+```
+
+### DHCP
+
+dhclient runs in the foreground (`-d`) under netconfigd, which runs `ifconfig <if> up` first (dhclient waits for the link, and the driver reports it only once the interface is enabled) and restarts the client 10 seconds after it exits. dhclient splits into a privileged process (BPF writes, the script) and an unprivileged one (`nobody`, chrooted to `/var/empty`; FreeBSD's `_dhcp` user isn't in macOS's user database, hence the one-line warning). Leases persist in `/var/db/dhclient.leases.en0`; renewal and rebinding are dhclient's own. The script is FreeBSD's, adapted by patch 0002:
+- Darwin's `ifconfig` has no `-n`; `arp` isn't built yet (P4-24), so the ARP flush is skipped.
+- `resolvconf_enable=NEODARWIN` (the new default): the name servers and search domain go to `/var/run/resolv.conf` (`RESOLV_CONF`), then `SIGHUP` to mDNSResponder (`/var/run/mDNSResponder.pid`). An expired lease removes the file. FreeBSD's other modes stay.
+- Local policy goes in `/etc/dhclient-enter-hooks` and `/etc/dhclient-exit-hooks`, as on FreeBSD; options in `/etc/dhclient.conf`.
+
+A static interface: `ifconfig_en0="inet 192.0.2.10/24"` and `defaultrouter="192.0.2.1"` in `/etc/netconfigd.conf`; name servers then go in a plain `/etc/resolv.conf` replacing the link.
+
+### Name resolution
+
+Libinfo's search module asks, in order, its cache, the file module (`/etc/hosts` and the other `/etc` files) and the mdns module (`docs/base/libsystem.md`). The mdns module sends each query to mDNSResponder over `/var/run/mDNSResponder` (`DNSServiceQueryRecord`, with the failover attribute that `libsystem_dnssd` patch 0002 sends and the daemon ignores). mDNSResponder answers:
+- unicast names from the servers in `/etc/resolv.conf` (`mDNS_AddDNSServer`; `GetServerForQuestion ... 10.0.2.3:53` in its log);
+- `.local` names by multicast DNS on every interface, including records registered in the daemon itself (`dns-sd -R`, `-P`);
+- `localhost` negatively (RFC 6761: never sent to a server; the file module has answered it already).
+
+`dns-sd` is the published client (`Clients/dns-sd.c`), as `/usr/bin/dns-sd` on macOS. libresolv answers the programs that call it directly, from `/etc/resolv.conf` and `/etc/resolver/*`: its `dns.c` asks configd first (`dns_configuration_copy`), and the stand-in answers that there is no configuration, as Apple's does when configd isn't running.
+
+What the published daemon lacks next to macOS's (closed since 1310): DNS over TLS and HTTPS (`POSIX_HAS_TLS` needs mbedtls), per-interface and scoped resolvers from configd (`/etc/resolver/*` is libresolv's only), DNSSEC validation, the XPC and Network.framework interfaces (`DNSServiceAttr*` setters over XPC, `nw_resolver`), and launchd socket activation (it makes its own socket; `Bonjour` keys in jobs' `Sockets` still aren't registered by launchctl).
+
+### Tests
+
+The three tests of checkpoint 1 (`//kernel:sbsa_net_test`, `sbsa_net_intx_test`, `sbsa_ref_net_test`) no longer configure en0: root waits for `/var/run/resolv.conf`, prints the lease log, and checks `ifconfig en0` (inet 10.0.2.15/24), `netstat -rn` (default via 10.0.2.2, `UGScg`), `nameserver 10.0.2.3`, `ping` to the gateway, and three lookups through Libinfo:
+
+| Name | Path | Hermetic |
+|---|---|---|
+| `localhost` | `/etc/hosts` (the file module): `PING localhost (127.0.0.1)` | yes |
+| `nd-test.local` | mDNSResponder: `dns-sd -P nd-test _nd-test._tcp local 7 nd-test.local 10.0.2.15` registers an address record; `ping` resolves it through `libsystem_dnssd`: `PING nd-test.local (10.0.2.15)` | yes: multicast DNS inside the guest |
+| `example.com` | mDNSResponder, unicast, through slirp's DNS proxy (10.0.2.3), which forwards to the host's resolver | no: the guest's answer is checked only if the host's own `host -W 5 example.com` succeeds (`host: dns: example.com resolved`); without a network the test says `host: dns: skipped: ...` and passes. A guest failure while the host resolves fails the test (`--absent 'host: dns: FAILED'`) |
+
+slirp has no local DNS records (only the proxy), so a hermetic unicast check would need a DNS server on the host, which the tests' rule (no host listeners but the loopback ssh forward) excludes. Unicast DNS is proven whenever the test host has a network; the `.local` check proves the Libinfo, `libsystem_dnssd` and daemon path every time. ssh from the host then works as in checkpoint 1, to the leased address.
+
+Every other image with launchd now starts mDNSResponder and netconfigd too, so `virt` boots without `--user-net` take a lease on the machine's default NIC (also on slirp); `sbsa-ref` boots have no en* interface and netconfigd idles.
+
+### Findings
+
+| Finding | Fix |
+|---|---|
+| dhclient's DHCPDISCOVERs never left: xnu's BPF sends a frame written without "header complete" through the interface's `PF_INET` protocol, which isn't attached until the interface has an IPv4 address (FreeBSD's BPF doesn't care), so every write before the lease failed. The privileged process's error went to `/dev/null` | dhclient patch 0001: `BIOCSHDRCMPLT` on the write descriptor, as macOS's IPConfiguration sets (the frames carry their own Ethernet header); in the foreground the privileged process keeps standard error |
+| After the OFFER: `buf_read: Bad file descriptor`, `short write`. dhclient's two processes talk both ways over a `pipe()`; FreeBSD's pipes are bidirectional, Darwin's aren't | patch 0001: a socket pair on Darwin |
+| `can't drop privileges: Operation not permitted`: Darwin's `setuid()` without privilege takes only the real or saved ID, so FreeBSD's `seteuid()` then `setuid()` fails | patch 0001: `setuid()` as root, which sets all three |
+| xnu's BPF has no `BIOCSETWF`, `BIOCLOCK`, `BIOCSETVLANPCP`; the routing socket no `RTM_IFANNOUNCE` or `RTM_IEEE80211`; there is no Capsicum, Casper or netlink | patch 0001 guards; `compat/`; `-DWITHOUT_NETLINK`. The unprivileged process's descriptors aren't limited (no Capsicum, no write filter): its sandbox is the chroot and `nobody` |
+| `dhclient-script`'s `ifconfig -n` and `resolvconf(8)` are FreeBSD's | patch 0002 |
+| mDNSResponder's POSIX daemon rereads `resolv.conf` (start, `SIGHUP`) without the core's lock and logs "Lock failure ... caller: mDNS_AddDNSServer" | `daemon-patches/0001` |
+| The mDNS core advertises the host name's address records only while a service with an automatic target is registered (`AdvertiseInterfaceIfNeeded`, `AutoTargetServices`), so `localhost.local` doesn't resolve on an idle system (the host name is `localhost`, too) | expected; the test registers its own record with `dns-sd -P` |
+| `dns-sd -P` logs `getaddrinfo] dlopen("...libnetwork.dylib") failed`: Libinfo tries Network.framework's closed `libnetwork` for some lookups | expected; Libinfo falls back to its own path |
+| libresolv-93 includes Apple-internal headers: `notify_private.h` (Libnotify), `dnsinfo.h` (configd), `md5.h` (CommonCrypto's MD5 under `MD5Init` names), and tests the dyld version set `dyld_2024_SU_E_os_versions`, which no published AvailabilityVersions (155, 157.2) defines | the first two from their projects (`@apple_libnotify`, the pinned configd header); HMAC-MD5 on FreeBSD's `md5c.c`, linked privately (no export); libresolv patch 0001 defines the set where it is missing |
+| Bazel's downloader couldn't resolve github.com in this sandboxed session (curl could) | fetched with `--distdir` from files downloaded and checked against the pins; a normal checkout fetches as usual |
+
+### Limits
+
+- IPv4 only: no DHCPv6 and no router solicitation handling beyond the kernel's own (IPv6 link-local only); the IPv6-only option (RFC 8925) is never honoured (no netlink).
+- Interfaces are found by name (`en*`); one default route, the first lease's (dhclient-script's `is_default_interface`).
+- netconfigd doesn't stop a client when its interface is removed (dhclient exits when the interface goes down) and doesn't reread its configuration (restart the job).
+- No `arp`, `ndp` or `traceroute` (P4-24), no `nslookup`/`dig` (macOS's are BIND's, not in the release set).
+- mDNSResponder's limits above; no Bonjour registration of launchd jobs' sockets.
+
+## What checkpoint 3 and P4-24 still need
+
+**Checkpoint 3** needs nothing more from the userland: netconfigd starts dhclient on whatever en* interface the TC956x driver attaches, and the board's DHCP server's lease, router and name servers flow through the same script.
+
+**P4-24** (the networking userland) builds on this: `arp`, `ndp`, `traceroute`, `ping6`, `rtadvd` and the rest of network_cmds; DHCPv6 or SLAAC configuration; pf and `pfctl`; an NTP client; a persistent interface namer (with P3-08's `netd`); and whether NeoDarwin keeps FreeBSD's dhclient or moves to bootp's IPConfiguration once configd is built.
 
 **Checkpoint 3, the TC956x** (FreeBSD's `sys/dev/tcx`, BSD-2-Clause, James Kane, on the `radxa-dragon-q8b` branch of `../freebsd-src`).
 - The board's TC956x is on PCIe segment 4 (`arm64-sbsa-bringup.md`, the board's table), behind the same SMMUv3 as the NVMe disk.
@@ -180,4 +292,4 @@ route -n add default 10.0.2.2
 - DMA through a 36-bit window: `dma-address-bits` 36 (the IORT also says 36 for the Q8B's root complexes), so the bounce paths above run for real there, and descriptor addresses are translated (`pa + TC956X_DMA_OFFSET`).
 - The descriptor rings are XGMAC's, not virtio's: `NDVirtqueue` doesn't apply, `NDStorageDMA` and the receive/transmit/batching structure of this driver do.
 - Risks the FreeBSD driver records: a block whose clock is off or reset asserted doesn't answer, and on Qualcomm PCIe a failed read is an SError, so the bring-up order matters; the SMMUv3 must be in bypass (as for NVMe, `storage.md`); the switch's downstream link must be up before its functions enumerate.
-- Exit: the TC956x takes a DHCP lease (checkpoint 2's client) and accepts ssh.
+- Exit: the TC956x takes a DHCP lease (checkpoint 2's netconfigd and dhclient, unchanged) and accepts ssh.

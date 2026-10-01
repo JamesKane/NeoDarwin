@@ -1,0 +1,9 @@
+# configd-1385.0.7's dnsinfo/dnsinfo.h (macOS 26.0 release set; APSL 2.0), the
+# declarations of configd's DNS configuration interface, which libresolv's
+# dns.c calls (base/libresolv/build.sh). NeoDarwin doesn't build configd;
+# only this header is pinned. Fetched unmodified by //rules:pinned_files.bzl.
+# Repository: https://github.com/apple-oss-distributions/configd (tag configd-1385.0.7)
+# commit: 86ef71c041c9e08716c57f75e1093157f3078795
+# Format: shasum -a 256 (hash, two spaces, path).
+9b8b3c820a6708f0add91887e8332e2700f7dfab6d9c2cf74866d4c2f26d58ea  dnsinfo/dnsinfo.h
+e5881019d8766c1e88a5fe1dbca4ba40c78011d41fcb18f6e9f50df60182685b  APPLE_LICENSE

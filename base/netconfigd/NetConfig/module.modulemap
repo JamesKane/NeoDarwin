@@ -1,0 +1,4 @@
+module NetConfig {
+  header "netconfig_shim.h"
+  export *
+}

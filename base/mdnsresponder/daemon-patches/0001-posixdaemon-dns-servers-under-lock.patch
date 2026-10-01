@@ -1,0 +1,32 @@
+From: NeoDarwin
+Subject: [PATCH] PosixDaemon: read the DNS servers under the lock
+
+Reconfigure(), at start and on SIGHUP, calls ParseDNSServers(), whose
+mDNS_AddDNSServer() expects the core's lock held (mDNSPosix.c's own call,
+in mDNSPlatformInit, takes it). Without it every reconfiguration logs
+"Lock failure: Check Lock, last lock dropper dropped the lock before
+grabbing it - caller: mDNS_AddDNSServer". Take the lock around the parse,
+as the platform layer does.
+
+Rebase-risk: low (an include and two lines).
+--- a/mDNSPosix/PosixDaemon.c
++++ b/mDNSPosix/PosixDaemon.c
+@@ -45,6 +45,7 @@
+ #endif
+ 
+ #include "mDNSEmbeddedAPI.h"
++#include "DNSCommon.h"      // For mDNS_Lock()
+ #include "mDNSPosix.h"
+ #include "mDNSUNP.h"        // For daemon()
+ #include "uds_daemon.h"
+@@ -94,8 +95,10 @@
+     mDNSAddr DynDNSIP;
+     const mDNSAddr dummy = { mDNSAddrType_IPv4, { { { 1, 1, 1, 1 } } } };;
+     mDNS_SetPrimaryInterfaceInfo(m, NULL, NULL, NULL);
++    mDNS_Lock(m);
+     if (ParseDNSServers(m, uDNS_SERVERS_FILE) < 0)
+         LogMsg("Unable to parse DNS server list. Unicast DNS-SD unavailable");
++    mDNS_Unlock(m);
+     ReadDDNSSettingsFromConfFile(m, CONFIG_FILE, &DynDNSHostname, &DynDNSZone, NULL);
+     mDNSPlatformSourceAddrForDest(&DynDNSIP, &dummy);
+     if (DynDNSHostname.c[0]) mDNS_AddDynDNSHostName(m, &DynDNSHostname, NULL, NULL);
