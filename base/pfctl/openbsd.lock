@@ -1,0 +1,24 @@
+# OpenBSD's pfctl as released in OpenBSD 4.3 (sbin/pfctl less its ALTQ
+# files, and the userland pf_ruleset.c from sys/net), which
+# base/pfctl/build.sh builds as /sbin/pfctl against xnu's
+# <net/pfvar.h> (docs/base/pf-ntp.md). xnu's pf is OpenBSD's of the same
+# months: its pfvar.h is OpenBSD 1.259 (2007-12-02), pf.c 1.567
+# (2008-02-20). Apple publishes no pfctl. Also etc/pf.os, the passive OS
+# fingerprints pfctl loads. Fetched unmodified by //rules:pinned_files.bzl;
+# base/pfctl/patches applies NeoDarwin's changes.
+# Repository: https://github.com/openbsd/src (the CVS history as git)
+# pfctl's last change before the 4.3 release (2008-02-13):
+# commit: fd47049c620b738e373bc0c0295ccf2f6ae84e47
+# Format: shasum -a 256 (hash, two spaces, path). Regenerate with tools/pinned/lock.sh.
+ce6c2f269965ac861c8bb46829300942feaab289cfdc118d8078a18f63043a9f  etc/pf.os
+99be3d14433d5d11aa8abc088798fb4ae8e005140645fb288b87d540114278df  sbin/pfctl/parse.y
+e7db65db51d936d914ac3acdbf44307807e5696a841cc1a6539d8c693cdde4da  sbin/pfctl/pf_print_state.c
+6042b63928ba7def2edff161a2922026aa35a87f32a5dc701a1e7b1cfc6c1c38  sbin/pfctl/pfctl_optimize.c
+6e568c9e2733bfd0dd8b56bdc29659a5744e5c161b98788ae8403387e3470cfc  sbin/pfctl/pfctl_osfp.c
+7f37ae7e62b358fe4a7afa7d513654c20fd1961d97832dedb84651457d160fdb  sbin/pfctl/pfctl_parser.c
+f6dfe1c4a5f0ce240049ce27ca807d2166b952ef0c60d8bc9199db649d98b4f2  sbin/pfctl/pfctl_parser.h
+3157fc45e31b976de4bde992bf395078efabaad75679f15a93832f318e0b9a8e  sbin/pfctl/pfctl_radix.c
+581b641b54a62d6a61b5ec2ee64c0e5607c6a449a1899fa0b25003e10f96df1e  sbin/pfctl/pfctl_table.c
+07ce73343dc409dbe40c2aae550350b4db07202c81deedc6585529955038b43b  sbin/pfctl/pfctl.c
+029f6d6db8813c8a48aa3890be2c839ff5cf690ba504e7fb2866663e44efbe72  sbin/pfctl/pfctl.h
+d0d13b8f4cc65ca4284bbd53901f07284867a6cb99a968876a08f7a160c89098  sys/net/pf_ruleset.c

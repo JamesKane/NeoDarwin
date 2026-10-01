@@ -1,0 +1,4 @@
+module SNTPWrapper {
+  header "sntp_wrapper_shim.h"
+  export *
+}

@@ -36,7 +36,9 @@ NeoDarwin's own code is under the BSD 2-Clause licence (`LICENSE`). NeoDarwin al
 | zsh | zsh-110.1.1 (zsh 5.9) | the zsh licence (MIT-style) | `/bin/zsh` |
 | libedit | libedit-65 (NetBSD libedit 20121213-3.0) | BSD-3-Clause | `libedit.3.dylib`, which `/bin/sh` (ash) links for line editing and history |
 | bash | bash-140 (bash 3.2.57) | **GPL-2.0-or-later** (copyleft; the `lib/readline` and `lib/intl` it links statically are GPL and LGPL-2.0) | `/bin/bash`, a separate program: nothing else links it or its readline. Its complete corresponding source is the pinned archive (URL and hash in `MODULE.bazel` and `base/upstream.lock`) with NeoDarwin's build script (`base/bash`), which must be offered with any binary distribution |
-| network_cmds | network_cmds-726 | APSL-2.0 and BSD (the commands are BSD-derived; each file keeps its notice) | `ifconfig`, `ping`, `netstat`, `route` |
+| network_cmds | network_cmds-726 | APSL-2.0 and BSD (the commands are BSD-derived; each file keeps its notice) | `ifconfig`, `ping`, `netstat`, `route`, `arp`, `ndp`, `ping6`, `traceroute`, `traceroute6`, `rtsol`/`rtsold`, `rarpd`, `spray`, `kdumpd` |
+| OpenBSD `pfctl` | OpenBSD 4.3's `sbin/pfctl` and `sys/net/pf_ruleset.c`, openbsd/src at the commit in `base/pfctl/openbsd.lock` | per file: BSD-2-Clause (`pfctl.c`, `parse.y`, `pfctl_parser.c`, `pf_print_state.c`, `pfctl_radix.c`, `pfctl_table.c`, `pf_ruleset.c`), ISC (`pfctl_optimize.c`, `pfctl_osfp.c`, and `etc/pf.os`, adapted from p0f); its MD5 is FreeBSD's `md5c.c` (RSA Data Security's MD5, notice below) | `/sbin/pfctl`, `/etc/pf.os` |
+| ntp | ntp-139 (ntp 4.2.8p10; the last ntp Apple published, macOS 10.15) | the NTP licence (University of Delaware, notice below); the files it includes keep their notices: libisc (ISC), libevent (BSD-3-Clause), libopts (AutoOpts, offered under LGPL-3.0-or-later or a modified BSD licence: **used under the modified BSD licence**, `sntp/libopts/COPYING.mbsd`; its LGPL-only `parse-duration.c` isn't compiled, as in Apple's build) | `/usr/bin/sntp` |
 | OpenSSL | openssl-3.5.9 (upstream release; FreeBSD's base library, the 3.5 LTS line) | Apache-2.0 (`LICENSE.txt`; the archive has no `NOTICE` file) | `libcrypto.3.dylib`, `libssl.3.dylib`, the legacy provider (`/usr/lib/ossl-modules`), the `capi` and `loader_attic` engines (`/usr/lib/engines-3`), `/usr/bin/openssl` and `/etc/ssl/openssl.cnf` |
 | OpenSSH | OpenSSH-354.0.3 (OpenSSH 10.0p2) | BSD-style: the `LICENCE` file's terms (BSD-2-Clause and BSD-3-Clause, ISC, and public-domain parts, per file) | `ssh`, `sshd`, `sshd-session`, `sshd-auth`, `ssh-keygen`, `ssh-add`, `ssh-agent`, `ssh-keyscan`, `scp`, `sftp`, `sftp-server`, `/etc/ssh`, `/etc/pam.d/sshd` and `ssh.plist` |
 | Swift Embedded standard library | swift.org toolchain 6.3.2 | Apache-2.0 WITH Swift runtime library exception | linked into neoboot and NeoDarwin's Swift programs |
@@ -173,7 +175,7 @@ SUCH DAMAGE.
 
 ## RSA Data Security MD5
 
-`libresolv.9.dylib` and `libsystem_c.dylib` (and the kernel's and dyld's digest code) include FreeBSD's `sys/crypto/md5c.c`, which is "derived from the RSA Data Security, Inc. MD5 Message-Digest Algorithm". As its licence requires:
+`libresolv.9.dylib`, `libsystem_c.dylib` and `/sbin/pfctl` (and the kernel's and dyld's digest code) include FreeBSD's `sys/crypto/md5c.c`, which is "derived from the RSA Data Security, Inc. MD5 Message-Digest Algorithm". As its licence requires:
 
 > Copyright (C) 1991-2, RSA Data Security, Inc. Created 1991. All rights reserved.
 >
@@ -219,4 +221,24 @@ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+## The NTP distribution (University of Delaware)
+
+`/usr/bin/sntp` is built from Apple's ntp-139, the Network Time Protocol Version 4 distribution (ntp 4.2.8p10). Its `COPYRIGHT` file applies to all of it unless a file says otherwise:
+
+```
+Copyright (c) University of Delaware 1992-2015
+
+Permission to use, copy, modify, and distribute this software and
+its documentation for any purpose with or without fee is hereby
+granted, provided that the above copyright notice appears in all
+copies and that both the copyright notice and this permission
+notice appear in supporting documentation, and that the name
+University of Delaware not be used in advertising or publicity
+pertaining to distribution of the software without specific,
+written prior permission. The University of Delaware makes no
+representations about the suitability this software for any
+purpose. It is provided "as is" without express or implied
+warranty.
 ```

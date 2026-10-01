@@ -1,0 +1,65 @@
+From: NeoDarwin
+Subject: [PATCH] sntp: a server on another port, as host:port
+
+sntp always sends to port 123. A server name of the form "host:port" or
+"[address]:port" now names another port, given as a number; a bare IPv6
+address (more than one colon) is taken whole, as before. NeoDarwin's QEMU
+test needs it: the guest reaches the host only through QEMU's user network,
+which forwards a datagram to the host's loopback at the same port, and the
+test's SNTP responder can't bind the privileged port 123
+(docs/base/pf-ntp.md, "Tests"). Names without a port behave as upstream.
+
+Rebase-risk: low (one function; ntp-139 is the last published drop).
+
+--- a/sntp/main.c
++++ b/sntp/main.c
+@@ -386,9 +386,40 @@
+ 	char *		name_copy;
+ 	size_t		name_sz;
+ 	size_t		octets;
++	char		nd_host[256];
++	const char *	service = "123";
++	const char *	sep;
+ 
+ 	TRACE(1, ("handle_lookup(%s,%#x)\n", name, flags));
+ 
++	/*
++	 * NeoDarwin: "host:port" or "[address]:port" names a server on a
++	 * port other than 123; a bare IPv6 address (two or more colons) is
++	 * taken whole. The port must be numeric (Z_AI_NUMERICSERV).
++	 */
++	sep = NULL;
++	if (name[0] == '[') {
++		const char *close = strchr(name, ']');
++		if (close != NULL && close[1] == ':' && close[2] != '\0'
++		    && (size_t)(close - name - 1) < sizeof(nd_host)) {
++			memcpy(nd_host, name + 1, close - name - 1);
++			nd_host[close - name - 1] = '\0';
++			sep = close + 1;
++		}
++	} else if ((sep = strchr(name, ':')) != NULL) {
++		if (strchr(sep + 1, ':') != NULL || sep[1] == '\0'
++		    || (size_t)(sep - name) >= sizeof(nd_host)) {
++			sep = NULL;
++		} else {
++			memcpy(nd_host, name, sep - name);
++			nd_host[sep - name] = '\0';
++		}
++	}
++	if (sep != NULL) {
++		service = sep + 1;
++		name = nd_host;
++	}
++
+ 	ZERO(hints);
+ 	hints.ai_family = ai_fam_pref;
+ 	hints.ai_flags = AI_CANONNAME | Z_AI_NUMERICSERV;
+@@ -420,7 +451,7 @@
+ 	}
+ 
+ 	++n_pending_dns;
+-	getaddrinfo_sometime(name, "123", &hints, 0,
++	getaddrinfo_sometime(name, service, &hints, 0,
+ 			     &sntp_name_resolved, ctx);
+ }
+ 

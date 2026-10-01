@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SPDX-License-Identifier: BSD-2-Clause
+  The NTP client (base/sntp_wrapper, docs/base/pf-ntp.md): sets the clock from
+  /etc/ntp.conf's servers with Apple's sntp at load and every 1024 seconds
+  (ntpd's longest default poll interval). Disabled, as FreeBSD's ntpd is
+  (ntpd_enable="NO"): `launchctl load -w` turns it on, or Disabled false here
+  for every boot. sntp's reports and errors go to /var/log/sntp.log.
+-->
+<plist version="1.0">
+<dict>
+	<key>Disabled</key>
+	<true/>
+	<key>Label</key>
+	<string>com.neodarwin.sntp</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/libexec/sntp-wrapper</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StartInterval</key>
+	<integer>1024</integer>
+	<key>StandardOutPath</key>
+	<string>/var/log/sntp.log</string>
+	<key>StandardErrorPath</key>
+	<string>/var/log/sntp.log</string>
+</dict>
+</plist>

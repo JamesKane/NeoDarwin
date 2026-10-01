@@ -1,0 +1,345 @@
+From: NeoDarwin
+Subject: [PATCH] pfctl: build against xnu's pfvar.h and Darwin's libc
+
+xnu's pf is OpenBSD's of early 2008 (pfvar.h 1.259, pf.c 1.567) with
+Apple's changes to the structures pfctl shares with the kernel. pfctl is
+compiled against xnu's own <net/pfvar.h>, so every layout is the kernel's;
+this patch follows the members Apple renamed:
+- a rule's port match is the union xport (TCP/UDP ranges, GRE call IDs,
+  ESP SPIs): src.port[]/port_op become src.xport.range.port[]/op, in the
+  parser, the printer and the optimizer's field table (which now lists
+  the whole union);
+- a state carries a family per side of the translation (af_lan, af_gwy:
+  NAT64) and the external host as each side sees it (ext_lan, ext_gwy),
+  and its ports are xport.port; creation and expiry times are 64-bit.
+Darwin: no interface groups (the SIOCGIFGMEMB lookups are left out when
+the request doesn't exist), and bison's yacc wants YYSTYPE_IS_DECLARED
+beside the parser's own YYSTYPE. base/pfctl/compat/nd_pfctl_compat.h
+supplies the rest (SIMPLEQ, the ruleset prototypes, v4/v6).
+
+Rebase-risk: low (OpenBSD 4.3 is fixed; xnu's pfvar.h changes rarely).
+
+--- a/sbin/pfctl/parse.y
++++ b/sbin/pfctl/parse.y
+@@ -409,6 +409,7 @@
+ 	} v;
+ 	int lineno;
+ } YYSTYPE;
++#define YYSTYPE_IS_DECLARED 1	/* bison: the type above, not its default int */
+ 
+ #define DYNIF_MULTIADDR(addr) ((addr).type == PF_ADDR_DYNIFTL && \
+ 	(!((addr).iflags & PFI_AFLAG_NOALIAS) ||		 \
+@@ -914,9 +915,9 @@
+ 					    " not supported in rdr-anchor");
+ 					YYERROR;
+ 				}
+-				r.dst.port[0] = $6.dst.port->port[0];
+-				r.dst.port[1] = $6.dst.port->port[1];
+-				r.dst.port_op = $6.dst.port->op;
++				r.dst.xport.range.port[0] = $6.dst.port->port[0];
++				r.dst.xport.range.port[1] = $6.dst.port->port[1];
++				r.dst.xport.range.op = $6.dst.port->op;
+ 			}
+ 
+ 			expand_rule(&r, $3, NULL, $5, $6.src_os,
+@@ -4296,7 +4297,7 @@
+ 	int	problems = 0;
+ 
+ 	if (r->proto != IPPROTO_TCP && r->proto != IPPROTO_UDP &&
+-	    (r->src.port_op || r->dst.port_op)) {
++	    (r->src.xport.range.op || r->dst.xport.range.op)) {
+ 		yyerror("port only applies to tcp/udp");
+ 		problems++;
+ 	}
+@@ -4326,8 +4327,8 @@
+ 		yyerror("allow-opts can only be specified for pass rules");
+ 		problems++;
+ 	}
+-	if (r->rule_flag & PFRULE_FRAGMENT && (r->src.port_op ||
+-	    r->dst.port_op || r->flagset || r->type || r->code)) {
++	if (r->rule_flag & PFRULE_FRAGMENT && (r->src.xport.range.op ||
++	    r->dst.xport.range.op || r->flagset || r->type || r->code)) {
+ 		yyerror("fragments can be filtered only on IP header fields");
+ 		problems++;
+ 	}
+@@ -4358,11 +4359,11 @@
+ 	int			 problems = 0;
+ 
+ 	if (r->proto != IPPROTO_TCP && r->proto != IPPROTO_UDP) {
+-		if (r->src.port_op) {
++		if (r->src.xport.range.op) {
+ 			yyerror("src port only applies to tcp/udp");
+ 			problems++;
+ 		}
+-		if (r->dst.port_op) {
++		if (r->dst.xport.range.op) {
+ 			yyerror("dst port only applies to tcp/udp");
+ 			problems++;
+ 		}
+@@ -4371,8 +4372,8 @@
+ 			problems++;
+ 		}
+ 	}
+-	if (r->dst.port_op &&
+-	    r->dst.port_op != PF_OP_EQ && r->dst.port_op != PF_OP_RRG) {
++	if (r->dst.xport.range.op &&
++	    r->dst.xport.range.op != PF_OP_EQ && r->dst.xport.range.op != PF_OP_RRG) {
+ 		yyerror("invalid port operator for rdr destination port");
+ 		problems++;
+ 	}
+@@ -4966,14 +4967,14 @@
+ 		r->proto = proto->proto;
+ 		r->src.addr = src_host->addr;
+ 		r->src.neg = src_host->not;
+-		r->src.port[0] = src_port->port[0];
+-		r->src.port[1] = src_port->port[1];
+-		r->src.port_op = src_port->op;
++		r->src.xport.range.port[0] = src_port->port[0];
++		r->src.xport.range.port[1] = src_port->port[1];
++		r->src.xport.range.op = src_port->op;
+ 		r->dst.addr = dst_host->addr;
+ 		r->dst.neg = dst_host->not;
+-		r->dst.port[0] = dst_port->port[0];
+-		r->dst.port[1] = dst_port->port[1];
+-		r->dst.port_op = dst_port->op;
++		r->dst.xport.range.port[0] = dst_port->port[0];
++		r->dst.xport.range.port[1] = dst_port->port[1];
++		r->dst.xport.range.op = dst_port->op;
+ 		r->uid.op = uid->op;
+ 		r->uid.uid[0] = uid->uid[0];
+ 		r->uid.uid[1] = uid->uid[1];
+--- a/sbin/pfctl/pf_print_state.c
++++ b/sbin/pfctl/pf_print_state.c
+@@ -167,7 +167,7 @@
+ void
+ print_host(struct pfsync_state_host *h, sa_family_t af, int opts)
+ {
+-	u_int16_t p = ntohs(h->port);
++	u_int16_t p = ntohs(h->xport.port);
+ 
+ 	if (opts & PF_OPT_USEDNS)
+ 		print_name(&h->addr, af);
+@@ -222,20 +222,30 @@
+ 		printf("%s ", p->p_name);
+ 	else
+ 		printf("%u ", s->proto);
+-	if (PF_ANEQ(&s->lan.addr, &s->gwy.addr, s->af) ||
+-	    (s->lan.port != s->gwy.port)) {
+-		print_host(&s->lan, s->af, opts);
++	/*
++	 * xnu keeps a family for each side of the translation (NAT64) and
++	 * the external host as seen from each side (ext_lan, ext_gwy).
++	 */
++	if (s->af_lan != s->af_gwy ||
++	    PF_ANEQ(&s->lan.addr, &s->gwy.addr, s->af_lan) ||
++	    (s->lan.xport.port != s->gwy.xport.port)) {
++		print_host(&s->lan, s->af_lan, opts);
+ 		if (s->direction == PF_OUT)
+ 			printf(" -> ");
+ 		else
+ 			printf(" <- ");
+ 	}
+-	print_host(&s->gwy, s->af, opts);
++	print_host(&s->gwy, s->af_gwy, opts);
+ 	if (s->direction == PF_OUT)
+ 		printf(" -> ");
+ 	else
+ 		printf(" <- ");
+-	print_host(&s->ext, s->af, opts);
++	print_host(&s->ext_gwy, s->af_gwy, opts);
++	if (s->af_lan != s->af_gwy) {
++		printf(" (");
++		print_host(&s->ext_lan, s->af_lan, opts);
++		printf(")");
++	}
+ 
+ 	printf("    ");
+ 	if (s->proto == IPPROTO_TCP) {
+@@ -285,12 +295,12 @@
+ 		s->creation /= 60;
+ 		min = s->creation % 60;
+ 		s->creation /= 60;
+-		printf("   age %.2u:%.2u:%.2u", s->creation, min, sec);
++		printf("   age %.2u:%.2u:%.2u", (unsigned)s->creation, min, sec);
+ 		sec = s->expire % 60;
+ 		s->expire /= 60;
+ 		min = s->expire % 60;
+ 		s->expire /= 60;
+-		printf(", expires in %.2u:%.2u:%.2u", s->expire, min, sec);
++		printf(", expires in %.2u:%.2u:%.2u", (unsigned)s->expire, min, sec);
+ 		printf(", %llu:%llu pkts, %llu:%llu bytes",
+ 		    pf_state_counter_from_pfsync(s->packets[0]),
+ 		    pf_state_counter_from_pfsync(s->packets[1]),
+--- a/sbin/pfctl/pfctl_optimize.c
++++ b/sbin/pfctl/pfctl_optimize.c
+@@ -165,10 +165,8 @@
+     PF_RULE_FIELD(flags,		NOMERGE),
+     PF_RULE_FIELD(flagset,		NOMERGE),
+     PF_RULE_FIELD(tos,			NOMERGE),
+-    PF_RULE_FIELD(src.port,		NOMERGE),
+-    PF_RULE_FIELD(dst.port,		NOMERGE),
+-    PF_RULE_FIELD(src.port_op,		NOMERGE),
+-    PF_RULE_FIELD(dst.port_op,		NOMERGE),
++    PF_RULE_FIELD(src.xport,		NOMERGE),
++    PF_RULE_FIELD(dst.xport,		NOMERGE),
+     PF_RULE_FIELD(src.neg,		NOMERGE),
+     PF_RULE_FIELD(dst.neg,		NOMERGE),
+ 
+@@ -1105,9 +1103,9 @@
+ 	 *    a->proto == IPPROTO_ICMP
+ 	 *	return (1);
+ 	 */
+-	if (a->dst.port_op == PF_OP_NONE || a->dst.port_op != b->dst.port_op ||
+-	    a->dst.port[0] != b->dst.port[0] ||
+-	    a->dst.port[1] != b->dst.port[1])
++	if (a->dst.xport.range.op == PF_OP_NONE || a->dst.xport.range.op != b->dst.xport.range.op ||
++	    a->dst.xport.range.port[0] != b->dst.xport.range.port[0] ||
++	    a->dst.xport.range.port[1] != b->dst.xport.range.port[1])
+ 		return (1);
+ 	return (0);
+ }
+@@ -1172,9 +1170,9 @@
+ int
+ skip_cmp_src_port(struct pf_rule *a, struct pf_rule *b)
+ {
+-	if (a->src.port_op == PF_OP_NONE || a->src.port_op != b->src.port_op ||
+-	    a->src.port[0] != b->src.port[0] ||
+-	    a->src.port[1] != b->src.port[1])
++	if (a->src.xport.range.op == PF_OP_NONE || a->src.xport.range.op != b->src.xport.range.op ||
++	    a->src.xport.range.port[0] != b->src.xport.range.port[0] ||
++	    a->src.xport.range.port[1] != b->src.xport.range.port[1])
+ 		return (1);
+ 	/* XXX if (a->proto != b->proto && a->proto != 0 && b->proto != 0
+ 	 *    && (a->proto == IPPROTO_TCP || a->proto == IPPROTO_UDP ||
+@@ -1373,8 +1371,9 @@
+ 	if (a->addr.type != PF_ADDR_ADDRMASK ||
+ 	    b->addr.type != PF_ADDR_ADDRMASK)
+ 		return (0);
+-	if (a->neg != b->neg || a->port_op != b->port_op ||
+-	    a->port[0] != b->port[0] || a->port[1] != b->port[1])
++	if (a->neg != b->neg || a->xport.range.op != b->xport.range.op ||
++	    a->xport.range.port[0] != b->xport.range.port[0] ||
++	    a->xport.range.port[1] != b->xport.range.port[1])
+ 		return (0);
+ 	return (1);
+ }
+@@ -1545,15 +1544,15 @@
+ 	if (super->proto == 0)
+ 		sub->proto = 0;
+ 
+-	if (super->src.port_op == 0) {
+-		sub->src.port_op = 0;
+-		sub->src.port[0] = 0;
+-		sub->src.port[1] = 0;
++	if (super->src.xport.range.op == 0) {
++		sub->src.xport.range.op = 0;
++		sub->src.xport.range.port[0] = 0;
++		sub->src.xport.range.port[1] = 0;
+ 	}
+-	if (super->dst.port_op == 0) {
+-		sub->dst.port_op = 0;
+-		sub->dst.port[0] = 0;
+-		sub->dst.port[1] = 0;
++	if (super->dst.xport.range.op == 0) {
++		sub->dst.xport.range.op = 0;
++		sub->dst.xport.range.port[0] = 0;
++		sub->dst.xport.range.port[1] = 0;
+ 	}
+ 
+ 	if (super->src.addr.type == PF_ADDR_ADDRMASK && !super->src.neg &&
+--- a/sbin/pfctl/pfctl_parser.c
++++ b/sbin/pfctl/pfctl_parser.c
+@@ -369,7 +369,7 @@
+ 	    PF_AZERO(&dst->addr.v.a.addr, AF_INET6) &&
+ 	    PF_AZERO(&dst->addr.v.a.mask, AF_INET6) &&
+ 	    !src->neg && !dst->neg &&
+-	    !src->port_op && !dst->port_op &&
++	    !src->xport.range.op && !dst->xport.range.op &&
+ 	    osfp == PF_OSFP_ANY)
+ 		printf(" all");
+ 	else {
+@@ -377,9 +377,9 @@
+ 		if (src->neg)
+ 			printf("! ");
+ 		print_addr(&src->addr, af, verbose);
+-		if (src->port_op)
+-			print_port(src->port_op, src->port[0],
+-			    src->port[1],
++		if (src->xport.range.op)
++			print_port(src->xport.range.op, src->xport.range.port[0],
++			    src->xport.range.port[1],
+ 			    proto == IPPROTO_TCP ? "tcp" : "udp");
+ 		if (osfp != PF_OSFP_ANY)
+ 			printf(" os \"%s\"", pfctl_lookup_fingerprint(osfp, buf,
+@@ -389,9 +389,9 @@
+ 		if (dst->neg)
+ 			printf("! ");
+ 		print_addr(&dst->addr, af, verbose);
+-		if (dst->port_op)
+-			print_port(dst->port_op, dst->port[0],
+-			    dst->port[1],
++		if (dst->xport.range.op)
++			print_port(dst->xport.range.op, dst->xport.range.port[0],
++			    dst->xport.range.port[1],
+ 			    proto == IPPROTO_TCP ? "tcp" : "udp");
+ 	}
+ }
+@@ -629,14 +629,14 @@
+ 		sn->creation /= 60;
+ 		min = sn->creation % 60;
+ 		sn->creation /= 60;
+-		printf("   age %.2u:%.2u:%.2u", sn->creation, min, sec);
++		printf("   age %.2u:%.2u:%.2u", (unsigned)sn->creation, min, sec);
+ 		if (sn->states == 0) {
+ 			sec = sn->expire % 60;
+ 			sn->expire /= 60;
+ 			min = sn->expire % 60;
+ 			sn->expire /= 60;
+ 			printf(", expires in %.2u:%.2u:%.2u",
+-			    sn->expire, min, sec);
++			    (unsigned)sn->expire, min, sec);
+ 		}
+ 		printf(", %llu pkts, %llu bytes",
+ 		    sn->packets[0] + sn->packets[1],
+@@ -1182,12 +1182,15 @@
+ ifa_exists(const char *ifa_name)
+ {
+ 	struct node_host	*n;
++#ifdef SIOCGIFGMEMB
+ 	struct ifgroupreq	ifgr;
+ 	int			s;
++#endif
+ 
+ 	if (iftab == NULL)
+ 		ifa_load();
+ 
++#ifdef SIOCGIFGMEMB	/* Darwin has no interface groups */
+ 	/* check wether this is a group */
+ 	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
+ 		err(1, "socket");
+@@ -1203,6 +1206,7 @@
+ 		return (n);
+ 	}
+ 	close(s);
++#endif
+ 
+ 	for (n = iftab; n; n = n->next) {
+ 		if (n->af == AF_LINK && !strncmp(n->ifname, ifa_name, IFNAMSIZ))
+@@ -1215,6 +1219,9 @@
+ struct node_host *
+ ifa_grouplookup(const char *ifa_name, int flags)
+ {
++#ifndef SIOCGIFGMEMB	/* Darwin has no interface groups */
++	return (NULL);
++#else
+ 	struct ifg_req		*ifg;
+ 	struct ifgroupreq	 ifgr;
+ 	int			 s, len;
+@@ -1251,6 +1258,7 @@
+ 	close(s);
+ 
+ 	return (h);
++#endif
+ }
+ 
+ struct node_host *

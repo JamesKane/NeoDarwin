@@ -2299,6 +2299,42 @@ NET_SSH = ("ssh -F /dev/null -i id_ed25519 -o IdentitiesOnly=yes -o IdentityAgen
            "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=60 " +
            "-p $$ND_HOSTFWD_PORT test@127.0.0.1")
 
+# P4-24 (docs/kernel/network.md, "P4-24: the rest of network_cmds and
+# IPv6"): the rest of network_cmds and IPv6 autoconfiguration. netconfigd
+# starts SLAAC on en0 and runs rtsol; slirp's router (fe80::2, the gateway
+# fec0::2) advertises fec0::/64. Wait for rtsol to finish and the IPv6
+# default route, then: the gateway in the ARP table, traceroute to it by
+# ICMP (slirp answers an echo to 10.0.2.2 whatever its hop limit; UDP
+# probes to it would reach the host's loopback), traceroute run by test
+# (setuid root: -I needs a raw socket), en0's link-local and EUI-64 SLAAC
+# addresses, the router in the neighbour cache, the IPv6 routes, and ping6
+# to the gateway.
+NET_TOOLS = [
+    "--send-after 'root@localhost ~ # ' 'for i in {1..30}; do case $$(cat /var/log/netconfigd.log; netstat -rn -f inet6) in " +
+    "*\"rtsol exited\"*default*) break;; esac; sleep 1; done; cat /var/log/netconfigd.log\\n'",
+    "--send-after 'root@localhost ~ # ' 'ping -c 1 10.0.2.2 > /dev/null; arp -an; traceroute -n -I -m 3 10.0.2.2\\n'",
+    "--send-after 'root@localhost ~ # ' 'su test -c \"traceroute -n -I -m 1 10.0.2.2\" > /tmp/tr.txt 2>&1; " +
+    "case $$(cat /tmp/tr.txt) in *\" 1  10.0.2.2 \"*) echo traceroute-as-test-$$((6*7));; *) cat /tmp/tr.txt;; esac\\n'",
+    "--send-after 'root@localhost ~ # ' 'ifconfig en0 inet6; ndp -an; netstat -rn -f inet6; ping6 -c 2 fec0::2\\n'",
+]
+
+NET_TOOLS_LINES = [
+    "'netconfigd: en0: IPv6 autoconfiguration (link-local address started, router advertisements accepted)'",
+    "'netconfigd: en0: IPv6 autoconfiguration (rtsol en0, pid '",
+    "'netconfigd: en0: rtsol exited (status 0)'",
+    "'? (10.0.2.2) at 52:55:a:0:2:2 on en0 ifscope [ethernet]'",
+    "'traceroute to 10.0.2.2 (10.0.2.2), 3 hops max, 48 byte packets'",
+    "' 1  10.0.2.2  '",
+    "'traceroute-as-test-42'",
+    "'inet6 fe80::5054:ff:fe12:3456%en0 prefixlen 64 scopeid 0x'",
+    "'inet6 fec0::5054:ff:fe12:3456 prefixlen 64 autoconf'",
+    "'fe80::2%en0                             52:56:0:0:0:2        en0 '",
+    "'default                                 fe80::2%en0                             UGcIg                 en0'",
+    "'fec0::/64                               link#'",
+    "'16 bytes from fec0::2, icmp_seq=1 hlim=255 '",
+    "'--- fec0::2 ping6 statistics ---'",
+]
+
 # Log in as root and wait for en0's DHCP lease: netconfigd runs dhclient
 # at boot, which configures en0 and the default route and writes
 # /var/run/resolv.conf (/etc/resolv.conf's target), and mDNSResponder
@@ -2320,6 +2356,7 @@ NET_SESSION = [
     "--send-after 'root@localhost ~ # ' 'ping -c 1 localhost\\n'",
     "--send-after 'root@localhost ~ # ' 'dns-sd -P nd-test _nd-test._tcp local 7 nd-test.local 10.0.2.15 > /dev/null & sleep 3; ping -c 1 -t 5 nd-test.local; kill %1\\n'",
     "--send-after 'root@localhost ~ # ' 'for i in 1 2 3; do ping -c 1 -t 10 " + NET_DNS_NAME + " > /tmp/dns.txt 2>&1; case $$(cat /tmp/dns.txt) in PING*) break;; esac; sleep 2; done; cat /tmp/dns.txt\\n'",
+] + NET_TOOLS + [
     "--send-after 'root@localhost ~ # ' 'launchctl load -w /System/Library/LaunchDaemons/ssh.plist\\n'",
     "--send-after 'root@localhost ~ # ' 'mkdir -p /Users/test/.ssh && echo \"{hostfile:id_ed25519.pub}\" > /Users/test/.ssh/authorized_keys && echo key-$$((6*7))\\n'",
     "--host-cmd-after 'key-42' '" + NET_SSH + " uname -a'",
@@ -2351,7 +2388,7 @@ NET_SESSION_LINES = [
     "'host: transfer-ok'",
     "'host: dns: '",
     "'Accepted publickey for test from 10.0.2.2'",
-]
+] + NET_TOOLS_LINES
 
 # virt: a modern virtio-net (1af4:1041) on MSI-X, three vectors.
 sh_test(
@@ -2457,6 +2494,106 @@ sh_test(
         "//boot/neoboot",
         "//images:pam_session_root",
         "//images:pam_session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P4-24 (docs/base/pf-ntp.md): pf with OpenBSD 4.3's pfctl, and the NTP
+# client (Apple's sntp under com.neodarwin.sntp). After the lease: pf is
+# off at boot (/dev/pf, `pfctl -s info`); Remote Login and the run's key;
+# com.apple.pfctl loads macOS's /etc/pf.conf (its anchors) and enables pf
+# with a reference, which `-s References` lists; the host logs in over ssh
+# under that ruleset. A rule appended to the ruleset blocks the guest's
+# ping to the gateway; `pfctl -d` disables pf and the ping passes. Then the
+# guest's clock is set to 2000, /etc/ntp.conf names the host's SNTP
+# responder (tests/qemu/sntp: 127.0.0.1 on the host, a free UDP port, which
+# the guest reaches as 10.0.2.2 through slirp; it stops with the run), the
+# job is loaded and steps the clock, and the host checks over ssh that the
+# guest's clock agrees with its own.
+PF_NTP_SESSION = [
+    "--hostfwd 22",
+    "--host-setup 'ssh-keygen -q -t ed25519 -N \"\" -C nd-pf-test -f id_ed25519'",
+    "--host-setup 'perl \"$$TEST_SRCDIR/$(rlocationpath //tests/qemu/sntp:sntp_responder.pl)\" \"$$ND_HOST_DIR\" 900 " +
+    "> ntp.log 2>&1 < /dev/null & for i in $$(seq 100); do [ -s ntp_port ] && exit 0; sleep 0.1; done; exit 1'",
+    "--send-after 'login: ' 'root\\n'",
+    "--send-after 'root@localhost ~ # ' 'until [ -s /var/run/resolv.conf ]; do sleep 1; done; echo lease-$$((6*7))\\n'",
+    "--send-after 'lease-42' 'ls -l /dev/pf; pfctl -s info\\n'",
+    "--send-after 'root@localhost ~ # ' 'launchctl load -w /System/Library/LaunchDaemons/ssh.plist; mkdir -p /Users/test/.ssh && " +
+    "echo \"{hostfile:id_ed25519.pub}\" > /Users/test/.ssh/authorized_keys && echo key-$$((6*7))\\n'",
+    "--send-after 'key-42' 'launchctl load -w /System/Library/LaunchDaemons/com.apple.pfctl.plist; sleep 2; cat /var/log/pfctl.log; " +
+    "pfctl -s info; pfctl -s References; pfctl -s rules; pfctl -s nat; pfctl -s dummynet; echo pf-on-$$((6*7))\\n'",
+    "--host-cmd-after 'pf-on-42' '" + NET_SSH + " uname -a'",
+    "--send-after 'host: exit' 'cp /etc/pf.conf /tmp/pf.conf; echo \"table <nd_test> persist { 192.0.2.1 }\" >> /tmp/pf.conf; " +
+    "echo \"block drop out quick inet proto icmp from any to 10.0.2.2\" >> /tmp/pf.conf; " +
+    "echo \"pass in quick on en0 inet proto tcp from any to any port 22 keep state\" >> /tmp/pf.conf; " +
+    "pfctl -f /tmp/pf.conf; pfctl -s rules; ping -c 2 -t 4 10.0.2.2; case $$? in 0) r=passed;; *) r=blocked;; esac; echo ping-$$r-$$((6*7))\\n'",
+    "--host-cmd-after 'ping-blocked-42' '" + NET_SSH + " uname -n'",
+    "--send-after 'host: exit' 'pfctl -s states; pfctl -t nd_test -T add 192.0.2.2; pfctl -t nd_test -T show; pfctl -s Tables; echo tables-$$((6*7))\\n'",
+    "--send-after 'tables-42' 'pfctl -d; pfctl -s info; ping -c 2 10.0.2.2; case $$? in 0) r=passed;; *) r=blocked;; esac; echo ping-$$r-$$((6*7))\\n'",
+    "--send-after 'ping-passed-42' 'date 010100002000 > /dev/null; echo year-$$(date +%Y); echo \"server 10.0.2.2:{hostfile:ntp_port}\" > /etc/ntp.conf; " +
+    "launchctl load -w /System/Library/LaunchDaemons/com.neodarwin.sntp.plist; " +
+    "for i in {1..60}; do case $$(date +%Y) in 2000) sleep 1;; *) break;; esac; done; cat /var/log/sntp.log; echo synced-$$((6*7))\\n'",
+    "--host-cmd-after 'synced-42' 'g=$$(" + NET_SSH + " date +%s); h=$$(date +%s); d=$$((h - g)); echo \"clock: guest $$g, host $$h\"; " +
+    "[ $${d#-} -le 10 ] && echo clock-ok; cat ntp.log'",
+    "--send-after 'host: exit' 'cat /var/log/sshd.log\\n'",
+]
+
+PF_NTP_LINES = [
+    "'lease-42'",
+    "'Status: Disabled'",
+    "'No ALTQ support in kernel'",
+    "'pf enabled'",
+    "'Token : '",
+    "'Status: Enabled for 0 days '",
+    "'scrub-anchor \"com.apple/*\" all fragment reassemble'",
+    "'anchor \"com.apple/*\" all'",
+    "'nat-anchor \"com.apple/*\" all'",
+    "'rdr-anchor \"com.apple/*\" all'",
+    "'dummynet-anchor \"com.apple/*\" all'",
+    "'host: Darwin localhost '",
+    "'block drop out quick inet proto icmp from any to 10.0.2.2'",
+    "'pass in quick on en0 inet proto tcp from any to any port = ssh flags S/SA keep state'",
+    "'ping-blocked-42'",
+    "'ALL tcp 10.0.2.15:22 <- 10.0.2.2:'",
+    "'1/1 addresses added.'",
+    "'   192.0.2.2'",
+    "'tables-42'",
+    "'pf disabled'",
+    "'ping-passed-42'",
+    "'year-2000'",
+    "'sntp-wrapper: 10.0.2.2:'",
+    "' 10.0.2.2 s1 no-leap'",
+    "'synced-42'",
+    "'host: clock-ok'",
+    "'host: sntp-responder: answered 127.0.0.1:'",
+    "'Accepted publickey for test from 10.0.2.2'",
+]
+
+sh_test(
+    name = "sbsa_pf_ntp_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pam_session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pam_session_root_trustcache)",
+        "--user-net virtio-net-pci,disable-legacy=on,mac=" + NET_MAC,
+        "--until-lines",
+        "--absent 'ndamfi: refused'",
+        "--absent 'host: timed out'",
+        "--absent 'pfctl: '",
+        "--absent 'DIOC'",
+        "--absent 'sntp-wrapper: no server set the clock'",
+    ] + PF_NTP_SESSION + [
+        "$(rootpath //boot/neoboot)",
+        "240",
+    ] + PF_NTP_LINES,
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pam_session_root",
+        "//images:pam_session_root_trustcache",
+        "//tests/qemu/sntp:sntp_responder.pl",
     ],
     tags = ["manual", "kernel", "qemu"],
 )

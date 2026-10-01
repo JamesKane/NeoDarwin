@@ -1,0 +1,27 @@
+load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:darwin_executable.bzl", "swift_embedded_executable")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["com.neodarwin.sntp.plist"])
+
+# /usr/libexec/sntp-wrapper (docs/base/pf-ntp.md): the program of the NTP
+# client's launchd job (com.neodarwin.sntp.plist). It sets the clock from
+# the first server in /etc/ntp.conf that answers, with Apple's sntp
+# (//base:ntp_client), as macOS's ntpd-wrapper (ntp-139) did before it ran
+# ntpd. Embedded Swift on libSystem, as sshd-keygen-wrapper is.
+swift_embedded_executable(
+    name = "sntp_wrapper",
+    srcs = glob(["Sources/*.swift"]),
+    hdrs = [
+        "Wrapper/module.modulemap",
+        "Wrapper/sntp_wrapper_shim.h",
+    ],
+    out = "sntp-wrapper",
+    root = "//base:root",
+)
+
+lang_audit_test(
+    name = "sntp_wrapper_lang_audit",
+    srcs = ["Wrapper/sntp_wrapper_shim.h"],
+)

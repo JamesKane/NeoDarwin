@@ -1,0 +1,429 @@
+From: NeoDarwin
+Subject: [PATCH] pfctl: xnu's enable references, scrub and dummynet anchors
+
+What xnu's pf adds and macOS's pfctl drives:
+- enable references: -E enables pf and takes a reference (DIOCSTARTREF),
+  printing its token; -X token releases one (DIOCSTOPREF), and pf stops
+  with the last; -s References lists the holders (DIOCGETSTARTERS). A
+  plain -e still enables without a token and -d still stops pf outright,
+  as on macOS.
+- anchors in the scrub ruleset (`scrub-anchor`), which xnu's pf_norm.c
+  steps into, and the dummynet ruleset (PF_RULESET_DUMMYNET,
+  `dummynet-anchor`): macOS's default /etc/pf.conf has both. The dummynet
+  transactions go with the filter rules (-R, -F rules), and -s dummynet
+  shows them.
+- pf_get_ruleset_number() knows xnu's actions (PF_DUMMYNET, PF_NAT64), and
+  rules print their names.
+The dummynet rules themselves (pipes) and NAT64 rules aren't parsed.
+
+Rebase-risk: low.
+
+--- a/sbin/pfctl/parse.y
++++ b/sbin/pfctl/parse.y
+@@ -423,6 +423,7 @@
+ %token	MINTTL ERROR ALLOWOPTS FASTROUTE FILENAME ROUTETO DUPTO REPLYTO NO LABEL
+ %token	NOROUTE URPFFAILED FRAGMENT USER GROUP MAXMSS MAXIMUM TTL TOS DROP TABLE
+ %token	REASSEMBLE FRAGDROP FRAGCROP ANCHOR NATANCHOR RDRANCHOR BINATANCHOR
++%token	DUMMYNETANCHOR SCRUBANCHOR
+ %token	SET OPTIMIZATION TIMEOUT LIMIT LOGINTERFACE BLOCKPOLICY RANDOMID
+ %token	REQUIREORDER SYNPROXY FINGERPRINTS NOSYNC DEBUG SKIP HOSTID
+ %token	ANTISPOOF FOR INCLUDE
+@@ -925,6 +926,51 @@
+ 			    0, 0, 0, $2);
+ 			free($2);
+ 		}
++		| SCRUBANCHOR string dir interface af proto fromto {
++			/* xnu: an anchor in the scrub ruleset */
++			struct pf_rule	r;
++
++			if (check_rulestate(PFCTL_STATE_SCRUB)) {
++				free($2);
++				YYERROR;
++			}
++
++			memset(&r, 0, sizeof(r));
++			r.action = PF_SCRUB;
++			r.direction = $3;
++			r.af = $5;
++			r.rtableid = -1;
++
++			decide_address_family($7.src.host, &r.af);
++			decide_address_family($7.dst.host, &r.af);
++
++			expand_rule(&r, $4, NULL, $6, $7.src_os,
++			    $7.src.host, $7.src.port, $7.dst.host, $7.dst.port,
++			    0, 0, 0, $2);
++			free($2);
++		}
++		| DUMMYNETANCHOR string interface af proto fromto rtable {
++			/* xnu: an anchor in the dummynet ruleset */
++			struct pf_rule	r;
++
++			if (check_rulestate(PFCTL_STATE_NAT)) {
++				free($2);
++				YYERROR;
++			}
++
++			memset(&r, 0, sizeof(r));
++			r.action = PF_DUMMYNET;
++			r.af = $4;
++			r.rtableid = $7;
++
++			decide_address_family($6.src.host, &r.af);
++			decide_address_family($6.dst.host, &r.af);
++
++			expand_rule(&r, $3, NULL, $5, $6.src_os,
++			    $6.src.host, $6.src.port, $6.dst.host, $6.dst.port,
++			    0, 0, 0, $2);
++			free($2);
++		}
+ 		| BINATANCHOR string interface af proto fromto rtable {
+ 			struct pf_rule	r;
+ 
+@@ -5136,6 +5182,7 @@
+ 		{ "debug",		DEBUG},
+ 		{ "drop",		DROP},
+ 		{ "drop-ovl",		FRAGDROP},
++		{ "dummynet-anchor",	DUMMYNETANCHOR},
+ 		{ "dup-to",		DUPTO},
+ 		{ "fastroute",		FASTROUTE},
+ 		{ "file",		FILENAME},
+@@ -5211,6 +5258,7 @@
+ 		{ "rule",		RULE},
+ 		{ "ruleset-optimization",	RULESET_OPTIMIZATION},
+ 		{ "scrub",		SCRUB},
++		{ "scrub-anchor",	SCRUBANCHOR},
+ 		{ "set",		SET},
+ 		{ "skip",		SKIP},
+ 		{ "source-hash",	SOURCEHASH},
+--- a/sbin/pfctl/pfctl.c
++++ b/sbin/pfctl/pfctl.c
+@@ -59,6 +59,10 @@
+ void	 usage(void);
+ int	 pfctl_enable(int, int);
+ int	 pfctl_disable(int, int);
++int	 pfctl_enable_ref(int, int);
++int	 pfctl_release_ref(int, const char *, int);
++int	 pfctl_show_references(int, int);
++int	 pfctl_show_dummynet(int, int, char *);
+ int	 pfctl_clear_stats(int, int);
+ int	 pfctl_clear_interface_flags(int, int);
+ int	 pfctl_clear_rules(int, int, char *);
+@@ -100,6 +104,7 @@
+ 
+ const char	*clearopt;
+ char		*rulesopt;
++char		*releaseopt;		/* xnu: -X token */
+ const char	*showopt;
+ const char	*debugopt;
+ char		*anchoropt;
+@@ -205,7 +210,7 @@
+ static const char *showopt_list[] = {
+ 	"nat", "queue", "rules", "Anchors", "Sources", "states", "info",
+ 	"Interfaces", "labels", "timeouts", "memory", "Tables", "osfp",
+-	"all", NULL
++	"all", "dummynet", "References", NULL
+ };
+ 
+ static const char *tblcmdopt_list[] = {
+@@ -226,8 +231,9 @@
+ {
+ 	extern char *__progname;
+ 
+-	fprintf(stderr, "usage: %s [-AdeghmNnOqRrvz] ", __progname);
++	fprintf(stderr, "usage: %s [-AdeEghmNnOqRrvz] ", __progname);
+ 	fprintf(stderr, "[-a anchor] [-D macro=value] [-F modifier]\n");
++	fprintf(stderr, "\t[-X token] ");
+ 	fprintf(stderr, "\t[-f file] [-i interface] [-K host | network] ");
+ 	fprintf(stderr, "[-k host | network]\n");
+ 	fprintf(stderr, "\t[-o level] [-p device] [-s modifier]\n");
+@@ -273,7 +279,86 @@
+ 	return (0);
+ }
+ 
++/*
++ * xnu: pf stays enabled while any reference taken with -E is held (and
++ * after a plain -e); -X releases one, and pf stops with the last.
++ */
+ int
++pfctl_enable_ref(int dev, int opts)
++{
++	u_int64_t token = 0;
++
++	if (ioctl(dev, DIOCSTARTREF, &token))
++		err(1, "DIOCSTARTREF");
++	if ((opts & PF_OPT_QUIET) == 0)
++		fprintf(stderr, "pf enabled\n");
++	printf("Token : %llu\n", (unsigned long long)token);
++	return (0);
++}
++
++int
++pfctl_release_ref(int dev, const char *token, int opts)
++{
++	struct pfioc_remove_token pfrt;
++	char *end;
++
++	memset(&pfrt, 0, sizeof(pfrt));
++	errno = 0;
++	pfrt.token_value = strtoull(token, &end, 10);
++	if (errno != 0 || *token == '\0' || *end != '\0')
++		errx(1, "invalid token: %s", token);
++	if (ioctl(dev, DIOCSTOPREF, &pfrt)) {
++		if (errno == ENOENT)
++			errx(1, "pf not enabled");
++		else if (errno == EINVAL)
++			errx(1, "no such token: %s", token);
++		else
++			err(1, "DIOCSTOPREF");
++	}
++	if ((opts & PF_OPT_QUIET) == 0) {
++		if (pfrt.refcount == 0)
++			fprintf(stderr, "pf disabled\n");
++		else
++			fprintf(stderr, "pf enable reference released, "
++			    "%llu remaining\n",
++			    (unsigned long long)pfrt.refcount);
++	}
++	return (0);
++}
++
++int
++pfctl_show_references(int dev, int opts)
++{
++	struct pfioc_tokens pt;
++	struct pfioc_token *tok;
++	int i, n;
++
++	memset(&pt, 0, sizeof(pt));
++	if (ioctl(dev, DIOCGETSTARTERS, &pt))
++		err(1, "DIOCGETSTARTERS");
++	if (opts & PF_OPT_SHOWALL)
++		pfctl_print_title("REFERENCES:");
++	if (pt.size <= 0) {
++		printf("No pf enable references\n");
++		return (0);
++	}
++	if ((pt.pgt_buf = calloc(1, pt.size)) == NULL)
++		err(1, "calloc");
++	if (ioctl(dev, DIOCGETSTARTERS, &pt))
++		err(1, "DIOCGETSTARTERS");
++	n = pt.size / sizeof(struct pfioc_token);
++	printf("%-8s %-20s %-20s %s\n", "PID", "Process Name", "TOKEN",
++	    "TIMESTAMP");
++	for (i = 0, tok = pt.pgt_tokens; i < n; i++, tok++)
++		printf("%-8d %-20.*s %-20llu %llu\n", (int)tok->pid,
++		    (int)sizeof(tok->proc_name), tok->proc_name,
++		    (unsigned long long)tok->token_value,
++		    (unsigned long long)tok->timestamp);
++	free(pt.pgt_buf);
++	return (0);
++}
++
++int
+ pfctl_clear_stats(int dev, int opts)
+ {
+ 	if (ioctl(dev, DIOCCLRSTATUS))
+@@ -308,6 +393,7 @@
+ 	memset(&t, 0, sizeof(t));
+ 	t.pfrb_type = PFRB_TRANS;
+ 	if (pfctl_add_trans(&t, PF_RULESET_SCRUB, anchorname) ||
++	    pfctl_add_trans(&t, PF_RULESET_DUMMYNET, anchorname) ||
+ 	    pfctl_add_trans(&t, PF_RULESET_FILTER, anchorname) ||
+ 	    pfctl_trans(dev, &t, DIOCXBEGIN, 0) ||
+ 	    pfctl_trans(dev, &t, DIOCXCOMMIT, 0))
+@@ -948,6 +1034,39 @@
+ }
+ 
+ int
++pfctl_show_dummynet(int dev, int opts, char *anchorname)
++{
++	struct pfioc_rule pr;
++	u_int32_t mnr, nr;
++	int dotitle = opts & PF_OPT_SHOWALL;
++
++	memset(&pr, 0, sizeof(pr));
++	memcpy(pr.anchor, anchorname, sizeof(pr.anchor));
++	pr.rule.action = PF_DUMMYNET;
++	if (ioctl(dev, DIOCGETRULES, &pr)) {
++		warn("DIOCGETRULES");
++		return (-1);
++	}
++	mnr = pr.nr;
++	for (nr = 0; nr < mnr; ++nr) {
++		pr.nr = nr;
++		if (ioctl(dev, DIOCGETRULE, &pr)) {
++			warn("DIOCGETRULE");
++			return (-1);
++		}
++		if (dotitle) {
++			pfctl_print_title("DUMMYNET RULES:");
++			dotitle = 0;
++		}
++		print_rule(&pr.rule, pr.anchor_call,
++		    opts & PF_OPT_VERBOSE2);
++		printf("\n");
++		pfctl_print_rule_counters(&pr.rule, opts);
++	}
++	return (0);
++}
++
++int
+ pfctl_show_src_nodes(int dev, int opts)
+ {
+ 	struct pfioc_src_nodes psn;
+@@ -1189,6 +1308,7 @@
+ 	}
+ 	if ((pf->loadopt & PFCTL_FLAG_FILTER) != 0) {
+ 		if (pfctl_add_trans(pf->trans, PF_RULESET_SCRUB, path) ||
++		    pfctl_add_trans(pf->trans, PF_RULESET_DUMMYNET, path) ||
+ 		    pfctl_add_trans(pf->trans, PF_RULESET_FILTER, path))
+ 			return (3);
+ 	}
+@@ -1429,7 +1549,8 @@
+ 	    pfctl_load_ruleset(&pf, path, rs, PF_RULESET_RDR, 0) ||
+ 	    pfctl_load_ruleset(&pf, path, rs, PF_RULESET_BINAT, 0))) ||
+ 	    (pf.loadopt & PFCTL_FLAG_FILTER &&
+-	    pfctl_load_ruleset(&pf, path, rs, PF_RULESET_FILTER, 0))) {
++	    (pfctl_load_ruleset(&pf, path, rs, PF_RULESET_DUMMYNET, 0) ||
++	    pfctl_load_ruleset(&pf, path, rs, PF_RULESET_FILTER, 0)))) {
+ 		if ((opts & PF_OPT_NOACTION) == 0)
+ 			ERRX("Unable to load rules into kernel");
+ 		else
+@@ -1953,7 +2074,7 @@
+ 		usage();
+ 
+ 	while ((ch = getopt(argc, argv,
+-	    "a:AdD:eqf:F:ghi:k:K:mnNOo:p:rRs:t:T:vx:z")) != -1) {
++	    "a:AdD:eEqf:F:ghi:k:K:mnNOo:p:rRs:t:T:vx:X:z")) != -1) {
+ 		switch (ch) {
+ 		case 'a':
+ 			anchoropt = optarg;
+@@ -1971,6 +2092,15 @@
+ 			opts |= PF_OPT_ENABLE;
+ 			mode = O_RDWR;
+ 			break;
++		case 'E':
++			opts |= PF_OPT_ENABLE_REF;
++			mode = O_RDWR;
++			break;
++		case 'X':
++			opts |= PF_OPT_RELEASE_REF;
++			releaseopt = optarg;
++			mode = O_RDWR;
++			break;
+ 		case 'q':
+ 			opts |= PF_OPT_QUIET;
+ 			break;
+@@ -2131,7 +2261,8 @@
+ 		if (dev >= 0)
+ 			opts |= PF_OPT_DUMMYACTION;
+ 		/* turn off options */
+-		opts &= ~ (PF_OPT_DISABLE | PF_OPT_ENABLE);
++		opts &= ~ (PF_OPT_DISABLE | PF_OPT_ENABLE |
++		    PF_OPT_ENABLE_REF | PF_OPT_RELEASE_REF);
+ 		clearopt = showopt = debugopt = NULL;
+ 		altqsupport = 1;
+ 	}
+@@ -2140,6 +2271,10 @@
+ 		if (pfctl_disable(dev, opts))
+ 			error = 1;
+ 
++	if (opts & PF_OPT_RELEASE_REF)
++		if (pfctl_release_ref(dev, releaseopt, opts))
++			error = 1;
++
+ 	if (showopt != NULL) {
+ 		switch (*showopt) {
+ 		case 'A':
+@@ -2159,6 +2294,13 @@
+ 			pfctl_load_fingerprints(dev, opts);
+ 			pfctl_show_nat(dev, opts, anchorname);
+ 			break;
++		case 'd':
++			pfctl_load_fingerprints(dev, opts);
++			pfctl_show_dummynet(dev, opts, anchorname);
++			break;
++		case 'R':
++			pfctl_show_references(dev, opts);
++			break;
+ 		case 'q':
+ 			pfctl_show_altq(dev, ifaceopt, opts,
+ 			    opts & PF_OPT_VERBOSE2);
+@@ -2183,6 +2325,7 @@
+ 			pfctl_load_fingerprints(dev, opts);
+ 
+ 			pfctl_show_nat(dev, opts, anchorname);
++			pfctl_show_dummynet(dev, opts, anchorname);
+ 			pfctl_show_rules(dev, path, opts, 0, anchorname, 0);
+ 			pfctl_show_altq(dev, ifaceopt, opts, 0);
+ 			pfctl_show_states(dev, ifaceopt, opts);
+@@ -2306,6 +2449,10 @@
+ 
+ 	if (opts & PF_OPT_ENABLE)
+ 		if (pfctl_enable(dev, opts))
++			error = 1;
++
++	if (opts & PF_OPT_ENABLE_REF)
++		if (pfctl_enable_ref(dev, opts))
+ 			error = 1;
+ 
+ 	if (debugopt != NULL) {
+--- a/sbin/pfctl/pfctl_parser.c
++++ b/sbin/pfctl/pfctl_parser.c
+@@ -662,16 +662,20 @@
+ void
+ print_rule(struct pf_rule *r, const char *anchor_call, int verbose)
+ {
++	/* xnu adds synproxy drop, dummynet and nat64 (PF_SYNPROXY_DROP..) */
+ 	static const char *actiontypes[] = { "pass", "block", "scrub",
+-	    "no scrub", "nat", "no nat", "binat", "no binat", "rdr", "no rdr" };
+-	static const char *anchortypes[] = { "anchor", "anchor", "anchor",
+-	    "anchor", "nat-anchor", "nat-anchor", "binat-anchor",
+-	    "binat-anchor", "rdr-anchor", "rdr-anchor" };
++	    "no scrub", "nat", "no nat", "binat", "no binat", "rdr", "no rdr",
++	    "synproxy drop", "dummynet", "no dummynet", "nat64", "no nat64" };
++	static const char *anchortypes[] = { "anchor", "anchor", "scrub-anchor",
++	    "scrub-anchor", "nat-anchor", "nat-anchor", "binat-anchor",
++	    "binat-anchor", "rdr-anchor", "rdr-anchor", "anchor",
++	    "dummynet-anchor", "dummynet-anchor", "nat64-anchor",
++	    "nat64-anchor" };
+ 	int	i, opts;
+ 
+ 	if (verbose)
+ 		printf("@%d ", r->nr);
+-	if (r->action > PF_NORDR)
++	if (r->action > PF_NONAT64)
+ 		printf("action(%d)", r->action);
+ 	else if (anchor_call[0]) {
+ 		if (anchor_call[0] == '_') {
+--- a/sbin/pfctl/pfctl_parser.h
++++ b/sbin/pfctl/pfctl_parser.h
+@@ -49,6 +49,8 @@
+ #define PF_OPT_OPTIMIZE		0x0800
+ #define PF_OPT_MERGE		0x2000
+ #define PF_OPT_RECURSE		0x4000
++#define PF_OPT_ENABLE_REF	0x10000		/* xnu: -E */
++#define PF_OPT_RELEASE_REF	0x20000		/* xnu: -X */
+ 
+ #define PF_TH_ALL		0xFF
+ 
+--- a/sys/net/pf_ruleset.c
++++ b/sys/net/pf_ruleset.c
+@@ -128,7 +128,16 @@
+ 		break;
+ 	case PF_RDR:
+ 	case PF_NORDR:
++#ifdef __APPLE__	/* xnu: NAT64 rules live in the rdr ruleset */
++	case PF_NAT64:
++	case PF_NONAT64:
++#endif
+ 		return (PF_RULESET_RDR);
++#ifdef __APPLE__	/* xnu's dummynet ruleset */
++	case PF_DUMMYNET:
++	case PF_NODUMMYNET:
++		return (PF_RULESET_DUMMYNET);
++#endif
+ 		break;
+ 	default:
+ 		return (PF_RULESET_MAX);

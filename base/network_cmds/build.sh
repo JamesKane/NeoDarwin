@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
-# ifconfig, ping, netstat and route from network_cmds-726 (docs/base/session.md,
-# "Loopback and sshd"): replays network_cmds.xcodeproj's ifconfig, ping,
-# netstat, route and network_cmds_lib targets with their Release settings.
+# network_cmds-726 (docs/base/session.md, "Loopback and sshd";
+# docs/kernel/network.md, "P4-24"): replays network_cmds.xcodeproj's
+# targets with their Release settings.
 #   build.sh OUT NETWORK_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root)
-# OUT receives sbin/{ifconfig,ping,route} and usr/sbin/netstat (each
-# target's INSTALL_PATH). The project's GCC_PREPROCESSOR_DEFINITIONS
+# OUT receives each target's INSTALL_PATH: sbin/{ifconfig,ping,ping6,route,
+# rtsol}, usr/sbin/{arp,ndp,netstat,rarpd,rtsold,spray,traceroute,
+# traceroute6} and usr/libexec/kdumpd, with kdumpd's launchd job (Disabled,
+# as on macOS) in System/Library/LaunchDaemons. traceroute and traceroute6
+# are setuid root on macOS (INSTALL_MODE_FLAG 4555); the images set the
+# mode (images/BUILD.bazel, _SYSTEM_MODES). rtsol is built though no
+# aggregate target installs it on macOS (there IPConfiguration solicits
+# routers itself): netconfigd runs it (base/netconfigd). network_cmds-726
+# has no rtadvd sources (rtadvd.tproj holds only a test script) and dnctl
+# (dummynet) goes with pf. The project's GCC_PREPROCESSOR_DEFINITIONS
 # (USE_RFC2292BIS=1, __APPLE_USE_RFC_3542=1, __APPLE_API_OBSOLETE=1) and
 # HEADER_SEARCH_PATHS (network_cmds_lib) apply to every target; each target
 # adds System.framework's PrivateHeaders (xnu's private net/ headers), so
@@ -15,8 +23,14 @@
 # server rights and private network-management ones); NeoDarwin has no
 # sandbox or policy that reads them, so they're signed ad hoc without, as ps
 # is (base/adv_cmds).
-# The rest of network_cmds (arp, ndp, traceroute, ping6, rtadvd, ...) is
-# P4-24's (roadmap/backlog.yaml).
+# traceroute and traceroute6 link libpcap for TCP probes (-P tcp) only;
+# NeoDarwin has no libpcap yet, so compat/pcap/pcap.h fails pcap_create.
+# traceroute6 and ping6 link libipsec for IPsec policy options (-P);
+# NeoDarwin has no libipsec, so traceroute6 is built without its IPSEC
+# definition and ping6 (whose target doesn't define it) as Apple builds it.
+# Apple signs ping6, traceroute and traceroute6 with the network-management
+# entitlements and rtsol, rarpd and kdumpd with the network client and
+# server ones: ad hoc without here, as ping.
 source "$(dirname "$0")/../../tools/base/common.sh"
 source "$(dirname "$0")/../commands.sh"
 OUT="$(abspath "$1")"; N="$(abspath "$2")"; SYSROOT="$(abspath "$3")"; shift 3
@@ -34,6 +48,15 @@ write_rsp "$B/ifconfig.rsp" "${base[@]}" -DUSE_IF_MEDIA -DNO_IPX -DINET6 -DUSE_V
 write_rsp "$B/ping.rsp" "${base[@]}"
 write_rsp "$B/netstat.rsp" "${base[@]}" -DINET6 -DIPSEC
 write_rsp "$B/route.rsp" "${base[@]}" -DINET6 -DIPSEC
+write_rsp "$B/arp.rsp" "${base[@]}"
+write_rsp "$B/ndp.rsp" "${base[@]}" -DINET6 -DIPSEC_DEBUG -DKAME_SCOPEID
+write_rsp "$B/ping6.rsp" "${base[@]}"
+write_rsp "$B/traceroute.rsp" "${base[@]}" -DHAVE_SOCKADDR_SA_LEN -I"$PROJ/compat"
+write_rsp "$B/traceroute6.rsp" "${base[@]}" -DINET6 -I"$PROJ/compat" -Itraceroute.tproj   # as.h: Xcode's header map
+write_rsp "$B/rtsol.rsp" "${base[@]}" -DINET6 -DHAVE_GETIFADDRS
+write_rsp "$B/rarpd.rsp" "${base[@]}" '-DTFTP_DIR=\"/tftpboot\"'
+write_rsp "$B/spray.rsp" "${base[@]}"
+write_rsp "$B/kdumpd.rsp" "${base[@]}"
 
 # network_cmds_lib: a static library ping, netstat and route link.
 compile "$B/obj/lib" "$B/lib.rsp" network_cmds_lib/network_cmds_lib.c network_cmds_lib/gmt2local.c
@@ -47,3 +70,20 @@ tool "$B" "$ROOT" "$OUT/usr/sbin/netstat" "$B/netstat.rsp" \
 	$(printf 'netstat.tproj/%s\n' bpf.c data.c if.c inet.c inet6.c ipsec.c main.c vsock.c mbuf.c mcast.c systm.c \
 		route.c tp_astring.c mptcp.c unix.c misc.c) -- "${LIB[@]}"
 tool "$B" "$ROOT" "$OUT/sbin/route" "$B/route.rsp" route.tproj/route.c -- "${LIB[@]}"
+
+tool "$B" "$ROOT" "$OUT/usr/sbin/arp" "$B/arp.rsp" arp.tproj/arp.c -- "${LIB[@]}"
+tool "$B" "$ROOT" "$OUT/usr/sbin/ndp" "$B/ndp.rsp" ndp.tproj/ndp.c
+tool "$B" "$ROOT" "$OUT/sbin/ping6" "$B/ping6.rsp" ping6.tproj/md5.c ping6.tproj/ping6.c -- "${LIB[@]}"
+TR=(traceroute.tproj/as.c traceroute.tproj/findsaddr-socket.c traceroute.tproj/ifaddrlist.c traceroute.tproj/version.c)
+tool "$B" "$ROOT" "$OUT/usr/sbin/traceroute" "$B/traceroute.rsp" "${TR[@]}" traceroute.tproj/traceroute.c -- "${LIB[@]}"
+tool "$B" "$ROOT" "$OUT/usr/sbin/traceroute6" "$B/traceroute6.rsp" "${TR[@]}" traceroute6.tproj/traceroute6.c -- "${LIB[@]}"
+# rtsol and rtsold are one program (rtsold.c: a name not ending in d is the
+# one-shot rtsol); the target's install phase links rtsold to it.
+tool "$B" "$ROOT" "$OUT/sbin/rtsol" "$B/rtsol.rsp" \
+	$(printf 'rtsol.tproj/%s\n' dump.c if.c probe.c rtsock.c rtsol.c rtsold.c)
+mkdir -p "$OUT/usr/sbin" && ln -f "$OUT/sbin/rtsol" "$OUT/usr/sbin/rtsold"
+tool "$B" "$ROOT" "$OUT/usr/sbin/rarpd" "$B/rarpd.rsp" rarpd.tproj/rarpd.c
+tool "$B" "$ROOT" "$OUT/usr/sbin/spray" "$B/spray.rsp" spray.tproj/spray.c spray.tproj/spray_xdr.c
+tool "$B" "$ROOT" "$OUT/usr/libexec/kdumpd" "$B/kdumpd.rsp" kdumpd.tproj/kdumpd.c kdumpd.tproj/kdumpsubs.c -- "${LIB[@]}"
+mkdir -p "$OUT/System/Library/LaunchDaemons"
+install -m 0644 kdumpd.tproj/com.apple.kdumpd.plist "$OUT/System/Library/LaunchDaemons/"

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SPDX-License-Identifier: BSD-2-Clause
+  pf at boot (base/pfctl, docs/base/pf-ntp.md): loads /etc/pf.conf and enables pf
+  with a reference (pfctl -E). Disabled, as macOS's com.apple.pfctl is: pf stays
+  off until root runs `launchctl load -w` on this file, or sets Disabled false
+  here for every boot. pfctl's messages and token go to /var/log/pfctl.log.
+-->
+<plist version="1.0">
+<dict>
+	<key>Disabled</key>
+	<true/>
+	<key>Label</key>
+	<string>com.apple.pfctl</string>
+	<key>WorkingDirectory</key>
+	<string>/var/run</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/sbin/pfctl</string>
+		<string>-E</string>
+		<string>-f</string>
+		<string>/etc/pf.conf</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>/var/log/pfctl.log</string>
+	<key>StandardErrorPath</key>
+	<string>/var/log/pfctl.log</string>
+</dict>
+</plist>

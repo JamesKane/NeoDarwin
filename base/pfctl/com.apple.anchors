@@ -1,0 +1,6 @@
+#
+# /etc/pf.anchors/com.apple: the com.apple anchor's rules, which /etc/pf.conf
+# loads (docs/base/pf-ntp.md). On macOS it holds anchor points for Internet
+# Sharing, AirDrop and the application firewall, components NeoDarwin
+# doesn't have; it is empty here, and pf passes everything by default.
+#

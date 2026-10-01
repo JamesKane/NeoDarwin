@@ -481,7 +481,8 @@ base_library(
 )
 
 # Loopback and sshd (docs/base/session.md, "Loopback and sshd"): ifconfig,
-# ping, netstat and route; launchproxy, which runs inetd-style launchd jobs;
+# ping, netstat and route, and the rest of network_cmds (P4-24,
+# docs/kernel/network.md); launchproxy, which runs inetd-style launchd jobs;
 # libcrypto and libssl (OpenSSL 3.5, with the openssl command); and OpenSSH,
 # with sshd under launchd (ssh.plist, Disabled as on macOS).
 base_library(
@@ -549,6 +550,32 @@ base_library(
     sysroot = ":sysroot",
 )
 
+# pf and NTP (docs/base/pf-ntp.md): OpenBSD 4.3's pfctl against xnu's
+# pfvar.h, with macOS's /etc/pf.conf and com.apple.pfctl (Disabled); Apple's
+# sntp (ntp-139) and /etc/ntp.conf, run by //base/sntp_wrapper's job.
+# (Not named pfctl or ntp: see above.)
+base_library(
+    name = "packet_filter",
+    data = glob(["pfctl/**"]) + [
+        "commands.sh",
+        "//kernel/neodarwin/crypto:kernel_srcs",
+        "@freebsd_crypto//:all",
+    ],
+    deps = [":root"],
+    script = "pfctl/build.sh",
+    srcs = "@openbsd_pfctl//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "ntp_client",
+    data = glob(["ntp/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "ntp/build.sh",
+    srcs = "@apple_ntp//:all",
+    sysroot = ":sysroot",
+)
+
 base_library(
     name = "openssh",
     data = glob(["openssh/**"]) + ["commands.sh"],
@@ -588,6 +615,8 @@ base_root(
         ":libresolv_dylib",
         ":dhcp_client",
         ":mdns_responder",
+        ":packet_filter",
+        ":ntp_client",
     ],
 )
 
@@ -678,6 +707,7 @@ lang_audit_test(
         "libplatform/src/nd_bitops.c",
         "llvm/src/nd_chkstk_darwin.c",
         "llvm/src/nd_typed_new_delete.cpp",
+        "pfctl/src/nd_pfctl_noaltq.c",
     ] + glob([
         "dyld/src/*.c",
         "launchd/include/*.h",
@@ -688,6 +718,8 @@ lang_audit_test(
         "libm/src/*.c",
         "libm/compat/**/*.h",
         "dhclient/compat/**/*.h",
+        "pfctl/compat/**/*.h",
+        "network_cmds/compat/**/*.h",
         "file_cmds/compat/*.h",
         "shell_cmds/compat/**/*.h",
         "system_cmds/compat/**/*.h",

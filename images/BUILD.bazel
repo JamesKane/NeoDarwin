@@ -49,14 +49,19 @@ _SYSTEM_LINKS = {
 
 # netconfigd and its job and configuration (docs/kernel/network.md,
 # "Bringing interfaces up"): every en* interface takes a DHCP lease at boot.
+# The NTP client's job (docs/base/pf-ntp.md), Disabled; sntp and
+# /etc/ntp.conf are in //base:system_root.
 _NETWORK_FILES = {
     "//base/netconfigd": "usr/libexec/netconfigd",
     "//base/netconfigd:com.neodarwin.netconfigd.plist": "System/Library/LaunchDaemons/com.neodarwin.netconfigd.plist",
     "//base/netconfigd:netconfigd.conf": "private/etc/netconfigd.conf",
+    "//base/sntp_wrapper": "usr/libexec/sntp-wrapper",
+    "//base/sntp_wrapper:com.neodarwin.sntp.plist": "System/Library/LaunchDaemons/com.neodarwin.sntp.plist",
 }
 
 _NETWORK_MODES = {
     "System/Library/LaunchDaemons/com.neodarwin.netconfigd.plist": "0644",
+    "System/Library/LaunchDaemons/com.neodarwin.sntp.plist": "0644",
     "private/etc/netconfigd.conf": "0644",
 }
 
@@ -74,6 +79,8 @@ _SYSTEM_MODES = {
     "usr/bin/login": "4555",
     "usr/bin/passwd": "4555",
     "usr/bin/su": "4755",
+    "usr/sbin/traceroute": "4555",
+    "usr/sbin/traceroute6": "4555",
 }
 
 # P1-15's code-signing probes (tests/qemu/cs_probe): `listed` is in the

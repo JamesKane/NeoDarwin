@@ -1,0 +1,56 @@
+From: NeoDarwin
+Subject: [PATCH] libntp: os_log for the clock traces, and ISC MD5 without CommonCrypto
+
+ntp-139 builds against two macOS libraries NeoDarwin doesn't have.
+systime.c traces each step and slew with os_trace_debug(), the os_trace
+API deprecated since macOS 10.13 that libsystem_trace's stand-in doesn't
+implement; os_log_debug() is the same debug-level message through the call
+that replaced it. ntp_md5.h maps MD5 to CommonCrypto's CC_MD5_* on every
+Apple platform, and NeoDarwin has no libcommonCrypto: with
+NEODARWIN_NO_COMMONCRYPTO (set by base/ntp/build.sh) it takes ntp's own
+fallback, libisc's MD5 (lib/isc/md5.c, already in libntp), which sntp uses
+only for symmetric-key authentication (-a, -k). Without the macro the
+header is unchanged.
+
+Rebase-risk: low (ntp-139 is the last published drop).
+
+--- a/include/ntp_md5.h
++++ b/include/ntp_md5.h
+@@ -15,7 +15,7 @@
+  */
+ # if defined HAVE_MD5_H && defined HAVE_MD5INIT
+ #  include <md5.h>
+-#elif defined(__APPLE__)
++#elif defined(__APPLE__) && !defined(NEODARWIN_NO_COMMONCRYPTO)
+ #include <CommonCrypto/CommonDigest.h>
+ # define MD5_CTX      CC_MD5_CTX
+ # define MD5Init      CC_MD5_Init
+--- a/libntp/systime.c
++++ b/libntp/systime.c
+@@ -15,7 +15,7 @@
+ #include "timespecops.h"
+ #include "ntp_calendar.h"
+ 
+-#include <os/trace.h>
++#include <os/log.h>
+ 
+ #ifdef HAVE_SYS_PARAM_H
+ # include <sys/param.h>
+@@ -313,7 +313,7 @@
+ 	 * carefully round the adjustment to the nearest quantum, then
+ 	 * adjust in quanta and keep the residue for later.
+ 	 */
+-	os_trace_debug("step: %f", now);
++	os_log_debug(OS_LOG_DEFAULT, "step: %f", now);
+ 	dtemp = now + sys_residual;
+ 	if (dtemp < 0) {
+ 		isneg = 1;
+@@ -358,7 +358,7 @@
+ 			return FALSE;
+ 		}
+         if (now != last_now) { /* reduce duplicates */
+-            os_trace_debug("adjust: %f", now);
++            os_log_debug(OS_LOG_DEFAULT, "adjust: %f", now);
+         }
+         last_now = now;
+ 	}

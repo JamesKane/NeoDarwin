@@ -1,0 +1,6 @@
+# The host side of //kernel:sbsa_pf_ntp_test's NTP check (docs/base/pf-ntp.md,
+# "Tests"): an SNTP server on the host's loopback that the guest reaches
+# through QEMU's user network.
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["sntp_responder.pl"])

@@ -13,6 +13,19 @@
 //  - static: `ifconfig <if> <args> up`, then `route -n add default
 //    <defaultrouter>` once, if set;
 //  - NONE: nothing.
+// and, by its ifconfig_<interface>_ipv6 line (then ifconfig_DEFAULT_ipv6,
+// then AUTOCONF, or NONE when the interface is NONE), IPv6:
+//  - AUTOCONF (or FreeBSD's "inet6 accept_rtadv"): stateless address
+//    autoconfiguration, as IPConfiguration's automatic-v6 service starts it
+//    on macOS: IPv6 attached to the interface (SIOCPROTOATTACH_IN6),
+//    `ifconfig <if> inet6 -ifdisabled`, the link-local address started
+//    (SIOCLL_START) and router advertisements accepted (SIOCAUTOCONF_START);
+//    then, whenever the link comes up, `rtsol <if>` solicits a router. The
+//    kernel takes the prefixes, addresses and default route from the
+//    advertisements;
+//  - static: `ifconfig <if> <args>` (e.g. "inet6 2001:db8::10 prefixlen 64"),
+//    then `route -n add -inet6 default <ipv6_defaultrouter>` once, if set;
+//  - NONE: nothing.
 // Interfaces that appear later are found again on the next scan: a message
 // on the routing socket (an interface's flags or addresses changed) or a
 // 5-second timer triggers one.
@@ -28,6 +41,7 @@ let configPath = "/etc/netconfigd.conf"
 let dhclient = "/sbin/dhclient"
 let ifconfig = "/sbin/ifconfig"
 let route = "/sbin/route"
+let rtsol = "/sbin/rtsol"
 let restartDelay = 10          // seconds before a dhclient that exited runs again
 let scanInterval: Int32 = 5000 // milliseconds between scans without routing messages
 
@@ -173,10 +187,20 @@ enum Mode {
     case none
 }
 
+enum IPv6Mode {
+    case autoconf
+    case manual([String])
+    case none
+}
+
 struct Interface {
     var name: String
     var mode: Mode
+    var ipv6: IPv6Mode
     var client: pid_t? = nil      // dhclient's pid while it runs
+    var solicitor: pid_t? = nil   // rtsol's pid while it runs
+    var autoconfStarted = false   // IPv6 attached and accepting router advertisements
+    var linkWasActive = false     // the link's state when last looked at
     var restartAt: Int = 0        // when to start dhclient again (seconds, CLOCK_MONOTONIC)
 }
 
@@ -193,9 +217,31 @@ func mode(of name: String, _ config: [(String, String)]) -> Mode {
     return .manual(words(value))
 }
 
+func ipv6Mode(of name: String, _ mode: Mode, _ config: [(String, String)]) -> IPv6Mode {
+    var fallback = "AUTOCONF"
+    if case .none = mode { fallback = "NONE" }
+    let value = lookup(config, "ifconfig_\(name)_ipv6") ?? lookup(config, "ifconfig_DEFAULT_ipv6") ?? fallback
+    let args = words(value)
+    if caseInsensitiveEqual(value, "AUTOCONF")
+        || (args.count == 2 && args[0] == "inet6" && args[1] == "accept_rtadv")
+    {
+        return .autoconf
+    }
+    if caseInsensitiveEqual(value, "NONE") || value.isEmpty { return .none }
+    return .manual(args)
+}
+
 /// Configures a new interface: brings it up, and starts its DHCP client or
-/// applies its static configuration. The default router is added once.
-func configure(_ interface: inout Interface, _ config: [(String, String)], defaultRouterAdded: inout Bool) {
+/// applies its static configuration, then its IPv6 configuration. The
+/// default routers are added once.
+func configure(_ interface: inout Interface, _ config: [(String, String)], defaultRouterAdded: inout Bool,
+    ipv6DefaultRouterAdded: inout Bool)
+{
+    configureIPv4(&interface, config, defaultRouterAdded: &defaultRouterAdded)
+    configureIPv6(&interface, config, defaultRouterAdded: &ipv6DefaultRouterAdded)
+}
+
+func configureIPv4(_ interface: inout Interface, _ config: [(String, String)], defaultRouterAdded: inout Bool) {
     switch interface.mode {
     case .none:
         log("\(interface.name): left alone (NONE)")
@@ -211,6 +257,89 @@ func configure(_ interface: inout Interface, _ config: [(String, String)], defau
         let status = run([ifconfig, interface.name, "up"])
         if status != 0 { log("\(interface.name): ifconfig up: status \(status)") }
         startClient(&interface)
+    }
+}
+
+// MARK: - IPv6
+
+/// An in6_aliasreq or in6_ifreq name field set to `name`.
+func setInterfaceName<T>(_ field: inout T, _ name: String) {
+    withUnsafeMutableBytes(of: &field) { raw in
+        for i in raw.indices { raw[i] = 0 }
+        for (i, c) in name.utf8.prefix(raw.count - 1).enumerated() { raw[i] = c }
+    }
+}
+
+/// One of IPConfiguration's interface requests; a log line if it fails.
+/// The request takes an in6_aliasreq with only the name set.
+func request6(_ s: Int32, _ name: String, _ label: String, _ request: UInt) -> Bool {
+    var ifra = in6_aliasreq()
+    setInterfaceName(&ifra.ifra_name, name)
+    if nd_ioctl(s, request, &ifra) != 0 && __error().pointee != EEXIST {
+        log("\(name): \(label): \(errorString(__error().pointee))")
+        return false
+    }
+    return true
+}
+
+func configureIPv6(_ interface: inout Interface, _ config: [(String, String)], defaultRouterAdded: inout Bool) {
+    let name = interface.name
+    switch interface.ipv6 {
+    case .none:
+        return
+    case .manual(let args):
+        let status = run([ifconfig, name] + args + ["up"])
+        log("\(name): IPv6 static (ifconfig \(name) \(args.joined(separator: " ")) up): status \(status)")
+        if status == 0, !defaultRouterAdded, let router = lookup(config, "ipv6_defaultrouter"), !router.isEmpty {
+            let routeStatus = run([route, "-n", "add", "-inet6", "default", router])
+            log("IPv6 default route via \(router): status \(routeStatus)")
+            defaultRouterAdded = routeStatus == 0
+        }
+    case .autoconf:
+        let s = socket(AF_INET6, SOCK_DGRAM, 0)
+        guard s >= 0 else {
+            log("\(name): IPv6: socket: \(errorString(__error().pointee))")
+            return
+        }
+        defer { _ = close(s) }
+        if case .none = interface.mode { _ = run([ifconfig, name, "up"]) }
+        // IPConfiguration's order: attach, enable, link-local, then RAs.
+        guard request6(s, name, "SIOCPROTOATTACH_IN6", ND_SIOCPROTOATTACH_IN6) else { return }
+        let enabled = run([ifconfig, name, "inet6", "-ifdisabled"])
+        if enabled != 0 { log("\(name): ifconfig inet6 -ifdisabled: status \(enabled)") }
+        guard request6(s, name, "SIOCLL_START", ND_SIOCLL_START) else { return }
+        var ifr = in6_ifreq()
+        setInterfaceName(&ifr.ifr_name, name)
+        guard nd_ioctl(s, ND_SIOCAUTOCONF_START, &ifr) == 0 else {
+            log("\(name): SIOCAUTOCONF_START: \(errorString(__error().pointee))")
+            return
+        }
+        interface.autoconfStarted = true
+        log("\(name): IPv6 autoconfiguration (link-local address started, router advertisements accepted)")
+    }
+}
+
+/// Whether the interface's link is up (SIOCGIFMEDIA's IFM_ACTIVE); an
+/// interface without media status counts as up. rtsol ignores an
+/// interface whose link is down (and, run once, exits at once), so it is
+/// started when the link comes up, as IPConfiguration solicits on link up.
+func linkActive(_ name: String) -> Bool {
+    let s = socket(AF_INET, SOCK_DGRAM, 0)
+    guard s >= 0 else { return false }
+    defer { _ = close(s) }
+    var ifmr = ifmediareq()
+    setInterfaceName(&ifmr.ifm_name, name)
+    guard nd_ioctl(s, ND_SIOCGIFMEDIA, &ifmr) == 0 else { return true }
+    guard ifmr.ifm_status & IFM_AVALID != 0 else { return true }
+    return ifmr.ifm_status & IFM_ACTIVE != 0
+}
+
+/// rtsol: router solicitations until an advertisement comes (or three
+/// went unanswered); the kernel processes the advertisement.
+func startSolicitor(_ interface: inout Interface) {
+    interface.solicitor = spawn([rtsol, interface.name])
+    if let pid = interface.solicitor {
+        log("\(interface.name): IPv6 autoconfiguration (rtsol \(interface.name), pid \(pid))")
     }
 }
 
@@ -230,6 +359,7 @@ func netconfigdMain(_ argc: Int32, _ argv: UnsafeMutablePointer<UnsafeMutablePoi
     let config = readConfig(configPath)
     var interfaces: [Interface] = []
     var defaultRouterAdded = false
+    var ipv6DefaultRouterAdded = false
 
     // A routing socket: any message (an interface's flags or addresses
     // changed, one attached) is a reason to look for new interfaces.
@@ -239,8 +369,10 @@ func netconfigdMain(_ argc: Int32, _ argv: UnsafeMutablePointer<UnsafeMutablePoi
     while true {
         // New interfaces.
         for name in ethernetInterfaces() where !interfaces.contains(where: { $0.name == name }) {
-            var interface = Interface(name: name, mode: mode(of: name, config))
-            configure(&interface, config, defaultRouterAdded: &defaultRouterAdded)
+            let ipv4 = mode(of: name, config)
+            var interface = Interface(name: name, mode: ipv4, ipv6: ipv6Mode(of: name, ipv4, config))
+            configure(&interface, config, defaultRouterAdded: &defaultRouterAdded,
+                ipv6DefaultRouterAdded: &ipv6DefaultRouterAdded)
             interfaces.append(interface)
         }
 
@@ -249,6 +381,10 @@ func netconfigdMain(_ argc: Int32, _ argv: UnsafeMutablePointer<UnsafeMutablePoi
         while true {
             let pid = waitpid(-1, &status, WNOHANG)
             if pid <= 0 { break }
+            for i in interfaces.indices where interfaces[i].solicitor == pid {
+                log("\(interfaces[i].name): rtsol exited (status \(describe(status)))")
+                interfaces[i].solicitor = nil
+            }
             for i in interfaces.indices where interfaces[i].client == pid {
                 log("\(interfaces[i].name): dhclient exited (status \(describe(status))); again in \(restartDelay) s")
                 interfaces[i].client = nil
@@ -256,6 +392,17 @@ func netconfigdMain(_ argc: Int32, _ argv: UnsafeMutablePointer<UnsafeMutablePoi
             }
         }
         let present = ethernetInterfaces()
+
+        // Router solicitation whenever an autoconfiguring interface's link
+        // comes up (at boot, the link comes up after `ifconfig up`).
+        for i in interfaces.indices where interfaces[i].autoconfStarted && present.contains(interfaces[i].name) {
+            let active = linkActive(interfaces[i].name)
+            if active && !interfaces[i].linkWasActive && interfaces[i].solicitor == nil {
+                startSolicitor(&interfaces[i])
+            }
+            interfaces[i].linkWasActive = active
+        }
+
         var nextRestart = Int.max
         for i in interfaces.indices {
             guard case .dhcp = interfaces[i].mode, interfaces[i].client == nil else { continue }

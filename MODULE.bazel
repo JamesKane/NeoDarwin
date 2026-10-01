@@ -326,6 +326,17 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/libresolv/archive/refs/tags/libresolv-93.tar.gz"],
 )
 
+# The NTP client (docs/base/pf-ntp.md): sntp from ntp-139, the last ntp drop
+# Apple published (macOS 10.15; later releases set the clock with the closed
+# timed).
+http_archive(
+    name = "apple_ntp",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "ec5ddb29e33b667c535d8ca2f616927772682d817f25205db80071b4e7b32ac7",
+    strip_prefix = "ntp-ntp-139",
+    urls = ["https://github.com/apple-oss-distributions/ntp/archive/refs/tags/ntp-139.tar.gz"],
+)
+
 # OpenSSL: FreeBSD's base library (crypto/openssl is 3.5.8 at freebsd-src
 # 050683bb8e13), at the newest 3.5 LTS patch release. The hash is the one
 # the release publishes (openssl-3.5.9.tar.gz.sha256).
@@ -531,6 +542,15 @@ pinned_files(
     build_file = "//base:dhclient/freebsd.BUILD",
     lockfile = "//base:dhclient/freebsd.lock",
     url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
+# OpenBSD 4.3's pfctl (base/pfctl, docs/base/pf-ntp.md): Apple publishes no
+# pfctl, and xnu's pf is OpenBSD's of the same months.
+pinned_files(
+    name = "openbsd_pfctl",
+    build_file = "//base:pfctl/openbsd.BUILD",
+    lockfile = "//base:pfctl/openbsd.lock",
+    url_template = "https://raw.githubusercontent.com/openbsd/src/{commit}/{path}",
 )
 
 # FreeBSD's libcrypt schemes (MD5, bcrypt, SHA-256, SHA-512) for libsystem_c's
