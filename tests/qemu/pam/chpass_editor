@@ -1,0 +1,13 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# The EDITOR of //kernel:sbsa_accounts_test (docs/base/session.md, "passwd
+# and chpass"): chpass(1) runs it, as the user, on its temporary copy of the
+# record, and it sets the full name. chpass takes the record as changed only
+# if the file's modification time is: HFS+ keeps it to the second, hence the
+# sleep.
+sleep 1
+sed 's/^Full Name: .*/Full Name: Neo Q42/' "$1" > "/tmp/chpass_editor.$$" &&
+	cat "/tmp/chpass_editor.$$" > "$1"
+status=$?
+rm -f "/tmp/chpass_editor.$$"
+exit $status

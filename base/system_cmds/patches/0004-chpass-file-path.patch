@@ -1,0 +1,672 @@
+From: NeoDarwin
+Subject: [PATCH] chpass: the FreeBSD file path, with pw_util's record functions
+
+Apple's chpass reads and writes the account through Open Directory and
+CoreFoundation (open_directory.c), both closed. Its sources keep FreeBSD's
+path under !__APPLE__: edit the record, then pw_copy() the changed line
+into a copy of /etc/master.passwd and run pwd_mkdb -p, which installs it
+and writes /etc/passwd. With PW_FILES, NeoDarwin's switch (without it
+upstream is unchanged), chpass builds that path:
+ - every #ifdef __APPLE__ in chpass/ becomes
+   defined(__APPLE__) && !defined(PW_FILES), and #ifndef __APPLE__ its
+   negation; util.c's Darwin includes stay (tzfile.h's TM_YEAR_BASE);
+ - FreeBSD's <pw_scan.h> and <libutil.h> are pwd_mkdb's pw_scan.h and
+   vipw's pw_util.h, which declares the record functions (pw_copy, pw_dup,
+   pw_equal, pw_make, pw_scan, pw_tempname) and PWSCAN_*;
+ - vipw/pw_util.c builds those functions, which it keeps under
+   !__APPLE__, with PW_FILES; Darwin's reallocarray is libmalloc's
+   ($DARWIN_EXTSN, not in the SDK), so pw_copy() doubles its buffer with
+   realloc;
+ - Darwin's struct passwd has no pw_fields, so the record's source is
+   always the files.
+chpass, chfn and chsh are installed setuid root, as FreeBSD's are: a user
+changes their own shell and finger information after giving their password,
+and root changes any record.
+
+--- a/chpass/chpass.c
++++ b/chpass/chpass.c
+@@ -78,7 +78,7 @@ __FBSDID("$FreeBSD$");
+ 
+ #include <sys/param.h>
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ #include <sys/stat.h>
+ #include <sys/signal.h>
+ #include <sys/time.h>
+@@ -96,7 +96,10 @@ __FBSDID("$FreeBSD$");
+ #include <ypclnt.h>
+ #endif
+ 
+-#ifndef __APPLE__
++#if defined(PW_FILES)
++#include "pw_scan.h"
++#include "pw_util.h"
++#elif !defined(__APPLE__)
+ #include <pw_scan.h>
+ #include <libutil.h>
+ #endif /* !__APPLE__ */
+@@ -105,7 +108,7 @@ __FBSDID("$FreeBSD$");
+ 
+ int master_mode;
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ #include "open_directory.h"
+ char *progname = NULL;
+ CFStringRef DSPath = NULL;
+@@ -118,7 +121,7 @@ int
+ main(int argc, char *argv[])
+ {
+ 	enum { NEWSH, LOADENTRY, EDITENTRY, NEWPW, NEWEXP } op;
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	struct passwd lpw, *old_pw, *pw;
+ 	int ch, pfd, tfd;
+ 	const char *password;
+@@ -135,7 +138,7 @@ main(int argc, char *argv[])
+ 	struct ypclnt *ypclnt;
+ 	const char *yp_domain = NULL, *yp_host = NULL;
+ #endif
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	CFStringRef username = NULL;
+ 	CFStringRef authname = NULL;
+ 	CFStringRef location = NULL;
+@@ -147,7 +150,7 @@ main(int argc, char *argv[])
+ 
+ 	pw = old_pw = NULL;
+ 	op = EDITENTRY;
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	while ((ch = getopt(argc, argv, "a:s:l:u:")) != -1)
+ #else /* !__APPLE__ */
+ #ifdef YP
+@@ -165,7 +168,7 @@ main(int argc, char *argv[])
+ 			op = NEWSH;
+ 			arg = optarg;
+ 			break;
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 		case 'p':
+ 			op = NEWPW;
+ 			arg = optarg;
+@@ -216,13 +219,13 @@ main(int argc, char *argv[])
+ 		} else {
+ 			if ((pw = getpwnam(*argv)) == NULL)
+ 				errx(1, "unknown user: %s", *argv);
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 			if (uid != 0 && uid != pw->pw_uid)
+ 				baduser();
+ #endif /* !__APPLE__ */
+ 		}
+ 
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 		/* Make a copy for later verification */
+ 		if ((pw = pw_dup(pw)) == NULL ||
+ 		    (old_pw = pw_dup(pw)) == NULL)
+@@ -230,7 +233,7 @@ main(int argc, char *argv[])
+ #endif /* !__APPLE__ */
+ 	}
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	master_mode = (uid == 0);
+ 
+ 	/*
+@@ -274,7 +277,7 @@ main(int argc, char *argv[])
+ 			usage();
+ 		if (p_shell(arg, pw, (ENTRY *)NULL) == -1)
+ 			exit(1);
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 		else {
+ 			ENTRY* ep;
+ 
+@@ -299,7 +302,7 @@ main(int argc, char *argv[])
+ #endif /* __APPLE__ */
+ 	}
+ 
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	if (op == NEWEXP) {
+ 		if (uid)	/* only root can change expire */
+ 			baduser();
+@@ -311,7 +314,7 @@ main(int argc, char *argv[])
+ 	if (op == LOADENTRY) {
+ 		if (uid)
+ 			baduser();
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 		warnx("-a is not supported for Open Directory.");
+ 		exit(1);
+ #else /* !__APPLE__ */
+@@ -322,7 +325,7 @@ main(int argc, char *argv[])
+ #endif /* __APPLE__ */
+ 	}
+ 
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	if (op == NEWPW) {
+ 		if (uid)
+ 			baduser();
+@@ -334,7 +337,7 @@ main(int argc, char *argv[])
+ #endif /* !__APPLE__ */
+ 
+ 	if (op == EDITENTRY) {
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 		setrestricted(attrs_orig);
+ 		tmpdir = getenv("TMPDIR");
+ 		if (!tmpdir)
+@@ -370,7 +373,7 @@ main(int argc, char *argv[])
+ #endif /* __APPLE__ */
+ 	}
+ 
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	if (old_pw && !master_mode) {
+ 		password = getpass("Password: ");
+ 		cryptpw = crypt(password, old_pw->pw_passwd);
+@@ -381,7 +384,7 @@ main(int argc, char *argv[])
+ 	}
+ #endif /* !__APPLE__ */
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	odUpdateUser(rec, attrs_orig, attrs);
+ 
+ 	if (rec) CFRelease(rec);
+@@ -389,9 +392,14 @@ main(int argc, char *argv[])
+ 	exit(0);
+ 	return 0;
+ #else /* !__APPLE__ */
++#ifdef PW_FILES
++	/* Darwin's struct passwd has no pw_fields: the record is a file's. */
++	switch (0) {
++#else
+ 	if (old_pw != NULL)
+ 		pw->pw_fields |= (old_pw->pw_fields & _PWF_SOURCE);
+ 	switch (pw->pw_fields & _PWF_SOURCE) {
++#endif
+ #ifdef YP
+ 	case _PWF_NIS:
+ 		ypclnt = ypclnt_new(yp_domain, "passwd.byname", yp_host);
+@@ -409,7 +417,9 @@ main(int argc, char *argv[])
+ 		errx(0, "NIS user information updated");
+ #endif /* YP */
+ 	case 0:
++#ifndef PW_FILES
+ 	case _PWF_FILES:
++#endif
+ 		if (pw_init(NULL, NULL))
+ 			err(1, "pw_init()");
+ 		if ((pfd = pw_lock()) == -1) {
+@@ -450,7 +460,7 @@ usage(void)
+ 
+ 	(void)fprintf(stderr,
+ 	    "usage: chpass%s %s [user]\n",
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	    "",
+ 	    "[-l location] [-u authname] [-s shell]");
+ #else /* !__APPLE__ */
+--- a/chpass/chpass.h
++++ b/chpass/chpass.h
+@@ -65,7 +65,7 @@
+  * $FreeBSD$
+  */
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ #include "open_directory.h"
+ 
+ extern char* progname;
+@@ -76,13 +76,13 @@ struct passwd;
+ 
+ typedef struct _entry {
+ 	const char *prompt;
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	void (*display)(CFDictionaryRef, CFStringRef, const char*, FILE *);
+ #endif /* __APPLE__ */
+ 	int (*func)(char *, struct passwd *, struct _entry *);
+ 	int restricted;
+ 	size_t len;
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	char *except;
+ 	const CFStringRef *attrName;
+ #else /* !__APPLE__ */
+@@ -101,7 +101,7 @@ typedef struct _entry {
+ extern ENTRY list[];
+ extern int master_mode;
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ /* edit.c */
+ void	display_time(CFDictionaryRef, CFStringRef, const char*, FILE *);
+ void	display_string(CFDictionaryRef, CFStringRef, const char*, FILE *);
+@@ -113,7 +113,7 @@ int	editfile(const char* tfn);
+ #endif /* __APPLE__ */
+ 
+ int	 atot(char *, time_t *);
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ struct passwd *edit(const char *, struct passwd *);
+ #endif /* !__APPLE__ */
+ int      ok_shell(char *);
+@@ -128,7 +128,7 @@ int	 p_login(char *, struct passwd *, ENTRY *);
+ int	 p_passwd(char *, struct passwd *, ENTRY *);
+ int	 p_shell(char *, struct passwd *, ENTRY *);
+ int	 p_uid(char *, struct passwd *, ENTRY *);
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ int	 p_uuid(char *, struct passwd *, ENTRY *);
+ #endif /* __APPLE__ */
+ char    *ttoa(time_t);
+--- a/chpass/edit.c
++++ b/chpass/edit.c
+@@ -84,14 +84,17 @@ __FBSDID("$FreeBSD$");
+ #include <string.h>
+ #include <unistd.h>
+ 
+-#ifndef __APPLE__
++#if defined(PW_FILES)
++#include "pw_scan.h"
++#include "pw_util.h"
++#elif !defined(__APPLE__)
+ #include <pw_scan.h>
+ #include <libutil.h>
+ #endif /* !__APPLE__ */
+ 
+ #include "chpass.h"
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ static int display(const char *tfn, CFDictionaryRef attrs);
+ static CFDictionaryRef verify(const char *tfn, CFDictionaryRef attrs);
+ #else /* !__APPLE__ */
+@@ -99,7 +102,7 @@ static int display(const char *tfn, struct passwd *pw);
+ static struct passwd *verify(const char *tfn, struct passwd *pw);
+ #endif /* __APPLE__ */
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ CFDictionaryRef
+ edit(const char *tfn, CFDictionaryRef pw)
+ #else /* !__APPLE__ */
+@@ -107,7 +110,7 @@ struct passwd *
+ edit(const char *tfn, struct passwd *pw)
+ #endif /* __APPLE__ */
+ {
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	CFDictionaryRef npw;
+ #else /* !__APPLE__ */
+ 	struct passwd *npw;
+@@ -118,7 +121,7 @@ edit(const char *tfn, struct passwd *pw)
+ 	if (display(tfn, pw) == -1)
+ 		return (NULL);
+ 	for (;;) {
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 		switch (editfile(tfn)) {
+ #else /* !__APPLE__ */
+ 		switch (pw_edit(1)) {
+@@ -126,7 +129,7 @@ edit(const char *tfn, struct passwd *pw)
+ 		case -1:
+ 			return (NULL);
+ 		case 0:
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 			return (NULL);
+ #else /* !__APPLE__ */
+ 			return (pw_dup(pw));
+@@ -136,7 +139,7 @@ edit(const char *tfn, struct passwd *pw)
+ 		}
+ 		if ((npw = verify(tfn, pw)) != NULL)
+ 			return (npw);
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 		free(npw);
+ #endif /* !__APPLE__ */
+ 		printf("re-edit the password file? ");
+@@ -155,7 +158,7 @@ edit(const char *tfn, struct passwd *pw)
+  *	print out the file for the user to edit; strange side-effect:
+  *	set conditional flag if the user gets to edit the shell.
+  */
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ static int
+ display(const char *tfn, CFDictionaryRef attrs)
+ #else /* !__APPLE__ */
+@@ -164,7 +167,7 @@ display(const char *tfn, struct passwd *pw)
+ #endif /* __APPLE__ */
+ {
+ 	FILE *fp;
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	char *bp, *gecos, *p;
+ #endif /* !__APPLE__ */
+ 
+@@ -173,7 +176,7 @@ display(const char *tfn, struct passwd *pw)
+ 		return (-1);
+ 	}
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	CFArrayRef values = CFDictionaryGetValue(attrs, kODAttributeTypeRecordName);
+ 	CFStringRef username = (values && CFArrayGetCount(values)) > 0 ? CFArrayGetValueAtIndex(values, 0) : NULL;
+ 
+@@ -280,7 +283,7 @@ display(const char *tfn, struct passwd *pw)
+ 	return (0);
+ }
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ static CFDictionaryRef
+ verify(const char* tfn, CFDictionaryRef pw)
+ #else /* !__APPLE__ */
+@@ -288,7 +291,7 @@ static struct passwd *
+ verify(const char *tfn, struct passwd *pw)
+ #endif /* __APPLE__ */
+ {
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	CFMutableDictionaryRef npw;
+ #else /* !__APPLE__ */
+ 	struct passwd *npw;
+@@ -300,7 +303,7 @@ verify(const char *tfn, struct passwd *pw)
+ 	int line;
+ 	size_t len;
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	if ((npw = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks)) == NULL)
+ 		return (NULL);
+ #else /* !__APPLE__ */
+@@ -310,7 +313,7 @@ verify(const char *tfn, struct passwd *pw)
+ 	if ((fp = fopen(tfn, "r")) == NULL ||
+ 	    fstat(fileno(fp), &sb) == -1) {
+ 		warn("%s", tfn);
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 		free(pw);
+ #endif /* !__APPLE__ */
+ 		return (NULL);
+@@ -318,7 +321,7 @@ verify(const char *tfn, struct passwd *pw)
+ 	if (sb.st_size == 0) {
+ 		warnx("corrupted temporary file");
+ 		fclose(fp);
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 		free(pw);
+ #endif /* !__APPLE__ */
+ 		return (NULL);
+@@ -361,7 +364,7 @@ verify(const char *tfn, struct passwd *pw)
+ 				    tfn, ep->prompt, val);
+ 				goto bad;
+ 			}
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 			if ((ep->func)(val, NULL, NULL))
+ 				goto bad;
+ 			{
+@@ -381,7 +384,7 @@ verify(const char *tfn, struct passwd *pw)
+ 	free(val);
+ 	fclose(fp);
+ 
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	/* Build the gecos field. */
+ 	len = asprintf(&p, "%s,%s,%s,%s,%s", list[E_NAME].save,
+ 	    list[E_LOCATE].save, list[E_BPHONE].save,
+@@ -406,7 +409,7 @@ verify(const char *tfn, struct passwd *pw)
+ 	free(buf);
+ 	return (npw);
+ bad:
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	free(pw);
+ #endif /* !__APPLE__ */
+ 	free(val);
+--- a/chpass/field.c
++++ b/chpass/field.c
+@@ -97,7 +97,7 @@ p_login(char *p, struct passwd *pw, ENTRY *ep __unused)
+ 		warnx("login names may not begin with a hyphen");
+ 		return (-1);
+ 	}
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	if (!(pw->pw_name = strdup(p))) {
+ 		warnx("can't save entry");
+ 		return (-1);
+@@ -117,7 +117,7 @@ p_login(char *p, struct passwd *pw, ENTRY *ep __unused)
+ int
+ p_passwd(char *p, struct passwd *pw, ENTRY *ep __unused)
+ {
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	if (!(pw->pw_passwd = strdup(p))) {
+ 		warnx("can't save password entry");
+ 		return (-1);
+@@ -148,7 +148,7 @@ p_uid(char *p, struct passwd *pw, ENTRY *ep __unused)
+ 		warnx("illegal uid");
+ 		return (-1);
+ 	}
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	pw->pw_uid = id;
+ #endif /* !__APPLE__ */
+ 	return (0);
+@@ -171,7 +171,7 @@ p_gid(char *p, struct passwd *pw, ENTRY *ep __unused)
+ 			warnx("unknown group %s", p);
+ 			return (-1);
+ 		}
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 		pw->pw_gid = gr->gr_gid;
+ #endif /* !__APPLE__ */
+ 		return (0);
+@@ -182,7 +182,7 @@ p_gid(char *p, struct passwd *pw, ENTRY *ep __unused)
+ 		warnx("illegal gid");
+ 		return (-1);
+ 	}
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	pw->pw_gid = id;
+ #endif /* !__APPLE__ */
+ 	return (0);
+@@ -192,7 +192,7 @@ p_gid(char *p, struct passwd *pw, ENTRY *ep __unused)
+ int
+ p_class(char *p, struct passwd *pw, ENTRY *ep __unused)
+ {
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	if (!(pw->pw_class = strdup(p))) {
+ 		warnx("can't save entry");
+ 		return (-1);
+@@ -206,7 +206,7 @@ p_class(char *p, struct passwd *pw, ENTRY *ep __unused)
+ int
+ p_change(char *p, struct passwd *pw, ENTRY *ep __unused)
+ {
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	if (!atot(p, &pw->pw_change))
+ 		return (0);
+ 	warnx("illegal date for change field");
+@@ -218,7 +218,7 @@ p_change(char *p, struct passwd *pw, ENTRY *ep __unused)
+ int
+ p_expire(char *p, struct passwd *pw, ENTRY *ep __unused)
+ {
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	if (!atot(p, &pw->pw_expire))
+ 		return (0);
+ 	warnx("illegal date for expire field");
+@@ -230,7 +230,7 @@ p_expire(char *p, struct passwd *pw, ENTRY *ep __unused)
+ int
+ p_gecos(char *p, struct passwd *pw __unused, ENTRY *ep)
+ {
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	if (!(ep->save = strdup(p))) {
+ 		warnx("can't save entry");
+ 		return (-1);
+@@ -247,7 +247,7 @@ p_hdir(char *p, struct passwd *pw, ENTRY *ep __unused)
+ 		warnx("empty home directory field");
+ 		return (-1);
+ 	}
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	if (!(pw->pw_dir = strdup(p))) {
+ 		warnx("can't save entry");
+ 		return (-1);
+@@ -262,14 +262,14 @@ int
+ p_shell(char *p, struct passwd *pw, ENTRY *ep __unused)
+ {
+ 	struct stat sbuf;
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	struct passwd lpw;
+ 	pw = &lpw;
+ 	memset(pw, 0, sizeof(lpw));
+ 	pw->pw_shell = p;
+ #endif /* __APPLE__ */
+ 
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	if (!*p) {
+ 		pw->pw_shell = strdup(_PATH_BSHELL);
+ 		return (0);
+@@ -285,11 +285,11 @@ p_shell(char *p, struct passwd *pw, ENTRY *ep __unused)
+ 			warnx("%s: non-standard shell", p);
+ 			return (-1);
+ 		}
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 		pw->pw_shell = strdup(p);
+ #endif /* !__APPLE__ */
+ 	}
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 	else
+ 		pw->pw_shell = dup_shell(p);
+ 	if (!pw->pw_shell) {
+@@ -317,7 +317,7 @@ p_shell(char *p, struct passwd *pw, ENTRY *ep __unused)
+ 	return (0);
+ }
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ #include <uuid/uuid.h>
+ /* ARGSUSED */
+ int
+--- a/chpass/table.c
++++ b/chpass/table.c
+@@ -63,12 +63,12 @@ __FBSDID("$FreeBSD$");
+ #include <stddef.h>
+ #include "chpass.h"
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ #include "open_directory.h"
+ #endif /* __APPLE__ */
+ 
+ ENTRY list[] = {
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	{ "Login",						display_string,	p_login,	1,   5, ": ",	&kODAttributeTypeRecordName, },
+ 	{ "Password",					display_string,	p_passwd,	1,   8, ": ",	&kODAttributeTypePassword, },
+ 	{ "Uid [#]",					display_string,	p_uid,		1,   3, ": ",	&kODAttributeTypeUniqueID, },
+--- a/chpass/util.c
++++ b/chpass/util.c
+@@ -86,7 +86,9 @@ __FBSDID("$FreeBSD$");
+ #include <paths.h>
+ #include <sys/stat.h>
+ #include <tzfile.h>
++#ifndef PW_FILES
+ #include "open_directory.h"
++#endif
+ #endif /* __APPLE__ */
+ 
+ static const char *months[] =
+@@ -184,7 +186,7 @@ bad:		return (1);
+ int
+ ok_shell(char *name)
+ {
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ 	char *sh;
+ #else /* !__APPLE__ */
+ 	char *p, *sh;
+@@ -196,7 +198,7 @@ ok_shell(char *name)
+ 			endusershell();
+ 			return (1);
+ 		}
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ 		/* allow just shell name, but use "real" path */
+ 		if ((p = strrchr(sh, '/')) && strcmp(name, p + 1) == 0) {
+ 			endusershell();
+@@ -230,7 +232,7 @@ dup_shell(char *name)
+ 	return (NULL);
+ }
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(PW_FILES)
+ int
+ cfprintf(FILE* file, const char* format, ...)
+ {
+--- a/vipw/pw_util.c
++++ b/vipw/pw_util.c
+@@ -409,7 +409,7 @@ pw_fini(void)
+ 	errno = serrno;
+ }
+ 
+-#ifndef __APPLE__
++#if !defined(__APPLE__) || defined(PW_FILES)
+ /*
+  * Compares two struct pwds.
+  */
+@@ -504,7 +504,13 @@ pw_copy(int ffd, int tfd, const struct passwd *pw, struct passwd *old_pw)
+ 			if (eof)
+ 				break;
+ 			while ((size_t)(q - p) >= size) {
++#ifdef __APPLE__
++				/* Darwin's reallocarray is libmalloc's, not public. */
++				if (size > SIZE_MAX / 2 ||
++				    (tmp = realloc(buf, size * 2)) == NULL) {
++#else
+ 				if ((tmp = reallocarray(buf, 2, size)) == NULL) {
++#endif
+ 					warnx("passwd line too long");
+ 					goto err;
+ 				}
+--- a/vipw/pw_util.h
++++ b/vipw/pw_util.h
+@@ -64,3 +64,21 @@ int	pw_mkdb(const char *user);
+ void	pw_prompt __P((void));
+ int	pw_tmp(int);
+ void	pw_fini(void);
++
++#if defined(PW_FILES)
++/*
++ * FreeBSD libutil's record functions, which pw_util.c builds with PW_FILES:
++ * chpass(1)'s file path uses them (<libutil.h> on FreeBSD).
++ */
++#define	PWSCAN_MASTER	0x01
++#define	PWSCAN_WARN	0x02
++struct passwd;
++int	pw_copy(int, int, const struct passwd *, struct passwd *);
++struct passwd *pw_dup(const struct passwd *);
++int	pw_equal(const struct passwd *, const struct passwd *);
++void	pw_initpwd(struct passwd *);
++char	*pw_make(const struct passwd *);
++char	*pw_make_v7(const struct passwd *);
++struct passwd *pw_scan(const char *, int);
++const char *pw_tempname(void);
++#endif /* PW_FILES */

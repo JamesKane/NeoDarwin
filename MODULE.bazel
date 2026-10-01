@@ -253,6 +253,16 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/pam_modules/archive/refs/tags/pam_modules-217.0.1.tar.gz"],
 )
 
+# BSM audit (docs/base/session.md, "BSM audit"): OpenBSM-21 (OpenBSM 1.1), the
+# last OpenBSM Apple published (Mac OS X 10.6.8); no later release set has it.
+http_archive(
+    name = "apple_openbsm",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "ebbd23f36c08da9bae0d6f14727892e83f352cc50a4e8fdaf3f9f9137381de6b",
+    strip_prefix = "OpenBSM-OpenBSM-21",
+    urls = ["https://github.com/apple-oss-distributions/OpenBSM/archive/refs/tags/OpenBSM-21.tar.gz"],
+)
+
 http_archive(
     name = "apple_ncurses",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
@@ -283,6 +293,34 @@ http_archive(
     sha256 = "901e3b93d8d5bbf8a7bef318f9bdace864c12be6d7b18ba1bf1e8c93f7667af6",
     strip_prefix = "bash-bash-140",
     urls = ["https://github.com/apple-oss-distributions/bash/archive/refs/tags/bash-140.tar.gz"],
+)
+
+# Loopback and sshd (docs/base/session.md, "Loopback and sshd"): network_cmds'
+# ifconfig, ping, netstat and route; OpenSSH 10.0p2; and its libcrypto,
+# LibreSSL 3.3.6, the version macOS 26 ships. Apple's LibreSSL project isn't
+# in the macOS 26.0 release set (only OpenSSL098), so it is upstream's.
+http_archive(
+    name = "apple_network_cmds",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "bd9a87dba7a7da0ef99a95d3b2ed0cf01365079400fbd6174e1486a469bf4397",
+    strip_prefix = "network_cmds-network_cmds-726",
+    urls = ["https://github.com/apple-oss-distributions/network_cmds/archive/refs/tags/network_cmds-726.tar.gz"],
+)
+
+http_archive(
+    name = "apple_openssh",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "10f6ee5d5289435f3739e9eb02166383c04579f77dace9c1b81dfedb03b547db",
+    strip_prefix = "OpenSSH-OpenSSH-354.0.3",
+    urls = ["https://github.com/apple-oss-distributions/OpenSSH/archive/refs/tags/OpenSSH-354.0.3.tar.gz"],
+)
+
+http_archive(
+    name = "libressl",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "3f28849365e1190db2baf9014ff9686012c25b1ca6df8b3a085f789e24fe4b9a",
+    strip_prefix = "libressl-3.3.6",
+    urls = ["https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-3.3.6.tar.gz"],
 )
 
 http_archive(

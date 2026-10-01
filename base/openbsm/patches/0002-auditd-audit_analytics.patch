@@ -1,0 +1,36 @@
+From: NeoDarwin
+Subject: [PATCH] auditd: serve audit_analytics
+
+xnu's audit_triggers subsystem (mach/audit_triggers.defs, which the
+project's audit_triggers.defs includes) has gained a second simpleroutine,
+audit_analytics: the kernel sends the audit control port the signing ID and
+name of each non-platform program that submits a record. Its MIG server
+needs an implementation, and auditd had none, so it didn't link. Note the
+caller in the debug log and return success.
+
+--- a/openbsm/bin/auditd/auditd_darwin.c
++++ b/openbsm/bin/auditd/auditd_darwin.c
+@@ -465,6 +465,23 @@
+ }
+ 
+ /*
++ * Implementation of the audit_analytics() MIG simpleroutine, which xnu's
++ * audit_triggers subsystem has since gained: the kernel names the
++ * non-platform programs that submit audit records.  There is nothing to
++ * report them to; note them in the debug log.
++ */
++kern_return_t
++audit_analytics(mach_port_t __unused audit_port, string_t caller_id,
++    string_t caller_name)
++{
++
++	auditd_log_debug("audit record submitted by %s (%s)", caller_name,
++	    caller_id);
++
++	return (KERN_SUCCESS);
++}
++
++/*
+  * When we get a signal, we are often not at a clean point.  So, little can
+  * be done in the signal handler itself.  Instead,  we send a message to the
+  * main servicing loop to do proper handling from a non-signal-handler

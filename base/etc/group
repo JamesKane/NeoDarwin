@@ -2,7 +2,8 @@
 # Group Database (NeoDarwin, base/etc; docs/base/libsystem.md)
 #
 # Read by Libinfo's file module. The BSD base groups of Apple's group.iPhone
-# (files-968); login(1) gives the tty it runs on to group tty.
+# (files-968), and _sshd (gid 75, as on macOS) for OpenSSH's privilege
+# separation; login(1) gives the tty it runs on to group tty.
 ##
 nobody:*:-2:
 nogroup:*:-1:
@@ -22,3 +23,4 @@ group:*:16:
 staff:*:20:root
 utmp:*:45:
 admin:*:80:root
+_sshd:*:75:

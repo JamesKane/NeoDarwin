@@ -1,0 +1,4 @@
+module Wrapper {
+  header "wrapper_shim.h"
+  export *
+}

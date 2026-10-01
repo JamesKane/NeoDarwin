@@ -1135,6 +1135,208 @@ sh_test(
     tags = ["manual", "kernel", "qemu"],
 )
 
+# BSM audit (docs/base/session.md, "BSM audit") on //images:pam_session_root.
+# launchctl's bootstrap starts the trail (libauditd's audit_quick_start());
+# auditd runs on demand. A wrong password and then test's own make login
+# record a failed and a successful AUE_login; test becomes root with su
+# (AUE_su), and test's logout records AUE_logout. root logs in and has
+# auditd rotate the trail (audit -n: launchd starts auditd on demand, on the
+# audit control port, which launchd patch 0006 makes possible), and praudit
+# prints the records. Each expected line is praudit's or ls's, never typed:
+# the startup record, the failed login's non-attributable subject (auid -1)
+# and text, test's login and logout, su's record, and the identity token xnu
+# adds to each user record (OpenBSM patch 0001).
+sh_test(
+    name = "sbsa_audit_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pam_session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pam_session_root_trustcache)",
+        "--until-lines",
+        "--absent 'ndamfi: refused'",
+        "--absent 'audit_quick_start() failed'",
+        "--send-after 'login: ' 'test\\n'",
+        "--send-after 'Password:' 'wrong\\n'",
+        "--send-after 'login: ' 'test\\n'",
+        "--send-after 'Password:' 'neodarwin\\n'",
+        "--send-after 'test@localhost ~ % ' 'su - root -c id; exit\\n'",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'audit -n; sleep 3; launchctl list; ls -l /var/audit\\n'",
+        "--send-after 'root@localhost ~ # ' 'praudit -l /var/audit/2*\\n'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'ndamfi: code-signing enforcement on (a static trust cache from the loader)'",
+        "'Login incorrect'",
+        "'uid=0(root)'",
+        "'Trigger sent.'",
+        # auditd, started on demand, rotated the trail.
+        "'.not_terminated'",
+        # praudit: the trail's first record, from audit_quick_start().
+        "'audit startup,0,'",
+        "'text,launchctl::Audit startup,return,success,0,'",
+        # The failed login: non-attributable (auid -1), with login's text.
+        "'subject_ex,-1,root,wheel,-1,nogroup,'",
+        "'text,Login incorrect,return,failure : Operation not permitted,'",
+        # test's login and logout, and su's successful authentication.
+        "'login - local,0,'",
+        "'subject_ex,test,root,wheel,test,staff,'",
+        "'logout - local,0,'",
+        "'su(1),0,'",
+        "'subject,test,root,staff,test,staff,'",
+        "'text,successful authentication,return,success,0,'",
+        # The identity token xnu adds to each user record (patch 0001).
+        "'identity,1,login,complete,,complete,0x'",
+        "'identity,1,su,complete,,complete,0x'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pam_session_root",
+        "//images:pam_session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# Accounts (docs/base/session.md, "passwd and chpass") on
+# //images:pam_session_root. test logs in to zsh, whose /etc/zprofile ran
+# path_helper: PATH is /etc/paths' entries, in order. test changes its
+# password with passwd (old password, then the new one twice); the old one
+# is then refused, the new one accepted. test sets its full name with chpass
+# (EDITOR is tests/qemu/pam/chpass_editor; chpass asks for the password), and
+# getpwnam answers with it. root changes test's shell with chpass -s:
+# master.passwd has it, and test's extended DES hash, and pwd_mkdb has
+# written /etc/passwd ("*" for the password). root gives itself a password
+# with passwd, and login then asks root for it.
+sh_test(
+    name = "sbsa_accounts_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pam_session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pam_session_root_trustcache)",
+        "--until-lines",
+        "--absent 'ndamfi: refused'",
+        "--send-after 'login: ' 'test\\n'",
+        "--send-after 'Password:' 'neodarwin\\n'",
+        "--send-after 'test@localhost ~ % ' 'echo path=$$PATH\\n'",
+        "--send-after 'test@localhost ~ % ' 'passwd\\n'",
+        "--send-after 'Old password:' 'neodarwin\\n'",
+        "--send-after 'New password:' 'darwin26\\n'",
+        "--send-after 'Retype new password:' 'darwin26\\n'",
+        "--send-after 'test@localhost ~ % ' 'echo passwd-status=$$?; exit\\n'",
+        "--send-after 'login: ' 'test\\n'",
+        "--send-after 'Password:' 'neodarwin\\n'",
+        "--send-after 'login: ' 'test\\n'",
+        "--send-after 'Password:' 'darwin26\\n'",
+        "--send-after 'test@localhost ~ % ' 'echo new-$$(id -un); EDITOR=/usr/local/bin/chpass_editor chpass\\n'",
+        "--send-after 'Password:' 'darwin26\\n'",
+        "--send-after 'test@localhost ~ % ' 'echo fullname=$$(id -F); exit\\n'",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'chpass -s /bin/bash test\\n'",
+        "--send-after 'root@localhost ~ # ' 'id -P test; cat /etc/passwd\\n'",
+        "--send-after 'root@localhost ~ # ' 'passwd\\n'",
+        "--send-after 'New password:' 'rootpw42\\n'",
+        "--send-after 'Retype new password:' 'rootpw42\\n'",
+        "--send-after 'root@localhost ~ # ' 'exit\\n'",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'Password:' 'rootpw42\\n'",
+        "--send-after 'root@localhost ~ # ' 'echo root-$$((40+2))\\n'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'ndamfi: code-signing enforcement on (a static trust cache from the loader)'",
+        "'path=/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin'",
+        "'Changing password for test.'",
+        "'passwd-status=0'",
+        # The old password, refused after the change.
+        "'Login incorrect'",
+        "'new-test'",
+        "'chpass: user information updated'",
+        "'fullname=Neo Q42'",
+        # root's chpass -s: getpwnam (master.passwd, an extended DES hash:
+        # '_', then 65537 rounds), and /etc/passwd.
+        "'test:_/.E.'",
+        "':501:20::0:0:Neo Q42:/Users/test:/bin/bash'",
+        "'test:*:501:20:Neo Q42:/Users/test:/bin/bash'",
+        "'Changing password for root.'",
+        "'root-42'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pam_session_root",
+        "//images:pam_session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# Loopback and sshd (docs/base/session.md, "Loopback and sshd") on
+# //images:pam_session_root, under code-signing enforcement. launchctl's
+# bootstrap gave lo0 127.0.0.1/8 and ::1, which ifconfig shows and ping
+# reaches. As root: load ssh.plist with -w (Remote Login is off, as on
+# macOS); launchctl creates the job's listening sockets and launchd runs
+# launchproxy, then sshd-keygen-wrapper (host keys) and sshd -i for each
+# connection. test logs in over ssh to 127.0.0.1 with its password
+# (keyboard-interactive through PAM's pam_unix) and runs id; a wrong
+# password is refused; root's new ed25519 key in test's authorized_keys
+# logs in without one. sshd's log has each attempt.
+sh_test(
+    name = "sbsa_ssh_session_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pam_session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pam_session_root_trustcache)",
+        "--until-lines",
+        "--absent 'ndamfi: refused'",
+        # launchctl's loopback set-up and socket creation report failures.
+        "--absent 'launchctl: lo0'",
+        "--absent 'launchctl: com.openssh.sshd'",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'ifconfig lo0; ping -c 1 127.0.0.1\\n'",
+        "--send-after 'root@localhost ~ # ' 'launchctl load -w /System/Library/LaunchDaemons/ssh.plist; launchctl list\\n'",
+        "--send-after 'root@localhost ~ # ' 'ssh -o StrictHostKeyChecking=no test@127.0.0.1 id\\n'",
+        "--send-after 'Password:' 'neodarwin\\n'",
+        "--send-after 'root@localhost ~ # ' 'ssh -o NumberOfPasswordPrompts=1 -o PreferredAuthentications=keyboard-interactive test@127.0.0.1 id; echo ssh-status=$$?\\n'",
+        "--send-after 'Password:' 'wrong\\n'",
+        "--send-after 'root@localhost ~ # ' 'ssh-keygen -q -t ed25519 -N \"\" -f /var/root/.ssh/id_ed25519 && mkdir -p /Users/test/.ssh && cp /var/root/.ssh/id_ed25519.pub /Users/test/.ssh/authorized_keys\\n'",
+        "--send-after 'root@localhost ~ # ' 'ssh -o BatchMode=yes test@127.0.0.1 echo key-\\$$UID; echo key-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' 'cat /var/log/sshd.log\\n'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'ndamfi: code-signing enforcement on (a static trust cache from the loader)'",
+        "'inet 127.0.0.1 netmask 0xff000000'",
+        "'inet6 ::1 prefixlen 128'",
+        "'1 packets transmitted, 1 packets received, 0.0% packet loss'",
+        "'com.openssh.sshd'",
+        "'Warning: Permanently added '",
+        "'uid=501(test) gid=20(staff)'",
+        "'test@127.0.0.1: Permission denied'",
+        "'ssh-status=255'",
+        "'key-501'",
+        "'key-status=0'",
+        "'Accepted keyboard-interactive/pam for test from 127.0.0.1'",
+        "'PAM: authentication error for test from 127.0.0.1'",
+        "'Accepted publickey for test from 127.0.0.1'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pam_session_root",
+        "//images:pam_session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
 # P1-15's exit (docs/kernel/amfi-provider.md §4): the session disk under
 # code-signing enforcement. neoboot passes the root's static trust cache
 # (\\NeoDarwin\\trustcache on the image's ESP); the kernel loads it and

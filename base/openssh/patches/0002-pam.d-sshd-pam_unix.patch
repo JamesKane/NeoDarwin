@@ -1,0 +1,35 @@
+From: NeoDarwin
+Subject: [PATCH] pam.d/sshd: pam_unix in place of closed modules
+
+Apple's policy authenticates through pam_krb5, pam_ntlm, pam_mount and
+pam_opendirectory, checks the ssh service ACL with pam_sacl and opens a
+per-user launchd session with pam_launchd. OpenPAM fails a whole policy
+when one module doesn't load, and the Kerberos, NTLM, mount and Open
+Directory modules need closed frameworks (docs/base/session.md, "PAM").
+As login's and su's policies do, NeoDarwin's uses OpenPAM's pam_unix for
+auth, account and password: crypt(3) against the password database. It
+has no nullok: an account with an empty password (root's) can't log in
+over ssh. pam_nologin stays. pam_sacl is left out: it asks Libinfo's
+mbr_check_service_membership(), which answers EIO without a directory
+service, and that denies everyone. The session chain is pam_permit, as
+su's is: pam_launchd moves the session into a per-user launchd, which
+NeoDarwin's launchd doesn't run.
+
+--- a/pam.d/sshd
++++ b/pam.d/sshd
+@@ -1,11 +1,6 @@
+ # sshd: auth account password session
+-auth       optional       pam_krb5.so use_kcminit
+-auth       optional       pam_ntlm.so try_first_pass
+-auth       optional       pam_mount.so try_first_pass
+-auth       required       pam_opendirectory.so try_first_pass
++auth       required       pam_unix.so try_first_pass
+ account    required       pam_nologin.so
+-account    required       pam_sacl.so sacl_service=ssh
+-account    required       pam_opendirectory.so
+-password   required       pam_opendirectory.so
+-session    required       pam_launchd.so
+-session    optional       pam_mount.so
++account    required       pam_unix.so
++password   required       pam_unix.so
++session    required       pam_permit.so

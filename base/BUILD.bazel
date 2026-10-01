@@ -334,7 +334,7 @@ base_library(
 base_library(
     name = "system_commands",
     data = glob(["system_cmds/**"]) + ["commands.sh"],
-    deps = [":root", ":libpam_dylib"],
+    deps = [":root", ":libpam_dylib", ":bsm_audit"],
     script = "system_cmds/build.sh",
     srcs = "@apple_system_cmds//:all",
     sysroot = ":sysroot",
@@ -365,9 +365,24 @@ base_library(
 base_library(
     name = "su_command",
     data = glob(["shell_cmds/**"]) + ["commands.sh"],
-    deps = [":root", ":libpam_dylib"],
+    deps = [":root", ":libpam_dylib", ":bsm_audit"],
     script = "shell_cmds/su.sh",
     srcs = "@apple_shell_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+# BSM audit (docs/base/session.md, "BSM audit"): OpenBSM-21's libbsm and
+# libauditd, auditd, audit, auditreduce, praudit, /etc/security and
+# com.apple.auditd.plist. login (system_commands) and su (su_command)
+# record their events through libbsm. (Not named openbsm: a target named
+# like its source directory hides that directory's files from tests'
+# runfiles.)
+base_library(
+    name = "bsm_audit",
+    data = glob(["openbsm/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "openbsm/build.sh",
+    srcs = "@apple_openbsm//:all",
     sysroot = ":sysroot",
 )
 
@@ -462,6 +477,46 @@ base_library(
     sysroot = ":sysroot",
 )
 
+# Loopback and sshd (docs/base/session.md, "Loopback and sshd"): ifconfig,
+# ping, netstat and route; launchproxy, which runs inetd-style launchd jobs;
+# libcrypto (LibreSSL); and OpenSSH, with sshd under launchd
+# (ssh.plist, Disabled as on macOS).
+base_library(
+    name = "network_commands",
+    data = glob(["network_cmds/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "network_cmds/build.sh",
+    srcs = "@apple_network_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "launchproxy",
+    data = glob(["launchproxy/**", "launchd/patches/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "launchproxy/build.sh",
+    srcs = "@apple_launchd//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libcrypto_dylib",
+    data = glob(["libressl/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "libressl/build.sh",
+    srcs = "@libressl//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "openssh",
+    data = glob(["openssh/**"]) + ["commands.sh"],
+    deps = [":root", ":libcrypto_dylib", ":libpam_dylib"],
+    script = "openssh/build.sh",
+    srcs = "@apple_openssh//:all",
+    sysroot = ":sysroot",
+)
+
 # The system root: the runtime root with the commands and /etc.
 base_root(
     name = "system_root",
@@ -474,6 +529,7 @@ base_root(
         ":libpam_dylib",
         ":pam_modules",
         ":su_command",
+        ":bsm_audit",
         ":file_commands",
         ":text_commands",
         ":adv_commands",
@@ -484,6 +540,10 @@ base_root(
         ":zsh_shell",
         ":libedit_dylib",
         ":bash_shell",
+        ":network_commands",
+        ":launchproxy",
+        ":libcrypto_dylib",
+        ":openssh",
     ],
 )
 
@@ -541,6 +601,8 @@ base_root(
     ("libncurses", ":libncurses_dylib", "usr/lib/libncurses.5.4.dylib", "ncurses/exports.txt"),
     ("libpam", ":libpam_dylib", "usr/lib/libpam.2.dylib", "openpam/exports/libpam.2.txt"),
     ("libpam.1", ":libpam_dylib", "usr/lib/libpam.1.dylib", "openpam/exports/libpam.1.txt"),
+    ("libbsm", ":bsm_audit", "usr/lib/libbsm.0.dylib", "openbsm/exports/libbsm.0.txt"),
+    ("libauditd", ":bsm_audit", "usr/lib/libauditd.0.dylib", "openbsm/exports/libauditd.0.txt"),
     ("libedit", ":libedit_dylib", "usr/lib/libedit.3.dylib", "libedit/exports.txt"),
     ("libsystem", ":libsystem_b", "usr/lib/libSystem.B.dylib", "libsystem/exports.txt"),
     ("libcompiler_rt", ":llvm_runtimes", "usr/lib/system/libcompiler_rt.dylib", "llvm/exports/libcompiler_rt.txt"),
@@ -582,5 +644,6 @@ lang_audit_test(
         "libm/compat/**/*.h",
         "file_cmds/compat/*.h",
         "shell_cmds/compat/**/*.h",
+        "system_cmds/compat/**/*.h",
     ]),
 )

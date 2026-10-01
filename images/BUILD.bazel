@@ -28,6 +28,7 @@ hfs_ramdisk(
 _SYSTEM_DIRS = [
     "dev",
     "private/tmp",
+    "private/var/audit",
     "private/var/db/launchd.db/com.apple.launchd",
     "private/var/empty",
     "private/var/log/com.apple.launchd",
@@ -44,9 +45,17 @@ _SYSTEM_LINKS = {
 
 _SYSTEM_MODES = {
     "private/etc/master.passwd": "0600",
+    "private/etc/security/audit_control": "0400",
+    "private/etc/security/audit_user": "0400",
+    "private/etc/security/audit_warn": "0555",
     "private/tmp": "1777",
+    "private/var/audit": "0700",
     "private/var/tmp": "1777",
+    "usr/bin/chfn": "4555",
+    "usr/bin/chpass": "4555",
+    "usr/bin/chsh": "4555",
     "usr/bin/login": "4555",
+    "usr/bin/passwd": "4555",
     "usr/bin/su": "4755",
 }
 
@@ -69,7 +78,10 @@ _CS_PROBES_UNLISTED = [
 hfs_ramdisk(
     name = "session_root",
     dirs = _SYSTEM_DIRS,
-    files = {"//base/launchctl": "bin/launchctl"} | _CS_PROBES,
+    files = {
+        "//base/launchctl": "bin/launchctl",
+        "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
+    } | _CS_PROBES,
     links = _SYSTEM_LINKS,
     tree_modes = _SYSTEM_MODES,
     trees = [
@@ -92,8 +104,9 @@ hfs_ramdisk(
 
 # PAM (docs/base/session.md, "PAM"): session_root with two test accounts in
 # its user and group databases (tests/qemu/pam), test (group admin) and
-# guest, and their home directories, which they own. Booted by
-# //kernel:sbsa_pam_session_test.
+# guest, and their home directories, which they own, and chpass_editor, an
+# EDITOR for chpass. Booted by //kernel:sbsa_pam_session_test and
+# //kernel:sbsa_accounts_test.
 hfs_ramdisk(
     name = "pam_session_root",
     dirs = _SYSTEM_DIRS + [
@@ -102,6 +115,8 @@ hfs_ramdisk(
     ],
     files = {
         "//base/launchctl": "bin/launchctl",
+        "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
+        "//tests/qemu/pam:chpass_editor": "usr/local/bin/chpass_editor",
         "//tests/qemu/pam:group": "private/etc/group",
         "//tests/qemu/pam:master.passwd": "private/etc/master.passwd",
         "//tests/qemu/pam:passwd": "private/etc/passwd",
@@ -111,6 +126,7 @@ hfs_ramdisk(
         "private/etc/group": "0644",
         "private/etc/master.passwd": "0600",
         "private/etc/passwd": "0644",
+        "usr/local/bin/chpass_editor": "0755",
     },
     owners = {
         "Users/guest": "502:20",
@@ -137,7 +153,10 @@ hfs_ramdisk(
 hfs_ramdisk(
     name = "session_root_volume",
     dirs = _SYSTEM_DIRS,
-    files = {"//base/launchctl": "bin/launchctl"} | _CS_PROBES,
+    files = {
+        "//base/launchctl": "bin/launchctl",
+        "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
+    } | _CS_PROBES,
     journaled = True,
     links = _SYSTEM_LINKS,
     volume_size = "192m",

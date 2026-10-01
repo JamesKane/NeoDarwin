@@ -1,0 +1,22 @@
+From: NeoDarwin
+Subject: [PATCH] su: build with USE_BSM_AUDIT on Apple platforms
+
+su.c records its events with audit_submit(3) under USE_BSM_AUDIT, as
+FreeBSD's su does, but Apple builds it without (it reports to
+EndpointSecurity instead), and the Apple block declares auid for its own
+getauid() call, a second declaration once USE_BSM_AUDIT is defined too.
+NeoDarwin has no EndpointSecurity and builds su with USE_BSM_AUDIT
+(docs/base/session.md, "BSM audit"): declare auid once.
+
+--- a/su/su.c
++++ b/su/su.c
+@@ -219,7 +219,9 @@
+ 	au_id_t		 auid;
+ #endif
+ #ifdef __APPLE__
++#ifndef USE_BSM_AUDIT
+ 	au_id_t		 auid;
++#endif /* !USE_BSM_AUDIT */
+ 	/* 4043304 */
+ 	const char	*avshell;
+ 	char		avshellbuf[MAXPATHLEN];

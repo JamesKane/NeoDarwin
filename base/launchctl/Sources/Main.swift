@@ -135,9 +135,12 @@ func submitJobs(_ paths: [String], force: Bool) -> Int32 {
             if job[LAUNCH_JOBKEY_DISABLED]?.boolValue == true && !force { continue }
             var submitted = job
             if case .dictionary(let entries) = job {
-                submitted = .dictionary(entries.filter { $0.key != LAUNCH_JOBKEY_DISABLED })
+                submitted = .dictionary(entries.filter { $0.key != LAUNCH_JOBKEY_DISABLED && $0.key != LAUNCH_JOBKEY_SOCKETS })
             }
             guard let data = launchData(submitted) else { failures += 1; continue }
+            if let sockets = socketsData(job, label: label) {
+                _ = launch_data_dict_insert(data, sockets, LAUNCH_JOBKEY_SOCKETS)
+            }
             let error = responseErrno(launchMessage(launchRequest(LAUNCH_KEY_SUBMITJOB, data)))
             if error == EEXIST {
                 warn("\(label): already loaded")
@@ -214,8 +217,10 @@ func list() -> Int32 {
 /// does that NeoDarwin's system needs, in its order. The kernel mounts the
 /// root read-only, and launchd creates its socket under /var/tmp only once
 /// asked, so the root is checked and made writable first, as launchctl-842's
-/// do_potential_fsck() does. Left out until their tools exist: /etc/rc.*
-/// scripts, loopback setup, sysctl.conf, BootCache, auditd and IOKit's
+/// do_potential_fsck() does. lo0 gets its addresses after the host name,
+/// as in 842 (Network.swift). The audit trail starts before any job, as
+/// 842 built with HAVE_LIBAUDITD starts it (startAudit()). Left out until
+/// their tools exist: /etc/rc.* scripts, sysctl.conf, BootCache and IOKit's
 /// quiet wait.
 func bootstrap(_ args: [String]) -> Int32 {
     guard args.count >= 2, args[0] == "-S" else { LaunchCtl.usage() }
@@ -227,14 +232,38 @@ func bootstrap(_ args: [String]) -> Int32 {
     var mib: [Int32] = [CTL_KERN, KERN_HOSTNAME]
     let hostname = "localhost"
     _ = hostname.withCString { sysctl(&mib, 2, nil, nil, UnsafeMutableRawPointer(mutating: $0), strlen($0) + 1) }
+    setUpLoopback()
     emptyDirectory("/var/run")
     emptyDirectory("/tmp")
     _ = unlink("/etc/nologin")
     touch("/var/run/utmpx")
+    startAudit()
     _ = _vproc_set_global_on_demand(true)
     let status = submitJobs(launchDaemonDirectories.filter { access($0, F_OK) == 0 }, force: false)
     _ = _vproc_set_global_on_demand(false)
     return status
+}
+
+/// launchctl-842 built with HAVE_LIBAUDITD, as on macOS: unless the auditd
+/// job is Disabled, libauditd's audit_quick_start() reads
+/// /etc/security/audit_control, opens a new trail in its directory
+/// (/var/audit), hands it to the kernel (auditctl(2)), and sets the
+/// kernel's masks and policy. auditd itself starts on demand: its job's
+/// MachServices entry makes launchd hold the audit control port (host
+/// special port 9), where the kernel and audit(8) send their triggers.
+/// libauditd is opened at run time, so a root without it boots unaudited.
+func startAudit() {
+    let plist = "/System/Library/LaunchDaemons/com.apple.auditd.plist"
+    guard access(plist, F_OK) == 0, let job = readPlist(plist) else { return }
+    if job[LAUNCH_JOBKEY_DISABLED]?.boolValue == true { return }
+    guard let lib = dlopen("/usr/lib/libauditd.0.dylib", RTLD_NOW),
+        let symbol = dlsym(lib, "audit_quick_start")
+    else {
+        warn("audit: \(dlerror().map { String(cString: $0) } ?? "no audit_quick_start")")
+        return
+    }
+    typealias QuickStart = @convention(c) () -> Int32
+    if unsafeBitCast(symbol, to: QuickStart.self)() != 0 { warn("audit_quick_start() failed") }
 }
 
 /// launchctl-842's do_potential_fsck(): if the root is mounted read-only,

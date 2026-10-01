@@ -1,0 +1,25 @@
+load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:darwin_executable.bzl", "swift_embedded_executable")
+
+package(default_visibility = ["//visibility:public"])
+
+# /usr/libexec/sshd-keygen-wrapper (docs/base/session.md, "Loopback and
+# sshd"): the program of OpenSSH's launchd job (ssh.plist). It creates the
+# host keys sshd lacks, then runs sshd -i on the connection. Apple's
+# (OpenSSH-354.0.3) is Swift on Foundation, System and AppleKeyStore;
+# this is NeoDarwin's, in Embedded Swift on libSystem, as launchctl is.
+swift_embedded_executable(
+    name = "sshd_keygen_wrapper",
+    srcs = glob(["Sources/*.swift"]),
+    hdrs = [
+        "Wrapper/module.modulemap",
+        "Wrapper/wrapper_shim.h",
+    ],
+    out = "sshd-keygen-wrapper",
+    root = "//base:root",
+)
+
+lang_audit_test(
+    name = "sshd_keygen_wrapper_lang_audit",
+    srcs = ["Wrapper/wrapper_shim.h"],
+)

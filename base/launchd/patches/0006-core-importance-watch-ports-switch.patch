@@ -1,0 +1,59 @@
+From: NeoDarwin
+Subject: [PATCH] core: a switch for importance-watch ports
+
+Before it execs a job that has MachServices, launchd's forked child asks
+PID 1 for send rights to them (get_listener_port_rights) and passes them to
+posix_spawn(2) as importance-watch ports, so that a message to one boosts
+the daemon. PID 1 answers with an out-of-line array of made send rights
+(job.defs: mach_port_make_send_array_t). xnu-12377 refuses that from a
+platform binary (IPC_POLICY_ENHANCED_V2: only COPY_SEND arrays, and only to
+ports that accept arrays, which a MIG reply port never does) with a fatal
+guard exception: starting com.apple.auditd, NeoDarwin's first on-demand
+daemon, killed PID 1 (EXC_GUARD, kGUARD_EXC_DESCRIPTOR_VIOLATION) and the
+kernel panicked (docs/base/session.md, "BSM audit"). Add
+HAVE_IMPORTANCE_WATCH_PORTS (config.h; default 1, so 842's behaviour) around
+the child's request, so the build can leave it out; the daemon then runs
+unboosted, as a job without MachServices does.
+
+Rebase-risk: low (one #if, kr declared ahead of it, and one config.h switch).
+---
+--- a/src/config.h
++++ b/src/config.h
+@@ -42,6 +42,14 @@
+ #define HAVE_PER_USER_LAUNCHD !TARGET_OS_EMBEDDED
+ #endif
+ 
++/* Importance-watch ports: a job's child asks launchd for send rights to the
++ * job's MachServices (get_listener_port_rights) and passes them to
++ * posix_spawn(2), so that messages to them boost the daemon.
++ */
++#ifndef HAVE_IMPORTANCE_WATCH_PORTS
++#define HAVE_IMPORTANCE_WATCH_PORTS 1
++#endif
++
+ #ifndef HAVE_SYSTEMSTATS
+ #if !TARGET_OS_EMBEDDED && __has_include(<systemstats/systemstats.h>)
+ #define HAVE_SYSTEMSTATS 1
+--- a/src/core.c
++++ b/src/core.c
+@@ -4653,9 +4653,11 @@
+ 	        j->jetsam_priority, j->jetsam_memlimit));
+ #endif
+ 
++	kern_return_t kr;
++#if HAVE_IMPORTANCE_WATCH_PORTS
+ 	mach_port_array_t sports = NULL;
+ 	mach_msg_type_number_t sports_cnt = 0;
+-	kern_return_t kr = vproc_mig_get_listener_port_rights(bootstrap_port, &sports, &sports_cnt);
++	kr = vproc_mig_get_listener_port_rights(bootstrap_port, &sports, &sports_cnt);
+ 	if (kr == 0 && sports_cnt) {
+ 		/* For some reason, this SPI takes a count as a signed quantity. */
+ 		(void)posix_spawnattr_set_importancewatch_port_np(&spattr, (int)sports_cnt, sports);
+@@ -4673,6 +4675,7 @@
+ 	} else if (kr != BOOTSTRAP_UNKNOWN_SERVICE) {
+ 		(void)job_assumes_zero(j, kr);
+ 	}
++#endif /* HAVE_IMPORTANCE_WATCH_PORTS */
+ 
+ #if TARGET_OS_EMBEDDED
+ 	if (!j->app || j->system_app) {

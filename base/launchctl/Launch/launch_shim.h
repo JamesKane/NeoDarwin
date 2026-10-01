@@ -25,6 +25,7 @@
 #define LAUNCH_JOBKEY_DISABLED "Disabled"
 #define LAUNCH_JOBKEY_PID "PID"
 #define LAUNCH_JOBKEY_LASTEXITSTATUS "LastExitStatus"
+#define LAUNCH_JOBKEY_SOCKETS "Sockets"
 
 typedef struct _launch_data *launch_data_t;
 typedef void (*launch_data_dict_iterator_t)(const launch_data_t _Nullable lval, const char *_Nullable key,
@@ -56,21 +57,30 @@ launch_data_t _Nullable launch_data_new_bool(bool val);
 launch_data_t _Nullable launch_data_new_real(double val);
 launch_data_t _Nullable launch_data_new_string(const char *_Nonnull val);
 launch_data_t _Nullable launch_data_new_opaque(const void *_Nullable bytes, size_t sz);
+launch_data_t _Nullable launch_data_new_fd(int fd);
 long long launch_data_get_integer(const launch_data_t _Nonnull ld);
 int launch_data_get_errno(const launch_data_t _Nonnull ld);
 // Sends a request to launchd and returns its reply, NULL with errno set on failure.
 launch_data_t _Nullable launch_msg(const launch_data_t _Nonnull request);
 
 #include <dirent.h>
+#include <dlfcn.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <netdb.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <netinet6/in6_var.h>
+#include <netinet6/nd6.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <spawn.h>
 #include <sys/mount.h>
+#include <sys/ioctl.h>
 #include <sys/reboot.h>
+#include <sys/socket.h>
 #include <sys/sysctl.h>
 #include <sys/time.h>
 #include <sys/stat.h>
@@ -81,4 +91,17 @@ launch_data_t _Nullable launch_msg(const launch_data_t _Nonnull request);
 // launchd starts no job for Mach-service demand, so a bootstrap loads every
 // job before any starts. Returns NULL on success.
 void *_Nullable _vproc_set_global_on_demand(bool val);
+
+// ioctl(2), for the loopback interface (Network.swift). It is variadic,
+// which Swift can't call (arm64 Darwin passes variadic arguments on the
+// stack, so no non-variadic declaration of it is right either), and the
+// interface requests are function-like macros (_IOW, _IOWR), which Swift
+// doesn't import.
+static inline int nd_ioctl(int fd, unsigned long request, void *_Nonnull arg) {
+	return ioctl(fd, request, arg);
+}
+static const unsigned long ND_SIOCGIFFLAGS = SIOCGIFFLAGS;
+static const unsigned long ND_SIOCSIFFLAGS = SIOCSIFFLAGS;
+static const unsigned long ND_SIOCAIFADDR = SIOCAIFADDR;
+static const unsigned long ND_SIOCAIFADDR_IN6 = SIOCAIFADDR_IN6;
 #endif

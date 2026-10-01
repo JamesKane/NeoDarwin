@@ -44,7 +44,7 @@ Commands link against the runtime root with `-syslibroot` (`base/commands.sh`), 
 | Finding | Resolution |
 |---|---|
 | Apple's `/bin/sh` is closed (dash-16); shell_cmds' `sh` is FreeBSD ash with libedit, installed as `/usr/local/bin/ash` | ash installed as `/bin/sh`, with `mknodes` and `mksyntax` built for the host. At first it was built without libedit (`-DNO_HISTORY`); since libedit-65 it is built as `sh.xcconfig` builds it (§3, the shells) |
-| login builds with PAM and BSM audit. PAM's macOS configuration needs `pam_opendirectory` (OpenDirectory and CoreFoundation, both closed) | at first login's own non-PAM path: `crypt()` against `pw_passwd`. Since OpenPAM (§3, PAM) it builds with `USE_PAM`. `login_audit.c` still compiles to nothing (no libbsm) |
+| login builds with PAM and BSM audit. PAM's macOS configuration needs `pam_opendirectory` (OpenDirectory and CoreFoundation, both closed) | at first login's own non-PAM path: `crypt()` against `pw_passwd`. Since OpenPAM (§3, PAM) it builds with `USE_PAM`, and since OpenBSM (§3, BSM audit) with `USE_BSM_AUDIT` |
 | ls builds only with `COLORLS` (libcurses): `unix2003_compat` is declared inside the `COLORLS` block | file_cmds patch 0001 moves the declaration; `ls -G` is accepted and ignored |
 | wc and others link libxo, which Apple doesn't publish | FreeBSD's `contrib/libxo`, at the commit libm uses, with Apple's install name. Patch 0001 configures it for Darwin |
 | libutil's `tzlink` calls tzlinkd over XPC | libutil patch 0001 takes the simulator's `ENOTSUP` path |
@@ -82,7 +82,7 @@ Still to check on the kernel: `ps` (`KERN_PROC`, `proc_pidinfo`, `task_read_for_
 | macOS's `<launch.h>` marks launch_msg deprecated, and it's part of the SDK's Darwin module, so the marking can't be undone for one import | `launch_shim.h` declares the calls as 842's own `launch.h` does |
 | Embedded Swift has no `CommandLine`; String comparison needs the Unicode tables | a `@_cdecl("main")` entry; `rules/darwin_executable.bzl` links the Embedded stdlib's `libswiftUnicodeDataTables.a`, which dead-stripping trims to what's used |
 
-Not in NeoDarwin's launchctl yet: binary plists, the overrides database (`load -w` doesn't persist), `/etc/rc.*`, loopback setup and `sysctl.conf`.
+Not in NeoDarwin's launchctl yet: binary plists, the overrides database (`load -w` doesn't persist), `/etc/rc.*` and `sysctl.conf`. Loopback setup and job sockets are under "Loopback and sshd", below.
 
 ### After P1-08: zsh and ncurses
 
@@ -101,7 +101,7 @@ Root's login shell is zsh 5.9, as on macOS, built from zsh-110.1.1 on ncurses-79
 | A Bazel target named like its source directory hides that directory's files from tests' runfiles | targets `libncurses_dylib` and `zsh_shell`, as `libutil_dylib` |
 | zle writes a character, backs up (`\b`) and redraws the line, which the harness's log showed doubled | `qemu_efi_test.sh` applies backspaces when it cleans the log, and types half a second after its prompt appears, as a person would |
 
-Not yet: locale data (zprofile sets `LANG=C.UTF-8`; zsh falls back to the C locale), `/usr/libexec/path_helper` and `/usr/bin/locale` (zprofile and zshrc skip them). PAM, mount and fsck are below.
+Not yet: locale data (zprofile sets `LANG=C.UTF-8`; zsh falls back to the C locale) and `/usr/bin/locale` (zshrc skips it). PAM, mount and fsck are below, and `/usr/libexec/path_helper`, which zprofile runs, under "passwd and chpass".
 
 ### After P1-08: the shells
 
@@ -115,7 +115,7 @@ NeoDarwin has macOS's three shells:
 
 - **libedit** (libedit-65, NetBSD libedit 20121213-3.0) installs as `/usr/lib/libedit.3.dylib`, with `install_misc.sh`'s names `libedit.2`, `libedit.3.0`, `libedit` and `libreadline` linked to it, as the SDK's `.tbd` files name it. It exports the SDK `libedit.3.tbd`'s 150 symbols, all of them, and links libncurses. Its headers (`histedit.h`, `editline/readline.h` and the `readline/` links) are build-only, as ncurses' are.
 - **ash** links libedit as Apple's does. `mkbuiltins` now runs without `-h`, so `fc` is a builtin. Editing starts once the shell is interactive on a terminal and `set -o emacs` or `set -o vi` is given (FreeBSD's sh of 2017 enables neither by default).
-- **bash** is built with the project's committed configuration: `config.h`, `pathnames.h`, `signames.h`, `syntax.c`, `version.h` and the generated `builtins/*.c`. Apple's build doesn't run configure, and neither does NeoDarwin's: it uses them as ncurses' `ncurses_cfg.h` is used. Only what the project generates is generated: `ostype.h` (`darwin25`, xnu-12377's release) and `parse.y` through the toolchain's yacc. It links its four static libraries (readline, glob, libsh, intl) and libncurses. `/etc/profile` and `/etc/bashrc` are Apple's, from bash-140's RC files phase. `profile` runs `/usr/libexec/path_helper` only if it is executable, so it's skipped while it doesn't exist.
+- **bash** is built with the project's committed configuration: `config.h`, `pathnames.h`, `signames.h`, `syntax.c`, `version.h` and the generated `builtins/*.c`. Apple's build doesn't run configure, and neither does NeoDarwin's: it uses them as ncurses' `ncurses_cfg.h` is used. Only what the project generates is generated: `ostype.h` (`darwin25`, xnu-12377's release) and `parse.y` through the toolchain's yacc. It links its four static libraries (readline, glob, libsh, intl) and libncurses. `/etc/profile` and `/etc/bashrc` are Apple's, from bash-140's RC files phase. `profile` runs `/usr/libexec/path_helper` if it is executable, as zsh's `zprofile` does ("passwd and chpass", below).
 - **The test:** `//kernel:sbsa_shells_boot_test` logs in to zsh. It starts `/bin/sh` with `$ENV` and edits a line with Backspace in emacs mode. It recalls and edits a line with the Up arrow, lists the history with `fc -l` and edits a line in vi mode. Then it runs `bash --version`, and `bash -l`, whose prompt is `/etc/bashrc`'s. There it uses arrays and recalls a line with readline. Each expected line can only appear if the editing worked: the typed text doesn't contain it. `qemu_efi_test.sh`'s `--send-after` now types `\b` (DEL, the tty's erase character), `\e` and the arrow keys (`{up}`) on serial.
 
 | Finding | Resolution |
@@ -163,7 +163,7 @@ Not built: `quotacheck`, `fstyp`, `fdisk`, `vsdbutil`, `mount_devfs` (the kernel
 | OpenPAM's modules | OpenPAM-35 | `pam_deny` and `pam_permit`, as Apple builds them, and `pam_unix`, which OpenPAM ships and Apple doesn't build |
 | pam_modules | pam_modules-217.0.1 (`//base:pam_modules`) | the eight that need only libSystem and libpam: `pam_env`, `pam_group`, `pam_launchd`, `pam_nologin`, `pam_rootok`, `pam_sacl`, `pam_self` and `pam_uwtmp` |
 | Policies | each project's own (`/etc/pam.d`) | `other` (OpenPAM: deny everything), `login` and `login.term` (system_cmds), `su` (shell_cmds) |
-| login | system_cmds-1039 | built with `USE_PAM`, still without `USE_BSM_AUDIT` |
+| login | system_cmds-1039 | built with `USE_PAM` (and, since BSM audit, `USE_BSM_AUDIT`: below) |
 | su | shell_cmds-326 (`//base:su_command`) | `/usr/bin/su`, setuid root |
 
 Modules are `MH_DYLIB`s named `pam_NAME.so.2` in `/usr/lib/pam`. A policy names `pam_NAME.so`, and OpenPAM's loader tries the `.so.2` first. Not built, for their closed dependencies: `pam_opendirectory`, `pam_krb5`, `pam_ntlm` and `pam_mount` (OpenDirectory, CoreFoundation, Heimdal, GSS, NetFS), `pam_smartcard` (CryptoTokenKit), `pam_localauthentication`, `pam_tid` and `pam_aks` (LocalAuthentication, AppleKeyStore), and `pam_basesystem` (CoreFoundation).
@@ -184,7 +184,7 @@ Modules are `MH_DYLIB`s named `pam_NAME.so.2` in `/usr/lib/pam`. A policy names 
 - `pam_unix`'s `nullok` (OpenPAM patch 0001, FreeBSD's option) lets an account with an empty password authenticate without a prompt. Without `nullok` it can't authenticate at all.
 - login refuses root on a terminal that `/etc/ttys` doesn't mark `secure`. Only the console is. Apple's login makes that check on its non-PAM path only; system_cmds patch 0001 keeps it with PAM.
 - su takes root's empty password too, but `pam_group` lets only members of `admin` or `wheel` become root (`ruser root_only`). That is FreeBSD's default with an empty root password: `nullok`, and su to root for wheel only. Becoming any other user takes that user's password, unless it's empty.
-- Giving root a password (or `*`, as macOS does) needs `passwd(1)`, which isn't built.
+- root can be given a password (or `*`, as macOS does) with `passwd(1)` (below).
 
 **Code signing.** libpam loads every module with `dlopen`, and under enforcement the kernel refuses a library that the image's trust cache doesn't list (`docs/kernel/amfi-provider.md` §4). `//tools/trustcache` lists every signed Mach-O staged in an image, whatever its name, so libpam, the shim, the eleven modules, login and su are all in it. The test runs under enforcement and fails if `ndamfi` refuses anything.
 
@@ -198,7 +198,7 @@ Modules are `MH_DYLIB`s named `pam_NAME.so.2` in `/usr/lib/pam`. A policy names 
 
 | Finding | Resolution |
 |---|---|
-| The first non-root login panicked the kernel: launchd, PID 1, was killed by `EXC_GUARD` (`kGUARD_EXC_DESCRIPTOR_VIOLATION`). launchd-842 answers a non-root client's lookup with `VPROC_ERR_TRY_PER_USER`, and starts a per-user launchd for that user. The two exchange jobs and ports in MIG messages with out-of-line arrays of moved send rights (`job.defs`: `take_subset`, `lookup_children`). xnu-12377 refuses those from a platform binary (`IPC_POLICY_ENHANCED_V2`) with a fatal guard exception. With the boot-arg `ool_port_array_enforced=0`, PID 1 survives and the per-user launchd it starts dies instead | launchd patch 0005 adds `HAVE_PER_USER_LAUNCHD`, built 0: PID 1 serves every user, as embedded launchd does |
+| The first non-root login panicked the kernel: launchd, PID 1, was killed by `EXC_GUARD` (`kGUARD_EXC_DESCRIPTOR_VIOLATION`). launchd-842 answers a non-root client's lookup with `VPROC_ERR_TRY_PER_USER`, and starts a per-user launchd for that user. PID 1 answers the new launchd, and later exchanges jobs and ports with it, in MIG messages with out-of-line port arrays (`job.defs`: `get_listener_port_rights` first, then `take_subset`, `lookup_children`; "Per-user launchd", below). xnu-12377 refuses those from a platform binary (`IPC_POLICY_ENHANCED_V2`) with a fatal guard exception. With the boot-arg `ool_port_array_enforced=0`, PID 1 survives and the per-user launchd it starts dies instead | launchd patch 0005 adds `HAVE_PER_USER_LAUNCHD`, built 0: PID 1 serves every user, as embedded launchd does |
 | hdiutil records the build user (uid 501) as every file's owner and drops set-user-ID bits. su ran as uid 501 ("su: not running setuid"), and a user with uid 501 owned every system file | `//tools/hfsowners` (Swift) rewrites the image's catalog after hdiutil: every file and folder is root:wheel, every `files`/`tree_modes` mode is set again, and `hfs_ramdisk`'s new `owners` gives single paths (home directories) to their users. This applies to every image |
 | `pam_unix` compares `crypt()` of the typed password with `pw_passwd`, so an empty password never matches | OpenPAM patch 0001: `nullok` |
 | With `USE_PAM`, login leaves the root-terminal check to the policy (FreeBSD's `pam_securetty`), which macOS doesn't have: its root has no password | system_cmds patch 0001: the check runs with PAM too |
@@ -208,4 +208,255 @@ Modules are `MH_DYLIB`s named `pam_NAME.so.2` in `/usr/lib/pam`. A policy names 
 | su.c includes the private `<SoftLinking/SoftLinking.h>` (for libEndpointSecuritySystem, closed) and libsystem_sandbox's private `<rootless.h>` | `base/shell_cmds/compat`: a SoftLinking that resolves the library with `dlopen` (not found), and `rootless_restricted_environment()` answering 0 |
 | libpam's public headers are in the SDK | installed from OpenPAM's tree, build-only, for login, su and the modules. They aren't in the sysroot: nothing in libSystem includes them |
 
-Not yet: `passwd(1)` and `chpass(1)` (password changes), BSM audit (libbsm), sshd and its policy, per-user launchd sessions (`pam_launchd`), and account expiry.
+Not yet: per-user launchd sessions (`pam_launchd`; "Per-user launchd", below), and account expiry. `passwd(1)` and `chpass(1)` are below, and sshd's policy under "Loopback and sshd".
+
+### After P1-08: passwd and chpass
+
+Accounts live in `/etc/master.passwd` alone, as on FreeBSD without `pwd.db`, and users change them with system_cmds-1039's commands (`//base:system_commands`):
+
+| Command | From | Backend |
+|---|---|---|
+| `/usr/bin/passwd` | `passwd.tproj`: `passwd.c`, `file_passwd.c` | the project's own file backend (iOS's): it rewrites `master.passwd` in place, under `O_EXLOCK`, through a temporary file and `rename` |
+| `/usr/bin/chpass`, `chfn`, `chsh` | `chpass.tproj` with vipw's `pw_util.c` and pwd_mkdb's `pw_scan.c` | FreeBSD's file path, which Apple's sources keep under `!__APPLE__`: `pw_copy` the changed line into a copy of `master.passwd`, then `pwd_mkdb -p` |
+| `/usr/sbin/pwd_mkdb` | `pwd_mkdb.tproj` | Apple's: no `pwd.db` (its `db(3)` code is `!__APPLE__`); `-p` writes `/etc/passwd` and installs the new `master.passwd` |
+
+- **PW_FILES**, NeoDarwin's switch (system_cmds patches 0003 and 0004; without it upstream is unchanged), compiles out Open Directory, PAM and NIS. On macOS, passwd changes passwords through `pam_opendirectory` (the `passwd` PAM policy) or Open Directory directly as root, and chpass edits the record through Open Directory and CoreFoundation (`open_directory.c`). All of that is closed. OpenPAM's `pam_unix` can't change a password (`pam_sm_chauthtok` returns `PAM_SERVICE_ERR`), so passwd has no PAM path, and NeoDarwin installs no `passwd` policy.
+- **setuid.** passwd, chpass, chfn and chsh are setuid root (4555), as on FreeBSD (`images/BUILD.bazel`'s modes). A user changes their own password after giving the old one. chpass asks a user for their password too, and lets them change the full name, office, phones and shell (one of `/etc/shells`). root changes any record without a password. chpass runs `$EDITOR` (default `vi`, which the base doesn't have) as the user, on a temporary copy of the record. `chpass -s SHELL [user]` needs no editor.
+- **/etc/passwd** holds `*` for every password, as `pwd_mkdb -p` writes it, and the build now writes it so too (`base/etc/build.sh`). Libinfo's file module reads `master.passwd` only for euid 0, and login, su, passwd and chpass are setuid. Until now the build copied the hashes into the world-readable file.
+- **Hashes.** libc's `crypt(3)` (`gen/crypt.c`) has two formats, both DES:
+  - traditional DES: two salt characters and 25 rounds, and only the first eight characters of the password count;
+  - BSDi's extended DES: `_`, then four characters of rounds and four of salt, and every character counts.
+
+  There is no MD5, Blowfish or SHA-crypt. passwd made traditional hashes from `srandom(time())`. With `PW_FILES` it writes extended DES: 65537 rounds (`_/.E.`), and a 24-bit salt from `arc4random`. That is the strongest scheme NeoDarwin's libc has, but it is still DES: a 64-bit result and 56-bit keys, cheap to brute-force with modern hardware. A stronger scheme (SHA-512 crypt, bcrypt) would need a new `crypt` in libc, and pam_unix and login would use it through `crypt(3)` unchanged. It's not done here. In QEMU, 65537 rounds take well under a second.
+- **path_helper.** `/usr/libexec/path_helper` comes from shell_cmds-326 (`//base:shell_commands`). `/etc/zprofile` (zsh) and `/etc/profile` (bash, sh) run `eval $(path_helper -s)` when it's executable. It builds `PATH` from `/etc/paths` (files-968's, unmodified: `/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin`) and the files in `/etc/paths.d`, which the image doesn't have. Then it appends the inherited `PATH`'s other entries (login's `_PATH_DEFPATH`, all of them already listed). If `MANPATH` is set, it builds that from `/etc/manpaths` the same way.
+
+**The test:** `//kernel:sbsa_accounts_test` boots `//images:pam_session_root`, with code signing enforced:
+- `test` logs in to zsh, and `$PATH` is `/etc/paths`' entries in order.
+- `test` runs `passwd`: the old password, then the new one twice. After logout, the old password gets "Login incorrect", and the new one logs in.
+- `test` runs chpass with `EDITOR=/usr/local/bin/chpass_editor` (`tests/qemu/pam`, a sed script). chpass asks for test's password, then reports "user information updated". `id -F` (getpwuid from `/etc/passwd`, as test) answers with the new full name.
+- root runs `chpass -s /bin/bash test`. `id -P test` (from `master.passwd`) shows the new shell and an extended DES hash (`test:_/.E.`). `/etc/passwd` has `test:*:501:20:Neo Q42:/Users/test:/bin/bash`.
+- root sets its own password with `passwd`. No old password is asked: it was empty. From then on, login asks root for it.
+
+| Finding | Resolution |
+|---|---|
+| passwd's `file_passwd.c` reads and rewrites `master.passwd` itself, without pwd_mkdb, and doesn't touch `/etc/passwd` | nothing to do once `/etc/passwd` holds `*`: only the hash changes |
+| chpass's FreeBSD path needs FreeBSD libutil's record functions (`pw_copy`, `pw_dup`, `pw_equal`, `pw_make`, `pw_scan`, `pw_tempname`). Apple's vipw `pw_util.c` has them, under `!__APPLE__`. Darwin's `struct passwd` has no `pw_fields` | patch 0004 builds them with `PW_FILES` and declares them in `pw_util.h`. The record's source is always the files |
+| `pw_copy` grows its buffer with `reallocarray`, which on Darwin is libmalloc's `reallocarray$DARWIN_EXTSN`, absent from the SDK headers | patch 0004: an overflow-checked `realloc` on Darwin |
+| chpass takes the record as edited only if the temporary file's modification time changed. HFS+ keeps it to the second, so an editor that finishes within the second changes nothing | the test's editor sleeps a second first. An interactive edit takes longer |
+| The test image has no `grep` | the test reads `/etc/passwd` with `cat` |
+
+### After P1-08: BSM audit
+
+The system records BSM audit trails, as macOS does: the kernel's audit subsystem, libbsm, auditd and the tools to read trails. login and su record their events (`//base:bsm_audit`).
+
+**Where it comes from.** macOS 26's release set has no OpenBSM (`release.json`). Apple last published it as OpenBSM-21 (OpenBSM 1.1, Mac OS X 10.6.8). Every later macOS ships libbsm, libauditd and auditd without source. NeoDarwin builds OpenBSM-21, as it builds launchd-842, the last launchd Apple published. Its `OpenBSM.xcodeproj` targets are replayed, with the project's committed `config.h`. libauditd, which launchctl-842 calls, is part of the project and isn't closed. auditd's dependencies are open too: launchd check-in (liblaunch), ASL, notify and MIG. Nothing had to be compiled out.
+
+| Piece | Installed |
+|---|---|
+| libbsm | `/usr/lib/libbsm.0.dylib`, with `libbsm.dylib` linked to it. It exports 151 of the SDK `libbsm.0.tbd`'s 180 symbols, and 2 of OpenBSM 1.1's own (`audit_set_terminal_host` and `audit_set_terminal_port`). The 29 it lacks are Apple's additions after 2011 (below) |
+| libauditd | `/usr/lib/libauditd.0.dylib` (+ `libauditd.dylib`): 16 of the SDK's 18. It lacks `audit_quick_start_internal` and `auditd_set_sflags_masks` |
+| Commands | `/usr/sbin/auditd`, `audit`, `auditreduce` and `praudit` |
+| Configuration | `/etc/security/audit_class`, `audit_control`, `audit_event`, `audit_user` and `audit_warn`, with the project's modes (`audit_control` and `audit_user` 0400, `audit_warn` 0555). The images add `/var/audit` (0700), as files' `hierarchy` does |
+| Job | `/System/Library/LaunchDaemons/com.apple.auditd.plist`, unmodified. auditd runs on demand, and its MachService is the audit control port (host special port 9) |
+
+The libbsm exports NeoDarwin lacks:
+- `/dev/auditsessions` (`au_sdev_*`);
+- the session-flag, control-mode and `expire-after` calls (`audit_get_sflags`, `audit_get_ctlmode` and the like);
+- the `audit_token_to_*` accessors;
+- the `*_ex` writers;
+- the identity, certificate-hash and Kerberos-principal token constructors.
+
+The public headers (`libbsm.h`, `audit_uevents.h`, `audit_filter.h`, `auditd_lib.h`) are build-only, in `usr/local/include/bsm`. `bsm/audit.h` and the other kernel headers are xnu's, from the sysroot, as in Apple's build. login and su also include `<bsm/audit_session.h>`, which no published project has. It comes from the SDK, as su's already did.
+
+**The kernel.** `CONFIG_AUDIT` is in `MASTER.arm64.MacOSX`'s `SECURITY_BASE`, and the SBSA kernel has it. That gives `audit`, `auditon` and `auditctl`, the audit pipe and sessions, and `audit_send_trigger()` to the audit control port. Nothing needed patching. The control mode is normal, so root may call `auditctl(2)` and `auditon(2)` `A_SETCOND` without Apple's entitlements.
+
+**How audit starts.** launchctl's bootstrap does what launchctl-842 does when built with `HAVE_LIBAUDITD`, as macOS's was. Unless `com.apple.auditd.plist` is Disabled, it calls libauditd's `audit_quick_start()`. The call comes after launchctl touches utmpx and before any job loads. libauditd is opened with `dlopen`, so a root without it boots unaudited. `audit_quick_start()`:
+- reads `audit_control`;
+- opens a new trail in `/var/audit`, links `current` to it and hands it to the kernel (`auditctl(2)`);
+- writes the `audit startup` record;
+- sets the kernel's event-to-class map, non-attributable mask, policy, file-size limit and host.
+
+launchd then holds the audit control port for the auditd job. auditd starts when a message arrives there, either a kernel trigger (a full trail, low space) or one from `audit -n` and its siblings. It checks in and does what the trigger asks, such as rotating the trail. It exits after its job's `TimeOut` of 60 idle seconds.
+
+**login and su.**
+- login builds with `USE_BSM_AUDIT` and `-lbsm`, as Apple's Release settings have it. `login_audit.c` records `AUE_login` for each success and failure, and `AUE_logout`. A successful login also gets the user's auid and preselection mask (`au_user_mask`).
+- `login_audit.c` also reports to EndpointSecurity through weak links to libEndpointSecuritySystem, which is closed. `base/system_cmds/compat` makes those symbols null, as they are when the library is absent.
+- su builds with `USE_BSM_AUDIT` too, as FreeBSD's does. Apple builds it without and reports to EndpointSecurity instead. `audit_submit(3)` records `AUE_su` for each success and refusal.
+
+**What a trail holds.** As `praudit -l` prints it (`//kernel:sbsa_audit_test`):
+- the startup record: `audit startup`, `text,launchctl::Audit startup`;
+- a failed login: `login - local`, `subject_ex,-1,root,wheel,-1,nogroup,…`, `text,Login incorrect`, `return,failure : Operation not permitted`. The record is non-attributable, because login knows no account yet. As in Apple's code, it doesn't name the user who was tried;
+- a successful login: `subject_ex,test,root,wheel,test,staff,…`, `return,success`;
+- su: `su(1)`, `subject,test,…`, `text,successful authentication`;
+- the logout.
+
+xnu appends an `identity` token to each record a program submits: `identity,1,login,complete,,complete,0x<cdhash>`.
+
+**Status on macOS.** Apple has deprecated auditd and the audit APIs since macOS 11 in favour of EndpointSecurity, and the SDK's headers mark them deprecated. The kernel's audit subsystem is still there, and it is what NeoDarwin uses. NeoDarwin keeps BSM audit because it is the open, documented record of logins and privilege changes. EndpointSecurity's client library and daemon are closed.
+
+**The test:** `//kernel:sbsa_audit_test` boots `//images:pam_session_root` under code-signing enforcement. It fails if `audit_quick_start()` fails.
+1. `test` types a wrong password, logs in with the right one, runs `su - root -c id` and logs out.
+2. root logs in and runs `audit -n`. launchd starts auditd on demand, and auditd closes the trail and opens a new one (`ls` shows a `.not_terminated` file).
+3. `praudit -l` prints the records above.
+
+| Finding | Resolution |
+|---|---|
+| macOS 26.0's `release.json` has no OpenBSM or other audit project. Apple's GitHub has one OpenBSM tag, OpenBSM-21, from the 10.6.8 release set | OpenBSM-21, pinned as launchd-842 is: the last published version, outside the release set |
+| auditd didn't link. xnu's `mach/audit_triggers.defs`, which the project's `.defs` includes, has gained a second routine, `audit_analytics`. With it the kernel sends the signing ID and name of each non-platform program that submits a record | OpenBSM patch 0002: auditd serves it and notes the caller in its debug log |
+| xnu appends an identity token (`AUT_IDENTITY`, 0xed) to every record a program submits, unless the program holds Apple's reserved-class entitlement. OpenBSM 1.1's `au_fetch_tok()` didn't know the token, so praudit stopped at login's first record | OpenBSM patch 0001: libbsm reads and prints the identity, certificate-hash and Kerberos-principal tokens, in plain and XML form, with the structures of macOS's `<bsm/libbsm.h>` |
+| Starting auditd, NeoDarwin's first on-demand daemon, killed PID 1 (`EXC_GUARD`, `kGUARD_EXC_DESCRIPTOR_VIOLATION`) and the kernel panicked. It was `get_listener_port_rights` ("Per-user launchd", below). With `ool_port_array_enforced=0` audit worked | launchd patch 0006 adds `HAVE_IMPORTANCE_WATCH_PORTS`, built 0. The child doesn't ask, and the daemon runs without the importance boost |
+| system_cmds patch 0001 keeps login's root-terminal refusal on the PAM path. That block calls `au_login_fail()` with two of its four arguments, and Apple never compiles it with `USE_BSM_AUDIT` | patch 0001 now also passes the user name and `fflag` |
+| su declares `auid` both under `USE_BSM_AUDIT` and under `__APPLE__` | shell_cmds patch 0002 declares it once |
+| login includes the private `<SoftLinking/WeakLinking.h>` and `<EndpointSecuritySystem/ESSubmitSPI.h>` | `base/system_cmds/compat` |
+
+Not built: `auditfilterd` (not in Apple's targets) and OpenBSM's man pages. Not done:
+- the libbsm exports Apple added later (above), and so clients of `/dev/auditsessions`;
+- launchd's own `HAVE_LIBAUDITD`, its `audit_quick_stop()` at shutdown, which closes the trail cleanly. Without it, a trail still open at shutdown stays `.not_terminated`, and the next `audit_quick_start()` renames it when it opens a new one;
+- `logger`, which `audit_warn` runs.
+
+### Per-user launchd
+
+launchd-842 on macOS runs one launchd per logged-in user, started by PID 1. NeoDarwin builds it with `HAVE_PER_USER_LAUNCHD=0` (launchd patch 0005), so PID 1 serves every user, as embedded launchd does. This section evaluates the alternatives and the decision. Citations: launchd-842.92.1 (`src/`, `liblaunch/`) and xnu-12377 (`osfmk/ipc/`).
+
+**Where launchd-842 moves port arrays.** `job_types.defs:27-30` defines `mach_port_move_send_array_t` and `mach_port_make_send_array_t`. MIG puts an out-of-line ports descriptor in a message even when its count is 0. Error replies are not complex, so they carry no array.
+
+| Routine (`job.defs`) | Array | Sent by | When |
+|---|---|---|---|
+| `get_listener_port_rights` (:288) | `out sports`, MAKE_SEND | the server, PID 1 (`core.c:8549`) | the child of every fork asks before it execs (`job_start_child`, `core.c:4653`), to pass the job's `MachServices` to `posix_spawn` as importance-watch ports. PID 1 answers with an array when the job has `upfront` services: every `MachServices` job (`core.c:6577`), and the per-user launchd job (`core.c:8817`) |
+| `take_subset` (:123) | `out ports`, MOVE_SEND, plus one MOVE_RECEIVE | PID 1 (`core.c:9876`) | a per-user launchd's `move_subset` (`core.c:9599`) grabs a session's subset from PID 1 (`_vproc_grab_subset`, `libvproc.c:375`). pam_launchd starts this through `_vprocmgr_switch_to_session` for any session type but Background |
+| `lookup_children` (:209) | `out childports`, MOVE_SEND | the server (`core.c:9321`) | 842's `launchctl bstree`. NeoDarwin's launchctl doesn't have it |
+| `legacy_ipc_request` (:278) | `in request_fds` and `out reply_fds`, MOVE_SEND | the client (`launch_socket_service_check_in`, `libvproc.c:1033`, count 0) and the server (`core.c:11634`) | a daemon's socket check-in over MIG |
+
+So the panic at the first non-root login comes from the first routine. `job_mig_lookup_per_user_context` (`core.c:8833`) creates `com.apple.launchd.peruser.UID` with an upfront service, and PID 1 is killed answering that job's own child. `lookup_per_user_context` itself returns a single port. The same reply also killed PID 1 when launchd first started a daemon with `MachServices` (`com.apple.auditd`, "BSM audit"). Launchd patch 0006 (`HAVE_IMPORTANCE_WATCH_PORTS=0`) leaves out the child's request, so daemons run unboosted.
+
+**What xnu-12377 enforces.**
+- `ipc_policy_for_task` (`ipc_policy.c:117-136`) gives `IPC_POLICY_ENHANCED_V2` to every `TFRO_PLATFORM` task, and every binary in NeoDarwin's trust cache is a platform binary. It gives it too to a task whose platform restrictions version is 2 or more.
+- `ipc_validate_kmsg_header_from_user` (`ipc_policy.c:931-958`) checks a message from such a task that carries any OOL ports descriptor. The destination must be an `IOT_CONNECTION_PORT_WITH_PORT_ARRAY` (`ip_is_port_array_allowed`, `ipc_port.h:328`), and the message may carry at most one array.
+- The descriptor's copyin (`ipc_kmsg.c:2445-2460`) also refuses any disposition but COPY_SEND.
+- Both raise `kGUARD_EXC_DESCRIPTOR_VIOLATION`, which is always fatal.
+- Only `mach_port_construct(MPO_CONNECTION_PORT_WITH_PORT_ARRAY)` makes such a port (`mach_port.c:2492`). It requires the entitlement `com.apple.developer.allow-connection-port-with-port-array` (`port.h:456`, `mach_port.c:2502-2513`).
+- A MIG reply port is never that type, so a platform binary can't reply with a port array at all.
+- The exemptions (`ipc_should_apply_policy`, `ipc_policy.c:270-294`) are for simulated, translated and opted-out tasks only. Opting out takes `IMGPF_3P_PLUGINS`, or a DEVELOPMENT kernel's AMFI configuration.
+- The boot-arg `ool_port_array_enforced` (`ipc_policy.c:76-81`, default on) turns both checks off.
+- Single port descriptors, with any disposition and including moved receive rights of plain ports, are not affected.
+
+**What per-user launchds would buy.**
+- LaunchAgents per user, loaded by the per-user launchd's `launchctl bootstrap -S Background` (`core.c:7044`).
+- A bootstrap namespace per user and per session, which pam_launchd moves login sessions into.
+- Services that die with the user's last session.
+
+macOS hasn't worked this way since launchd 2.0 (OS X 10.10). There, one PID 1 serves the system, user (`gui/UID`, `user/UID`) and session domains, over XPC messages that carry ports one descriptor each. Apple left the per-user launchd process model behind, and xnu-12377's policy assumes it is gone.
+
+**Options.**
+- **(a) Keep the embedded model** (the current state). PID 1 serves every user's lookups and registrations. There are no per-user agents or namespaces, and no change is needed. A user's jobs could still be loaded into PID 1 with `UserName`.
+- **(b) Patch launchd's routines to send single ports.** `get_listener_port_rights` would become one port per message (an index argument, called until `BOOTSTRAP_UNKNOWN_SERVICE`), or stay off (patch 0006). `take_subset` would carry the jobs' data and a count, then one `MOVE_SEND` per routine call. The subset's job manager would have to stay in PID 1 until the last port is taken, where 842 now hands it over in a single reply (`job_mig_take_subset`, `jobmgr_export2`). `lookup_children` and `legacy_ipc_request` would change the same way. liblaunch (in the libxpc stand-in) and launchd change together, which is possible because NeoDarwin builds both. A per-user session would also need more, beyond the arrays:
+  - launchctl's `bootstrap -S Background/StandardIO/Aqua` and LaunchAgents directories (NeoDarwin's launchctl has `-S System` only);
+  - pam_launchd in the `login` and `su` policies, with an audit session per login (`audit_session_join`, `core.c:8800`);
+  - the cause of the per-user launchd's own death, still not diagnosed. With `ool_port_array_enforced=0` PID 1 survived, and the per-user launchd it started died. The policy above is all gated on that boot-arg, so something else killed it.
+
+  That is several routines, both sides of the protocol and an unexplained failure, so (b) is neither small nor clean today.
+- **(c) A kernel exemption for PID 1** (an entitlement-checked or `task_is_initproc` bypass of `IPC_POLICY_ENHANCED_V2`'s array checks) would weaken the hardening for the one task that holds every service's receive right and every job's task port. The check exists so that a compromised platform process can't spray moved rights into another's space, and launchd is where that matters most. The receiving per-user launchds are platform binaries too, so they would need the same exemption. NeoDarwin would also diverge from xnu's policy in a security-relevant path.
+- **(d) The boot-arg `ool_port_array_enforced=0`** turns the policy off for every process, and doesn't make per-user launchds work.
+
+**Decision: (a).** `HAVE_PER_USER_LAUNCHD` stays 0, and pam_launchd stays out of the policies. If NeoDarwin wants per-user agents, the direction is macOS's: user domains inside PID 1, with jobs loaded per user (`UserName`, and a `launchctl bootstrap gui/UID`-style command in NeoDarwin's launchctl). The alternative is per-user launchd processes, which xnu's policy argues against. A future (b) needs, at the least:
+1. the four routines above without port arrays;
+2. the per-user launchd's death diagnosed (its crash report's guard code);
+3. launchctl session types and LaunchAgents;
+4. pam_launchd in the policies with audit sessions;
+5. a test: a non-root login gets its own bootstrap subset, a LaunchAgent loads for the user, and PID 1 survives.
+
+### After P1-08: loopback and sshd
+
+NeoDarwin configures the loopback interface at boot and runs OpenSSH's sshd under launchd, as macOS does. Everything is tested over 127.0.0.1 inside QEMU: there is no NIC driver, DHCP or name service yet. Those are later items in `roadmap/backlog.yaml`: Ethernet dexts in Phase 3, P4-24 (the rest of the networking userland, `resolv.conf`, pf) and P4-25 (sshd on the board with a key, scp and sftp). This section is the loopback part of both, and sets no status.
+
+| Piece | From | Installed |
+|---|---|---|
+| loopback | launchctl's bootstrap (`base/launchctl/Sources/Network.swift`) | lo0 up with 127.0.0.1/8 and ::1/128 |
+| network commands | network_cmds-726 (`//base:network_commands`) | `/sbin/ifconfig`, `/sbin/ping`, `/sbin/route`, `/usr/sbin/netstat` |
+| launchproxy | launchd-842.92.1 (`//base:launchproxy`) | `/usr/libexec/launchproxy` |
+| libcrypto | LibreSSL 3.3.6, upstream (`//base:libcrypto_dylib`) | `/usr/lib/libcrypto.46.dylib`; the headers are build-only, in `usr/local/libressl` |
+| OpenSSH | OpenSSH-354.0.3, OpenSSH 10.0p2 (`//base:openssh`) | `ssh`, `scp`, `sftp`, `ssh-add`, `ssh-agent`, `ssh-keygen`, `ssh-keyscan` and `slogin` in `/usr/bin`; `/usr/sbin/sshd`; `sshd-session`, `sshd-auth` and `sftp-server` in `/usr/libexec`; `/etc/ssh`; `/etc/pam.d/sshd`; `/System/Library/LaunchDaemons/ssh.plist` |
+| sshd-keygen-wrapper | NeoDarwin's, Embedded Swift (`//base/sshd_keygen_wrapper`) | `/usr/libexec/sshd-keygen-wrapper` |
+| `_sshd` | `base/etc` | the privilege-separation user and group, uid and gid 75 as on macOS, home `/var/empty` |
+
+**Loopback.** The kernel attaches lo0 but gives it no address. launchctl-842's `system_specific_bootstrap()` configures it, right after the host name (`loopback_setup_ipv4`, `loopback_setup_ipv6`). NeoDarwin's launchctl now does the same, with the same ioctls:
+- `SIOCGIFFLAGS`, then `SIOCSIFFLAGS` with `IFF_UP`;
+- `SIOCAIFADDR` with 127.0.0.1 and the mask 255.0.0.0;
+- `SIOCAIFADDR_IN6` with ::1/128 and infinite lifetimes (`EEXIST` is fine).
+
+Swift can't call `ioctl`, which is variadic, or import the `_IOW` request macros. So `launch_shim.h` has a static inline `nd_ioctl` and the four request codes as constants. No ifconfig runs at boot. The kernel adds fe80::1%lo0 itself.
+
+**ifconfig and the others** build from network_cmds' Release settings, with xnu's private `net/` headers: the targets' `HEADER_SEARCH_PATHS` add System.framework's PrivateHeaders. network_cmds-726 knows two netem models ("iod", "fpd") that xnu-12377's `if_var_private.h` doesn't define, and network_cmds patch 0001 leaves them out. Apple signs ping and route with network-management entitlements. NeoDarwin has no sandbox or policy that reads them, so they're signed ad hoc without, as ps is. The rest of network_cmds is P4-24's.
+
+**libcrypto.** macOS links OpenSSH against `/usr/lib/libcrypto.46.dylib`, LibreSSL's libcrypto (macOS's `openssl version` and `ssh -V` say LibreSSL 3.3.6). Apple's LibreSSL project isn't in the macOS 26.0 release set: distribution-macOS `macos-260` has only `OpenSSL098-85`, the 0.9.8 library it keeps for old binaries. So NeoDarwin pins upstream LibreSSL 3.3.6 from ftp.openbsd.org, with the hash OpenBSD publishes (`SHA256`).
+- Its configure runs cross-compiling, as zsh's does, against NeoDarwin's sysroot and root. It has no run checks.
+- Assembly is off: 3.3.6 has none for arm64 Darwin.
+- Only `crypto/` is built: OpenSSH needs no libssl or libtls.
+- libtool's version 46:2:0 gives macOS's install name and versions (compatibility 47.0.0, current 47.2.0).
+- Its randomness is libc's `arc4random_buf`, and `OPENSSLDIR` is `/private/etc/ssl`.
+
+**OpenSSH** is built as Apple's Xcode project builds it, without configure: from the project's committed `openssh/config.h`, the `openbsd-compat` and `libssh` static libraries, then each tool target's own sources. openssh.xcconfig sets the feature macros:
+- Kept, because their code needs only libSystem: `clear_lv`, `display_var`, `membership` (`getgrouplist_2`), `nohostauthproxy`, `tmpdir` and `basesystem`. sshd's what string says "Apple modifications: clear_lv display_var membership nohostauthproxy tmpdir basesystem".
+- Left out, for closed code: `keychain` (Security.framework; `keychain.m` isn't compiled), `endpointsecurity`, `managed_configuration` and `nw_connection`. Also left out: the two BSM audit fixes, and `launchd`, which needs `launch_activate_socket()`, an XPC-era call that launchd-842's liblaunch lacks (only `ssh-agent -l` uses it).
+- openssh patch 0001 turns off in `config.h` what needs code NeoDarwin doesn't have:
+  - GSSAPI and Kerberos (Heimdal, GSS);
+  - BSM audit (there was no libbsm when this was built);
+  - zlib (not in the base), so compression is never negotiated;
+  - Seatbelt's `sandbox_init()`: libsystem_sandbox is a stand-in without a policy. The pre-authentication process, `sshd-auth`, uses OpenSSH's rlimit sandbox instead (`SANDBOX_RLIMIT`: no new files, descriptors or processes), on top of privilege separation (chroot to `/var/empty`, user `_sshd`).
+- Patch 0003: `getrrsetbyname()` (SSHFP records for `VerifyHostKeyDNS`) fails with `ERRSET_FAIL`. Apple links libresolv for it (`-lresolv`), which the base doesn't have; libresolv-93 is in the release set.
+- Not built: `ssh-keysign` (setuid, host-based authentication), `ssh-pkcs11-helper` and `ssh-sk-helper` (libfido2), `ssh-apple-pkcs11`, `sshd-fvunlock`, `remote-login-status`, `slapconfig-keygen` and the regression tools. Without `ssh-sk-helper`, security-key (`-sk`) keys don't work.
+
+**Configuration** is make-config.zsh's:
+- OpenSSH's `ssh_config` and `sshd_config`, each with Apple's `Include /etc/ssh/*_config.d/*`. Both are byte-identical to the build host's (macOS 27), as is `100-macos.conf`.
+- `100-macos.conf` (for sshd: `UsePAM yes`, `AcceptEnv LANG LC_*`).
+- `crypto.conf`, linked to `crypto/apple.conf`: AES-GCM, ECDH P-256 and HMAC-SHA-256 first.
+
+sshd's defaults stand: `PermitRootLogin prohibit-password`, `PasswordAuthentication yes`, `KbdInteractiveAuthentication yes`, `PermitEmptyPasswords no`.
+
+**The PAM policy** (openssh patch 0002) is login's, without `nullok`: `pam_unix` for auth, account and password, `pam_nologin`, and `pam_permit` for the session, as su's is. Apple's has `pam_krb5`, `pam_ntlm`, `pam_mount` and `pam_opendirectory`, all closed. Two more are left out:
+- `pam_sacl` (the ssh service ACL) calls `mbr_check_service_membership()`, which answers `EIO` without a directory service, and that denies everyone;
+- `pam_launchd`: there are no per-user launchds.
+
+Without `nullok`, an account with an empty password (root's) can't log in over ssh. sshd refuses empty passwords anyway.
+
+**The launch model is macOS's: socket-activated, inetd-style.** `ssh.plist` is Apple's `com.openssh.sshd.plist`, unmodified and `Disabled`. Remote Login is off until root runs `launchctl load -w /System/Library/LaunchDaemons/ssh.plist`. With launchd-842 this works as on Mac OS X 10.9:
+- launchctl, not launchd, creates a job's listening sockets. NeoDarwin's launchctl now does, as 842's `sock_dict_edit_entry()` does. For each `Sockets` entry it runs `getaddrinfo` with `AI_PASSIVE`. `SockServiceName` `ssh` gives port 22 from `/etc/services`, on 0.0.0.0 and ::, with `IPV6_V6ONLY`, `SO_REUSEADDR` and `listen(-1)`. It also handles `SockPathName` (Unix sockets), `SockType`, `SockFamily`, `SockProtocol` and `SockNodeName`. It sends the descriptors in the `SubmitJob` message (`launch_data_new_fd`; liblaunch passes them with `SCM_RIGHTS`).
+- Left out: `Bonjour` (no mDNSResponder daemon), `SecureSocketWithKey` and multicast groups.
+- For an `inetdCompatibility` job, launchd watches the sockets and starts `/usr/libexec/launchproxy`. launchproxy checks in, accepts each connection and runs the job's program with the connection as standard input and output (`Wait` false, up to 42 instances).
+- The program, `sshd-keygen-wrapper`, generates any missing host key (ecdsa, ed25519, rsa: `ssh-keygen -q -t ALG -f /etc/ssh/ssh_host_ALG_key -N "" -C ""`, as Apple's `HostKeyManager` does). So the keys are made on the first connection after Remote Login is turned on. Then it execs `sshd -i`. sshd re-execs `sshd-session`, which runs `sshd-auth` for the pre-authentication phase.
+- A KeepAlive `sshd -D` would have needed none of this. But it would listen from boot, and the socket model is what macOS ships. Every part of it is open source (launchd-842, launchproxy), and only launchctl's half was missing.
+
+Apple's wrapper is Swift on Foundation, System and AppleKeyStore. NeoDarwin's is about 70 lines of Embedded Swift on libSystem. It leaves out the Recovery (base system) keys and banner, the preboot copy of the keys and `sshd-fvunlock`'s plist. It adds `-e -E /var/log/sshd.log`. Until NeoDarwin has a log store, `syslog(3)` writes to standard error (the libsystem_trace stand-in). `sshd -i` points standard error at `/dev/null`, and so does the plist. With `-e -E`, sshd logs to `/var/log/sshd.log` instead.
+
+**Code signing.** Every new Mach-O is in the image's trust cache: launchctl, the network commands, launchproxy, libcrypto, the OpenSSH tools and the wrapper (`//tools/trustcache` lists everything signed in the image). The test runs under enforcement with `--absent 'ndamfi: refused'`. Nothing is setuid.
+
+**The test:** `//kernel:sbsa_ssh_session_test` boots `//images:pam_session_root` (accounts `test` and `guest`, password `neodarwin`) with code signing enforced, and logs in as root:
+- `ifconfig lo0` shows `inet 127.0.0.1 netmask 0xff000000` and `inet6 ::1 prefixlen 128`. `ping -c 1 127.0.0.1` gets its reply.
+- `launchctl load -w .../ssh.plist`; `launchctl list` shows `com.openssh.sshd`.
+- `ssh -o StrictHostKeyChecking=no test@127.0.0.1 id`: the first connection generates the host keys. ssh adds the ED25519 host key to root's `known_hosts`. PAM asks for test's password ("(test@127.0.0.1) Password:", keyboard-interactive), and the harness types it. It prints `uid=501(test) gid=20(staff)`.
+- The same with a wrong password and one prompt: "Permission denied", status 255.
+- root makes an ed25519 key with `ssh-keygen`, and copies the public key to `/Users/test/.ssh/authorized_keys`. `ssh -o BatchMode=yes` runs `echo key-$UID` as test (`key-501`), without a password.
+- `/var/log/sshd.log` has "Accepted keyboard-interactive/pam for test from 127.0.0.1", "PAM: authentication error for test from 127.0.0.1" and "Accepted publickey for test from 127.0.0.1".
+- launchctl reports no loopback or socket errors (`--absent`).
+
+It passes in about 20 seconds.
+
+| Finding | Resolution |
+|---|---|
+| launchd-842 runs an `inetdCompatibility` job through `/usr/libexec/launchproxy` (`core.c`, `file2exec`), which wasn't built. launchctl, not launchd, creates the job's sockets | `//base:launchproxy` from 842's `support/launchproxy.c`, with launchd's patches. launchctl creates the `Sockets` descriptors (Network.swift) |
+| sshd in inetd mode points standard error at `/dev/null` unless it logs to stderr (`-e`), and NeoDarwin's `syslog(3)` is standard error | the wrapper passes `-e -E /var/log/sshd.log` |
+| network_cmds-726 names netem models that xnu-12377 lacks | network_cmds patch 0001 |
+| Apple's OpenSSH links libresolv (SSHFP lookups through `res_9_query`), which the base doesn't have | openssh patch 0003: the lookups fail. libresolv-93 can come with P4-24's name service |
+| Seatbelt (`sandbox_init`) is closed | `SANDBOX_RLIMIT` for sshd-auth |
+| `pam_sacl` denies everyone without a directory service (`mbr_check_service_membership` answers `EIO`) | left out of `pam.d/sshd` |
+| Libinfo's `getaddrinfo` logs "si_destination_compare: send failed: Invalid argument" for each passive address (`::`, `0.0.0.0`) when launchctl creates the sockets. Its RFC 6724 sort asks the kernel's netsrc control for a route to the unspecified address | expected, as Libinfo's own comment says ("no route to host"). The order of passive sockets doesn't matter |
+| `echo key-$((6*7))`, typed for the remote side, is a glob pattern in root's zsh ("no matches found") | the test sends `echo key-\$UID` |
+
+**Security notes.**
+- Remote Login is off by default (`Disabled`), as on macOS. `load -w` doesn't persist yet (no overrides database), so sshd is off again after a reboot.
+- Root can't log in with a password (`PermitRootLogin prohibit-password`), and nobody can with an empty one.
+- Passwords are libc's DES `crypt(3)` hashes ("passwd and chpass"), weak against offline guessing if `master.passwd` leaks. Keys are the better way in.
+- The pre-authentication sandbox is rlimit plus chroot and `_sshd`, weaker than macOS's Seatbelt profile.
+- LibreSSL 3.3.6 is the version macOS ships. It dates from 2022, and later LibreSSL releases fix known advisories. OpenSSH uses libcrypto only for its primitives (no TLS or X.509). Moving to a maintained LibreSSL is a decision for P4-25, before sshd runs on the board.
+- Without a log store or BSM audit, logins over ssh are recorded only in `/var/log/sshd.log` and utmpx. Now that the base has libbsm (OpenBSM, above), OpenSSH's `USE_BSM_AUDIT` can come back.
+- The wrapper creates the host keys on the first connection, as root, mode 0600.

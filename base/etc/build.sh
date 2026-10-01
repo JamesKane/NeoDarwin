@@ -33,6 +33,9 @@ for f in find.codes hosts.equiv rmtab xtab; do : > "$E/$f"; chmod 0644 "$E/$f"; 
 # SRC_PASSWD and SRC_GROUP, NeoDarwin's; passwd as the Makefile derives it
 install -m 0600 "$PROJ/master.passwd" "$E/master.passwd"
 install -m 0644 "$PROJ/group" "$E/group"
-# (cut -d : -f 1-4,8-10), keeping the comment lines.
-awk -F: -v OFS=: '/^#/ { print; next } { print $1, $2, $3, $4, $8, $9, $10 }' "$PROJ/master.passwd" > "$E/passwd"
+# (cut -d : -f 1-4,8-10), keeping the comment lines, with "*" for every
+# password, as pwd_mkdb -p writes it: the file is world-readable, and only
+# root's lookups (login, su and passwd, which are setuid) read hashes, from
+# master.passwd.
+awk -F: -v OFS=: '/^#/ { print; next } { print $1, "*", $3, $4, $8, $9, $10 }' "$PROJ/master.passwd" > "$E/passwd"
 chmod 0644 "$E/passwd"

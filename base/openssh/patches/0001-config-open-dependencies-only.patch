@@ -1,0 +1,176 @@
+From: NeoDarwin
+Subject: [PATCH] config.h: only what NeoDarwin's base provides
+
+openssh/config.h is Apple's, from configure-for-osx.sh (--with-pam
+--with-audit=bsm --with-kerberos5=/usr), against macOS's closed libraries.
+NeoDarwin builds OpenSSH from it, as Apple does, with what needs code the
+base doesn't have turned off, as configure would leave it:
+
+- GSSAPI and Kerberos (Heimdal, GSS.framework, Kerberos.framework):
+  GSSAPI, KRB5 and their header and function checks;
+- BSM audit (libbsm, not built yet): USE_BSM_AUDIT, HAVE_LIBBSM,
+  HAVE_BSM_AUDIT_H, HAVE_GETAUDIT and HAVE_GETAUDIT_ADDR;
+- zlib (not in the base): WITH_ZLIB and HAVE_LIBZ, so compression is
+  never negotiated;
+- Seatbelt: sandbox_init() is libsystem_sandbox's, which NeoDarwin stands
+  in for without a policy. sshd-auth, the pre-authentication process,
+  uses OpenSSH's rlimit sandbox instead (SANDBOX_RLIMIT: no new files,
+  descriptors or processes), on top of privilege separation's chroot to
+  /var/empty and the _sshd user.
+
+--- a/openssh/config.h
++++ b/openssh/config.h
+@@ -176,7 +176,7 @@
+ /* #undef GLOB_HAS_GL_STATV */
+ 
+ /* Define this if you want GSSAPI support in the version 2 protocol */
+-#define GSSAPI 1
++/* #undef GSSAPI */
+ 
+ /* Define if you want to use shadow password expire field */
+ /* #undef HAS_SHADOW_EXPIRE */
+@@ -266,7 +266,7 @@
+ /* #undef HAVE_BSD_LIBUTIL_H */
+ 
+ /* Define to 1 if you have the <bsm/audit.h> header file. */
+-#define HAVE_BSM_AUDIT_H 1
++/* #undef HAVE_BSM_AUDIT_H */
+ 
+ /* Define to 1 if you have the <bstring.h> header file. */
+ /* #undef HAVE_BSTRING_H */
+@@ -352,7 +352,7 @@
+ 
+ /* Define to 1 if you have the declaration of `GSS_C_NT_HOSTBASED_SERVICE',
+    and to 0 if you don't. */
+-#define HAVE_DECL_GSS_C_NT_HOSTBASED_SERVICE 1
++/* #undef HAVE_DECL_GSS_C_NT_HOSTBASED_SERVICE */
+ 
+ /* Define to 1 if you have the declaration of `howmany', and to 0 if you
+    don't. */
+@@ -640,10 +640,10 @@
+ #define HAVE_GETADDRINFO 1
+ 
+ /* Define to 1 if you have the `getaudit' function. */
+-#define HAVE_GETAUDIT 1
++/* #undef HAVE_GETAUDIT */
+ 
+ /* Define to 1 if you have the `getaudit_addr' function. */
+-#define HAVE_GETAUDIT_ADDR 1
++/* #undef HAVE_GETAUDIT_ADDR */
+ 
+ /* Define to 1 if you have the `getcwd' function. */
+ #define HAVE_GETCWD 1
+@@ -754,16 +754,16 @@
+ /* #undef HAVE_GSSAPI_GENERIC_H */
+ 
+ /* Define to 1 if you have the <gssapi/gssapi_generic.h> header file. */
+-#define HAVE_GSSAPI_GSSAPI_GENERIC_H 1
++/* #undef HAVE_GSSAPI_GSSAPI_GENERIC_H */
+ 
+ /* Define to 1 if you have the <gssapi/gssapi.h> header file. */
+-#define HAVE_GSSAPI_GSSAPI_H 1
++/* #undef HAVE_GSSAPI_GSSAPI_H */
+ 
+ /* Define to 1 if you have the <gssapi/gssapi_krb5.h> header file. */
+-#define HAVE_GSSAPI_GSSAPI_KRB5_H 1
++/* #undef HAVE_GSSAPI_GSSAPI_KRB5_H */
+ 
+ /* Define to 1 if you have the <gssapi.h> header file. */
+-#define HAVE_GSSAPI_H 1
++/* #undef HAVE_GSSAPI_H */
+ 
+ /* Define to 1 if you have the <gssapi_krb5.h> header file. */
+ /* #undef HAVE_GSSAPI_KRB5_H */
+@@ -832,13 +832,13 @@
+ #define HAVE_KILLPG 1
+ 
+ /* Define to 1 if you have the `krb5_cc_new_unique' function. */
+-#define HAVE_KRB5_CC_NEW_UNIQUE 1
++/* #undef HAVE_KRB5_CC_NEW_UNIQUE */
+ 
+ /* Define to 1 if you have the `krb5_free_error_message' function. */
+-#define HAVE_KRB5_FREE_ERROR_MESSAGE 1
++/* #undef HAVE_KRB5_FREE_ERROR_MESSAGE */
+ 
+ /* Define to 1 if you have the `krb5_get_error_message' function. */
+-#define HAVE_KRB5_GET_ERROR_MESSAGE 1
++/* #undef HAVE_KRB5_GET_ERROR_MESSAGE */
+ 
+ /* Define to 1 if you have the <langinfo.h> header file. */
+ #define HAVE_LANGINFO_H 1
+@@ -853,7 +853,7 @@
+ /* #undef HAVE_LIBAUDIT_H */
+ 
+ /* Define to 1 if you have the `bsm' library (-lbsm). */
+-#define HAVE_LIBBSM 1
++/* #undef HAVE_LIBBSM */
+ 
+ /* Define to 1 if you have the `dl' library (-ldl). */
+ #define HAVE_LIBDL 1
+@@ -883,7 +883,7 @@
+ /* #undef HAVE_LIBXNET */
+ 
+ /* Define to 1 if you have the `z' library (-lz). */
+-#define HAVE_LIBZ 1
++/* #undef HAVE_LIBZ */
+ 
+ /* Define to 1 if you have the <limits.h> header file. */
+ #define HAVE_LIMITS_H 1
+@@ -1126,10 +1126,10 @@
+ #define HAVE_RSA_GET_DEFAULT_METHOD 1
+ 
+ /* Define to 1 if you have the <sandbox.h> header file. */
+-#define HAVE_SANDBOX_H 1
++/* #undef HAVE_SANDBOX_H */
+ 
+ /* Define to 1 if you have the `sandbox_init' function. */
+-#define HAVE_SANDBOX_INIT 1
++/* #undef HAVE_SANDBOX_INIT */
+ 
+ /* define if you have sa_family_t data type */
+ #define HAVE_SA_FAMILY_T 1
+@@ -1696,7 +1696,7 @@
+ /* #undef IP_TOS_IS_BROKEN */
+ 
+ /* Define if you want Kerberos 5 support */
+-#define KRB5 1
++/* #undef KRB5 */
+ 
+ /* Define if pututxline updates lastlog too */
+ #define LASTLOG_WRITE_PUTUTXLINE 1
+@@ -1821,7 +1821,7 @@
+ /* #undef SANDBOX_CAPSICUM */
+ 
+ /* Sandbox using Darwin sandbox_init(3) */
+-#define SANDBOX_DARWIN 1
++/* #undef SANDBOX_DARWIN */
+ 
+ /* no privsep sandboxing */
+ /* #undef SANDBOX_NULL */
+@@ -1830,7 +1830,7 @@
+ /* #undef SANDBOX_PLEDGE */
+ 
+ /* Sandbox using setrlimit(2) */
+-/* #undef SANDBOX_RLIMIT */
++#define SANDBOX_RLIMIT 1
+ 
+ /* Sandbox using seccomp filter */
+ /* #undef SANDBOX_SECCOMP_FILTER */
+@@ -1938,7 +1938,7 @@
+ /* #undef USE_AFS */
+ 
+ /* Use BSM audit module */
+-#define USE_BSM_AUDIT 1
++/* #undef USE_BSM_AUDIT */
+ 
+ /* Use btmp to log bad logins */
+ /* #undef USE_BTMP */
+@@ -2002,7 +2002,7 @@
+ /* #undef WITH_SELINUX */
+ 
+ /* Enable zlib */
+-#define WITH_ZLIB 1
++/* #undef WITH_ZLIB */
+ 
+ /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
+    significant byte first (like Motorola and SPARC, unlike Intel). */

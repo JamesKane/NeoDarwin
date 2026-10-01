@@ -38,3 +38,7 @@ diskdev_cmds         diskdev_cmds-751              sha256:74b17f980eb896a8baf089
 hfs                  hfs-704.0.3.0.2               pinned in kernel/upstream.lock (userland: mount_hfs, newfs_hfs, fsck_hfs)
 OpenPAM              OpenPAM-35                    sha256:d7d940b10160870b44f4e7de58962150ff0fb1b4ac26a92752abe68ff7cbbc3b  (OpenPAM 20071221)
 pam_modules          pam_modules-217.0.1           sha256:4127cf2ecd757d10da7e9f125880cccf3f9d4c8869e47283d036fb25c0ee65c0
+network_cmds         network_cmds-726              sha256:bd9a87dba7a7da0ef99a95d3b2ed0cf01365079400fbd6174e1486a469bf4397  (ifconfig, ping, netstat, route)
+OpenSSH              OpenSSH-354.0.3               sha256:10f6ee5d5289435f3739e9eb02166383c04579f77dace9c1b81dfedb03b547db  (OpenSSH 10.0p2)
+LibreSSL             libressl-3.3.6                sha256:3f28849365e1190db2baf9014ff9686012c25b1ca6df8b3a085f789e24fe4b9a  (upstream, ftp.openbsd.org: the version macOS 26 ships; no Apple project in the release set)
+OpenBSM              OpenBSM-21                    sha256:ebbd23f36c08da9bae0d6f14727892e83f352cc50a4e8fdaf3f9f9137381de6b  (OpenBSM 1.1; last published, Mac OS X 10.6.8; outside the release set)

@@ -1,8 +1,11 @@
 # The user and group databases of //images:pam_session_root: base/etc's, as
 # //base:etc_files installs them, with the test accounts of
 # users.master.passwd. test joins group admin. passwd is derived as
-# base/etc/build.sh derives it (master.passwd's fields 1-4 and 8-10).
+# base/etc/build.sh derives it (master.passwd's fields 1-4 and 8-10, with
+# "*" for the password).
 package(default_visibility = ["//visibility:public"])
+
+exports_files(["chpass_editor"])
 
 genrule(
     name = "etc",
@@ -19,7 +22,7 @@ genrule(
 E=$(location //base:etc_files)/private/etc
 U=$(location users.master.passwd)
 cat $$E/master.passwd $$U > $(location master.passwd)
-{ cat $$E/passwd; awk -F: -v OFS=: '/^#/ { next } { print $$1, $$2, $$3, $$4, $$8, $$9, $$10 }' $$U; } > $(location passwd)
+{ cat $$E/passwd; awk -F: -v OFS=: '/^#/ { next } { print $$1, "*", $$3, $$4, $$8, $$9, $$10 }' $$U; } > $(location passwd)
 sed 's/^admin:\\*:80:root$$/admin:*:80:root,test/' $$E/group > $(location group)
 grep -q '^admin:\\*:80:root,test$$' $(location group)
 """,

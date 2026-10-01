@@ -1,0 +1,40 @@
+From: NeoDarwin
+Subject: [PATCH] ifconfig: leave out the netem models xnu-12377 lacks
+
+network_cmds-726 knows three netem models (nlc, iod, fpd), but the macOS
+26.0 kernel, xnu-12377.1.9, defines only IF_NETEM_MODEL_NLC in
+<net/if_var_private.h>. NEODARWIN_XNU_12377 (set by
+base/network_cmds/build.sh) leaves the other two out: `ifconfig ... netem
+model iod|fpd` fails as an invalid model, and a model the kernel reports is
+named only if it is NLC. Without the macro, upstream is unchanged.
+
+--- a/ifconfig.tproj/ifconfig.c
++++ b/ifconfig.tproj/ifconfig.c
+@@ -1136,10 +1136,12 @@
+ 			argc--, argv++;
+ 			if (strcmp(*argv, "nlc") == 0) {
+ 				p->ifnetem_model = IF_NETEM_MODEL_NLC;
++#ifndef NEODARWIN_XNU_12377
+ 			} else if (strcmp(*argv, "iod") == 0) {
+ 				p->ifnetem_model = IF_NETEM_MODEL_IOD;
+ 			} else if (strcmp(*argv, "fpd") == 0) {
+ 				p->ifnetem_model = IF_NETEM_MODEL_FPD;
++#endif
+ 			} else {
+ 				err(1, "Invalid model '%s'", *argv);
+ 			}
+@@ -1287,12 +1289,14 @@
+ 		case IF_NETEM_MODEL_NLC:
+ 			return ("Network link conditioner");
+ 			break;
++#ifndef NEODARWIN_XNU_12377
+ 		case IF_NETEM_MODEL_IOD:
+ 			return ("In-order delivery");
+ 			break;
+ 		case IF_NETEM_MODEL_FPD:
+ 			return ("Fast packet delivery");
+ 			break;
++#endif
+ 		default:
+ 			return ("unknown");
+ 			break;

@@ -7,7 +7,7 @@
 # target says /bin), and install-files.sh's [ link.
 #   build.sh OUT SHELL_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root, //base:libedit_dylib)
 # OUT receives bin/sh, bin/{echo,test,[,pwd,kill,sleep,date,hostname} and
-# usr/bin/{env,id,groups,whoami,printf,uname}.
+# usr/bin/{env,id,groups,whoami,printf,uname} and usr/libexec/path_helper.
 # The sh target is FreeBSD's ash, which Apple installs as /usr/local/bin/ash
 # (sh.xcconfig) and links with libedit (OTHER_LDFLAGS -ledit); its /bin/sh
 # is closed. NeoDarwin installs ash as /bin/sh, built as sh.xcconfig builds
@@ -56,6 +56,10 @@ for t in bin/echo:echo/echo.c bin/test:test/test.c bin/pwd:pwd/pwd.c bin/kill:ki
 	dest="${t%%:*}"; IFS=, read -r -a srcs <<< "${t#*:}"
 	tool "$B" "$ROOT" "$OUT/$dest" "$B/cflags" "${srcs[@]}" "$(vers "${dest##*/}")"
 done
+# path_helper (INSTALL_PATH /usr/libexec): /etc/profile (bash, sh) and
+# /etc/zprofile (zsh) run it if it is executable, to set PATH from /etc/paths
+# and /etc/paths.d (MANPATH from /etc/manpaths if it is set).
+tool "$B" "$ROOT" "$OUT/usr/libexec/path_helper" "$B/cflags" path_helper/path_helper.c "$(vers path_helper)"
 # id adds USE_BSM_AUDIT (getaudit_addr(2), a libsystem_kernel call; no libbsm).
 write_rsp "$B/id.rsp" "${base[@]}" -D__FBSDID=__RCSID -DUSE_BSM_AUDIT
 tool "$B" "$ROOT" "$OUT/usr/bin/id" "$B/id.rsp" id/id.c "$(vers id)"

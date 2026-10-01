@@ -7,7 +7,9 @@ pam_securetty), which macOS doesn't have: there, root has no password. On
 NeoDarwin root has an empty password, which pam_unix's nullok accepts, so
 keep the check on the PAM path (ending the PAM transaction before the next
 attempt), as the non-PAM build did: root logs in only on a secure terminal,
-the console (docs/base/session.md, "PAM").
+the console (docs/base/session.md, "PAM"). The block's BSM audit call
+predates au_login_fail()'s username and fflag arguments, so it never
+compiled with USE_BSM_AUDIT; it passes them now.
 
 --- a/login/login.c
 +++ b/login/login.c
@@ -35,7 +37,8 @@ the console (docs/base/session.md, "PAM").
  		if (pwd != NULL && rootlogin && !rootterm(tty)) {
  			refused("root login refused on this terminal", "ROOTTERM", 0);
  #ifdef USE_BSM_AUDIT
- 			au_login_fail("Login refused on terminal", 0);
+-			au_login_fail("Login refused on terminal", 0);
++			au_login_fail("Login refused on terminal", 0, username, fflag);
  #endif
 +#ifdef USE_PAM
 +			pam_cleanup();

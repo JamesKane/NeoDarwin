@@ -28,6 +28,11 @@ enum Plist {
         return nil
     }
 
+    var integerValue: Int64? {
+        if case .integer(let i) = self { return i }
+        return nil
+    }
+
     var boolValue: Bool? {
         if case .boolean(let b) = self { return b }
         return nil

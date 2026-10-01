@@ -1,0 +1,376 @@
+From: NeoDarwin
+Subject: [PATCH] libbsm: read the token types xnu writes
+
+OpenBSM 1.1 predates three token types that xnu-12377 writes
+(bsm/audit_record.h): the identity token (AUT_IDENTITY), which the kernel
+appends to every record a process submits with audit(2) unless it holds
+Apple's reserved-class entitlement, and the certificate hash and Kerberos
+principal tokens. au_fetch_tok() failed on them, so praudit and auditreduce
+stopped at the first user record (login's, su's). Read and print them, with
+the token structures of macOS's <bsm/libbsm.h> (au_identity_t,
+au_cert_hash_t, au_krb5_principal_t). praudit prints an identity token as
+identity,SIGNER-TYPE,SIGNING-ID,complete|truncated,TEAM-ID,complete|truncated,CDHASH.
+
+--- a/openbsm/bsm/libbsm.h
++++ b/openbsm/bsm/libbsm.h
+@@ -60,6 +60,8 @@
+  */
+ #define	AUDIT_MAX_ARGS	128
+ #define	AUDIT_MAX_ENV	128
++#define	AUDIT_MAX_CERT_HASH	32
++#define	AUDIT_MAX_KRB5_PRINCIPAL	32
+ 
+ /*
+  * Arguments to au_preselect(3).
+@@ -669,8 +671,48 @@
+ 	u_int16_t	 len;
+ 	char		*zonename;
+ } au_zonename_t;
++
++/*
++ * Apple's token types, which xnu writes (bsm/audit_record.h) and OpenBSM 1.1
++ * predates; the layouts are those of macOS's <bsm/libbsm.h>.
++ *
++ * count                   4 bytes
++ * text                    count null-terminated string(s)
++ */
++typedef struct {
++	u_int32_t	 count;
++	char		*text[AUDIT_MAX_CERT_HASH];
++} au_cert_hash_t;
+ 
+ typedef struct {
++	u_int32_t	 count;
++	char		*text[AUDIT_MAX_KRB5_PRINCIPAL];
++} au_krb5_principal_t;
++
++/*
++ * signer type             4 bytes
++ * signing id length       2 bytes
++ * signing id              N bytes (with its NUL)
++ * signing id truncated    1 byte
++ * team id length          2 bytes
++ * team id                 N bytes (with its NUL)
++ * team id truncated       1 byte
++ * cdhash length           2 bytes
++ * cdhash                  N bytes
++ */
++typedef struct {
++	u_int32_t	signer_type;
++	u_int16_t	signing_id_len;
++	char		*signing_id;
++	u_char		signing_id_truncated;
++	u_int16_t	team_id_len;
++	char		*team_id;
++	u_char		team_id_truncated;
++	u_int16_t	cdhash_len;
++	u_int8_t	*cdhash;
++} au_identity_t;
++
++typedef struct {
+ 	u_int32_t	ident;
+ 	u_int16_t	filter;
+ 	u_int16_t	flags;
+@@ -739,6 +781,9 @@
+ 		au_invalid_t		invalid;
+ 		au_trailer_t		trail;
+ 		au_zonename_t		zonename;
++		au_cert_hash_t		cert_hash;
++		au_krb5_principal_t	krb5_principal;
++		au_identity_t		identity;
+ 	} tt; /* The token is one of the above types */
+ };
+ 
+--- a/openbsm/libbsm/bsm_io.c
++++ b/openbsm/libbsm/bsm_io.c
+@@ -400,6 +400,18 @@
+ 	case AUT_ZONENAME:
+ 		fprintf(fp, "/>");
+ 		break;
++
++	case AUT_CERT_HASH:
++		fprintf(fp, "</cert_hash>");
++		break;
++
++	case AUT_KRB5_PRINCIPAL:
++		fprintf(fp, "</krb5_principal>");
++		break;
++
++	case AUT_IDENTITY:
++		fprintf(fp, "/>");
++		break;
+ 	}
+ }
+ 
+@@ -573,6 +585,18 @@
+ 
+ 		case AUT_ZONENAME:
+ 			fprintf(fp, "<zone ");
++			break;
++
++		case AUT_CERT_HASH:
++			fprintf(fp, "<cert_hash>");
++			break;
++
++		case AUT_KRB5_PRINCIPAL:
++			fprintf(fp, "<krb5_principal>");
++			break;
++
++		case AUT_IDENTITY:
++			fprintf(fp, "<identity ");
+ 			break;
+ 		}
+ 	} else {
+@@ -4011,6 +4035,195 @@
+ 		print_delim(fp, del);
+ 		print_string(fp, tok->tt.zonename.zonename,
+ 		    tok->tt.zonename.len);
++	}
++}
++
++/*
++ * count                   4 bytes
++ * text                    count null-terminated string(s)
++ * The certificate hash and Kerberos principal tokens, which have the exec
++ * arg token's layout.
++ */
++static int
++fetch_strings_tok(tokenstr_t *tok, u_char *buf, int len, u_int32_t *count,
++    char **text, u_int32_t max)
++{
++	int err = 0;
++	u_int32_t i;
++	u_char *bptr;
++
++	READ_TOKEN_U_INT32(buf, len, *count, tok->len, err);
++	if (err)
++		return (-1);
++
++	for (i = 0; i < *count; i++) {
++		bptr = buf + tok->len;
++		if (i < max)
++			text[i] = (char *)bptr;
++
++		/* Look for a null terminated string. */
++		while (*bptr != '\0') {
++			if (++tok->len >= (u_int32_t)len)
++				return (-1);
++			bptr = buf + tok->len;
++		}
++		tok->len++; /* \0 character */
++	}
++	if (*count > max)
++		*count = max;
++
++	return (0);
++}
++
++static void
++print_strings_tok(FILE *fp, tokenstr_t *tok, const char *tokname, u_int32_t count,
++    char **text, const char *del, char raw, int xml)
++{
++	u_int32_t i;
++
++	print_tok_type(fp, tok->id, tokname, raw, xml);
++	for (i = 0; i < count; i++) {
++		if (xml) {
++			fprintf(fp, "<str>");
++			print_string(fp, text[i], strlen(text[i]));
++			fprintf(fp, "</str>");
++		} else {
++			print_delim(fp, del);
++			print_string(fp, text[i], strlen(text[i]));
++		}
++	}
++	if (xml)
++		close_tag(fp, tok->id);
++}
++
++static int
++fetch_cert_hash_tok(tokenstr_t *tok, u_char *buf, int len)
++{
++
++	return (fetch_strings_tok(tok, buf, len, &tok->tt.cert_hash.count,
++	    tok->tt.cert_hash.text, AUDIT_MAX_CERT_HASH));
++}
++
++static void
++print_cert_hash_tok(FILE *fp, tokenstr_t *tok, char *del, char raw,
++    __unused char sfrm, int xml)
++{
++
++	print_strings_tok(fp, tok, "cert hash", tok->tt.cert_hash.count,
++	    tok->tt.cert_hash.text, del, raw, xml);
++}
++
++static int
++fetch_krb5_principal_tok(tokenstr_t *tok, u_char *buf, int len)
++{
++
++	return (fetch_strings_tok(tok, buf, len,
++	    &tok->tt.krb5_principal.count, tok->tt.krb5_principal.text,
++	    AUDIT_MAX_KRB5_PRINCIPAL));
++}
++
++static void
++print_krb5_principal_tok(FILE *fp, tokenstr_t *tok, char *del, char raw,
++    __unused char sfrm, int xml)
++{
++
++	print_strings_tok(fp, tok, "krb5 principal",
++	    tok->tt.krb5_principal.count, tok->tt.krb5_principal.text, del,
++	    raw, xml);
++}
++
++/*
++ * The identity token xnu adds to the records processes submit with
++ * audit(2): who signed the submitting program (au_identity_t).
++ */
++static int
++fetch_identity_tok(tokenstr_t *tok, u_char *buf, int len)
++{
++	int err = 0;
++
++	READ_TOKEN_U_INT32(buf, len, tok->tt.identity.signer_type, tok->len,
++	    err);
++	if (err)
++		return (-1);
++	READ_TOKEN_U_INT16(buf, len, tok->tt.identity.signing_id_len,
++	    tok->len, err);
++	if (err)
++		return (-1);
++	SET_PTR((char *)buf, len, tok->tt.identity.signing_id,
++	    tok->tt.identity.signing_id_len, tok->len, err);
++	if (err)
++		return (-1);
++	READ_TOKEN_U_CHAR(buf, len, tok->tt.identity.signing_id_truncated,
++	    tok->len, err);
++	if (err)
++		return (-1);
++	READ_TOKEN_U_INT16(buf, len, tok->tt.identity.team_id_len, tok->len,
++	    err);
++	if (err)
++		return (-1);
++	SET_PTR((char *)buf, len, tok->tt.identity.team_id,
++	    tok->tt.identity.team_id_len, tok->len, err);
++	if (err)
++		return (-1);
++	READ_TOKEN_U_CHAR(buf, len, tok->tt.identity.team_id_truncated,
++	    tok->len, err);
++	if (err)
++		return (-1);
++	READ_TOKEN_U_INT16(buf, len, tok->tt.identity.cdhash_len, tok->len,
++	    err);
++	if (err)
++		return (-1);
++	SET_PTR((char *)buf, len, tok->tt.identity.cdhash,
++	    tok->tt.identity.cdhash_len, tok->len, err);
++	if (err)
++		return (-1);
++	return (0);
++}
++
++static void
++print_identity_tok(FILE *fp, tokenstr_t *tok, char *del, char raw,
++    __unused char sfrm, int xml)
++{
++	au_identity_t *id = &tok->tt.identity;
++
++	print_tok_type(fp, tok->id, "identity", raw, xml);
++	if (xml) {
++		open_attr(fp, "signer-type");
++		print_4_bytes(fp, id->signer_type, "%u");
++		close_attr(fp);
++		open_attr(fp, "signing-id");
++		print_string(fp, id->signing_id, id->signing_id_len);
++		close_attr(fp);
++		open_attr(fp, "signing-id-truncated");
++		fprintf(fp, "%s", id->signing_id_truncated ? "truncated" :
++		    "complete");
++		close_attr(fp);
++		open_attr(fp, "team-id");
++		print_string(fp, id->team_id, id->team_id_len);
++		close_attr(fp);
++		open_attr(fp, "team-id-truncated");
++		fprintf(fp, "%s", id->team_id_truncated ? "truncated" :
++		    "complete");
++		close_attr(fp);
++		open_attr(fp, "cdhash");
++		print_mem(fp, id->cdhash, id->cdhash_len);
++		close_attr(fp);
++		close_tag(fp, tok->id);
++	} else {
++		print_delim(fp, del);
++		print_4_bytes(fp, id->signer_type, "%u");
++		print_delim(fp, del);
++		print_string(fp, id->signing_id, id->signing_id_len);
++		print_delim(fp, del);
++		fprintf(fp, "%s", id->signing_id_truncated ? "truncated" :
++		    "complete");
++		print_delim(fp, del);
++		print_string(fp, id->team_id, id->team_id_len);
++		print_delim(fp, del);
++		fprintf(fp, "%s", id->team_id_truncated ? "truncated" :
++		    "complete");
++		print_delim(fp, del);
++		print_mem(fp, id->cdhash, id->cdhash_len);
+ 	}
+ }
+ 
+@@ -4151,7 +4364,16 @@
+ 
+ 	case AUT_ZONENAME:
+ 		return (fetch_zonename_tok(tok, buf, len));
++
++	case AUT_CERT_HASH:
++		return (fetch_cert_hash_tok(tok, buf, len));
++
++	case AUT_KRB5_PRINCIPAL:
++		return (fetch_krb5_principal_tok(tok, buf, len));
+ 
++	case AUT_IDENTITY:
++		return (fetch_identity_tok(tok, buf, len));
++
+ 	default:
+ 		return (fetch_invalid_tok(tok, buf, len));
+ 	}
+@@ -4329,6 +4551,18 @@
+ 		print_zonename_tok(outfp, tok, del, raw, sfrm, AU_PLAIN);
+ 		return;
+ 
++	case AUT_CERT_HASH:
++		print_cert_hash_tok(outfp, tok, del, raw, sfrm, AU_PLAIN);
++		return;
++
++	case AUT_KRB5_PRINCIPAL:
++		print_krb5_principal_tok(outfp, tok, del, raw, sfrm, AU_PLAIN);
++		return;
++
++	case AUT_IDENTITY:
++		print_identity_tok(outfp, tok, del, raw, sfrm, AU_PLAIN);
++		return;
++
+ 	default:
+ 		print_invalid_tok(outfp, tok, del, raw, sfrm, AU_PLAIN);
+ 	}
+@@ -4501,8 +4735,20 @@
+ 
+ 	case AUT_ZONENAME:
+ 		print_zonename_tok(outfp, tok, del, raw, sfrm, AU_XML);
++		return;
++
++	case AUT_CERT_HASH:
++		print_cert_hash_tok(outfp, tok, del, raw, sfrm, AU_XML);
++		return;
++
++	case AUT_KRB5_PRINCIPAL:
++		print_krb5_principal_tok(outfp, tok, del, raw, sfrm, AU_XML);
+ 		return;
+ 
++	case AUT_IDENTITY:
++		print_identity_tok(outfp, tok, del, raw, sfrm, AU_XML);
++		return;
++
+ 	default:
+ 		print_invalid_tok(outfp, tok, del, raw, sfrm, AU_XML);
+ 	}
