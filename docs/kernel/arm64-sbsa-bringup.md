@@ -206,7 +206,7 @@ A launch failure is visible: dyld's error goes into the exit reason, which the "
   - SMMUv3 translation is unhandled, bypass only (`gic-its.md`);
   - no `ioreg` userland yet: tests read the kernel log;
   - the nested panic after "initproc failed to start" (§2.1.5).
-- **Userland next steps** (`docs/base/session.md`): diskdev_cmds' `mount` and fsck, so launchctl stops remounting root itself; OpenPAM; bash; line editing in `/bin/sh`.
+- **Userland** (`docs/base/session.md`): since 2026-10-01 the base has mount and fsck (launchctl's bootstrap runs `fsck -q` and `mount -uw /`), `/bin/sh` with line editing, bash 3.2, zsh, and PAM login/su. Every image is owned by root (`tools/hfsowners`). Not yet: `passwd`/`chpass`, BSM audit, sshd, per-user launchd sessions, `path_helper`.
 
 Each probe build of `//kernel:sbsa_kc` takes about 9 minutes. Never run `bazel clean`: it throws the kernel build away.
 
