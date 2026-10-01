@@ -1,0 +1,36 @@
+From: NeoDarwin
+Subject: [PATCH] pam_group: membership from the group database without Open Directory
+
+pam_group asks mbr_check_membership(3), which Libinfo answers through
+opendirectoryd. NeoDarwin's Libinfo is built without it (DS_AVAILABLE off,
+docs/base/libsystem.md) and answers EIO, so no one was ever a member and
+su(1)'s "group=admin,wheel ruser root_only" check refused everyone. When the
+call fails, check the group database as the module's FreeBSD code does: the
+user's primary group, or the group's member list (Libinfo's file module:
+/etc/group).
+
+--- a/modules/pam_group/pam_group.c
++++ b/modules/pam_group/pam_group.c
+@@ -122,8 +122,21 @@
+ 			continue;
+ 		if (mbr_gid_to_uuid(grp->gr_gid, g_uuid) != 0)
+ 			continue;
+-		if (mbr_check_membership(u_uuid, g_uuid, &ismember) != 0)
++		if (mbr_check_membership(u_uuid, g_uuid, &ismember) != 0) {
++			/*
++			 * NeoDarwin: no directory service answers (Libinfo
++			 * without Open Directory: EIO). The group database
++			 * does, as on FreeBSD: the primary group, or a member.
++			 */
++			char *const *list;
++
++			if (pwd->pw_gid == grp->gr_gid)
++				goto found;
++			for (list = grp->gr_mem; *list != NULL; ++list)
++				if (strcmp(*list, pwd->pw_name) == 0)
++					goto found;
+ 			continue;
++		}
+ 		if (ismember)
+ 			goto found;
+ 	}

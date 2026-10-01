@@ -1,0 +1,89 @@
+From: NeoDarwin
+Subject: [PATCH] newfs_hfs: build without CoreFoundation and IOKit (HFS_NO_FRAMEWORKS)
+
+newfs_hfs uses IOKit to read an external journal device's IOMedia UUID
+(-J with a device), and CoreFoundation's _CFStringGetFileSystemRepresentation
+for the canonical decomposition of the volume name. NeoDarwin has neither
+framework. With HFS_NO_FRAMEWORKS the UUID lookup fails (so does -J with a
+journal device, as when IOKit finds no UUID), and an ASCII volume name, its
+own canonical form, is used as given; any other name takes newfs_hfs's
+existing fallback, "untitled", with its warning. CoreFoundation's headers
+are still used for types and encoding constants. Without the switch
+nothing changes.
+
+Rebase-risk: low (conditions around three uses).
+---
+diff --git a/newfs_hfs/makehfs.c b/newfs_hfs/makehfs.c
+--- a/newfs_hfs/makehfs.c
++++ b/newfs_hfs/makehfs.c
+@@ -92,8 +92,10 @@
+ 
+ #include <CoreFoundation/CFString.h>
+ #include <CoreFoundation/CFStringEncodingExt.h>
++#if !HFS_NO_FRAMEWORKS
+ #include <IOKit/IOKitLib.h>
+ #include <IOKit/storage/IOMedia.h>
++#endif
+ 
+ #include <TargetConditionals.h>
+ 
+@@ -1390,6 +1392,10 @@
+ 
+     dev_uuid_str[0] = '\0';
+ 
++#if HFS_NO_FRAMEWORKS
++    /* No IOKit: the IOMedia's UUID can't be read. */
++    (void)service; (void)uuid_str; (void)dev_uuid_len;
++#else
+     service = IOServiceGetMatchingService(kIOMainPortDefault, IOBSDNameMatching(kIOMainPortDefault, 0, disk_name));
+     if (service != IO_OBJECT_NULL) {
+ 	uuid_str = IORegistryEntryCreateCFProperty(service, CFSTR(kIOMediaUUIDKey), kCFAllocatorDefault, 0);
+@@ -1401,6 +1407,7 @@
+ 	}
+ 	IOObjectRelease(service);
+     }
++#endif /* HFS_NO_FRAMEWORKS */
+ 
+     return ret;
+ }
+@@ -1628,7 +1635,9 @@
+ 	SInt16					offset;
+ 	size_t					unicodeBytes;
+ 	UInt8 canonicalName[kHFSPlusMaxFileNameBytes];	// UTF8 character may convert to three bytes, plus a NUL
++#if !HFS_NO_FRAMEWORKS
+ 	CFStringRef cfstr;
++#endif
+ 	Boolean	cfOK;
+ 	int index = 0;
+ 
+@@ -1650,9 +1659,20 @@
+ 	 */
+ 	ckp = (HFSPlusCatalogKey *)((UInt8 *)buffer + offset);
+ 	
++#if HFS_NO_FRAMEWORKS
++	/*
++	 * No CoreFoundation for the canonical decomposition: an ASCII name is
++	 * its own canonical form; any other takes the fallback below.
++	 */
++	cfOK = strlcpy((char *)canonicalName, (const char *)dp->volumeName, sizeof(canonicalName)) < sizeof(canonicalName);
++	for (const UInt8 *c = canonicalName; cfOK && *c; c++)
++		if (*c & 0x80)
++			cfOK = false;
++#else
+ 	/* Use CFString functions to get a HFSPlus Canonical name */
+ 	cfstr = CFStringCreateWithCString(kCFAllocatorDefault, (char *)dp->volumeName, kCFStringEncodingUTF8);
+ 	cfOK = _CFStringGetFileSystemRepresentation(cfstr, canonicalName, sizeof(canonicalName));
++#endif
+ 
+ 	if (!cfOK || ConvertUTF8toUnicode(canonicalName, sizeof(ckp->nodeName.unicode),
+ 		ckp->nodeName.unicode, &ckp->nodeName.length)) {
+@@ -1665,7 +1685,9 @@
+ 		warnx("invalid HFS+ name: \"%s\", using \"%s\" instead",
+ 		      dp->volumeName, kDefaultVolumeNameStr);
+ 	}
++#if !HFS_NO_FRAMEWORKS
+ 	CFRelease(cfstr);
++#endif
+ 	ckp->nodeName.length = SWAP_BE16 (ckp->nodeName.length);
+ 
+ 	unicodeBytes = sizeof(UniChar) * SWAP_BE16 (ckp->nodeName.length);

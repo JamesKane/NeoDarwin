@@ -1,0 +1,24 @@
+From: NeoDarwin
+Subject: [PATCH] mount: include APFS.framework's headers only where it is used
+
+mount.c includes <APFS/APFS.h> and <APFS/APFSConstants.h> on every
+platform, but uses them (APFSContainerMigrateMediaKeys, the EDT's OS
+environments) only in its iOS device blocks. APFS.framework is closed;
+include its headers under the same condition as the code that uses them.
+
+Rebase-risk: low (an include guarded).
+---
+diff --git a/mount.tproj/mount.c b/mount.tproj/mount.c
+--- a/mount.tproj/mount.c
++++ b/mount.tproj/mount.c
+@@ -73,8 +73,10 @@
+ #include <TargetConditionals.h>
+ #include <sysexits.h>
+ #include <sys/sysctl.h>
++#if (TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR)
+ #include <APFS/APFS.h>
+ #include <APFS/APFSConstants.h>
++#endif
+ 
+ #include "edt_fstab.h"
+ #include "fsck.h"

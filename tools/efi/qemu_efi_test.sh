@@ -42,9 +42,11 @@
 #   --send-after LINE TEXT
 #                     once LINE appears on serial (after the previous step's
 #                     match), type TEXT half a second later, as a person
-#                     would; "\n" in TEXT is Enter. Steps run in order. The
-#                     kernel drops input typed before the console is open, so
-#                     LINE should be a prompt
+#                     would; "\n" in TEXT is Enter, "\b" Backspace (DEL, the
+#                     tty's erase character), "\e" Esc, and {up}, {down},
+#                     {left}, {right} the arrow keys' ANSI sequences. Steps
+#                     run in order. The kernel drops input typed before the
+#                     console is open, so LINE should be a prompt
 #   --sendkey-after LINE TEXT
 #                     the same, but TEXT is typed on the guest's keyboard
 #                     (a USB keyboard: --device usb-kbd) through QEMU's
@@ -371,6 +373,8 @@ perl -e '
 		if (defined $due && time >= $due) {
 			if ($send[0][0] eq "serial") {
 				(my $keys = $send[0][2]) =~ s/\\n/\r/g;
+				my %arrow = (up => "A", down => "B", right => "C", left => "D");
+				$keys =~ s/\\b/\x7f/g; $keys =~ s/\\e/\e/g; $keys =~ s/\{(up|down|left|right)\}/\e[$arrow{$1}/g;
 				syswrite($in, $keys);
 			} else {
 				typekeys($send[0][2]);

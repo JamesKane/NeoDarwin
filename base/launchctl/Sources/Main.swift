@@ -213,17 +213,17 @@ func list() -> Int32 {
 /// `bootstrap -S System`: what launchctl-842's system_specific_bootstrap()
 /// does that NeoDarwin's system needs, in its order. The kernel mounts the
 /// root read-only, and launchd creates its socket under /var/tmp only once
-/// asked, so the root is made writable first (launchctl-842 runs fsck and
-/// `mount -uw /`; NeoDarwin has neither tool yet and remounts directly).
-/// Left out until their tools exist: fsck, /etc/rc.* scripts, loopback
-/// setup, sysctl.conf, BootCache, auditd and IOKit's quiet wait.
+/// asked, so the root is checked and made writable first, as launchctl-842's
+/// do_potential_fsck() does. Left out until their tools exist: /etc/rc.*
+/// scripts, loopback setup, sysctl.conf, BootCache, auditd and IOKit's
+/// quiet wait.
 func bootstrap(_ args: [String]) -> Int32 {
     guard args.count >= 2, args[0] == "-S" else { LaunchCtl.usage() }
     guard args[1] == "System" else {
         warn("bootstrap: only the System session is supported")
         return 1
     }
-    remountRootWritable()
+    checkAndRemountRoot()
     var mib: [Int32] = [CTL_KERN, KERN_HOSTNAME]
     let hostname = "localhost"
     _ = hostname.withCString { sysctl(&mib, 2, nil, nil, UnsafeMutableRawPointer(mutating: $0), strlen($0) + 1) }
@@ -237,55 +237,84 @@ func bootstrap(_ args: [String]) -> Int32 {
     return status
 }
 
-/// `mount -uw /`: an update mount of the root without MNT_RDONLY.
-func remountRootWritable() {
+/// launchctl-842's do_potential_fsck(): if the root is mounted read-only,
+/// `fsck -q` (unless safe booted), then `fsck -fy` if that fails; if both
+/// fail, halt (842's macOS behaviour; it notes that the rest of the system
+/// can't run on a read-only root). Then `mount -uw /`. mount finds the
+/// root's device, which the kernel names "root_device", in the fstab entry
+/// Libinfo synthesizes for "/" from the /dev node whose device number is the
+/// root's.
+func checkAndRemountRoot() {
     var fs = statfs()
     guard statfs("/", &fs) == 0 else {
         warn("statfs /: \(errorString(__error().pointee))")
         return
     }
     guard (fs.f_flags & UInt32(MNT_RDONLY)) != 0 else { return }
-    let type = withUnsafeBytes(of: fs.f_fstypename) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
-    guard type == "hfs" else {
-        warn("the root is read-only, and launchctl can't remount \(type)")
-        return
-    }
-    // The kernel names the root's device "root_device", which no path
-    // reaches; the update mount needs one, so find the block device in
-    // /dev that holds the root.
-    var device = withUnsafeBytes(of: fs.f_mntfromname) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
-    if !device.hasPrefix("/dev/") {
-        guard let found = blockDevice(holding: "/") else {
-            warn("mount -uw /: no block device in /dev holds the root")
+    if !isSafeBoot() {
+        warn("Running fsck on the boot volume...")
+        let status = run(["/sbin/fsck", "-q"])
+        if status == 0 {
+            remount()
             return
         }
-        device = found
+        if status > 0 { warn("fsck exited with status: \(status)") }
     }
-    let flags = Int32(bitPattern: (fs.f_flags & ~UInt32(MNT_RDONLY)) | UInt32(MNT_UPDATE))
-    let error = device.withCString { fspec -> Int32 in
-        var args = nd_hfs_mount_args()
-        args.fspec = UnsafeMutablePointer(mutating: fspec)
-        return mount("hfs", "/", flags, &args) == 0 ? 0 : __error().pointee
+    warn("Running safe fsck on the boot volume...")
+    let status = run(["/sbin/fsck", "-fy"])
+    if status == 0 {
+        remount()
+        return
     }
-    if error != 0 { warn("mount -uw / (\(device)): \(errorString(error))") }
+    if status > 0 { warn("Safe fsck exited with status: \(status)") }
+    warn("fsck failed! Shutting down in 3 seconds.")
+    _ = sleep(3)
+    _ = reboot(RB_HALT)
 }
 
-/// The /dev block device whose device number is `path`'s file system's.
-func blockDevice(holding path: String) -> String? {
-    var target = stat()
-    guard stat(path, &target) == 0, let dir = opendir("/dev") else { return nil }
-    defer { closedir(dir) }
-    while let entry = readdir(dir) {
-        let name = withUnsafeBytes(of: entry.pointee.d_name) { raw in
-            String(decoding: raw.prefix(Int(entry.pointee.d_namlen)), as: UTF8.self)
-        }
-        var st = stat()
-        let candidate = "/dev/\(name)"
-        if lstat(candidate, &st) == 0, (Int32(st.st_mode) & S_IFMT) == S_IFBLK, st.st_rdev == target.st_dev {
-            return candidate
+/// `mount -uw /`.
+func remount() {
+    let status = run(["/sbin/mount", "-uw", "/"])
+    if status > 0 { warn("mount -uw / exited with status: \(status)") }
+}
+
+/// kern.safeboot, as launchctl-842's is_safeboot().
+func isSafeBoot() -> Bool {
+    var mib: [Int32] = [CTL_KERN, KERN_SAFEBOOT]
+    var value: UInt32 = 0
+    var size = MemoryLayout<UInt32>.size
+    guard sysctl(&mib, 2, &value, &size, nil, 0) == 0 else { return false }
+    return value != 0
+}
+
+/// Runs a tool (an absolute path) and waits for it, as launchctl-842's
+/// fwexec(): its exit status; 128 + the signal if one ended it; -1 (after a
+/// message) if it couldn't be started.
+func run(_ argv: [String]) -> Int32 {
+    var cArgs: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) } + [nil]
+    var cEnv: [UnsafeMutablePointer<CChar>?] = [strdup("PATH=/usr/bin:/bin:/usr/sbin:/sbin"), nil]
+    defer {
+        for p in cArgs { free(p) }
+        for p in cEnv { free(p) }
+    }
+    var pid: pid_t = 0
+    let error = posix_spawn(&pid, cArgs[0]!, nil, nil, &cArgs, &cEnv)
+    guard error == 0 else {
+        warn("\(argv[0]): \(errorString(error))")
+        return -1
+    }
+    var status: Int32 = 0
+    while waitpid(pid, &status, 0) == -1 {
+        guard __error().pointee == EINTR else {
+            warn("waitpid \(argv[0]): \(errorString(__error().pointee))")
+            return -1
         }
     }
-    return nil
+    // <sys/wait.h>'s WIFEXITED and friends are macros Swift doesn't import.
+    let signal = status & 0x7f
+    if signal == 0 { return (status >> 8) & 0xff }
+    warn("\(argv[0]): signal \(signal)")
+    return 128 + signal
 }
 
 /// Removes everything inside `path`, leaving the directory.

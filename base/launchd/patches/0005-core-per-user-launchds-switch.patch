@@ -1,0 +1,68 @@
+From: NeoDarwin
+Subject: [PATCH] core: a switch for per-user launchds
+
+On macOS, PID 1 answers a non-root client's bootstrap lookup or
+registration with VPROC_ERR_TRY_PER_USER, and the client asks for its
+user's per-user context, a second launchd that PID 1 starts for that user;
+embedded launchd serves every user from PID 1. Add HAVE_PER_USER_LAUNCHD
+(config.h; default !TARGET_OS_EMBEDDED, so macOS's behaviour) for the
+three places that choose, so the build can pick embedded's.
+
+NeoDarwin builds it off (docs/base/session.md, "PAM"): PID 1 and a
+per-user launchd exchange jobs and ports in MIG messages with out-of-line
+port arrays of moved send rights (job.defs: take_subset, lookup_children,
+legacy_ipc_request). xnu-12377 refuses those from a platform binary
+(IPC_POLICY_ENHANCED_V2: only COPY_SEND arrays, to ports that accept them)
+with a fatal guard exception: the first non-root login killed PID 1
+(EXC_GUARD, kGUARD_EXC_DESCRIPTOR_VIOLATION) and the kernel panicked. With
+the boot-arg ool_port_array_enforced=0, PID 1 survives, and the per-user
+launchd it starts is killed instead.
+
+Rebase-risk: low (three #if conditions and one config.h switch).
+---
+--- a/src/config.h
++++ b/src/config.h
+@@ -34,6 +34,14 @@
+ #define HAVE_LIBAUDITD !TARGET_OS_EMBEDDED
+ #endif
+ 
++/* Per-user launchds: PID 1 sends non-root clients' lookups, registrations
++ * and per-user context requests to a launchd it starts for their user, as on
++ * macOS; without them it serves every user itself, as on embedded.
++ */
++#ifndef HAVE_PER_USER_LAUNCHD
++#define HAVE_PER_USER_LAUNCHD !TARGET_OS_EMBEDDED
++#endif
++
+ #ifndef HAVE_SYSTEMSTATS
+ #if !TARGET_OS_EMBEDDED && __has_include(<systemstats/systemstats.h>)
+ #define HAVE_SYSTEMSTATS 1
+--- a/src/core.c
++++ b/src/core.c
+@@ -8852,7 +8852,7 @@
+ 		return BOOTSTRAP_UNKNOWN_SERVICE;
+ 	}
+ 
+-#if TARGET_OS_EMBEDDED
++#if !HAVE_PER_USER_LAUNCHD
+ 	// There is no need for per-user launchd's on embedded.
+ 	job_log(j, LOG_ERR, "Per-user launchds are not supported on this platform.");
+ 	return BOOTSTRAP_UNKNOWN_SERVICE;
+@@ -8993,7 +8993,7 @@
+ #endif
+ 
+ 	// 5641783 for the embedded hack
+-#if !TARGET_OS_EMBEDDED
++#if HAVE_PER_USER_LAUNCHD
+ 	/*
+ 	 * From a per-user/session launchd's perspective, SecurityAgent (UID
+ 	 * 92) is a rogue application (not our UID, not root and not a child of
+@@ -9056,7 +9056,7 @@
+ 	bool xpc_req = (j->mgr->properties & BOOTSTRAP_PROPERTY_XPC_DOMAIN);
+ 
+ 	// 5641783 for the embedded hack
+-#if !TARGET_OS_EMBEDDED
++#if HAVE_PER_USER_LAUNCHD
+ 	if (unlikely(pid1_magic && j->anonymous && j->mgr->parentmgr == NULL && ldc->uid != 0 && ldc->euid != 0)) {
+ 		return VPROC_ERR_TRY_PER_USER;
+ 	}

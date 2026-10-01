@@ -199,7 +199,7 @@ launchctl bootstrap      mount -uw / on the /dev block device holding / (docs/ba
 
 The property is a NUL-terminated 36-character string (`dt-abi.md`); `DTCheck` refuses anything else, and `dtdump --boot-uuid` models it.
 
-**The root device and the remount.** The kernel mounts `/dev/disk0s2` read-only as `root_device`; launchctl's `mount -uw /` finds the `/dev` block device whose `st_rdev` is the root's `st_dev` (`blockDevice(holding:)`), which is `/dev/disk0s2` as it was `/dev/md0`, and passes it to HFS. After the update mount `f_mntfromname` is `/dev/disk0s2`, which `df /` shows. The volume is **journaled HFS+**: HFS refuses a read-write mount of a dirty volume without a journal (`hfs_mounthfsplus`: "cannot mount dirty non-journaled volumes"), and a VM that is switched off leaves it dirty; with the journal, the next boot replays it.
+**The root device and the remount.** The kernel mounts `/dev/disk0s2` read-only as `root_device`. launchctl runs `fsck -q` and then `mount -uw /` (diskdev_cmds, `docs/base/session.md`). Both take the root's device from the fstab entry that Libinfo makes up for `/`: the `/dev` block device whose `st_rdev` is the root's `st_dev`, which is `/dev/disk0s2` as it was `/dev/md0`. mount passes it to `mount_hfs`. After the update mount `f_mntfromname` is `/dev/disk0s2`, which `df /` and `mount` show. The volume is **journaled HFS+**: HFS refuses a read-write mount of a dirty volume without a journal (`hfs_mounthfsplus`: "cannot mount dirty non-journaled volumes"), and a VM that is switched off leaves it dirty; with the journal, the next boot replays it.
 
 ## The disk image
 

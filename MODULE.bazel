@@ -214,6 +214,14 @@ http_archive(
 )
 
 http_archive(
+    name = "apple_diskdev_cmds",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "74b17f980eb896a8baf089b97269a6087563b1dde92cf50853f5ecbaa8673503",
+    strip_prefix = "diskdev_cmds-diskdev_cmds-751",
+    urls = ["https://github.com/apple-oss-distributions/diskdev_cmds/archive/refs/tags/diskdev_cmds-751.tar.gz"],
+)
+
+http_archive(
     name = "apple_libutil",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
     sha256 = "dfb7a334e716768079c46bf9ae0846e6231eb6e4481dbad9981ac666f112d61e",
@@ -230,6 +238,22 @@ http_archive(
 )
 
 http_archive(
+    name = "apple_openpam",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "d7d940b10160870b44f4e7de58962150ff0fb1b4ac26a92752abe68ff7cbbc3b",
+    strip_prefix = "OpenPAM-OpenPAM-35",
+    urls = ["https://github.com/apple-oss-distributions/OpenPAM/archive/refs/tags/OpenPAM-35.tar.gz"],
+)
+
+http_archive(
+    name = "apple_pam_modules",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "4127cf2ecd757d10da7e9f125880cccf3f9d4c8869e47283d036fb25c0ee65c0",
+    strip_prefix = "pam_modules-pam_modules-217.0.1",
+    urls = ["https://github.com/apple-oss-distributions/pam_modules/archive/refs/tags/pam_modules-217.0.1.tar.gz"],
+)
+
+http_archive(
     name = "apple_ncurses",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
     sha256 = "5a7bfa041c4b5f7da6ae8b45c8fd7df5595968168199237b52a5fa27f690a4d6",
@@ -243,6 +267,22 @@ http_archive(
     sha256 = "63cb3b4ffd2de40e1c091b8db2f2e91d5c8b612424857d149779d63642cdb27c",
     strip_prefix = "zsh-zsh-110.1.1",
     urls = ["https://github.com/apple-oss-distributions/zsh/archive/refs/tags/zsh-110.1.1.tar.gz"],
+)
+
+http_archive(
+    name = "apple_libedit",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "f02b05ed8df11cff3e3e90c21d8ed1131ee395e9748b20b28c89fd7771956ebe",
+    strip_prefix = "libedit-libedit-65",
+    urls = ["https://github.com/apple-oss-distributions/libedit/archive/refs/tags/libedit-65.tar.gz"],
+)
+
+http_archive(
+    name = "apple_bash",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "901e3b93d8d5bbf8a7bef318f9bdace864c12be6d7b18ba1bf1e8c93f7667af6",
+    strip_prefix = "bash-bash-140",
+    urls = ["https://github.com/apple-oss-distributions/bash/archive/refs/tags/bash-140.tar.gz"],
 )
 
 http_archive(
@@ -273,14 +313,17 @@ http_archive(
 )
 
 # Apple's HFS+ (hfs-704.0.3.0.2, the macOS 26.0 release; APSL): the hfs and
-# HFSEncodings kexts' sources, built into the SBSA kernel (kernel/neodarwin/hfs).
+# HFSEncodings kexts' sources, built into the SBSA kernel (kernel/neodarwin/hfs),
+# and its userland, mount_hfs, newfs_hfs and fsck_hfs (base/hfs).
 http_archive(
     name = "apple_hfs",
     build_file_content = """filegroup(
     name = "kernel_srcs",
     srcs = glob(["core/*.c", "core/*.cpp", "core/*.h", "hfs_encodings/*.c", "hfs_encodings/*.h"]),
     visibility = ["//visibility:public"],
-)""",
+)
+
+filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
     sha256 = "95e2508b9f38091f505111fd2154c97c8b1b13a8f01f0b61a1353b0fcfb80958",
     strip_prefix = "hfs-hfs-704.0.3.0.2",
     urls = ["https://github.com/apple-oss-distributions/hfs/archive/refs/tags/hfs-704.0.3.0.2.tar.gz"],

@@ -1,0 +1,24 @@
+From: NeoDarwin
+Subject: [PATCH] fskit_support: build the FSKit path only with FSKit's private headers
+
+fskit_support.m takes its FSKit path when <FSKit/FSKit.h> exists, and that
+path also imports <FSKit/FSKit_private.h> and LiveFS, which are only in
+Apple's internal SDK. The public macOS SDK has FSKit.framework, so the
+check passes there and the build stops. Test for the private header the
+path needs; without it invoke_tool_from_fskit() returns ENOTSUP, as
+upstream's own fallback does, and mount runs mount_<type> from /sbin.
+
+Rebase-risk: low (one preprocessor condition).
+---
+diff --git a/disklib/fskit_support.m b/disklib/fskit_support.m
+--- a/disklib/fskit_support.m
++++ b/disklib/fskit_support.m
+@@ -26,7 +26,7 @@
+ /** **This file must be compiled with ARC enabled.**  **/
+ 
+ #import "fskit_support.h"
+-#if __has_include(<FSKit/FSKit.h>)
++#if __has_include(<FSKit/FSKit_private.h>)
+ #define HAS_FSKIT
+ #import <FSKit/FSKit.h>
+ #import <FSKit/FSKit_private.h>

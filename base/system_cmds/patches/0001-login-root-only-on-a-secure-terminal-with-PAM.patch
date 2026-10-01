@@ -1,0 +1,63 @@
+From: NeoDarwin
+Subject: [PATCH] login: refuse root on an insecure terminal with PAM too
+
+Apple's login checks the terminal's secure flag in /etc/ttys for root only
+on its non-PAM path; with USE_PAM it leaves that to the PAM policy (FreeBSD's
+pam_securetty), which macOS doesn't have: there, root has no password. On
+NeoDarwin root has an empty password, which pam_unix's nullok accepts, so
+keep the check on the PAM path (ending the PAM transaction before the next
+attempt), as the non-PAM build did: root logs in only on a secure terminal,
+the console (docs/base/session.md, "PAM").
+
+--- a/login/login.c
++++ b/login/login.c
+@@ -139,9 +139,9 @@
+ #ifdef __APPLE__
+ static void		 dolastlog(int);
+ 
++static int		 rootterm(const char *);
+ #ifndef USE_PAM
+ static void		 checknologin(void);
+-static int		 rootterm(const char *);
+ #endif /* !USE_PAM */
+ #endif /* __APPLE__ */
+ 
+@@ -534,19 +534,21 @@
+ 		}
+ 
+ #ifdef __APPLE__
+-#ifndef USE_PAM
+ 		/*
+ 		 * If trying to log in as root but with insecure terminal,
+ 		 * refuse the login attempt.
++		 * NeoDarwin: with PAM too, which has no pam_securetty.
+ 		 */
+ 		if (pwd != NULL && rootlogin && !rootterm(tty)) {
+ 			refused("root login refused on this terminal", "ROOTTERM", 0);
+ #ifdef USE_BSM_AUDIT
+ 			au_login_fail("Login refused on terminal", 0);
+ #endif
++#ifdef USE_PAM
++			pam_cleanup();
++#endif /* USE_PAM */
+ 			continue;
+ 		}
+-#endif /* !USE_PAM */
+ #endif /* __APPLE__ */
+ 		if (pwd != NULL && rval == 0)
+ 			break;
+@@ -1269,14 +1271,12 @@
+ }
+ 
+ #ifdef __APPLE__
+-#ifndef USE_PAM
+ static int
+ rootterm(const char* ttyn)
+ {
+ 	struct ttyent *t;
+ 	return ((t = getttynam(ttyn)) && t->ty_status & TTY_SECURE);
+ }
+-#endif /* !USE_PAM */
+ #endif /* __APPLE__ */
+ 
+ /*

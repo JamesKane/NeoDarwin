@@ -1,0 +1,29 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:swift.bzl", "nd_swift_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# hfsowners: root:wheel ownership and set-user-ID modes in an HFS+ volume
+# image's catalog, which hdiutil can't record (rules/ramdisk.bzl,
+# docs/base/session.md, "PAM").
+nd_swift_binary(
+    name = "hfsowners",
+    srcs = ["main.swift"],
+)
+
+# An image from tools/ramdisk/mkhfs.sh with a setuid file and an owner
+# override, listed back. hdiutil needs the host outside the sandbox.
+sh_test(
+    name = "hfsowners_test",
+    size = "small",
+    srcs = ["hfsowners_test.sh"],
+    args = [
+        "$(rootpath //tools/ramdisk:mkhfs.sh)",
+        "$(rootpath :hfsowners)",
+    ],
+    data = [
+        ":hfsowners",
+        "//tools/ramdisk:mkhfs.sh",
+    ],
+    tags = ["no-sandbox", "requires-darwin"],
+)

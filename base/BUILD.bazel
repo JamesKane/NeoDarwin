@@ -325,7 +325,7 @@ base_library(
 base_library(
     name = "shell_commands",
     data = glob(["shell_cmds/**"]) + ["commands.sh"],
-    deps = [":root"],
+    deps = [":root", ":libedit_dylib"],
     script = "shell_cmds/build.sh",
     srcs = "@apple_shell_cmds//:all",
     sysroot = ":sysroot",
@@ -334,9 +334,40 @@ base_library(
 base_library(
     name = "system_commands",
     data = glob(["system_cmds/**"]) + ["commands.sh"],
-    deps = [":root"],
+    deps = [":root", ":libpam_dylib"],
     script = "system_cmds/build.sh",
     srcs = "@apple_system_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+# PAM (docs/base/session.md, "PAM"): OpenPAM's libpam with pam_deny,
+# pam_permit and pam_unix, and pam_modules' modules that need only
+# libSystem. login (system_commands) and su (su_command) authenticate
+# through it.
+base_library(
+    name = "libpam_dylib",
+    data = glob(["openpam/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "openpam/build.sh",
+    srcs = "@apple_openpam//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "pam_modules",
+    data = glob(["pam_modules/**"]) + ["commands.sh"],
+    deps = [":root", ":libpam_dylib"],
+    script = "pam_modules/build.sh",
+    srcs = "@apple_pam_modules//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "su_command",
+    data = glob(["shell_cmds/**"]) + ["commands.sh"],
+    deps = [":root", ":libpam_dylib"],
+    script = "shell_cmds/su.sh",
+    srcs = "@apple_shell_cmds//:all",
     sysroot = ":sysroot",
 )
 
@@ -367,6 +398,26 @@ base_library(
     sysroot = ":sysroot",
 )
 
+# mount, umount and fsck, and HFS+'s mount_hfs, newfs_hfs and fsck_hfs
+# (docs/base/session.md): launchctl's boot-time fsck and `mount -uw /`.
+base_library(
+    name = "diskdev_commands",
+    data = glob(["diskdev_cmds/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "diskdev_cmds/build.sh",
+    srcs = "@apple_diskdev_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "hfs_commands",
+    data = glob(["hfs/**"]) + ["commands.sh"],
+    deps = [":root", ":libutil_dylib"],
+    script = "hfs/build.sh",
+    srcs = "@apple_hfs//:all",
+    sysroot = ":sysroot",
+)
+
 base_library(
     name = "etc_files",
     data = glob(["etc/**"]),
@@ -393,6 +444,24 @@ base_library(
     sysroot = ":sysroot",
 )
 
+base_library(
+    name = "libedit_dylib",
+    data = glob(["libedit/**"]) + ["commands.sh"],
+    deps = [":root", ":libncurses_dylib"],
+    script = "libedit/build.sh",
+    srcs = "@apple_libedit//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "bash_shell",
+    data = glob(["bash/**"]) + ["commands.sh"],
+    deps = [":root", ":libncurses_dylib"],
+    script = "bash/build.sh",
+    srcs = "@apple_bash//:all",
+    sysroot = ":sysroot",
+)
+
 # The system root: the runtime root with the commands and /etc.
 base_root(
     name = "system_root",
@@ -402,12 +471,19 @@ base_root(
         ":libxo_dylib",
         ":shell_commands",
         ":system_commands",
+        ":libpam_dylib",
+        ":pam_modules",
+        ":su_command",
         ":file_commands",
         ":text_commands",
         ":adv_commands",
+        ":diskdev_commands",
+        ":hfs_commands",
         ":etc_files",
         ":libncurses_dylib",
         ":zsh_shell",
+        ":libedit_dylib",
+        ":bash_shell",
     ],
 )
 
@@ -463,6 +539,9 @@ base_root(
     ("libxo", ":libxo_dylib", "usr/lib/libxo.dylib", "libxo/exports.txt"),
     ("libxpc", ":libxpc", "usr/lib/system/libxpc.dylib", "launchd/exports.txt"),
     ("libncurses", ":libncurses_dylib", "usr/lib/libncurses.5.4.dylib", "ncurses/exports.txt"),
+    ("libpam", ":libpam_dylib", "usr/lib/libpam.2.dylib", "openpam/exports/libpam.2.txt"),
+    ("libpam.1", ":libpam_dylib", "usr/lib/libpam.1.dylib", "openpam/exports/libpam.1.txt"),
+    ("libedit", ":libedit_dylib", "usr/lib/libedit.3.dylib", "libedit/exports.txt"),
     ("libsystem", ":libsystem_b", "usr/lib/libSystem.B.dylib", "libsystem/exports.txt"),
     ("libcompiler_rt", ":llvm_runtimes", "usr/lib/system/libcompiler_rt.dylib", "llvm/exports/libcompiler_rt.txt"),
     ("libunwind", ":llvm_runtimes", "usr/lib/system/libunwind.dylib", "llvm/exports/libunwind.txt"),
@@ -502,5 +581,6 @@ lang_audit_test(
         "libm/src/*.c",
         "libm/compat/**/*.h",
         "file_cmds/compat/*.h",
+        "shell_cmds/compat/**/*.h",
     ]),
 )

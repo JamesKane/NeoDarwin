@@ -32,3 +32,9 @@ libxo                freebsd-src 050683bb8e13      contrib/libxo (1.6.0); pinned
 launchd              launchd-842.92.1              sha256:76657450aee11bdc2f4ebf85e19e3b9c215771564257e710e3a59b1340c1b49b  (last published launchd; outside the release set)
 ncurses              ncurses-79                    sha256:5a7bfa041c4b5f7da6ae8b45c8fd7df5595968168199237b52a5fa27f690a4d6  (ncurses 6.0-20150808, 5.4 ABI)
 zsh                  zsh-110.1.1                   sha256:63cb3b4ffd2de40e1c091b8db2f2e91d5c8b612424857d149779d63642cdb27c  (zsh 5.9)
+libedit              libedit-65                    sha256:f02b05ed8df11cff3e3e90c21d8ed1131ee395e9748b20b28c89fd7771956ebe  (NetBSD libedit 20121213-3.0)
+bash                 bash-140                      sha256:901e3b93d8d5bbf8a7bef318f9bdace864c12be6d7b18ba1bf1e8c93f7667af6  (bash 3.2.57; GPLv2)
+diskdev_cmds         diskdev_cmds-751              sha256:74b17f980eb896a8baf089b97269a6087563b1dde92cf50853f5ecbaa8673503
+hfs                  hfs-704.0.3.0.2               pinned in kernel/upstream.lock (userland: mount_hfs, newfs_hfs, fsck_hfs)
+OpenPAM              OpenPAM-35                    sha256:d7d940b10160870b44f4e7de58962150ff0fb1b4ac26a92752abe68ff7cbbc3b  (OpenPAM 20071221)
+pam_modules          pam_modules-217.0.1           sha256:4127cf2ecd757d10da7e9f125880cccf3f9d4c8869e47283d036fb25c0ee65c0

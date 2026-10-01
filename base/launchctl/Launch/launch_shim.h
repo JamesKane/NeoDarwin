@@ -68,27 +68,14 @@ launch_data_t _Nullable launch_msg(const launch_data_t _Nonnull request);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <spawn.h>
 #include <sys/mount.h>
+#include <sys/reboot.h>
 #include <sys/sysctl.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
-
-// HFS's mount arguments (hfs-704 core/hfs_mount.h, which the SDK doesn't
-// install): the root's update mount passes them, and HFS reads only the
-// device name on an update.
-struct nd_hfs_mount_args {
-	char *_Nullable fspec;
-	uid_t hfs_uid;
-	gid_t hfs_gid;
-	mode_t hfs_mask;
-	u_int32_t hfs_encoding;
-	struct timezone hfs_timezone;
-	int flags;
-	int journal_tbuffer_size;
-	int journal_flags;
-	int journal_disable;
-};
 
 // launchd-842's libvproc (vproc_priv.h): while "global on demand" is set,
 // launchd starts no job for Mach-service demand, so a bootstrap loads every

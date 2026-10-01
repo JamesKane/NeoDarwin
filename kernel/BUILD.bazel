@@ -592,9 +592,11 @@ sh_test(
 # partition's unique GUID as /chosen boot-uuid. NeoDarwinVirtioBlock drives
 # the disk over two MSI-X vectors, IOStorageFamily publishes disk0,
 # disk0s1 and disk0s2, AppleFileSystemDriver finds the IOMedia whose UUID is
-# the boot-uuid, and the kernel roots on /dev/disk0s2. launchctl remounts it
-# read-write; the shell shows df on it, writes a file and syncs. A second
-# boot of the same image reads the file back.
+# the boot-uuid, and the kernel roots on /dev/disk0s2. launchctl checks it
+# (fsck -q) and remounts it read-write (mount -uw /); the shell shows df and
+# mount on it, writes a file and syncs. A second boot of the same image,
+# after QEMU was stopped with the volume mounted, checks it again and reads
+# the file back.
 DISK_BOOT_LINES = [
     "'neoboot: root: HFS+ partition 2 of the boot disk, boot-uuid " + SESSION_DISK_ROOT_UUID + "'",
     "'rooting via boot-uuid from /chosen: " + SESSION_DISK_ROOT_UUID + "'",
@@ -614,29 +616,82 @@ sh_test(
         "--cpu neoverse-n2",
         "--mem 2G",
         "--until-lines",
+        "--absent 'Running safe fsck'",
         "--send-after 'login: ' 'root\\n'",
-        "--send-after 'root@localhost ~ # ' 'df /\\n'",
+        "--send-after 'root@localhost ~ # ' 'df /; mount\\n'",
         "--send-after 'root@localhost ~ # ' 'echo persisted-$$((6*7)) > /var/root/disk-test && zmodload -F zsh/files b:sync && sync && echo synced-$$((6*7))\\n'",
         "-",
         "180",
     ] + DISK_BOOT_LINES + [
+        "'launchctl: Running fsck on the boot volume...'",
         "'/dev/disk0s2 '",
+        "'/dev/disk0s2 on / (hfs, local, journaled)'",
         "'synced-42'",
         "--reboot",
         "--cpu neoverse-n2",
         "--mem 2G",
         "--until-lines",
+        "--absent 'Running safe fsck'",
         "--send-after 'login: ' 'root\\n'",
         "--send-after 'root@localhost ~ # ' 'cat /var/root/disk-test\\n'",
         "-",
         "180",
         "'BSD root: disk0s2, major'",
+        "'launchctl: Running fsck on the boot volume...'",
         "'persisted-42'",
     ],
     data = [
         "//images:session_disk",
         "//tools/efi:qemu_efi_test.sh",
     ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# mount and fsck (docs/base/session.md): launchctl checks the read-only root
+# with `fsck -q` (fsck_hfs) and remounts it with `mount -uw /` (mount_hfs).
+# In the session, mount lists the root by its device; a second, blank
+# virtio-blk disk (the whole disk with no partition map) gets a journaled
+# HFS+ volume from newfs_hfs, is mounted with mount -t hfs, written,
+# unmounted, checked with fsck_hfs -fn, mounted again and read back, and
+# unmounted. The two disks register in either order, so the root is
+# disk0s2 or disk1s2 here, and the scratch disk the other whole disk
+# (sbsa_disk_boot_test, with one disk, checks /dev/disk0s2).
+sh_test(
+    name = "sbsa_disk_mount_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--disk $(rootpath //images:session_disk)",
+        "--drive scratch=64M",
+        "--device virtio-blk-pci,drive=scratch,disable-legacy=on",
+        "--until-lines",
+        "--absent 'fsck failed!'",
+        "--absent 'Running safe fsck'",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'mount\\n'",
+        "--send-after 'root@localhost ~ # ' 'd=; for x in /dev/disk[0-9]; do [ -e $${x}s1 ] || d=$$x; done; echo scratch-disk=$$d\\n'",
+        "--send-after 'root@localhost ~ # ' 'newfs_hfs -J -v Scratch $$d && echo newfs-$$((6*7))\\n'",
+        "--send-after 'root@localhost ~ # ' 'mkdir -p /Volumes/Scratch && mount -t hfs $$d /Volumes/Scratch && mount\\n'",
+        "--send-after 'root@localhost ~ # ' 'echo round-trip-$$((6*7)) > /Volumes/Scratch/file && umount /Volumes/Scratch && fsck_hfs -fn $${d/disk/rdisk} && echo checked-$$((6*7))\\n'",
+        "--send-after 'root@localhost ~ # ' 'mount -t hfs $$d /Volumes/Scratch && cat /Volumes/Scratch/file && umount /Volumes/Scratch && echo unmounted-$$((6*7))\\n'",
+        "-",
+        "180",
+        "'s2, major'",
+        "'launchctl: Running fsck on the boot volume...'",
+        "'s2 on / (hfs, local, journaled)'",
+        "'devfs on /dev (devfs, local'",
+        "'scratch-disk=/dev/disk'",
+        "' case-insensitive HFS Plus volume with a '",
+        "'newfs-42'",
+        "' on /Volumes/Scratch (hfs, local, journaled)'",
+        "'The volume Scratch appears to be OK.'",
+        "'checked-42'",
+        "'round-trip-42'",
+        "'unmounted-42'",
+    ],
+    data = ["//images:session_disk"],
     tags = ["manual", "kernel", "qemu"],
 )
 
@@ -738,6 +793,7 @@ sh_test(
         "'NeoDarwinNVMeController: 00:02.0: write cache on; DMA coherent, 64 address bits; read-write: QEMU'",
         "'I/O queue 1: first completion by its interrupt (MSI-X vector 1, LPI '",
         "'/dev/disk0s2 '",
+        "'launchctl: Running fsck on the boot volume...'",
         "'synced-42'",
         "--reboot",
         NVME_DISK,
@@ -749,6 +805,7 @@ sh_test(
         "-",
         "180",
         "'BSD root: disk0s2, major'",
+        "'launchctl: Running fsck on the boot volume...'",
         "'persisted-42'",
     ],
     data = [
@@ -965,6 +1022,115 @@ sh_test(
         "//boot/neoboot",
         "//images:session_root",
         "//images:session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# The shells (docs/base/session.md): from zsh, /bin/sh (ash with libedit)
+# reads $ENV, then edits lines in emacs mode (Backspace, Up-arrow history
+# recall), lists its history with fc and edits in vi mode; then bash 3.2
+# as a login shell (/etc/profile sources /etc/bashrc, whose PS1 is the
+# prompt waited for), with arrays and readline's history. Each expected
+# line is output the typed text can't contain: the editing must have
+# happened for it to appear.
+sh_test(
+    name = "sbsa_shells_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'echo echo env-\\$$\\(\\(3+4\\)\\) > /tmp/ndenv; ENV=/tmp/ndenv /bin/sh\\n'",
+        "--send-after 'env-7' 'set -o emacs; PS1=ash\\>\\ \\n'",
+        "--send-after 'ash> ' 'echo x$$((5*51\\b))-ed\\n'",
+        "--send-after 'x25-ed' '{up}\\b\\bup\\n'",
+        "--send-after 'x25-up' 'fc -l\\n'",
+        "--send-after 'x$$((5*5))-up' 'set -o vi; echo vi-$$((1+1))\\n'",
+        "--send-after 'vi-2' 'echo vi-$$((7*61\\b))\\n'",
+        "--send-after 'vi-42' 'exit\\n'",
+        "--send-after 'root@localhost ~ # ' 'bash --version; bash -l\\n'",
+        "--send-after 'localhost:~ root# ' 'a=(x y z); echo bash-$${BASH_VERSION%%.*}-$${#a[@]}-$${a[2]}\\n'",
+        "--send-after 'bash-3-3-z' '{up}\\b\\b\\b1]}x\\b\\n'",
+        "--send-after 'bash-3-3-y' 'exit\\n'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'env-7'",
+        "'x25-ed'",
+        "'x25-up'",
+        "'x$$((5*5))-up'",
+        "'vi-42'",
+        "'GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)'",
+        "'localhost:~ root# '",
+        "'bash-3-3-z'",
+        "'bash-3-3-y'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:session_root",
+        "//images:session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# PAM (docs/base/session.md, "PAM"): login and su authenticate through
+# OpenPAM, its modules dlopened under code-signing enforcement. On
+# //images:pam_session_root (test accounts test, in group admin, and guest,
+# password "neodarwin"): a wrong password is refused; test logs in and su
+# makes it root without a password (root's is empty: pam_unix nullok, gated by
+# pam_group); as root it writes /etc/nologin, which pam_nologin shows and
+# enforces: guest is refused, root still logs in (empty password, no
+# prompt). With /etc/nologin gone, guest logs in, and su refuses it: guest
+# is in neither admin nor wheel.
+sh_test(
+    name = "sbsa_pam_session_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pam_session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pam_session_root_trustcache)",
+        "--until-lines",
+        "--absent 'ndamfi: refused'",
+        "--send-after 'login: ' 'test\\n'",
+        "--send-after 'Password:' 'wrong\\n'",
+        "--send-after 'login: ' 'test\\n'",
+        "--send-after 'Password:' 'neodarwin\\n'",
+        "--send-after 'test@localhost ~ % ' 'echo user-$$(id -un)-$$(id -u)\\n'",
+        "--send-after 'test@localhost ~ % ' 'su - root -c id; echo su-status=$$?\\n'",
+        "--send-after 'test@localhost ~ % ' 'su - root -c \"echo nologin-$$((6*7)) > /etc/nologin\"; exit\\n'",
+        "--send-after 'login: ' 'guest\\n'",
+        "--send-after 'Password:' 'neodarwin\\n'",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'rm /etc/nologin; echo root-$$(id -u); exit\\n'",
+        "--send-after 'login: ' 'guest\\n'",
+        "--send-after 'Password:' 'neodarwin\\n'",
+        "--send-after 'guest@localhost ~ % ' 'su - root -c id; echo su-status=$$?\\n'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'ndamfi: code-signing enforcement on (a static trust cache from the loader)'",
+        "'Login incorrect'",
+        "'user-test-501'",
+        "'uid=0(root)'",
+        "'su-status=0'",
+        # pam_nologin shows /etc/nologin to guest (refused) and root.
+        "'nologin-42'",
+        "'root-0'",
+        "'su: Sorry'",
+        "'su-status=1'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pam_session_root",
+        "//images:pam_session_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )

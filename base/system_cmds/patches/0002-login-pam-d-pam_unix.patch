@@ -1,0 +1,42 @@
+From: NeoDarwin
+Subject: [PATCH] login: PAM policy with pam_unix in place of pam_opendirectory
+
+login's /etc/pam.d/login and login.term authenticate and manage accounts
+through pam_opendirectory, and try pam_krb5, pam_ntlm and pam_mount: all
+need closed frameworks (OpenDirectory, CoreFoundation, Heimdal, GSS, NetFS),
+and OpenPAM fails the whole policy when a module doesn't load. NeoDarwin's
+password module is OpenPAM's pam_unix (crypt(3) against /etc/master.passwd);
+nullok lets root's empty password log in, on a secure terminal only (patch
+0001). pam_launchd, which moves the session into a per-user launchd, is left
+out: NeoDarwin's launchd runs none. pam_uwtmp becomes optional: on a
+read-only root (before launchctl remounts it read-write, or under the test
+PID 1 that runs getty itself) it can't write utmpx, and login's non-PAM
+path ignored that failure too (docs/base/session.md, "PAM").
+
+--- a/login/pam.d/login
++++ b/login/pam.d/login
+@@ -1,11 +1,6 @@
+ # login: auth account password session
+-auth       optional       pam_krb5.so use_kcminit
+-auth       optional       pam_ntlm.so try_first_pass
+-auth       optional       pam_mount.so try_first_pass
+-auth       required       pam_opendirectory.so try_first_pass
++auth       required       pam_unix.so nullok
+ account    required       pam_nologin.so
+-account    required       pam_opendirectory.so
+-password   required       pam_opendirectory.so
+-session    required       pam_launchd.so
+-session    required       pam_uwtmp.so
+-session    optional       pam_mount.so
++account    required       pam_unix.so
++password   required       pam_unix.so
++session    optional       pam_uwtmp.so
+--- a/login/pam.d/login.term
++++ b/login/pam.d/login.term
+@@ -1,4 +1,4 @@
+ # login: account session
+ account    required       pam_nologin.so
+-account    required       pam_opendirectory.so
+-session    required       pam_uwtmp.so
++account    required       pam_unix.so
++session    optional       pam_uwtmp.so

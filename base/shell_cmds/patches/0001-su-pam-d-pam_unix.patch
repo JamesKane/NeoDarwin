@@ -1,0 +1,27 @@
+From: NeoDarwin
+Subject: [PATCH] su: PAM policy with pam_unix in place of pam_opendirectory
+
+su.pam (/etc/pam.d/su) authenticates through pam_opendirectory, which needs
+closed frameworks (OpenDirectory, CoreFoundation); OpenPAM fails the whole
+policy when a module doesn't load. Use OpenPAM's pam_unix instead, with
+nullok: root has an empty password, and pam_group's check (admin or wheel,
+patched in pam_modules to read /etc/group) still decides who may become
+root. The session module, pam_launchd, moves su's process into a per-user
+launchd, which launchd-842 doesn't run on NeoDarwin yet: pam_permit takes
+its place, since a policy without a session chain falls back to "other"'s
+pam_deny (docs/base/session.md, "PAM").
+
+--- a/su/su.pam
++++ b/su/su.pam
+@@ -1,7 +1,7 @@
+ # su: auth account session
+ auth       sufficient     pam_rootok.so 
+-auth       required       pam_opendirectory.so
++auth       required       pam_unix.so nullok
+ account    required       pam_group.so no_warn group=admin,wheel ruser root_only fail_safe
+-account    required       pam_opendirectory.so no_check_shell
+-password   required       pam_opendirectory.so
+-session    required       pam_launchd.so
++account    required       pam_unix.so
++password   required       pam_unix.so
++session    required       pam_permit.so

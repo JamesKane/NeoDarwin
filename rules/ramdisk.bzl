@@ -10,6 +10,10 @@ Mach-O staged in it, except trust_cache_exclude, in NAME.trustcache (a
 version 1 module, which neoboot loads from \\NeoDarwin\\trustcache), with
 NAME.trustcache.txt naming each listed file. The target NAME_trustcache is
 the module alone.
+
+Every file and folder in the volume is root:wheel, except the paths in
+owners, and modes keep their set-user-ID bits (//tools/hfsowners: hdiutil
+records the build user as the owner and drops them).
 """
 
 def _impl(ctx):
@@ -40,11 +44,14 @@ def _impl(ctx):
     args += ["--trust-cache", ctx.executable._trustcache.path, tc.path, manifest.path]
     for path in ctx.attr.trust_cache_exclude:
         args += ["--trust-cache-exclude", path]
+    args += ["--owners", ctx.executable._hfsowners.path]
+    for path, owner in ctx.attr.owners.items():
+        args += ["--owner", path, owner]
     ctx.actions.run(
         executable = ctx.file._script,
         arguments = args,
         inputs = inputs,
-        tools = [ctx.executable._trustcache],
+        tools = [ctx.executable._trustcache, ctx.executable._hfsowners],
         outputs = [out, tc, manifest],
         mnemonic = "HfsRamdisk",
         progress_message = "Building HFS+ ramdisk %{label}",
@@ -70,8 +77,10 @@ _hfs_ramdisk = rule(
         "volume_size": attr.string(doc = "The volume's size (hdiutil's syntax, e.g. 256m); default: just big enough for its files."),
         "journaled": attr.bool(doc = "Journaled HFS+, for a writable root on a disk (rules/disk.bzl)."),
         "trust_cache_exclude": attr.string_list(doc = "Paths (files or directories) whose Mach-Os the trust cache leaves out, e.g. a test binary that must be refused."),
+        "owners": attr.string_dict(doc = "Path -> \"UID:GID\" for a file or folder not owned by root:wheel, e.g. a home directory."),
         "_script": attr.label(default = "//tools/ramdisk:mkhfs.sh", allow_single_file = True),
         "_trustcache": attr.label(default = "//tools/trustcache", executable = True, cfg = "exec"),
+        "_hfsowners": attr.label(default = "//tools/hfsowners", executable = True, cfg = "exec"),
     },
 )
 

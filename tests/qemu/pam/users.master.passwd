@@ -1,0 +1,10 @@
+##
+# Test accounts for //kernel:sbsa_pam_session_test (docs/base/session.md,
+# "PAM"), added to base/etc's master.passwd in //images:pam_session_root
+# only; never in the system's own root. Both have the password "neodarwin"
+# (traditional DES crypt(3), salt "nd": libc's crypt has only DES). test is
+# in group admin (tests/qemu/pam/BUILD.bazel), so su(1) lets it become root;
+# guest isn't.
+##
+test:ndic/XPiorxqM:501:20::0:0:PAM Test User:/Users/test:/bin/zsh
+guest:ndic/XPiorxqM:502:20::0:0:PAM Test Guest:/Users/guest:/bin/zsh

@@ -1,0 +1,59 @@
+From: NeoDarwin
+Subject: [PATCH] mount_hfs: build without IOKit and DiskImages2 (HFS_NO_FRAMEWORKS)
+
+mount_hfs asks IOKit whether the device is a sparse DiskImages2 image (to
+hand HFS the backing store) or writable optical media (to mount it
+read-only). NeoDarwin has no IOKit.framework, and DiskImages2 is closed.
+With HFS_NO_FRAMEWORKS both checks compile out, as optical.c already does
+on iOS; the build leaves optical.c out. Without the switch nothing changes.
+
+Rebase-risk: low (conditions around two self-contained blocks).
+---
+diff --git a/mount_hfs/mount_hfs.c b/mount_hfs/mount_hfs.c
+--- a/mount_hfs/mount_hfs.c
++++ b/mount_hfs/mount_hfs.c
+@@ -51,8 +51,10 @@
+ #include <hfs/hfs_mount.h>
+ #include <hfs/hfs_format.h>
+ 
++#if !HFS_NO_FRAMEWORKS
+ #include <IOKit/IOKitLib.h>
+ #include <DiskImages2/DICommon.h>
++#endif
+ 
+ #include <TargetConditionals.h>
+ 
+@@ -69,7 +71,7 @@
+ 
+ /* Sensible wrappers over the byte-swapping routines */
+ #include "hfs_endian.h"
+-#if TARGET_OS_OSX  
++#if TARGET_OS_OSX && !HFS_NO_FRAMEWORKS
+ #include "optical.h"  //only include optical headers on Macs
+ #endif //osx
+ 
+@@ -725,6 +727,7 @@
+ 		 * diskimage via DI2, we need to detect and issue
+ 		 * HFSIOC_SETBACKINGSTOREINFO.
+ 		 */
++#if !HFS_NO_FRAMEWORKS
+ 		if (dev) {
+ 			char *bname;
+ 			size_t pdevlen = strlen(_PATH_DEV);
+@@ -802,6 +805,7 @@
+ 				}
+ 			}
+ 		}
++#endif /* !HFS_NO_FRAMEWORKS */
+ 	}
+ 
+ #if DEBUG
+@@ -817,7 +821,7 @@
+ 
+ #endif
+ 
+-#if TARGET_OS_OSX
++#if TARGET_OS_OSX && !HFS_NO_FRAMEWORKS
+     /*
+      * We shouldn't really be calling up to other layers, but
+      * an exception was made in this case to fix the situation

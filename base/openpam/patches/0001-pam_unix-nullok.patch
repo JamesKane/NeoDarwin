@@ -1,0 +1,31 @@
+From: NeoDarwin
+Subject: [PATCH] pam_unix: the nullok option
+
+OpenPAM's pam_unix compares crypt(3) of the typed password with pw_passwd,
+so an account with an empty password can never authenticate (crypt never
+returns ""). NeoDarwin's root has an empty password and logs in on the
+console without one (docs/base/session.md, "PAM"). Add FreeBSD pam_unix's
+nullok option: with it, an account without a password authenticates without
+a prompt, unless the application passes PAM_DISALLOW_NULL_AUTHTOK. Without
+it, nothing changes.
+
+--- a/openpam/modules/pam_unix/pam_unix.c
++++ b/openpam/modules/pam_unix/pam_unix.c
+@@ -86,6 +86,17 @@
+ 	if ((pwd = getpwnam(user)) == NULL)
+ 		return (PAM_USER_UNKNOWN);
+ 
++	/*
++	 * nullok, as in FreeBSD's pam_unix(8): an account without a password
++	 * authenticates without a prompt, unless the application passes
++	 * PAM_DISALLOW_NULL_AUTHTOK. Without nullok, the comparison below
++	 * refuses it, whatever is typed.
++	 */
++	if (pwd->pw_passwd[0] == '\0' &&
++	    openpam_get_option(pamh, "nullok") != NULL &&
++	    !(flags & PAM_DISALLOW_NULL_AUTHTOK))
++		return (PAM_SUCCESS);
++
+ 	/* get password */
+ #ifndef OPENPAM
+ 	pam_err = pam_get_item(pamh, PAM_CONV, (const void **)&conv);
