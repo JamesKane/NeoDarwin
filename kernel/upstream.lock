@@ -9,4 +9,5 @@ acpica               20260408                      sha256:ddc5d3e0f54030e2348484
 IOPCIFamily          IOPCIFamily-726.0.5           sha256:671e3692756f337dfa365834def7aaf8855a8db4433b22c22ddb103f141ab6d5
 IOStorageFamily      IOStorageFamily-331           sha256:3b0bfb7a9b0170fb8f8cf4018813eadaa9be4491b3a79e7ac346ee4736fd646d
 AppleFileSystemDriver AppleFileSystemDriver-31     sha256:b5d95d83194b76f197ad8f3dd8768e74adf17b84e02b7cdd55a63a484fd3e0ee
+IONetworkingFamily   IONetworkingFamily-186        sha256:589fda314ede20e7cb4718778e28232d047440b93032411b7548adcbbd8c07c7
 darwin_version       25.0.0

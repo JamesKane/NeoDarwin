@@ -248,6 +248,14 @@ epics:
     depends: [P1-09]
     exit: "a qemu-xhci + usb-kbd keyboard logs in at the console on QEMU virt and sbsa-ref (platform XHCI); on the Q8B, typing at login: on HDMI works"
     doc: docs/kernel/usb-console.md
+  - id: P1-19
+    title: "Bring-up Ethernet (in-kernel IOKit, replaced by P3-08's dexts): IONetworkingFamily, a virtio-net driver, DHCP and a resolver, and the Q8B's TC956x (a port of FreeBSD's tcx)"
+    phase: 1
+    owner: kernel-bridge
+    status: doing
+    depends: [P1-09]
+    exit: "QEMU virt and sbsa-ref take a DHCP lease on virtio-net, resolve a name, and accept ssh from the host; on the Q8B, the TC956x takes a lease and accepts ssh"
+    doc: docs/kernel/network.md
   # ---- Phase 2: Base system, packaging, updates ----
   - id: P2-01
     title: "ndpkg format, manifest schema, nd_package rule, ndsign; ndsign trust-cache load grants against the package key chain (from P1-15: the verifier behind ndamfi's nd_tc_set_grant_verifier)"

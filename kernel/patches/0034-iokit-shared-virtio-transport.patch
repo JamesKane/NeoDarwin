@@ -1,0 +1,30 @@
+From: NeoDarwin
+Subject: [PATCH] iokit: share the virtio transport between NeoDarwin's virtio drivers
+
+P1-19 adds a second virtio driver, NeoDarwinVirtioNet, next to P1-10's
+NeoDarwinVirtioBlock. What both need of the modern PCI transport
+(virtio 1.2 §4.1.4: the vendor capabilities, reset, status, feature
+negotiation, queue set-up, MSI-X vectors) and of split virtqueues (§2.7)
+moves out of the block driver into kernel/neodarwin/virtio, overlaid at
+iokit/ndvirtio: nd_virtio.h (the layouts) and NeoDarwinVirtioPCI.h (the
+transport and the ring, header-only). The block device's own layouts stay
+in kernel/neodarwin/storage (nd_virtio_blk.h). This patch gives the block
+driver the new directory's search path (docs/kernel/storage.md,
+docs/kernel/network.md).
+
+Rebase-risk: low (an appended make variable; applies after 0033).
+---
+--- a/iokit/conf/Makefile.template
++++ b/iokit/conf/Makefile.template
+@@ -120,6 +120,11 @@ NeoDarwinVirtioBlock.cpo_CFLAGS_ADD += -I$(ND_STORAGE)
+ NeoDarwinVirtioBlock.cpo_CFLAGS_ADD += -I$(ND_STORAGE) -I$(ND_STORAGE)/include -I$(ND_PCI) -I$(ND_IOPCI) \
+ 	-I$(ND_PCI)/compat -I$(SRCROOT)/libkern/ndpthread/compat -Wno-deprecated-declarations
+ 
++# The virtio transport NeoDarwin's virtio drivers share (patch 0034):
++# kernel/neodarwin/virtio, overlaid at iokit/ndvirtio, header-only.
++ND_VIRTIO = $(SRCROOT)/iokit/ndvirtio
++NeoDarwinVirtioBlock.cpo_CFLAGS_ADD += -I$(ND_VIRTIO)
++
+ # NeoDarwin's NVMe driver (patch 0029): the controller on an IOPCIDevice and
+ # its namespaces' IOBlockStorageDevices, with the same headers.
+ $(foreach o,NeoDarwinNVMeController.cpo NeoDarwinNVMeNamespace.cpo,$(eval $(o)_CFLAGS_ADD += -I$(ND_STORAGE) \

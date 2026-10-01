@@ -1,0 +1,104 @@
+From: NeoDarwin
+Subject: [PATCH] iokit: build IONetworkingFamily
+
+P1-19 puts the bring-up Ethernet drivers under Apple's open
+IONetworkingFamily (IONetworkingFamily-186, the macOS 26.0 release, APSL;
+overlaid at iokit/ndnet/IONetworkingFamily, its headers at
+iokit/ndnet/include/IOKit/network): IONetworkController and
+IOEthernetController (a driver's controller), IONetworkInterface and
+IOEthernetInterface (its BSD interface, through ifnet_allocate_extended),
+IONetworkStack (which names interfaces and attaches them to BSD), the
+output queues (IOOutputQueue, IOBasicOutputQueue, IOGatedOutputQueue),
+IOPacketQueue, IOMbufMemoryCursor, IONetworkData and IONetworkMedium,
+IONetworkUserClient and IOKernelDebugger. Like the rest of the platform
+they are compiled into the kernel, since kcgen links no kexts until M5
+(docs/kernel/network.md).
+
+This patch lists the kext's twelve sources, all of which build for arm64
+in the kernel, with their search paths: the family's public headers, its
+private ones beside the sources, and the compat TargetConditionals.h of
+patch 0010. They are compiled as the kext's Xcode project compiles them,
+against the kext's view of the kernel (ND_KEXT_VIEW): with __PRIVATE_SPI__
+and without XNU_KERNEL_PRIVATE, under which <sys/mbuf.h> and <net/dlil.h>
+expose BSD internals that don't compile as C++ outside bsd (mbuf_t is
+BSD's struct mbuf only under BSD_BUILD), and without IOKITSTATS, which
+changes no layout. <net/classq/classq.h>, which <net/dlil.h> includes and
+Kernel.framework's PrivateHeaders carry, is found in bsd/ after every
+other directory. Of the Info.plist's personalities, IONetworkStack becomes a
+built-in one (on IOResources once IOBSD is published). The "Kernel
+Debugging Driver" personality (IOKDP on an IOKernelDebugger) is left out:
+no driver attaches a debugger client, so there is no KDP over Ethernet.
+
+Rebase-risk: low (appended entries; applies after 0034).
+---
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -82,6 +82,12 @@ const char * gIOKernelConfigTables =
+     "     'IONameMatch'     = ('PNP0D10', 'PNP0D15', 'PNP0CA1');"
+     "   },"
+     "   {"
++    "     'IOClass'         = IONetworkStack;"
++    "     'IOProviderClass' = IOResources;"
++    "     'IOMatchCategory' = IONetworkStack;"
++    "     'IOResourceMatch' = IOBSD;"
++    "   },"
++    "   {"
+     "     'IOClass'         = IOBlockStorageDriver;"
+     "     'IOProviderClass' = IOBlockStorageDevice;"
+     "     'IOPropertyMatch' = { 'device-type' = 'Generic'; };"
+--- a/iokit/conf/Makefile.template
++++ b/iokit/conf/Makefile.template
+@@ -137,6 +137,29 @@ NeoDarwinXHCI.cpo_CFLAGS_ADD += -I$(SRCROOT)/iokit/ndu
+ NeoDarwinXHCI.cpo_CFLAGS_ADD += -I$(SRCROOT)/iokit/ndusb -I$(ND_STORAGE) -I$(ND_PCI) -I$(ND_IOPCI) -I$(ND_PCI)/compat \
+ 	-I$(SRCROOT)/libkern/ndpthread/compat -I$(ND_ACPI)/include -Wno-deprecated-declarations
+ 
++# Networking (patch 0035). IONetworkingFamily is kext code: its headers are
++# at ndnet/include/IOKit/network, as in the SDK, and its private ones beside
++# its sources; it needs the compat TargetConditionals.h (patch 0010). It is
++# built as its Xcode project builds the kext, against the kext's view of
++# the kernel (ND_KEXT_VIEW): __PRIVATE_SPI__ (Apple's own kexts' SPI in
++# the family's headers), and none of xnu's internals. Under
++# XNU_KERNEL_PRIVATE, <sys/mbuf.h> and <net/dlil.h> bring in BSD's
++# internals, which don't compile as C++ in iokit (mbuf_t is BSD's struct
++# mbuf only under BSD_BUILD). IOKITSTATS changes no layout, only friends
++# and private headers. Kernel.framework's PrivateHeaders have
++# <net/classq/classq.h>, which <net/dlil.h> includes and xnu's EXPORT_HDRS
++# lack: it comes from bsd/ after every other directory. -w: upstream
++# warnings are not NeoDarwin's to fix here. Everything that includes the
++# family's headers is built the same way, so its classes are laid out alike.
++ND_NET = $(SRCROOT)/iokit/ndnet
++ND_IONET = $(ND_NET)/IONetworkingFamily
++ND_KEXT_VIEW = -D__PRIVATE_SPI__ -UXNU_KERNEL_PRIVATE -UIOKITSTATS -idirafter $(SRCROOT)/bsd
++ND_IONET_OBJS = IONetworkController.cpo IOEthernetController.cpo IONetworkInterface.cpo IOEthernetInterface.cpo \
++	IONetworkStack.cpo IONetworkData.cpo IONetworkMedium.cpo IONetworkUserClient.cpo IOKernelDebugger.cpo \
++	IOOutputQueue.cpo IOPacketQueue.cpo IOMbufMemoryCursor.cpo
++$(foreach o,$(ND_IONET_OBJS),$(eval $(o)_CFLAGS_ADD += $(ND_KEXT_VIEW) -I$(ND_NET)/include -I$(ND_IONET) \
++	-I$(SRCROOT)/libkern/ndpthread/compat -w))
++
+ #
+ # Diagnostic opt-outs.  We need to make this list empty.
+ #
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -221,5 +221,21 @@ iokit/ndusb/NeoDarwinXHCI.cpp	optional iokitcpp
+ iokit/ndstorage/NeoDarwinNVMeNamespace.cpp	optional iokitcpp
+ iokit/ndusb/NeoDarwinXHCI.cpp	optional iokitcpp
+ 
++# NeoDarwin networking (kernel/neodarwin/network, overlaid at iokit/ndnet):
++# Apple's IONetworkingFamily-186 (@apple_ionetworkingfamily, APSL, at
++# iokit/ndnet/IONetworkingFamily), every source of the kext
++iokit/ndnet/IONetworkingFamily/IONetworkController.cpp	optional iokitcpp
++iokit/ndnet/IONetworkingFamily/IOEthernetController.cpp	optional iokitcpp
++iokit/ndnet/IONetworkingFamily/IONetworkInterface.cpp	optional iokitcpp
++iokit/ndnet/IONetworkingFamily/IOEthernetInterface.cpp	optional iokitcpp
++iokit/ndnet/IONetworkingFamily/IONetworkStack.cpp	optional iokitcpp
++iokit/ndnet/IONetworkingFamily/IONetworkData.cpp	optional iokitcpp
++iokit/ndnet/IONetworkingFamily/IONetworkMedium.cpp	optional iokitcpp
++iokit/ndnet/IONetworkingFamily/IONetworkUserClient.cpp	optional iokitcpp
++iokit/ndnet/IONetworkingFamily/IOKernelDebugger.cpp	optional iokitcpp
++iokit/ndnet/IONetworkingFamily/IOOutputQueue.cpp	optional iokitcpp
++iokit/ndnet/IONetworkingFamily/IOPacketQueue.cpp	optional iokitcpp
++iokit/ndnet/IONetworkingFamily/IOMbufMemoryCursor.cpp	optional iokitcpp
++
+ # tightbeamc generated implementation files
+ ./Exclaves/IOService.tightbeam.c		optional iokitcpp config_exclaves

@@ -367,7 +367,7 @@ macOS hasn't worked this way since launchd 2.0 (OS X 10.10). There, one PID 1 se
 
 ### After P1-08: loopback and sshd
 
-NeoDarwin configures the loopback interface at boot and runs OpenSSH's sshd under launchd, as macOS does. Everything is tested over 127.0.0.1 inside QEMU: there is no NIC driver, DHCP or name service yet. Those are later items in `roadmap/backlog.yaml`: Ethernet dexts in Phase 3, P4-24 (the rest of the networking userland, `resolv.conf`, pf) and P4-25 (sshd on the board with a key, scp and sftp). This section is the loopback part of both, and sets no status.
+NeoDarwin configures the loopback interface at boot and runs OpenSSH's sshd under launchd, as macOS does. Everything here is tested over 127.0.0.1 inside QEMU. Since P1-19 checkpoint 1 there is also a NIC (virtio-net, configured by hand) and the host logs in over it (`docs/kernel/network.md`); there is no DHCP or name service yet. Those are later items in `roadmap/backlog.yaml`: Ethernet dexts in Phase 3, P4-24 (the rest of the networking userland, `resolv.conf`, pf) and P4-25 (sshd on the board with a key, scp and sftp). This section is the loopback part of both, and sets no status.
 
 | Piece | From | Installed |
 |---|---|---|

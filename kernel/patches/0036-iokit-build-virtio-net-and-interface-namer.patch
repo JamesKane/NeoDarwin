@@ -1,0 +1,76 @@
+From: NeoDarwin
+Subject: [PATCH] iokit: build NeoDarwin's virtio-net driver and interface namer
+
+P1-19 checkpoint 1's Ethernet: NeoDarwinVirtioNet (kernel/neodarwin/network,
+overlaid at iokit/ndnet), an IOEthernetController for virtio 1.x network
+devices on PCI through the modern interface, with MSI-X or INTx and DMA
+that honours the host bridge's dma-coherent and dma-address-bits; and
+NeoDarwinInterfaceNamer, which names each network interface IONetworkStack
+sees published with the lowest free unit (en0, en1, ...), as configd's
+InterfaceNamer does on macOS and IORegisterNetworkInterface does in the
+kernel for a network root (docs/kernel/network.md). Both are bring-up
+code, replaced by P3-08's network dexts and a user-space namer.
+
+This patch lists them, gives them the network, virtio, PCI and storage
+(the DMA policy) search paths, and adds their personalities: the driver
+on IOPCIMatch 1af4:1041 (modern) and 1af4:1000 (transitional, whose
+modern capabilities it uses), the namer on IONetworkStack in a match
+category of its own.
+
+Rebase-risk: low (appended entries; applies after 0035).
+---
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -72,6 +72,11 @@ const char * gIOKernelConfigTables =
+     "     'IOPCIMatch'      = '0x10421af4 0x10011af4';"
+     "   },"
+     "   {"
++    "     'IOClass'         = NeoDarwinVirtioNet;"
++    "     'IOProviderClass' = IOPCIDevice;"
++    "     'IOPCIMatch'      = '0x10411af4 0x10001af4';"
++    "   },"
++    "   {"
+     "     'IOClass'         = NeoDarwinXHCI;"
+     "     'IOProviderClass' = IOPCIDevice;"
+     "     'IOPCIClassMatch' = '0x0c033000&0xffffff00';"
+@@ -88,6 +93,11 @@ const char * gIOKernelConfigTables =
+     "     'IOResourceMatch' = IOBSD;"
+     "   },"
+     "   {"
++    "     'IOClass'         = NeoDarwinInterfaceNamer;"
++    "     'IOProviderClass' = IONetworkStack;"
++    "     'IOMatchCategory' = NeoDarwinInterfaceNamer;"
++    "   },"
++    "   {"
+     "     'IOClass'         = IOBlockStorageDriver;"
+     "     'IOProviderClass' = IOBlockStorageDevice;"
+     "     'IOPropertyMatch' = { 'device-type' = 'Generic'; };"
+--- a/iokit/conf/Makefile.template
++++ b/iokit/conf/Makefile.template
+@@ -160,6 +160,15 @@ $(foreach o,$(ND_IONET_OBJS),$(eval $(o)_CFLAGS_ADD +=
+ $(foreach o,$(ND_IONET_OBJS),$(eval $(o)_CFLAGS_ADD += $(ND_KEXT_VIEW) -I$(ND_NET)/include -I$(ND_IONET) \
+ 	-I$(SRCROOT)/libkern/ndpthread/compat -w))
+ 
++# NeoDarwin's virtio-net driver and interface namer (patch 0036): an
++# IOEthernetController on an IOPCIDevice, with the network, virtio, PCI and
++# storage (the DMA policy) headers; the namer sees IONetworkStack's private
++# header. Both see the kernel as the family does (ND_KEXT_VIEW, patch
++# 0035). IOPCIFamily's classes are marked deprecated for kexts.
++$(foreach o,NeoDarwinVirtioNet.cpo NeoDarwinInterfaceNamer.cpo,$(eval $(o)_CFLAGS_ADD += $(ND_KEXT_VIEW) -I$(ND_NET) \
++	-I$(ND_NET)/include -I$(ND_IONET) -I$(ND_VIRTIO) -I$(ND_STORAGE) -I$(ND_PCI) -I$(ND_IOPCI) -I$(ND_PCI)/compat \
++	-I$(SRCROOT)/libkern/ndpthread/compat -Wno-deprecated-declarations))
++
+ #
+ # Diagnostic opt-outs.  We need to make this list empty.
+ #
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -236,6 +236,8 @@ iokit/ndnet/IONetworkingFamily/IOMbufMemoryCursor.cpp	
+ iokit/ndnet/IONetworkingFamily/IOOutputQueue.cpp	optional iokitcpp
+ iokit/ndnet/IONetworkingFamily/IOPacketQueue.cpp	optional iokitcpp
+ iokit/ndnet/IONetworkingFamily/IOMbufMemoryCursor.cpp	optional iokitcpp
++iokit/ndnet/NeoDarwinVirtioNet.cpp	optional iokitcpp
++iokit/ndnet/NeoDarwinInterfaceNamer.cpp	optional iokitcpp
+ 
+ # tightbeamc generated implementation files
+ ./Exclaves/IOService.tightbeam.c		optional iokitcpp config_exclaves

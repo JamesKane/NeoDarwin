@@ -12,7 +12,7 @@
 | `@apple_iostoragefamily` (`MODULE.bazel`) | IOStorageFamily **331**, from the macOS 26.0 release set (distribution-macOS `macos-260`), pinned by SHA-256 (`kernel/upstream.lock`). APSL 2.0 (`THIRD_PARTY_NOTICES.md`). Eleven sources, and the headers overlaid at `iokit/ndstorage/include/IOKit/storage`, where kexts find them in the SDK |
 | `@apple_filesystemdriver` | AppleFileSystemDriver **31**, same release set, APSL 2.0: turns `boot-uuid` into the `boot-uuid-media` resource `IOFindBSDRoot` waits for |
 | `kernel/neodarwin/storage/NeoDarwinVirtioBlock.cpp` | the virtio-blk driver, an `IOBlockStorageDevice` |
-| `kernel/neodarwin/storage/nd_virtio.h` | virtio 1.x PCI transport, split virtqueue and block device layouts |
+| `kernel/neodarwin/storage/nd_virtio_blk.h` | the block device's virtio layouts; the PCI transport and split virtqueue are shared with virtio-net since P1-19 (`kernel/neodarwin/virtio`: `nd_virtio.h`, `NeoDarwinVirtioPCI.h`, patch 0034; `network.md`) |
 | `kernel/neodarwin/storage/NeoDarwinNVMeController.cpp`, `NeoDarwinNVMeNamespace.cpp`, `NeoDarwinNVMe.h` | the NVMe driver: the controller (an `IOService` on the `IOPCIDevice`) and one `IOBlockStorageDevice` per namespace |
 | `kernel/neodarwin/storage/nd_nvme.h` | NVMe 1.4 registers, queue entries, opcodes and Identify offsets |
 | `kernel/neodarwin/storage/NeoDarwinStorageDMA.h` | the DMA policy PCI storage drivers share: `dma-coherent`, `dma-address-bits`, queue memory, `IODMACommand` |

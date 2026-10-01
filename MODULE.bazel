@@ -454,6 +454,31 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/AppleFileSystemDriver/archive/refs/tags/AppleFileSystemDriver-31.tar.gz"],
 )
 
+# Apple's IONetworkingFamily (IONetworkingFamily-186, the macOS 26.0 release;
+# APSL 2.0): IONetworkController, IOEthernetController, the interfaces that
+# attach to BSD (ifnet_allocate_extended), IONetworkStack, which names them,
+# the output queues and the mbuf cursors, built into the SBSA kernel
+# (kernel/neodarwin/network, docs/kernel/network.md). Every source builds;
+# the headers are overlaid at iokit/ndnet/include/IOKit/network, where kext
+# code finds them in the SDK, and also beside the sources, which include the
+# private ones by name.
+http_archive(
+    name = "apple_ionetworkingfamily",
+    build_file_content = """filegroup(
+    name = "kernel_srcs",
+    srcs = glob(["*.cpp", "*.h"]),
+    visibility = ["//visibility:public"],
+)
+filegroup(
+    name = "headers",
+    srcs = glob(["*.h"]),
+    visibility = ["//visibility:public"],
+)""",
+    sha256 = "589fda314ede20e7cb4718778e28232d047440b93032411b7548adcbbd8c07c7",
+    strip_prefix = "IONetworkingFamily-IONetworkingFamily-186",
+    urls = ["https://github.com/apple-oss-distributions/IONetworkingFamily/archive/refs/tags/IONetworkingFamily-186.tar.gz"],
+)
+
 # xnu's corecrypto subset and headers, for ndcrypto's host tests: the same
 # archive as apple_xnu (the repository cache serves it once), with its own
 # BUILD file so the kernel's inputs are untouched.

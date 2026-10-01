@@ -35,6 +35,9 @@
 // IODMACommand per slot, which bounces what lies above that limit and does
 // the cache maintenance when the device isn't dma-coherent.
 //
+// The transport and the split ring are NeoDarwinVirtioPCI.h's
+// (kernel/neodarwin/virtio), shared with NeoDarwinVirtioNet.
+//
 // Commands: reads (VIRTIO_BLK_T_IN), writes (T_OUT) and cache flushes
 // (T_FLUSH, for doSynchronize, when VIRTIO_BLK_F_FLUSH is offered). Read-only
 // from VIRTIO_BLK_F_RO; the block size from VIRTIO_BLK_F_BLK_SIZE (sectors
@@ -55,8 +58,9 @@
 #include <kern/queue.h>
 #include <pexpert/pexpert.h>
 
-#include "nd_virtio.h"
+#include "nd_virtio_blk.h"
 #include "NeoDarwinStorageDMA.h"
+#include "NeoDarwinVirtioPCI.h"
 
 class NeoDarwinVirtioBlock : public IOBlockStorageDevice
 {
@@ -111,23 +115,10 @@ private:
 		IOStorageCompletion completion;
 	};
 
-	// MMIO in the mapped BARs.
-	uint8_t rd8(volatile uint8_t *base, uint32_t off) { return *(volatile uint8_t *)(base + off); }
-	uint16_t rd16(volatile uint8_t *base, uint32_t off) { return *(volatile uint16_t *)(base + off); }
-	uint32_t rd32(volatile uint8_t *base, uint32_t off) { return *(volatile uint32_t *)(base + off); }
-	void wr8(volatile uint8_t *base, uint32_t off, uint8_t v) { *(volatile uint8_t *)(base + off) = v; }
-	void wr16(volatile uint8_t *base, uint32_t off, uint16_t v) { *(volatile uint16_t *)(base + off) = v; }
-	void wr32(volatile uint8_t *base, uint32_t off, uint32_t v) { *(volatile uint32_t *)(base + off) = v; }
-	void wr64(volatile uint8_t *base, uint32_t off, uint64_t v)
-	{
-		wr32(base, off, (uint32_t)v);
-		wr32(base, off + 4, (uint32_t)(v >> 32));
-	}
+	// The device configuration (virtio_blk_config).
+	uint8_t cfg8(uint32_t off) { return NDVirtioPCI::rd8(transport.config, off); }
+	uint32_t cfg32(uint32_t off) { return NDVirtioPCI::rd32(transport.config, off); }
 
-	bool findCapabilities();
-	volatile uint8_t *mapCapability(uint8_t bar, uint32_t offset, uint32_t length);
-	bool reset();
-	bool negotiate();
 	void readConfiguration();
 	bool setUpQueue();
 	bool setUpInterrupts();
@@ -147,10 +138,8 @@ private:
 	void reap();
 
 	IOPCIDevice *pci = NULL;
-	char where[16] = {};
-	IOMemoryMap *bars[6] = {};
-	volatile uint8_t *common = NULL, *notify = NULL, *isr = NULL, *config = NULL;
-	uint32_t notifyMultiplier = 0;
+	NDVirtioPCI transport;
+	const char *where = transport.where;
 
 	uint64_t features = 0;
 	uint64_t capacity = 0;          // 512-byte sectors
@@ -160,16 +149,13 @@ private:
 	bool readOnly = false;
 
 	NDStorageDMA dmaPolicy;
-	IOBufferMemoryDescriptor *ring = NULL;      // descriptors, available ring | used ring
+	NDVirtqueue queue;                          // descriptors, available ring | used ring
 	IOBufferMemoryDescriptor *headers = NULL;   // per slot: header, status
 	struct nd_virtq_desc *desc = NULL;
-	volatile uint8_t *avail = NULL, *used = NULL;
 	uint8_t *headerBytes = NULL;
 	uint64_t headersPA = 0;
 	uint32_t queueSize = 0;
 	uint32_t slotCount = 0;
-	uint16_t availIdx = 0, usedIdx = 0;
-	volatile uint8_t *queueNotify = NULL;
 	Slot slots[kMaxSlots] = {};
 	queue_head_t pending;
 	uint32_t pendingCount = 0;
@@ -189,116 +175,7 @@ OSDefineMetaClassAndStructors(NeoDarwinVirtioBlock, IOBlockStorageDevice);
 void
 NeoDarwinVirtioBlock::fail(const char *why)
 {
-	IOLog("NeoDarwinVirtioBlock: %s: %s\n", where, why);
-	if (common != NULL) {
-		wr8(common, kNDVirtioDeviceStatus, rd8(common, kNDVirtioDeviceStatus) | kNDVirtioStatusFailed);
-	}
-}
-
-volatile uint8_t *
-NeoDarwinVirtioBlock::mapCapability(uint8_t bar, uint32_t offset, uint32_t length)
-{
-	if (bar > 5) {
-		return NULL;
-	}
-	if (bars[bar] == NULL) {
-		bars[bar] = pci->mapDeviceMemoryWithRegister(kIOPCIConfigBaseAddress0 + 4 * bar);
-		if (bars[bar] == NULL) {
-			return NULL;
-		}
-	}
-	if ((uint64_t)offset + length > bars[bar]->getLength()) {
-		return NULL;
-	}
-	return (volatile uint8_t *)bars[bar]->getVirtualAddress() + offset;
-}
-
-// The vendor-specific capabilities (ID 0x09) of the modern interface. The
-// first capability of each type the driver can use is the one to use.
-bool
-NeoDarwinVirtioBlock::findCapabilities()
-{
-	IOByteCount found = 0;
-	for (int n = 0; n < 32; n++) {
-		// From the capability at `found` on; 0 when there are no more.
-		pci->extendedFindPCICapability(kIOPCIVendorSpecificCapability, &found);
-		if (found == 0) {
-			break;
-		}
-		uint8_t offset = (uint8_t)found;
-		uint8_t type = pci->configRead8(offset + kNDVirtioCapCfgType);
-		uint8_t bar = pci->configRead8(offset + kNDVirtioCapBar);
-		uint32_t off = pci->configRead32(offset + kNDVirtioCapOffset);
-		uint32_t len = pci->configRead32(offset + kNDVirtioCapLength);
-		switch (type) {
-		case kNDVirtioCapCommon:
-			if (common == NULL && len >= kNDVirtioCommonMinLength) {
-				common = mapCapability(bar, off, len);
-			}
-			break;
-		case kNDVirtioCapNotify:
-			if (notify == NULL && len >= 2) {
-				notify = mapCapability(bar, off, len);
-				notifyMultiplier = pci->configRead32(offset + kNDVirtioCapNotifyMultiplier);
-			}
-			break;
-		case kNDVirtioCapISR:
-			if (isr == NULL && len >= 1) {
-				isr = mapCapability(bar, off, len);
-			}
-			break;
-		case kNDVirtioCapDevice:
-			if (config == NULL && len >= 24) {
-				config = mapCapability(bar, off, len);
-			}
-			break;
-		default:
-			break;
-		}
-	}
-	return common != NULL && notify != NULL && isr != NULL && config != NULL;
-}
-
-bool
-NeoDarwinVirtioBlock::reset()
-{
-	wr8(common, kNDVirtioDeviceStatus, 0);
-	for (int i = 0; i < 1000; i++) {
-		if (rd8(common, kNDVirtioDeviceStatus) == 0) {
-			return true;
-		}
-		IOSleep(1);
-	}
-	return false;
-}
-
-bool
-NeoDarwinVirtioBlock::negotiate()
-{
-	wr32(common, kNDVirtioDeviceFeatureSelect, 0);
-	uint64_t offered = rd32(common, kNDVirtioDeviceFeature);
-	wr32(common, kNDVirtioDeviceFeatureSelect, 1);
-	offered |= (uint64_t)rd32(common, kNDVirtioDeviceFeature) << 32;
-	if ((offered & kNDVirtioFVersion1) == 0) {
-		fail("the device offers no VIRTIO_F_VERSION_1 (legacy only); not supported");
-		return false;
-	}
-	uint64_t wanted = kNDVirtioFVersion1 | kNDVirtioBlkFSizeMax | kNDVirtioBlkFSegMax | kNDVirtioBlkFRO |
-	    kNDVirtioBlkFBlkSize | kNDVirtioBlkFFlush | kNDVirtioBlkFConfigWCE |
-	    // The device addresses memory through the platform's translation,
-	    // which here is none: device addresses are physical ones.
-	    kNDVirtioFAccessPlatform | kNDVirtioFOrderPlatform;
-	features = offered & wanted;
-	wr32(common, kNDVirtioDriverFeatureSelect, 0);
-	wr32(common, kNDVirtioDriverFeature, (uint32_t)features);
-	wr32(common, kNDVirtioDriverFeatureSelect, 1);
-	wr32(common, kNDVirtioDriverFeature, (uint32_t)(features >> 32));
-	wr8(common, kNDVirtioDeviceStatus, rd8(common, kNDVirtioDeviceStatus) | kNDVirtioStatusFeaturesOK);
-	if ((rd8(common, kNDVirtioDeviceStatus) & kNDVirtioStatusFeaturesOK) == 0) {
-		fail("the device did not accept the features (FEATURES_OK)");
-		return false;
-	}
-	return true;
+	transport.fail(why);
 }
 
 // The device configuration, read until the generation counter is stable.
@@ -306,12 +183,12 @@ void
 NeoDarwinVirtioBlock::readConfiguration()
 {
 	for (int tries = 0; tries < 16; tries++) {
-		uint8_t generation = rd8(common, kNDVirtioConfigGeneration);
-		capacity = (uint64_t)rd32(config, kNDVirtioBlkCapacity) | (uint64_t)rd32(config, kNDVirtioBlkCapacity + 4) << 32;
-		sizeMax = (features & kNDVirtioBlkFSizeMax) ? rd32(config, kNDVirtioBlkSizeMax) : 0;
-		uint32_t segMax = (features & kNDVirtioBlkFSegMax) ? rd32(config, kNDVirtioBlkSegMax) : kMaxSegments;
-		uint32_t size = (features & kNDVirtioBlkFBlkSize) ? rd32(config, kNDVirtioBlkBlkSize) : kNDVirtioBlkSectorSize;
-		if (rd8(common, kNDVirtioConfigGeneration) != generation) {
+		uint8_t generation = transport.generation();
+		capacity = (uint64_t)cfg32(kNDVirtioBlkCapacity) | (uint64_t)cfg32(kNDVirtioBlkCapacity + 4) << 32;
+		sizeMax = (features & kNDVirtioBlkFSizeMax) ? cfg32(kNDVirtioBlkSizeMax) : 0;
+		uint32_t segMax = (features & kNDVirtioBlkFSegMax) ? cfg32(kNDVirtioBlkSegMax) : kMaxSegments;
+		uint32_t size = (features & kNDVirtioBlkFBlkSize) ? cfg32(kNDVirtioBlkBlkSize) : kNDVirtioBlkSectorSize;
+		if (transport.generation() != generation) {
 			continue;
 		}
 		segments = segMax == 0 ? 1 : (segMax < kMaxSegments ? segMax : kMaxSegments);
@@ -325,34 +202,19 @@ NeoDarwinVirtioBlock::readConfiguration()
 bool
 NeoDarwinVirtioBlock::setUpQueue()
 {
-	wr16(common, kNDVirtioQueueSelect, 0);
-	uint32_t max = rd16(common, kNDVirtioQueueSize);
-	if (max < kChain) {
-		fail("the request queue is shorter than one request's chain");
+	if (!queue.setUp(transport, 0, dmaPolicy, kMaxQueue, kChain)) {
 		return false;
 	}
-	queueSize = max < kMaxQueue ? max : kMaxQueue;
+	queueSize = queue.size;
 	slotCount = queueSize / kChain < kMaxSlots ? queueSize / kChain : kMaxSlots;
-	wr16(common, kNDVirtioQueueSize, (uint16_t)queueSize);
-
-	// Descriptors (16 bytes each) and the available ring on the first
-	// pages; the used ring, which the device writes, on its own page.
-	size_t driverBytes = 16 * queueSize + kNDVirtqRingEntries + 2 * queueSize + 2;
-	size_t usedOffset = (driverBytes + PAGE_SIZE - 1) & ~(size_t)(PAGE_SIZE - 1);
-	size_t usedBytes = kNDVirtqRingEntries + kNDVirtqUsedElemSize * queueSize + 2;
-	ring = dmaPolicy.allocate(usedOffset + ((usedBytes + PAGE_SIZE - 1) & ~(size_t)(PAGE_SIZE - 1)));
 	headers = dmaPolicy.allocate(kHeaderStride * kMaxSlots);
-	if (ring == NULL || headers == NULL) {
+	if (headers == NULL) {
 		fail("no memory for the request queue");
 		return false;
 	}
-	uint8_t *base = (uint8_t *)ring->getBytesNoCopy();
-	desc = (struct nd_virtq_desc *)base;
-	avail = base + 16 * queueSize;
-	used = base + usedOffset;
+	desc = queue.desc;
 	headerBytes = (uint8_t *)headers->getBytesNoCopy();
 	headersPA = NDStorageDMA::physical(headers);
-	uint64_t ringPA = NDStorageDMA::physical(ring);
 
 	// Each slot's chain: header -> data... -> status. The links are fixed;
 	// a request marks where its data ends (post()).
@@ -369,13 +231,7 @@ NeoDarwinVirtioBlock::setUpQueue()
 			return false;
 		}
 	}
-	dmaPolicy.toDevice(base, driverBytes);
-
-	wr64(common, kNDVirtioQueueDesc, ringPA);
-	wr64(common, kNDVirtioQueueDriver, ringPA + 16 * queueSize);
-	wr64(common, kNDVirtioQueueDevice, ringPA + usedOffset);
-	uint32_t notifyOff = rd16(common, kNDVirtioQueueNotifyOff);
-	queueNotify = notify + notifyOff * notifyMultiplier;
+	queue.flushDescriptors(0, queueSize);
 	return true;
 }
 
@@ -384,11 +240,7 @@ NeoDarwinVirtioBlock::setUpQueue()
 bool
 NeoDarwinVirtioBlock::setUpInterrupts()
 {
-	IOReturn ret = pci->configureInterrupts(kIOInterruptTypePCIMessagedX, 1, 2, 0);
-	int type = 0;
-	if (ret == kIOReturnSuccess && pci->getInterruptType(0, &type) == kIOReturnSuccess && (type & kIOInterruptTypePCIMessagedX) != 0) {
-		vectors = (pci->getInterruptType(1, &type) == kIOReturnSuccess && (type & kIOInterruptTypePCIMessagedX) != 0) ? 2 : 1;
-	}
+	vectors = transport.requestMSIX(2);
 	if (vectors != 0) {
 		int queueVector = vectors == 2 ? 1 : 0;
 		queueSource = IOInterruptEventSource::interruptEventSource(this, &NeoDarwinVirtioBlock::queueInterrupt, pci, queueVector);
@@ -413,15 +265,7 @@ NeoDarwinVirtioBlock::setUpInterrupts()
 	// With MSI-X on (registering the source enabled it), the vectors.
 	uint16_t configVector = vectors == 2 ? 0 : (vectors == 1 ? 0 : kNDVirtioNoVector);
 	uint16_t queueVector = vectors == 2 ? 1 : (vectors == 1 ? 0 : kNDVirtioNoVector);
-	wr16(common, kNDVirtioConfigMSIXVector, configVector);
-	wr16(common, kNDVirtioQueueSelect, 0);
-	wr16(common, kNDVirtioQueueMSIXVector, queueVector);
-	if (vectors != 0 && (rd16(common, kNDVirtioConfigMSIXVector) != configVector ||
-	    rd16(common, kNDVirtioQueueMSIXVector) != queueVector)) {
-		fail("the device refused its MSI-X vectors");
-		return false;
-	}
-	return true;
+	return transport.setConfigVector(configVector) && transport.setQueueVector(0, queueVector);
 }
 
 bool
@@ -431,7 +275,6 @@ NeoDarwinVirtioBlock::start(IOService *provider)
 	if (pci == NULL || !super::start(provider)) {
 		return false;
 	}
-	snprintf(where, sizeof(where), "%02x:%02x.%x", pci->getBusNumber(), pci->getDeviceNumber(), pci->getFunctionNumber());
 	uint16_t deviceID = pci->configRead16(kIOPCIConfigDeviceID);
 	queue_init(&pending);
 	dmaPolicy = NDStorageDMA::forDevice(pci);
@@ -442,30 +285,20 @@ NeoDarwinVirtioBlock::start(IOService *provider)
 		fail("no work loop");
 		return false;
 	}
-	pci->setMemoryEnable(true);
-	pci->setBusLeadEnable(true);
-	if (!findCapabilities()) {
-		IOLog("NeoDarwinVirtioBlock: %s: 1af4:%04x has no modern (virtio 1.x) PCI capabilities; not supported\n", where, deviceID);
+	if (!transport.attach(pci, "NeoDarwinVirtioBlock", 24) || !transport.begin()) {
 		return false;
 	}
-	if (!reset()) {
-		fail("the device does not reset");
-		return false;
-	}
-	wr8(common, kNDVirtioDeviceStatus, kNDVirtioStatusAcknowledge);
-	wr8(common, kNDVirtioDeviceStatus, kNDVirtioStatusAcknowledge | kNDVirtioStatusDriver);
-	if (!negotiate()) {
+	uint64_t wanted = kNDVirtioBlkFSizeMax | kNDVirtioBlkFSegMax | kNDVirtioBlkFRO |
+	    kNDVirtioBlkFBlkSize | kNDVirtioBlkFFlush | kNDVirtioBlkFConfigWCE;
+	if (!transport.negotiate(wanted, &features)) {
 		return false;
 	}
 	readConfiguration();
 	if (!setUpQueue() || !setUpInterrupts()) {
 		return false;
 	}
-	wr16(common, kNDVirtioQueueSelect, 0);
-	wr16(common, kNDVirtioQueueEnable, 1);
-	wr8(common, kNDVirtioDeviceStatus, rd8(common, kNDVirtioDeviceStatus) | kNDVirtioStatusDriverOK);
-	if (rd8(common, kNDVirtioDeviceStatus) & (kNDVirtioStatusNeedsReset | kNDVirtioStatusFailed)) {
-		fail("the device failed after DRIVER_OK");
+	transport.enableQueue(0);
+	if (!transport.driverOK()) {
 		return false;
 	}
 	running = true;
@@ -513,17 +346,7 @@ NeoDarwinVirtioBlock::start(IOService *provider)
 	}
 
 	char irq[64];
-	if (vectors != 0) {
-		OSNumber *lpi = OSDynamicCast(OSNumber, pci->getProperty("msi-lpi-base"));
-		uint32_t base = lpi != NULL ? lpi->unsigned32BitValue() : 0;
-		if (vectors == 2) {
-			snprintf(irq, sizeof(irq), "MSI-X 2 vectors (LPIs %u-%u)", base, base + 1);
-		} else {
-			snprintf(irq, sizeof(irq), "MSI-X 1 vector (LPI %u)", base);
-		}
-	} else {
-		snprintf(irq, sizeof(irq), "INTx");
-	}
+	transport.describeInterrupts(irq, sizeof(irq));
 	bool cache = false;
 	getWriteCacheState(&cache);
 	uint64_t mib = capacity * kNDVirtioBlkSectorSize >> 20;
@@ -540,8 +363,8 @@ NeoDarwinVirtioBlock::start(IOService *provider)
 void
 NeoDarwinVirtioBlock::stop(IOService *provider)
 {
-	if (common != NULL) {
-		reset();
+	if (transport.common != NULL) {
+		transport.reset();
 	}
 	running = false;
 	if (queueSource != NULL) {
@@ -563,17 +386,12 @@ NeoDarwinVirtioBlock::free()
 	for (uint32_t s = 0; s < kMaxSlots; s++) {
 		OSSafeReleaseNULL(slots[s].dma);
 	}
-	if (ring != NULL) {
-		ring->complete();
-		OSSafeReleaseNULL(ring);
-	}
+	queue.release();
 	if (headers != NULL) {
 		headers->complete();
 		OSSafeReleaseNULL(headers);
 	}
-	for (int b = 0; b < 6; b++) {
-		OSSafeReleaseNULL(bars[b]);
-	}
+	transport.unmap();
 	if (gate != NULL && workLoop != NULL) {
 		workLoop->removeEventSource(gate);
 	}
@@ -609,15 +427,9 @@ NeoDarwinVirtioBlock::post(uint32_t slot, uint32_t descriptors)
 	uint32_t first = slot * kChain;
 	struct nd_virtq_desc *last = &desc[first + descriptors - 1];
 	last->flags = kNDVirtqDescWrite;        // the status byte ends the chain
-	dmaPolicy.toDevice(&desc[first], sizeof(desc[0]) * descriptors);
-	volatile uint16_t *entry = (volatile uint16_t *)(avail + kNDVirtqRingEntries + 2 * (availIdx % queueSize));
-	*entry = (uint16_t)first;
-	dmaPolicy.toDevice(entry, 2);
-	availIdx++;
-	*(volatile uint16_t *)(avail + kNDVirtqRingIdx) = availIdx;
-	dmaPolicy.toDevice(avail + kNDVirtqRingIdx, 2);
-	__builtin_arm_dsb(0xf);                 // DSB SY: the ring in memory before the doorbell
-	*(volatile uint16_t *)queueNotify = 0;  // queue 0
+	queue.flushDescriptors(first, descriptors);
+	queue.push((uint16_t)first);
+	queue.publish();
 }
 
 // Fills slot's header, data and status descriptors and posts them. The
@@ -795,7 +607,7 @@ NeoDarwinVirtioBlock::filter(OSObject *owner, IOFilterInterruptEventSource *sour
 {
 	(void)source;
 	NeoDarwinVirtioBlock *self = static_cast<NeoDarwinVirtioBlock *>(owner);
-	uint8_t bits = self->rd8(self->isr, 0);     // reading acknowledges
+	uint8_t bits = self->transport.readISR();   // reading acknowledges
 	if (bits == 0) {
 		return false;                           // another device's
 	}
@@ -809,7 +621,7 @@ NeoDarwinVirtioBlock::configInterrupt(OSObject *owner, IOInterruptEventSource *s
 	(void)source; (void)count;
 	NeoDarwinVirtioBlock *self = static_cast<NeoDarwinVirtioBlock *>(owner);
 	IOLog("NeoDarwinVirtioBlock: %s: configuration changed (status 0x%x)\n", self->where,
-	    self->rd8(self->common, kNDVirtioDeviceStatus));
+	    NDVirtioPCI::rd8(self->transport.common, kNDVirtioDeviceStatus));
 }
 
 void
@@ -830,50 +642,39 @@ NeoDarwinVirtioBlock::queueInterrupt(OSObject *owner, IOInterruptEventSource *so
 void
 NeoDarwinVirtioBlock::reap()
 {
-	for (;;) {
-		volatile uint16_t *idx = (volatile uint16_t *)(used + kNDVirtqRingIdx);
-		dmaPolicy.fromDevice(idx, 2);
-		uint16_t deviceIdx = *idx;
-		if (deviceIdx == usedIdx) {
-			break;
+	uint32_t head, written;
+	while (queue.nextUsed(&head, &written)) {
+		uint32_t slot = head / kChain;
+		if (head % kChain != 0 || slot >= slotCount || slots[slot].state == kFree) {
+			IOLog("NeoDarwinVirtioBlock: %s: the device returned descriptor %u, which is not a request\n", where, head);
+			continue;
 		}
-		while (usedIdx != deviceIdx) {
-			volatile uint8_t *elem = used + kNDVirtqRingEntries + kNDVirtqUsedElemSize * (usedIdx % queueSize);
-			dmaPolicy.fromDevice(elem, kNDVirtqUsedElemSize);
-			uint32_t head = *(volatile uint32_t *)elem;
-			usedIdx++;
-			uint32_t slot = head / kChain;
-			if (head % kChain != 0 || slot >= slotCount || slots[slot].state == kFree) {
-				IOLog("NeoDarwinVirtioBlock: %s: the device returned descriptor %u, which is not a request\n", where, head);
-				continue;
-			}
-			Slot *s = &slots[slot];
-			uint8_t *status = headerBytes + slot * kHeaderStride + 16;
-			dmaPolicy.fromDevice(status, 1);
-			IOReturn result = *status == kNDVirtioBlkSOK ? kIOReturnSuccess :
-			    (*status == kNDVirtioBlkSUnsupp ? kIOReturnUnsupported : kIOReturnIOError);
-			if (s->buffer != NULL) {
-				s->dma->complete();
-				s->dma->clearMemoryDescriptor();
-			}
-			completed++;
-			if (s->state == kSync) {
-				s->result = result;
-				s->state = kSyncDone;
-				gate->commandWakeup(s);
-				continue;
-			}
-			IOStorageCompletion completion = s->completion;
-			IOMemoryDescriptor *buffer = s->buffer;
-			uint64_t bytes = result == kIOReturnSuccess ? s->bytes : 0;
-			if (result != kIOReturnSuccess) {
-				IOLog("NeoDarwinVirtioBlock: %s: request failed with status %u\n", where, *status);
-			}
-			s->buffer = NULL;
-			s->state = kFree;
-			buffer->release();
-			IOStorage::complete(&completion, result, bytes);
+		Slot *s = &slots[slot];
+		uint8_t *status = headerBytes + slot * kHeaderStride + 16;
+		dmaPolicy.fromDevice(status, 1);
+		IOReturn result = *status == kNDVirtioBlkSOK ? kIOReturnSuccess :
+		    (*status == kNDVirtioBlkSUnsupp ? kIOReturnUnsupported : kIOReturnIOError);
+		if (s->buffer != NULL) {
+			s->dma->complete();
+			s->dma->clearMemoryDescriptor();
 		}
+		completed++;
+		if (s->state == kSync) {
+			s->result = result;
+			s->state = kSyncDone;
+			gate->commandWakeup(s);
+			continue;
+		}
+		IOStorageCompletion completion = s->completion;
+		IOMemoryDescriptor *buffer = s->buffer;
+		uint64_t bytes = result == kIOReturnSuccess ? s->bytes : 0;
+		if (result != kIOReturnSuccess) {
+			IOLog("NeoDarwinVirtioBlock: %s: request failed with status %u\n", where, *status);
+		}
+		s->buffer = NULL;
+		s->state = kFree;
+		buffer->release();
+		IOStorage::complete(&completion, result, bytes);
 	}
 	startPending();
 	gate->commandWakeup(&slots);
@@ -924,7 +725,7 @@ NeoDarwinVirtioBlock::getRevisionString(void)
 char *
 NeoDarwinVirtioBlock::getAdditionalDeviceInfoString(void)
 {
-	return where;
+	return transport.where;
 }
 
 IOReturn
@@ -981,7 +782,7 @@ NeoDarwinVirtioBlock::getWriteCacheState(bool *enabled)
 	if ((features & kNDVirtioBlkFFlush) == 0) {
 		*enabled = false;
 	} else if (features & kNDVirtioBlkFConfigWCE) {
-		*enabled = rd8(config, kNDVirtioBlkWriteback) != 0;
+		*enabled = cfg8(kNDVirtioBlkWriteback) != 0;
 	} else {
 		*enabled = true;
 	}
@@ -994,6 +795,6 @@ NeoDarwinVirtioBlock::setWriteCacheState(bool enabled)
 	if ((features & kNDVirtioBlkFConfigWCE) == 0) {
 		return kIOReturnUnsupported;
 	}
-	wr8(config, kNDVirtioBlkWriteback, enabled ? 1 : 0);
+	NDVirtioPCI::wr8(transport.config, kNDVirtioBlkWriteback, enabled ? 1 : 0);
 	return kIOReturnSuccess;
 }

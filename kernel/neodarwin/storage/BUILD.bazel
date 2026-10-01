@@ -1,8 +1,9 @@
-# NeoDarwin's storage: the virtio-blk and NVMe drivers, the DMA policy PCI storage
-# drivers share, and the compat headers Apple's IOStorageFamily
-# (@apple_iostoragefamily) and AppleFileSystemDriver
-# (@apple_filesystemdriver), both APSL, need to build into the SBSA kernel
-# (patches 0025-0029, docs/kernel/storage.md). Kernel-only IOKit C++.
+# NeoDarwin's storage: the virtio-blk and NVMe drivers, the DMA policy PCI
+# drivers share (virtio-net and the console xHCI driver include it too), and
+# the compat headers Apple's IOStorageFamily (@apple_iostoragefamily) and
+# AppleFileSystemDriver (@apple_filesystemdriver), both APSL, need to build
+# into the SBSA kernel (patches 0025-0029, docs/kernel/storage.md). The
+# virtio transport is kernel/neodarwin/virtio's. Kernel-only IOKit C++.
 load("//rules:cc.bzl", "lang_audit_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -17,7 +18,7 @@ SRCS = [
     "compat/hfs/hfs_format.h",
     "compat/uuid/namespace.h",
     "nd_nvme.h",
-    "nd_virtio.h",
+    "nd_virtio_blk.h",
 ]
 
 # Overlaid at iokit/ndstorage (kernel/BUILD.bazel); IOStorageFamily at

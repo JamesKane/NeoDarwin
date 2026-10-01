@@ -1,0 +1,25 @@
+# What NeoDarwin's virtio drivers on PCI share (docs/kernel/storage.md,
+# docs/kernel/network.md): the virtio 1.x layouts (nd_virtio.h) and the
+# modern PCI transport and split virtqueue (NeoDarwinVirtioPCI.h), used by
+# NeoDarwinVirtioBlock (storage) and NeoDarwinVirtioNet (network).
+# Header-only kernel IOKit C++; the DMA policy it uses is the storage
+# drivers' NeoDarwinStorageDMA.h.
+load("//rules:cc.bzl", "lang_audit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+SRCS = [
+    "NeoDarwinVirtioPCI.h",
+    "nd_virtio.h",
+]
+
+# Overlaid at iokit/ndvirtio (kernel/BUILD.bazel, patch 0034).
+filegroup(
+    name = "kernel_srcs",
+    srcs = SRCS,
+)
+
+lang_audit_test(
+    name = "virtio_lang_audit",
+    srcs = SRCS,
+)

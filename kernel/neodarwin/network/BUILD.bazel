@@ -1,0 +1,26 @@
+# NeoDarwin's bring-up Ethernet (P1-19, docs/kernel/network.md): the
+# virtio-net driver and the interface namer, built into the SBSA kernel with
+# Apple's IONetworkingFamily (@apple_ionetworkingfamily, APSL) until P3-08's
+# network dexts replace them (patches 0034-0035). Kernel-only IOKit C++.
+load("//rules:cc.bzl", "lang_audit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+SRCS = [
+    "NeoDarwinInterfaceNamer.cpp",
+    "NeoDarwinVirtioNet.cpp",
+    "nd_virtio_net.h",
+]
+
+# Overlaid at iokit/ndnet (kernel/BUILD.bazel); IONetworkingFamily at
+# iokit/ndnet/IONetworkingFamily, its headers at
+# iokit/ndnet/include/IOKit/network.
+filegroup(
+    name = "kernel_srcs",
+    srcs = SRCS,
+)
+
+lang_audit_test(
+    name = "network_lang_audit",
+    srcs = SRCS,
+)

@@ -90,6 +90,30 @@
 #                     QEMU: for a kernel whose console is the framebuffer alone,
 #                     which prints nothing on serial
 #   --absent TEXT     fail if TEXT appears on serial; repeatable
+#   --user-net DEV    a NIC on QEMU's user-mode network (slirp: the guest is
+#                     10.0.2.15, the gateway 10.0.2.2, DNS 10.0.2.3), e.g.
+#                     virtio-net-pci,mac=52:54:00:12:34:56: -netdev user and
+#                     -device DEV,netdev=... It opens no host port by itself
+#   --hostfwd PORT    with --user-net: forward a TCP port on the host's
+#                     loopback to guest PORT. The host side is 127.0.0.1 and
+#                     a free high port chosen for this run (never 0.0.0.0);
+#                     host commands find it in $ND_HOSTFWD_PORT. It closes
+#                     with QEMU
+#   --host-setup CMD  run CMD (bash) on the host before QEMU starts, in a
+#                     directory of the run's own ($ND_HOST_DIR, also HOME);
+#                     the test fails if it fails. E.g. ssh-keygen a key
+#   --host-cmd-after LINE CMD
+#                     once LINE appears on serial (in order with the
+#                     --send-after steps), run CMD (bash) on the host in the
+#                     same directory, with $ND_HOSTFWD_PORT, for at most
+#                     ND_HOST_CMD_TIMEOUT seconds (default 180), while serial
+#                     keeps being read. Its output and exit status join the
+#                     log as "host: ..." lines ("host: exit N", 124 if it
+#                     timed out), which expected lines can name.
+#                     CMD is the test's own text: nothing from the guest's
+#                     output goes into it
+#   In --send-after TEXT, {hostfile:NAME} is the first line of file NAME in
+#   the host directory (made by --host-setup), e.g. a public key to install
 # Environment:
 #   ND_QEMU           qemu-system-aarch64 to use
 #   ND_QEMU_DEBUG=DIR keep serial.log there and add QEMU's exception trace (-d int)
@@ -97,6 +121,7 @@ set -euo pipefail
 esp_files=(); mem=""; smp=1; cpu=""; until_lines=0; sends=(); machine=virt; firmware=""; firmware_ns=""
 devices=(); drives=(); screendump=""; screen_font=""; screen_lines=(); until_screen=0; absent=(); mopts=""
 disk=""; disk_in_place=0; disk_device="virtio-blk-pci,disable-legacy=on"
+user_net=""; hostfwd=""; host_setups=()
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--esp) esp_files+=("$2"); shift 2 ;;
@@ -121,6 +146,10 @@ while [ $# -gt 0 ]; do
 		--screen-line) screen_lines+=("$2"); shift 2 ;;
 		--until-screen) until_screen=1; shift ;;
 		--absent) absent+=("$2"); shift 2 ;;
+		--user-net) user_net="$2"; shift 2 ;;
+		--hostfwd) hostfwd="$2"; shift 2 ;;
+		--host-setup) host_setups+=("$2"); shift 2 ;;
+		--host-cmd-after) sends+=(host "$2" "$3"); shift 3 ;;
 		*) break ;;
 	esac
 done
@@ -237,6 +266,28 @@ for spec in ${drives[@]+"${drives[@]}"}; do
 	esac
 	devices+=(-drive "if=none,id=$id,format=raw,file=$file")
 done
+# The host side: a directory for --host-setup and --host-cmd-after, and the
+# user-mode network with its one loopback forward.
+host_dir="$work/host"; mkdir -p "$host_dir"
+export ND_HOST_DIR="$host_dir"
+if [ -n "$hostfwd" ] && [ -z "$user_net" ]; then echo "--hostfwd needs --user-net"; exit 1; fi
+case "$hostfwd" in ""|[0-9]|[0-9][0-9]|[0-9][0-9][0-9]|[0-9][0-9][0-9][0-9]|[0-9][0-9][0-9][0-9][0-9]) ;;
+	*) echo "--hostfwd takes a guest TCP port number"; exit 1 ;; esac
+if [ -n "$user_net" ]; then
+	netdev="user,id=ndnet0"
+	if [ -n "$hostfwd" ]; then
+		# A free port on 127.0.0.1 (the kernel's choice), for this run only.
+		port="$(perl -MIO::Socket::INET -e '
+			my $s = IO::Socket::INET->new(LocalAddr => "127.0.0.1", LocalPort => 0, Proto => "tcp", Listen => 1, ReuseAddr => 1)
+				or die "no free port: $!"; print $s->sockport')"
+		export ND_HOSTFWD_PORT="$port"
+		netdev="$netdev,hostfwd=tcp:127.0.0.1:$port-:$hostfwd"
+	fi
+	devices+=(-netdev "$netdev" -device "$user_net,netdev=ndnet0")
+fi
+for cmd in ${host_setups[@]+"${host_setups[@]}"}; do
+	(cd "$host_dir" && HOME="$host_dir" bash -c "$cmd") || { echo "FAIL: --host-setup failed: $cmd"; exit 1; }
+done
 logdir="$work"; debug=()
 if [ -n "${ND_QEMU_DEBUG:-}" ]; then
 	logdir="$ND_QEMU_DEBUG"; mkdir -p "$logdir"; debug=(-d int,guest_errors,unimp -D "$logdir/qemu.log")
@@ -289,6 +340,45 @@ perl -e '
 	open(my $lf, ">>", $log) or die; $lf->autoflush(1);
 	my ($text, $pos, $due) = ("", 0, undef);
 	sub drain { my $buf; while (sysread($out, $buf, 65536)) { print $lf $buf; $buf =~ s/\r//g; $text .= $buf } }
+	# --host-cmd-after: the command runs in a child of its own while serial
+	# is drained; its output, then its status, join the log and the text
+	# as "host: " lines.
+	my ($host_pid, $host_out, $host_deadline, $host_n) = (undef, undef, 0, 0);
+	my $host_limit = $ENV{ND_HOST_CMD_TIMEOUT} || 180;
+	sub host_start {
+		my ($cmd) = @_; $host_n++;
+		$host_out = "$ENV{ND_HOST_DIR}/.host-cmd-$host_n.out";
+		$host_pid = fork();
+		if (!$host_pid) {
+			chdir $ENV{ND_HOST_DIR} or die; $ENV{HOME} = $ENV{ND_HOST_DIR};
+			open(STDOUT, ">", $host_out) or die; open(STDERR, ">&", \*STDOUT) or die; open(STDIN, "<", "/dev/null");
+			setpgrp(0, 0);
+			exec("bash", "-c", $cmd) or die "exec bash: $!";
+		}
+		$host_deadline = time + $host_limit;
+		my $note = "host\$ $cmd\n"; print $lf $note; $text .= $note;
+	}
+	sub host_poll {
+		return 1 unless defined $host_pid;
+		my $done = waitpid($host_pid, 1) > 0; my $status = $?;
+		if (!$done && time >= $host_deadline) {
+			kill 9, -$host_pid; waitpid($host_pid, 0); $status = -1; $done = 1;
+		}
+		return 0 unless $done;
+		open(my $hf, "<", $host_out); my @lines = <$hf>; close $hf;
+		my $report = join("", map { s/\r//g; chomp; "host: $_\n" } @lines);
+		$report .= $status < 0 ? "host: timed out after ${host_limit}s\nhost: exit 124\n" : "host: exit " . ($status >> 8) . "\n";
+		print $lf $report; $text .= $report; undef $host_pid;
+		return 1;
+	}
+	# {hostfile:NAME}: the first line of a file in the host directory.
+	sub hostfiles {
+		my ($t) = @_;
+		$t =~ s{\{hostfile:([A-Za-z0-9._-]+)\}}{
+			open(my $f, "<", "$ENV{ND_HOST_DIR}/$1") or die "{hostfile:$1}: $!"; my $l = <$f> // ""; chomp $l; $l
+		}ge;
+		return $t;
+	}
 	# The display as a PPM, a second after the last expected line (the
 	# console draws as it prints), once QEMU has finished writing it.
 	sub screendump {
@@ -363,16 +453,19 @@ perl -e '
 	my $deadline = time + $t;
 	while (1) {
 		drain();
-		if (waitpid($pid, 1) > 0) { drain(); exit($? >> 8) }
+		host_poll();
+		if (waitpid($pid, 1) > 0) { my $st = $?; drain(); kill 9, -$host_pid if defined $host_pid; exit($st >> 8) }
 		if (@send && !defined $due && $send[0][0] ne "screen" && (my $at = index($text, $send[0][1], $pos)) >= 0) {
 			$pos = $at + length($send[0][1]); $due = time + 0.5;
 		}
 		if (@send && !defined $due && $send[0][0] eq "screen" && screen_prompt($send[0][1])) {
 			$pos = length($text); $due = time + 0.5;
 		}
-		if (defined $due && time >= $due) {
-			if ($send[0][0] eq "serial") {
-				(my $keys = $send[0][2]) =~ s/\\n/\r/g;
+		if (defined $due && time >= $due && host_poll()) {
+			if ($send[0][0] eq "host") {
+				host_start($send[0][2]);
+			} elsif ($send[0][0] eq "serial") {
+				(my $keys = hostfiles($send[0][2])) =~ s/\\n/\r/g;
 				my %arrow = (up => "A", down => "B", right => "C", left => "D");
 				$keys =~ s/\\b/\x7f/g; $keys =~ s/\\e/\e/g; $keys =~ s/\{(up|down|left|right)\}/\e[$arrow{$1}/g;
 				syswrite($in, $keys);
@@ -382,10 +475,10 @@ perl -e '
 			}
 			shift @send; undef $due;
 		}
-		if ($until && !@send && !grep({ index($text, $_) < 0 } @want) && screen_ready()) {
+		if ($until && !@send && host_poll() && !grep({ index($text, $_) < 0 } @want) && screen_ready()) {
 			screendump() unless $until_screen; kill 9, $pid; waitpid($pid, 0); exit 0
 		}
-		if (time >= $deadline) { screendump(); kill 9, $pid; waitpid($pid, 0); exit 124 }
+		if (time >= $deadline) { kill 9, -$host_pid if defined $host_pid; screendump(); kill 9, $pid; waitpid($pid, 0); exit 124 }
 		select(undef, undef, undef, 0.2);
 	}
 ' "$timeout" "$until_lines" "$log" "$patterns" "$steps" "$work/ser" "${mon_dir:-}/mon" "$dump" \
