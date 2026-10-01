@@ -1,0 +1,29 @@
+tamap_offset @@ return pa + TC956X_DMA_OFFSET; @@ return pa;
+msigen_reset_before_clock @@ \tnd_tc956x_sfr_update(sc, TC956X_NCLKCTRL(0), 0, TC956X_CLK_MSIGEN);\n\tnd_tc956x_sfr_update(sc, TC956X_NRSTCTRL(0), TC956X_RST_MSIGEN, 0); @@ \tnd_tc956x_sfr_update(sc, TC956X_NRSTCTRL(0), TC956X_RST_MSIGEN, 0);\n\tnd_tc956x_sfr_update(sc, TC956X_NCLKCTRL(0), 0, TC956X_CLK_MSIGEN);
+mac_reset_before_clock @@ \tnd_tc956x_sfr_update(sc, TC956X_NCLKCTRL(sc->mac), 0, clk);\n\tnd_tc956x_sfr_update(sc, TC956X_NRSTCTRL(sc->mac), TC956X_RST_MAC, 0); @@ \tnd_tc956x_sfr_update(sc, TC956X_NRSTCTRL(sc->mac), TC956X_RST_MAC, 0);\n\tnd_tc956x_sfr_update(sc, TC956X_NCLKCTRL(sc->mac), 0, clk);
+sp_sel_always_1g @@ v |= (sp != 0 ? sp->sp_sel : (uint32_t)TC956X_EMACCTL_SP_1000) @@ v |= (sp != 0 ? (uint32_t)TC956X_EMACCTL_SP_1000 : (uint32_t)TC956X_EMACCTL_SP_1000)
+sp_sel_not_written @@ \tND_TC956X_WRITE(sc, emacctl, v);\n\n\t/* The clock settings @@ \t(void)v;\n\n\t/* The clock settings
+pma_written_outside_reset @@ \tnd_tc956x_sfr_update(sc, TC956X_NRSTCTRL(sc->mac), 0, TC956X_RST_PMA);\n\tuint32_t pma @@ \tuint32_t pma
+pma_refclk_missing @@ TC956X_PMA_COMM_CFG_0_1(i), TC956X_PMA_COMM_CFG_REFCLK_I); @@ TC956X_PMA_COMM_CFG_0_1(i), 0);
+fifo_not_released @@ \tif (changed) {\n\t\tnd_tc956x_phy_serdes_fifo(sc, l->up); @@ \tif (changed && false) {\n\t\tnd_tc956x_phy_serdes_fifo(sc, l->up);
+pcs_type_sel_skipped @@ nd_tc956x_xpcs_write(sc, XPCS_MMD_PCS, XPCS_PCS_CTRL2, XPCS_PCS_TYPE_SEL_MODAL); @@ (void)0;
+pcs_mode_switch_skipped @@ (sc->serdes_speed == 2500) != (speed == 2500) @@ (sc->serdes_speed == 2500) == (speed == 2500)
+xpcs_used_in_reset @@ \tnd_tc956x_sfr_update(sc, TC956X_NRSTCTRL(sc->mac), TC956X_RST_XPCS, 0);\n\tif (ok) {\n\t\tok = nd_tc956x_xpcs_config(sc, speed != 2500);\n\t} @@ \tif (ok) {\n\t\tok = nd_tc956x_xpcs_config(sc, speed != 2500);\n\t}\n\tnd_tc956x_sfr_update(sc, TC956X_NRSTCTRL(sc->mac), TC956X_RST_XPCS, 0);
+mac_address_read_unguarded @@ \tif (nd_tc956x_mac_running(sc)) {\n\t\thi = ND_TC956X_MAC_READ @@ \tif (true) {\n\t\thi = ND_TC956X_MAC_READ
+phy_speed_misread @@ #define  QCA808X_SS_SPEED_SHIFT         7 @@ #define  QCA808X_SS_SPEED_SHIFT         8
+mac_speed_fixed @@ uint32_t ss = sp != 0 ? sp->xgmac_ss : XGMAC_SS_2500_GMII; @@ uint32_t ss = sp != 0 ? XGMAC_SS_2500_GMII : XGMAC_SS_2500_GMII;
+pause_ignored @@ l->txpause = l->rxpause = true; @@ l->txpause = l->rxpause = false;
+swr_not_awaited @@ if (!nd_tc956x_wait(sc, ND_TC956X_MAC_OFF(sc, XGMAC_DMA_MODE), XGMAC_DMA_MODE_SWR, 0, 10, ND_TC956X_SWR_TIMEOUT)) { @@ if (false) {
+owrq_missing @@ (sc->nrxd - 1) | (3u << XGMAC_DMA_CH_OWRQ_SHIFT) @@ (sc->nrxd - 1)
+tx_tail_short @@ sc->tx_pa + (uint64_t)sc->tx_pidx * sizeof @@ sc->tx_pa + (uint64_t)((sc->tx_pidx - 1) & (sc->ntxd - 1)) * sizeof
+tx_ring_overfilled @@ return sc->ntxd - 1 - ((sc->tx_pidx @@ return sc->ntxd - ((sc->tx_pidx
+tx_reclaim_partial @@ \t\tif ((des3 & (TDES3_CTXT | TDES3_LD)) == TDES3_LD) {\n\t\t\tdone = count; @@ \t\tif (true) {\n\t\t\tdone = count;
+tx_csum_swapped @@ csum == ND_TC956X_TX_CSUM_FULL ? TDES3_CIC_FULL : csum == ND_TC956X_TX_CSUM_IP ? TDES3_CIC_IP : 0 @@ csum == ND_TC956X_TX_CSUM_FULL ? TDES3_CIC_IP : csum == ND_TC956X_TX_CSUM_IP ? TDES3_CIC_FULL : 0
+rx_tail_at_head @@ sc->rx_pa + (uint64_t)sc->rx_pidx * sizeof @@ sc->rx_pa + (uint64_t)sc->rx_cidx * sizeof
+rx_split_frames @@ \t\tif ((des3 & RDES3_LD) != 0) {\n\t\t\tf->first @@ \t\tif (true) {\n\t\t\tf->first
+rx_error_trusted @@ \tif ((des3 & RDES3_ES) != 0) {\n\t\tsc->stat_rx_err++; @@ \tif (false) {\n\t\tsc->stat_rx_err++;
+rx_no_ioc_without_watchdog @@ \tif (sc->rx_riwt == 0) {\n\t\treturn true; @@ \tif (sc->rx_riwt == 0) {\n\t\treturn false;
+hash_not_complemented @@ uint32_t bin = ~nd_tc956x_crc32_be(addr, 6) >> @@ uint32_t bin = nd_tc956x_crc32_be(addr, 6) >>
+hash_filter_off @@ \t\tv |= XGMAC_FILTER_HMC; @@ \t\t(void)0;
+stray_not_rearmed @@ \tif (st == 0) {\n\t\tND_TC956X_MSI_WRITE(sc, TC956X_MSI_MASK_CLR, TC956X_MSI_MASK_CLR_ALL);\n\t\treturn 0; @@ \tif (st == 0) {\n\t\treturn 0;
+stop_without_drain @@ \t\tif ((ND_TC956X_MAC_READ(sc, XGMAC_DMA_CH_STATUS(0)) & XGMAC_DMA_CH_TPS) != 0 && @@ \t\tif (true ||

@@ -119,6 +119,7 @@ SBSA_PATCHES = [
     "patches/0034-iokit-shared-virtio-transport.patch",
     "patches/0035-iokit-build-ionetworkingfamily.patch",
     "patches/0036-iokit-build-virtio-net-and-interface-namer.patch",
+    "patches/0037-iokit-build-tc956x-ethernet.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -2264,6 +2265,8 @@ NET_MAC = "52:54:00:12:34:56"
 
 # A name resolved through slirp's DNS proxy, which forwards to the host's
 # resolver: the guest's lookup is checked only when the host can resolve it.
+# The guest tries three times, 10 s each: under a loaded parallel run the
+# forwarded query can take longer than one short attempt allows.
 NET_DNS_NAME = "example.com"
 
 # The host's ssh: this run's key only, no user configuration, agent or
@@ -2292,7 +2295,7 @@ NET_SESSION = [
     "--send-after 'root@localhost ~ # ' 'ping -c 2 10.0.2.2\\n'",
     "--send-after 'root@localhost ~ # ' 'ping -c 1 localhost\\n'",
     "--send-after 'root@localhost ~ # ' 'dns-sd -P nd-test _nd-test._tcp local 7 nd-test.local 10.0.2.15 > /dev/null & sleep 3; ping -c 1 -t 5 nd-test.local; kill %1\\n'",
-    "--send-after 'root@localhost ~ # ' 'ping -c 1 -t 5 " + NET_DNS_NAME + " > /tmp/dns.txt 2>&1; cat /tmp/dns.txt\\n'",
+    "--send-after 'root@localhost ~ # ' 'for i in 1 2 3; do ping -c 1 -t 10 " + NET_DNS_NAME + " > /tmp/dns.txt 2>&1; case $$(cat /tmp/dns.txt) in PING*) break;; esac; sleep 2; done; cat /tmp/dns.txt\\n'",
     "--send-after 'root@localhost ~ # ' 'launchctl load -w /System/Library/LaunchDaemons/ssh.plist\\n'",
     "--send-after 'root@localhost ~ # ' 'mkdir -p /Users/test/.ssh && echo \"{hostfile:id_ed25519.pub}\" > /Users/test/.ssh/authorized_keys && echo key-$$((6*7))\\n'",
     "--host-cmd-after 'key-42' '" + NET_SSH + " uname -a'",

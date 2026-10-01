@@ -1,5 +1,7 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
-# Bring-up Ethernet: IONetworkingFamily, virtio-net, DHCP and a resolver (P1-19)
+# Bring-up Ethernet: IONetworkingFamily, virtio-net, DHCP, a resolver and the TC956x (P1-19)
+
+**P1-19, checkpoint 3** ("Checkpoint 3: the Radxa Dragon Q8B's TC956x", below): a driver for the board's **Toshiba TC956x** PCIe Ethernet (PCI 1179:0220, two functions, one MAC each), `NeoDarwinTC956x`, with its hardware logic ported from FreeBSD's `tcx` (written for and run on this board) into a C header that also builds on the host. QEMU has no TC956x, so it is proven by a **register model** of the chip (`//kernel/neodarwin/network:tc956x_sim_test`, FreeBSD's bring-up order with an SError for any access to a block in reset, the SerDes/PCS/PHY link machine at every speed, the rings, interrupts and offloads) and **29 planted bugs** it must catch (`tc956x_mutation_tests`). The kernel builds with it and every QEMU test is unchanged. The board exit (a DHCP lease on the TC956x and ssh from the Mac) waits for board time: P1-19 stays *doing*.
 
 **P1-19, checkpoint 2** ("Checkpoint 2: DHCP and name resolution", below): en0 takes a **DHCP lease at boot** (FreeBSD's `dhclient`, run by NeoDarwin's `netconfigd` launchd job), `/etc/resolv.conf` names the server the lease gives, and **names resolve** through Libinfo as on macOS: `/etc/hosts`, then **mDNSResponder** (the published POSIX daemon) for unicast DNS and `.local`; **libresolv-93** is built and OpenSSH links it again. On QEMU `virt` (MSI-X and INTx) and `sbsa-ref` the guest gets 10.0.2.15 from slirp, resolves a name and the host logs in over ssh.
 
@@ -18,6 +20,8 @@ It is a **bring-up aid**, kept small and easy to replace, as P1-18's console key
 | `kernel/neodarwin/virtio/NeoDarwinVirtioPCI.h`, `nd_virtio.h` | the virtio 1.x modern PCI transport and split virtqueue, shared with virtio-blk (moved out of `kernel/neodarwin/storage`, below) |
 | `kernel/neodarwin/storage/NeoDarwinStorageDMA.h` | the DMA policy (`dma-coherent`, `dma-address-bits`) PCI drivers share |
 | patches 0034–0036 | the virtio transport's search path (0034); IONetworkingFamily's build list, search paths, the kext's view of the kernel and IONetworkStack's personality (0035); the driver's and the namer's (0036) |
+| `kernel/neodarwin/network/NeoDarwinTC956x.cpp`, `nd_tc956x.h`, `test/tc956x_sim_test.c` | checkpoint 3: the TC956x driver, its FreeBSD-derived hardware core and the core's register model (below) |
+| patch 0037 | the TC956x driver's build-list line, search paths and personality |
 | `tools/efi/qemu_efi_test.sh --user-net`, `--hostfwd`, `--host-setup`, `--host-cmd-after` | a NIC on QEMU's user-mode network, one forward from the host's loopback, and commands the test runs on the host |
 
 Everything is compiled into the kernel, as IOPCIFamily and IOStorageFamily are, because `kcgen` links no kexts until M5. The overlay puts NeoDarwin's files at `iokit/ndnet`, IONetworkingFamily at `iokit/ndnet/IONetworkingFamily`, the virtio transport at `iokit/ndvirtio`.
@@ -279,17 +283,150 @@ Every other image with launchd now starts mDNSResponder and netconfigd too, so `
 - No `arp`, `ndp` or `traceroute` (P4-24), no `nslookup`/`dig` (macOS's are BIND's, not in the release set).
 - mDNSResponder's limits above; no Bonjour registration of launchd jobs' sockets.
 
-## What checkpoint 3 and P4-24 still need
+## Checkpoint 3: the Radxa Dragon Q8B's TC956x
 
-**Checkpoint 3** needs nothing more from the userland: netconfigd starts dhclient on whatever en* interface the TC956x driver attaches, and the board's DHCP server's lease, router and name servers flow through the same script.
+**Status.** Built into the SBSA kernel (patch 0037) and tested on the host against a register model; **not yet run on the board**, which wasn't available. QEMU has no TC956x model, and telling a QEMU kernel there is one would point the driver at whatever lies behind a fake BAR, so no QEMU boot covers it; the existing boots prove the rest of the path (IONetworkingFamily, the namer, netconfigd, dhclient, mDNSResponder, sshd). The exit, a DHCP lease on the TC956x and ssh from the Mac, is "On the board" below.
 
-**P4-24** (the networking userland) builds on this: `arp`, `ndp`, `traceroute`, `ping6`, `rtadvd` and the rest of network_cmds; DHCPv6 or SLAAC configuration; pf and `pfctl`; an NTP client; a persistent interface namer (with P3-08's `netd`); and whether NeoDarwin keeps FreeBSD's dhclient or moves to bootp's IPConfiguration once configd is built.
+### The hardware
 
-**Checkpoint 3, the TC956x** (FreeBSD's `sys/dev/tcx`, BSD-2-Clause, James Kane, on the `radxa-dragon-q8b` branch of `../freebsd-src`).
-- The board's TC956x is on PCIe segment 4 (`arm64-sbsa-bringup.md`, the board's table), behind the same SMMUv3 as the NVMe disk.
-- An `IOEthernetController` shell like this one, with the register logic ported into a C header (as `nd_geni_uart.h` and `nd_dwc3.h` were), `PROVENANCE.md` naming the upstream commit.
-- The chip is a PCIe switch with an internal endpoint whose two functions each hold an XGMAC 3.01, an XPCS and a SerDes; function 0 owns the chip's clocks, resets and the MAC's 64 GiB DMA window translation table. The PHY (a QCA8081) is reached over MDIO; the SerDes switches between 2500BASE-X and SGMII as the link changes. One TX and one RX DMA channel, a single MSI (`kIOInterruptTypePCIMessaged`, which IOPCIFamily and the ITS already support).
-- DMA through a 36-bit window: `dma-address-bits` 36 (the IORT also says 36 for the Q8B's root complexes), so the bounce paths above run for real there, and descriptor addresses are translated (`pa + TC956X_DMA_OFFSET`).
-- The descriptor rings are XGMAC's, not virtio's: `NDVirtqueue` doesn't apply, `NDStorageDMA` and the receive/transmit/batching structure of this driver do.
-- Risks the FreeBSD driver records: a block whose clock is off or reset asserted doesn't answer, and on Qualcomm PCIe a failed read is an SError, so the bring-up order matters; the SMMUv3 must be in bypass (as for NVMe, `storage.md`); the switch's downstream link must be up before its functions enumerate.
-- Exit: the TC956x takes a DHCP lease (checkpoint 2's netconfigd and dhclient, unchanged) and accepts ssh.
+From FreeBSD's port (`../freebsd-src`, branch `radxa-dragon-q8b`; its hardware notes), which runs on this board at 2.5G with DHCP, checksum offload, TSO and interrupt moderation:
+
+| What | On the Q8B |
+|---|---|
+| Where | PCIe segment 4: a TC9563 switch (UEFI powers and configures it; only its downstream port 3 is used), and behind it the TC956x endpoint 1179:0220 (subsystem 1179:0001) at bus 3, device 0, **functions 0 and 1**: one MAC each. The segment's host bridge is `_CCA` 1 (coherent) and reaches 36 address bits through the SMMUv3, assumed in bypass (`storage.md`) |
+| BARs, per function | BAR0 16 KiB, the bridge configuration with the **TAMAP** (AXI-to-PCIe translation, four entries at 0x800); BAR2 512 KiB, the embedded Cortex-M3's SRAM (unused: no firmware is loaded); BAR4 2 MiB, the chip's whole SFR space |
+| Chip-wide (function 0) | the clocks and resets (NCLKCTRL/NRSTCTRL 0x1004/0x1008), the TAMAP, the MSI generators' clock and reset |
+| Per MAC | a Synopsys XGMAC 3.01 (SNPSVER 0x30) at 0x40000 + 0x8000·n; behind it an XPCS (a 1 KiB window at +0x3a00) and the SerDes (PMA, +0x4000); EMACnCTL (0x1070 + 4n) selects the SerDes rate (SP_SEL 4 = 2500BASE-X, 5 = SGMII 1G, 6 = 100M, 7 = 10M; it resets to an invalid 8) and says INIT_DONE; an MSI generator at 0xf000 + 0x100·n |
+| PHY | a Qualcomm QCA8081 at MDIO address 0x1c (clause 22, PHY-specific status at register 0x11), its SerDes at 0x1d (clause 45, MMD 1); 10M to 2.5G. The SerDes runs 2500BASE-X at 2.5G and SGMII with in-band autonegotiation below |
+| DMA | the MAC sees host address x at 0x10_0000_0000 + x (TAMAP entry 0, a 64 GiB window): every descriptor and buffer address carries that offset, and host memory must be below 36 bits |
+| Interrupts | one MSI per function (32 advertised); the chip's MSI generator sends one MSI and holds off until MASK_CLR is written |
+| What UEFI leaves | both MACs clocked and out of reset, the PMA and XPCS initialised at 2500BASE-X (INIT_DONE), the TAMAP programmed, a station address in the MAC (88:12:4e:00:02:01 on function 1, the address the LAN's DHCP server knows). The PHY's SerDes FIFO is released only on a port that had a link when UEFI ran |
+
+The one hazard that shapes the code: **a block whose clock is off or whose reset is asserted doesn't answer, and on Qualcomm PCIe a failed read is an SError**. Every access follows FreeBSD's order, which ran on the board.
+
+### Where the code is
+
+| File | What |
+|---|---|
+| `kernel/neodarwin/network/nd_tc956x.h` | the hardware core, ported from FreeBSD's `if_tcx.c` and `if_tcxreg.h` (`PROVENANCE.md`): registers, chip set-up, MDIO, the PHY, the SerDes and PCS, the link state machine, init and stop, interrupts, descriptor formats and ring handling, the multicast hash. `static inline` C over five accessor macros (`ND_TC956X_READ`/`WRITE` for BAR4, `BRIDGE_WRITE` for BAR0, `DELAY`, `LOG`), as `nd_geni_uart.h` is |
+| `kernel/neodarwin/network/NeoDarwinTC956x.cpp` | the IOKit driver, an `IOEthernetController`: matching, the BARs, DMA memory and mbufs, the MSI, the timers, and what IONetworkingFamily is told |
+| `kernel/neodarwin/network/test/tc956x_sim_test.c` | the register model and the tests (below); `test/mutations.txt` and `test/mutate.sh` plant the bugs |
+| patch 0037 | the build-list line, the search paths (network, PCI, storage's DMA policy; the kext view of 0035) and the personality, `IOPCIMatch` `0x02201179` |
+| `THIRD_PARTY_NOTICES.md` | FreeBSD's BSD-2-Clause notice for the ported code |
+
+### The driver
+
+`NeoDarwinTC956x` matches both functions. `start` follows FreeBSD's `tcx_attach_pre` and `tcx_attach_post`:
+
+1. The boot-args; function > 1 is refused. The function must be `dma-coherent` (below), and `dma-address-bits` is capped at 36.
+2. Memory and bus mastering on; **BAR0 and BAR4 of this function** mapped, each checked to be at least as long as the highest offset the core uses (0x1000 and 0x50000).
+3. **Function 0: chip set-up** (`nd_tc956x_chip_init`): TAMAP entry 0 (`SRC_LO` 0x47, `SRC_HI` 0x10, no translation; entries 1–3 cleared), then the MSI generators: clock on, then reset released. It records that the chip is set up. **Function 1 waits** for that, up to 10 s (FreeBSD's function 1 fails with ENXIO if it attaches first); after that it goes on if the MSI generators run (firmware's set-up, which FreeBSD also accepts), or gives up with `function 0 has not set up the chip`. While waiting it only reads function 0's clock and reset registers, as FreeBSD's does.
+4. **The station address**, read from the MAC before anything resets it, and only if the MAC is clocked and out of reset; without one, a locally administered address (`02:4e:44:…`; the TC956x's own lives in an I2C EEPROM on `i2c12`, which NeoDarwin can't read yet).
+5. **Cold init** (FreeBSD's default, `hw.tcx.cold_init=1`; `nd_tc956x_cold=0` keeps a MAC firmware left running): MAC, PMA and XPCS reset asserted; the MAC's clocks on; MAC reset released; the PHY polled over MDIO for its speed (1G if no link); EMACnCTL's speed selector set **before** the PMA's reset is released, with its reference clock configured while held (`nd_tc956x_pma_init`; INIT_DONE awaited for up to 1 s); XPCS reset released; PCS soft reset, type select, then 2500BASE-X or MAC-side SGMII with automatic speed switching (`nd_tc956x_xpcs_config`).
+6. The PHY's ID (a warning if it isn't a QCA8081) and its advertisement fixed: both PAUSE bits, no half duplex (the XGMAC has none); changing it renegotiates once.
+7. The rings, the MSI, the timers, the media (autoselect and 2500/1000/100/10 full duplex), a first link check, the log line, then `attachInterface`: IONetworkStack and the namer make it en*.
+
+**Link.** A 500 ms timer (iflib's admin timer on FreeBSD) reads the PHY's status register 0x11 (`nd_tc956x_phy_poll`) and applies it (`nd_tc956x_link_apply`): on a new speed the PMA is restarted at the matching rate, and the PCS reconfigured when the link moves between 2.5G (2500BASE-X) and the rest (SGMII); the PHY's **SerDes FIFO is released on every link up and held on link down** (FreeBSD `189b99643d`: without it a port UEFI didn't bring up has link but passes nothing); the MAC's port speed and the resolved PAUSE use (802.3 Annex 28B) follow. The interface is told with `setLinkStatus`, with the medium of the speed. Choosing a medium (`ifconfig en0 media 1000baseT`) advertises that speed alone and renegotiates (`nd_tc956x_phy_set_media`).
+
+**The datapath** (`enable` → FreeBSD's `iflib_init_locked`): `nd_tc956x_init` (DMA software reset; bus mode, MTL with a 16 KiB TX and 32 KiB RX FIFO, store and forward, flow-control thresholds; the address, the filter, RX checksum, the port speed; channel 0 with PBL 32×8, the rings' addresses through the TAMAP, the RX ring length with the 3.01a erratum's OWRQ 3, the RX watchdog), then 255 receive buffers posted and the RX tail moved, then interrupts on. `disable` runs `nd_tc956x_stop` (MSI output and channel interrupts off; the TX DMA stopped and the MTL drained before the transmitter is turned off; receive off and drained) and frees every buffer.
+- **Rings**: 256 descriptors each way, physically contiguous below 36 bits, never across 4 GiB (the DMA keeps only the low 32 bits of a ring pointer). One descriptor always stays empty, so a full ring isn't mistaken for an empty one.
+- **Receive**: each descriptor takes a 2 KiB mbuf cluster (RBSZ 2048); the DMA's completions are handed to the interface in one batch per interrupt and each descriptor is refilled with a fresh mbuf (or its old one, with the frame dropped, if none can be had). A frame longer than one buffer (a jumbo frame: the MAC accepts giants) spans descriptors and is dropped. A cluster above 36 bits is replaced by the slot's bounce buffer.
+- **Transmit**: an `IOGatedOutputQueue`; one descriptor per segment (up to 8, from an `IOMbufNaturalMemoryCursor`), the frame length in each, FD and the checksum insertion on the first, LD on the last; the TX tail moved. A packet the DMA can't reach is copied into its descriptor's 2 KiB bounce buffer. Completions free whole packets only, from the interrupt, from `outputPacket` when the ring is short, and from the link timer.
+- **DMA coherence**: the descriptors share cache lines with ones the device writes, so a clean on a non-coherent device could overwrite a completion. The driver therefore drives only a `dma-coherent` function (`DMA is not coherent; not supported`); the Q8B's host bridges are `_CCA` 1. Making it work non-coherently needs the XGMAC's descriptor skip length, which nothing has tested on this chip.
+
+**Interrupts.** The function's MSI (IOPCIFamily lists it after INTx; one vector, as no `SUPPORT_MULTIPLE_MSI`) through the ITS, an `IOInterruptEventSource` on the work loop. FreeBSD's handler: the channel status, and if it is 0 a stray (the generator re-armed with MASK_CLR); otherwise the generator's output off, the status acknowledged, both rings serviced, then output on and MASK_CLR. A fatal bus error stops the channel; the datapath is restarted. **Moderation** is FreeBSD's: receive descriptors don't ask for an interrupt, the RX watchdog raises one 64 units (about 130 µs) after the first frame; a transmit descriptor asks for one only every 64 descriptors (the lower of 128 and a quarter ring), and the link timer reclaims what was sent without one. Without an MSI (`nd_pci_msi=0`, no ITS) or with `nd_tc956x_poll=1`, a 1 ms timer services the rings instead.
+
+**Filters and offloads.** Promiscuous and all-multicast modes; the multicast list goes into the 64-bin hash (`~ether_crc32_be(address) >> 26`, FreeBSD `a098b845da`). **Checksum offload** (FreeBSD `fee2e88a86`) both ways: `getChecksumSupport` offers the IPv4 header and TCP/UDP over IPv4 and IPv6; on transmit `getChecksumDemand` picks CIC 3 (or 1 for the IPv4 header alone); on receive the descriptor's packet type becomes `setChecksumResult`, and a frame with the error summary set (a bad checksum among them) goes up unchecked for the stack to judge. `nd_tc956x_csum=0` turns it off.
+
+**Counters**: the `Statistics` registry property (packets, bytes, drops, bounces, stalls, interrupts by cause, RX buffer unavailable, bus errors, link changes, the speeds).
+
+| Boot-arg | Effect |
+|---|---|
+| `nd_tc956x=0` | the driver doesn't attach |
+| `nd_tc956x_cold=0` | keep a MAC, SerDes and PCS firmware left running (FreeBSD's `hw.tcx.cold_init=0`) |
+| `nd_tc956x_csum=0` | no checksum offload |
+| `nd_tc956x_poll=1` | poll the rings every millisecond instead of taking the MSI |
+
+The log expected for function 1 (not yet seen on the board; the LPI depends on what else has MSIs):
+
+```
+NeoDarwinTC956x: 03:00.1: TC956x 1179:0220 function 1: revision 0x01, XGMAC 0x30; MAC 88:12:4e:00:02:01 (firmware's); cold init, SerDes 2500 Mb/s; PHY 0x004dd101; link up; rx 255 x 2048 bytes, tx 256 descriptors; MSI (LPI 8193); checksum offload on; DMA coherent, 36 address bits
+NeoDarwinInterfaceNamer: en1: IOEthernetInterface of NeoDarwinTC956x
+NeoDarwinTC956x: 03:00.1: en1: link up at 2500 Mb/s, full duplex, flow control rx/tx
+NeoDarwinTC956x: 03:00.1: rx: first completion by its interrupt (MSI, LPI 8193)
+NeoDarwinTC956x: 03:00.1: tx: first completion by its interrupt (MSI, LPI 8193)
+```
+
+### Ported and deferred
+
+| FreeBSD tcx | Here |
+|---|---|
+| chip set-up, MDIO, the QCA8081, PMA/XPCS per speed, the link state machine, the SerDes FIFO release, PAUSE | ported |
+| cold init by default, the address read before reset | ported (`nd_tc956x_cold=0`) |
+| one TX and one RX queue, store and forward, flow control, MTL FIFO sizes | ported |
+| interrupt moderation (RX watchdog, TX coalescing), MSI generator handling | ported, the defaults fixed (no sysctls) |
+| checksum offload | ported |
+| multicast hash filter | ported |
+| function 1 before function 0 | improved: waits instead of ENXIO |
+| **TSO** | **deferred**: IONetworkingFamily gives a driver only the MSS (`mbuf_get_tso_requested`), so the Ethernet, IP and TCP header lengths FreeBSD's first descriptor needs would have to be parsed from the mbuf here; the Skywalk compat path would need checking too. A throughput item, not a bring-up one |
+| **jumbo frames** | **deferred**: 2 KiB buffers, MTU 1500 (`getMaxPacketSize` is IOEthernetController's) |
+| the MMC PAUSE watch (iflib's TX watchdog), the sysctls, resume | not needed (no TX watchdog here) or deferred |
+
+### Safety
+
+- **Only its own function.** The driver maps BAR0 and BAR4 of the function it matched and nothing else; every offset the core uses is a constant below the lengths it checks. It never touches the TC9563 switch, the GPIOs (the PHY's reset lines), BAR2, or another device. Function 1 writes nothing of function 0's: the model fails a test on any write to the other function's clocks, resets, MAC, MSI generator or BAR0.
+- **`nd_tc956x=0`** keeps it off entirely.
+- **SErrors.** FreeBSD's order exactly: no block read or written before its clock is on and its reset released (the MSI generators before chip set-up, the MAC before `mac_start`'s release, the XPCS before its own release); the PMA only written, and only while held; the address read only from a running MAC. The model raises an SError for each of these, and the mutation tests show it notices when the order is broken.
+- **DMA** goes only to memory the driver allocated or mbufs it was given, below 36 bits, through the TAMAP window the driver programs.
+- **What remains a risk on the board**: the switch's other downstream ports (Linux disables ports 1 and 2 because reading them SErrors; how IOPCIFamily's scan of segment 4 behaves is P1-09's business, `pci.md` "Risk"); the SMMUv3 must pass the endpoint's stream through (as for NVMe); the ITS DeviceID of a device behind a switch (`gic-its.md`).
+
+### Tests
+
+`//kernel/neodarwin/network:tc956x_sim_test` builds the header on the host against a model of a TC956x with its two functions. The model flags an SError on any read or write of a block whose clock is off or reset asserted, any access outside the registers the driver uses or to the other function's, a PMA read or a PMA write outside its reset, a reset released before its clock, the PMA released with an invalid speed selector or without its reference clock set, MDIO used while busy or a device addressed in the wrong clause, DMA without the TAMAP or its offset, a TX descriptor reached before the tail that the driver doesn't own, a frame without FD or whose length disagrees, the RX ring length without OWRQ 3, and the transmitter turned off before the DMA stopped and the MTL drained. Frames pass only when the PHY's link, the SerDes FIFO, the PMA rate, the PCS mode and the MAC's port speed all agree. The tests:
+
+| Test | Checks |
+|---|---|
+| cold attach, function 0 | TAMAP and MSI generators; UEFI's address kept; the clock/reset/EMACCTL sequence (`clk0+msigen, rst0-msigen, rst0+mac+pma+xpcs, rst0-mac, emac0 sp5, rst0-pma, rst0-xpcs`); SGMII at 1G with no link; the QCA8081's ID; the advertisement fixed once |
+| function 1 before function 0 | it doesn't attach and writes nothing; after function 0 it does, keeping UEFI's address, at 2500BASE-X; with firmware's MSI set-up alone it attaches without writing BAR0 |
+| link speeds | status 0x2600/0x2500/0x2480/0x2400 for 2.5G/1G/100M/10M: SP_SEL 4–7, the PMA restarted on each change, the PCS reset only between 2500BASE-X and SGMII, the MAC's SS 2/3/4/7, the FIFO released on up and held on down, frames passing; one event per change |
+| PAUSE | four partner advertisements against Annex 28B and the MAC's flow-control registers |
+| datapath | every register init writes; 300 frames received and 400 sent (1 to 4 segments) over many laps, byte for byte and in order; a burst of 32 under the RX watchdog in at most 2 MSIs; a 3000-byte frame dropped with the ring intact |
+| TX ring | 63 packets fill a 64-descriptor ring; packets of three descriptors reclaimed whole while the DMA stops mid-packet |
+| moderation | IOC on every refill without the watchdog, none with it, every 8th with `rx_coal_frames` 8; TX IOCs every quarter ring, every 4, every packet |
+| checksums | CIC 0/1/3 on the first descriptor only; packet types 1, 2, 9, 10 reported, others and errored frames not, the error counted; IPC off without offload |
+| multicast | the hash bin against bitrev(~CRC-32) for six groups; joined groups, broadcast and the own address pass, others don't; all-multicast and promiscuous |
+| stop, warm attach, port 0, MSI, media, PMA timeout | stop waits for the TX DMA and the MTL, then everything is off, and init works again; `cold_init` false changes no clock or reset; a port UEFI left stopped comes up from scratch (clocks before reset release) and passes traffic once the FIFO is released; a stray MSI re-arms the generator; forced and automatic media; a SerDes that never comes up is logged and retried at the next link check |
+
+**Mutation tests** (`//kernel/neodarwin/network:tc956x_mutation_tests`, 29 targets): each builds the simulation against a copy of the header with one planted bug from `test/mutations.txt` and passes only if a check fails. The bugs: the TAMAP offset dropped; the MSI generator's or the MAC's reset released before its clock; the speed selector fixed at 1G or never written; the PMA written outside its reset or without its reference clock; the SerDes FIFO never released; the PCS type select skipped or its mode never switched; the XPCS used before its reset is released; the address read from a stopped MAC; the PHY's speed field misread; the MAC's port speed fixed; PAUSE ignored; the DMA reset not awaited; OWRQ missing; the TX tail one short; the TX ring filled completely; partial packets reclaimed; the checksum codes swapped; the RX tail at the head; frames split at each descriptor; the error summary trusted; no RX interrupt without the watchdog; the hash not complemented or not enabled; a stray MSI not re-armed; stop not waiting for the DMA. `mutate.sh` fails the build if a mutation no longer applies, so a change to the header can't silently retire one.
+
+### On the board
+
+What the exit needs: the Q8B with the NeoDarwin USB stick (the recipe in `arm64-sbsa-bringup.md`, "Status"), HDMI and a USB keyboard (`usb-console.md`), and an Ethernet cable from a TC956x port to the LAN switch that serves DHCP (192.168.0.0/24; the Mac is 192.168.0.18). Under FreeBSD the cable was in the port that is **function 1** (`tcx1`, Ubuntu's eth1), which linked at 2.5G and leased 192.168.0.11 for UEFI's address 88:12:4e:00:02:01; FreeBSD's notes also have port 0 cabled since 2026-09-28. Either works; note which.
+
+1. **Boot** from the stick with `boot.cfg` as it is. On HDMI, during boot, look for (and photograph) `NeoDarwinPCIHostBridge` lines for segment 4 naming 1179:0220 at 03:00.0 and 03:00.1 with `msi 32`, the `NeoDarwinPCIMSI` lines for them, the two `NeoDarwinTC956x:` lines, `NeoDarwinInterfaceNamer: en0` and `en1`, and `link up at 2500 Mb/s` for the cabled port.
+2. **At `login:`** log in as root. `ifconfig -a`: en0 and en1 with `ether` addresses (UEFI's, 88:12:4e:00:02:0x, unless the log says `random`), the cabled one `status: active` and `media: autoselect (2500baseT <full-duplex>)`, and `inet` 192.168.0.x once leased.
+3. **The lease**: `cat /var/log/netconfigd.log` shows `DHCPACK from` the LAN's server and `bound to 192.168.0.x`; `netstat -rn` the default route; `cat /etc/resolv.conf` the LAN's name server; `ping -c 3` the gateway and `ping -c 3 example.com`.
+4. **ssh from the Mac**: on the board, as root, `launchctl load -w /System/Library/LaunchDaemons/ssh.plist`, and put the Mac's public key in `/Users/test/.ssh/authorized_keys` (or set a password with `passwd test`). From the Mac: `ssh test@192.168.0.x uname -a` says `Darwin`; `scp` a file of a few MB back and compare sizes. That is the exit.
+5. **Both ports**, if both are cabled: the other one leases too (netconfigd runs a dhclient per en* interface; only the first lease sets the default route).
+
+If something fails, photograph the screen and note the `NeoDarwinTC956x:` lines, then try in this order (boot-args go in `\NeoDarwin\boot.cfg` on the stick):
+- **Nothing from NeoDarwinTC956x**: no `1179:0220` in the host bridge's lines means segment 4 didn't enumerate (P1-09); with the device listed, the driver declined: its line says why (`not coherent`, `cannot map`, `function 0 has not set up the chip`).
+- **A hang or SError while the driver starts**: boot with `nd_tc956x=0` to get the board up, and report the last lines; then try `nd_tc956x_cold=0` (no resets: UEFI's SerDes kept).
+- **`PHY at 28 does not answer`** or a PHY ID other than 0x004dd101: MDIO isn't reaching the QCA8081.
+- **Link never comes up**, or `SerDes did not come up`: `nd_tc956x_cold=0`; note the speed the partner offers.
+- **Link up but no lease**: if no `first completion` lines appear, the MSI isn't arriving (ITS DeviceID or the SMMU): `nd_tc956x_poll=1`. If they appear but DHCP never binds, note `netstat -I en1` (its output counts are right, its input counts aren't: "Findings" above) and try `nd_tc956x_csum=0`.
+- **Ping works, TCP doesn't**: `nd_tc956x_csum=0`.
+
+### Findings
+
+| Finding | Fix |
+|---|---|
+| FreeBSD's function 1 fails for good (ENXIO) if it attaches before function 0 has set the chip up | function 1 waits for function 0's driver (10 s), then accepts firmware's set-up if the MSI generators run, as FreeBSD's check does |
+| tcx's descriptor rings rely on coherent DMA: 16-byte descriptors share cache lines with ones the device writes back, so cleaning a line for a non-coherent device could overwrite a completion | the driver drives only a `dma-coherent` function (the Q8B's PCIe is `_CCA` 1) |
+| IONetworkingFamily's TSO hands the driver only the MSS; FreeBSD's TSO needs the header lengths in its first descriptor | TSO deferred ("Ported and deferred") |
+| iflib tells tcx when a TX completion interrupt is wanted (`IPI_TX_INTR`); IONetworkingFamily doesn't | an IOC every quarter ring at most (FreeBSD's cap), completions also reclaimed in `outputPacket` and by the 500 ms link timer |
+| tcx's OWN check in its RX ring walk is redundant with LD on this hardware's write-back (a descriptor the driver posted never has LD): its mutant survives every test | kept, as FreeBSD has it; not in the mutation list |
+
+## What P4-24 still needs
+
+**P4-24** (the networking userland) builds on this: `arp`, `ndp`, `traceroute`, `ping6`, `rtadvd` and the rest of network_cmds; DHCPv6 or SLAAC configuration; pf and `pfctl`; an NTP client; a persistent interface namer (with P3-08's `netd`); and whether NeoDarwin keeps FreeBSD's dhclient or moves to bootp's IPConfiguration once configd is built. Checkpoint 3 needed nothing more from the userland: netconfigd starts dhclient on whatever en* interface the TC956x driver attaches.

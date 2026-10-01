@@ -1,14 +1,20 @@
 # NeoDarwin's bring-up Ethernet (P1-19, docs/kernel/network.md): the
-# virtio-net driver and the interface namer, built into the SBSA kernel with
-# Apple's IONetworkingFamily (@apple_ionetworkingfamily, APSL) until P3-08's
-# network dexts replace them (patches 0034-0035). Kernel-only IOKit C++.
-load("//rules:cc.bzl", "lang_audit_test")
+# virtio-net driver, the Radxa Dragon Q8B's TC956x driver and the interface
+# namer, built into the SBSA kernel with Apple's IONetworkingFamily
+# (@apple_ionetworkingfamily, APSL) until P3-08's network dexts replace them
+# (patches 0034-0037). Kernel-only IOKit C++, except the TC956x's hardware
+# core, a C header ported from FreeBSD's tcx that also builds on the host
+# against a register model.
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//rules:cc.bzl", "ND_C_COPTS", "lang_audit_test", "nd_cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
 SRCS = [
     "NeoDarwinInterfaceNamer.cpp",
+    "NeoDarwinTC956x.cpp",
     "NeoDarwinVirtioNet.cpp",
+    "nd_tc956x.h",
     "nd_virtio_net.h",
 ]
 
@@ -23,4 +29,86 @@ filegroup(
 lang_audit_test(
     name = "network_lang_audit",
     srcs = SRCS,
+)
+
+# nd_tc956x.h against a model of the TC956x: FreeBSD's bring-up order with
+# no access to a block whose clock is off or reset asserted (an SError on
+# the Q8B's PCIe), the TAMAP and its DMA offset, MDIO to the QCA8081 and
+# its SerDes, the link state machine at 2.5G/1G/100M/10M with the SerDes,
+# PCS and MAC speed following the PHY and the SerDes FIFO released on link
+# up, PAUSE resolution, init's registers, TX and RX rings over many laps,
+# interrupt moderation, checksum offload, the multicast hash and stop.
+nd_cc_test(
+    name = "tc956x_sim_test",
+    size = "small",
+    srcs = [
+        "nd_tc956x.h",
+        "test/tc956x_sim_test.c",
+    ],
+    includes = ["."],
+)
+
+# Mutation tests: each copy of the header has one planted bug from
+# test/mutations.txt, and its test passes only if the simulation fails.
+TC956X_MUTANTS = [
+    "tamap_offset",
+    "msigen_reset_before_clock",
+    "mac_reset_before_clock",
+    "sp_sel_always_1g",
+    "sp_sel_not_written",
+    "pma_written_outside_reset",
+    "pma_refclk_missing",
+    "fifo_not_released",
+    "pcs_type_sel_skipped",
+    "pcs_mode_switch_skipped",
+    "xpcs_used_in_reset",
+    "mac_address_read_unguarded",
+    "phy_speed_misread",
+    "mac_speed_fixed",
+    "pause_ignored",
+    "swr_not_awaited",
+    "owrq_missing",
+    "tx_tail_short",
+    "tx_ring_overfilled",
+    "tx_reclaim_partial",
+    "tx_csum_swapped",
+    "rx_tail_at_head",
+    "rx_split_frames",
+    "rx_error_trusted",
+    "rx_no_ioc_without_watchdog",
+    "hash_not_complemented",
+    "hash_filter_off",
+    "stray_not_rearmed",
+    "stop_without_drain",
+]
+
+[genrule(
+    name = "tc956x_mutant_%s_h" % m,
+    testonly = True,
+    srcs = [
+        "nd_tc956x.h",
+        "test/mutations.txt",
+    ],
+    outs = ["mutants/%s/nd_tc956x_mutant.h" % m],
+    cmd = "$(location test/mutate.sh) %s $(location test/mutations.txt) $(location nd_tc956x.h) $@" % m,
+    tools = ["test/mutate.sh"],
+) for m in TC956X_MUTANTS]
+
+[cc_test(
+    name = "tc956x_mutant_%s_test" % m,
+    size = "small",
+    srcs = [
+        "test/tc956x_sim_test.c",
+        ":tc956x_mutant_%s_h" % m,
+    ],
+    copts = ND_C_COPTS + [
+        "-DND_TC956X_HEADER=\\\"mutants/%s/nd_tc956x_mutant.h\\\"" % m,
+        "-DND_TC956X_EXPECT_CAUGHT",
+    ],
+    includes = ["."],
+) for m in TC956X_MUTANTS]
+
+test_suite(
+    name = "tc956x_mutation_tests",
+    tests = [":tc956x_mutant_%s_test" % m for m in TC956X_MUTANTS],
 )

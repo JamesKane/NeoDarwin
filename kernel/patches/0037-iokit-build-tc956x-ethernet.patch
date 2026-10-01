@@ -1,0 +1,56 @@
+From: NeoDarwin
+Subject: [PATCH] iokit: build NeoDarwin's Toshiba TC956x Ethernet driver
+
+P1-19 checkpoint 3's Ethernet: NeoDarwinTC956x (kernel/neodarwin/network,
+overlaid at iokit/ndnet), an IOEthernetController for the Toshiba TC956x
+PCIe Ethernet controller of the Radxa Dragon Q8B (PCI 1179:0220, one MAC
+per function), over nd_tc956x.h, a port of FreeBSD's tcx driver
+(docs/kernel/network.md, "Checkpoint 3"). A bring-up driver, replaced by
+P3-08's network dexts.
+
+This patch lists it, gives it the network, PCI and storage (the DMA
+policy) search paths and the kext view of patch 0035, and adds its
+personality: IOPCIMatch 1179:0220, both functions.
+
+Rebase-risk: low (appended entries; applies after 0036).
+---
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -77,6 +77,11 @@ const char * gIOKernelConfigTables =
+     "     'IOPCIMatch'      = '0x10411af4 0x10001af4';"
+     "   },"
+     "   {"
++    "     'IOClass'         = NeoDarwinTC956x;"
++    "     'IOProviderClass' = IOPCIDevice;"
++    "     'IOPCIMatch'      = '0x02201179';"
++    "   },"
++    "   {"
+     "     'IOClass'         = NeoDarwinXHCI;"
+     "     'IOProviderClass' = IOPCIDevice;"
+     "     'IOPCIClassMatch' = '0x0c033000&0xffffff00';"
+--- a/iokit/conf/Makefile.template
++++ b/iokit/conf/Makefile.template
+@@ -169,6 +169,13 @@ $(foreach o,NeoDarwinVirtioNet.cpo NeoDarwinInterfaceNamer.cpo,$(eval $(o)_CFLAGS_ADD += $(ND_KEXT_VIEW) -I$(ND_NET) \
+ 	-I$(ND_NET)/include -I$(ND_IONET) -I$(ND_VIRTIO) -I$(ND_STORAGE) -I$(ND_PCI) -I$(ND_IOPCI) -I$(ND_PCI)/compat \
+ 	-I$(SRCROOT)/libkern/ndpthread/compat -Wno-deprecated-declarations))
+ 
++# NeoDarwin's TC956x Ethernet driver (patch 0037): an IOEthernetController on
++# an IOPCIDevice over nd_tc956x.h (its own directory), with the network,
++# PCI and storage (the DMA policy) headers, seeing the kernel as the family
++# does (ND_KEXT_VIEW, patch 0035).
++NeoDarwinTC956x.cpo_CFLAGS_ADD += $(ND_KEXT_VIEW) -I$(ND_NET) -I$(ND_NET)/include -I$(ND_IONET) -I$(ND_STORAGE) \
++	-I$(ND_PCI) -I$(ND_IOPCI) -I$(ND_PCI)/compat -I$(SRCROOT)/libkern/ndpthread/compat -Wno-deprecated-declarations
++
+ #
+ # Diagnostic opt-outs.  We need to make this list empty.
+ #
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -238,6 +238,7 @@ iokit/ndnet/IONetworkingFamily/IOMbufMemoryCursor.cpp	
+ iokit/ndnet/IONetworkingFamily/IOMbufMemoryCursor.cpp	optional iokitcpp
+ iokit/ndnet/NeoDarwinVirtioNet.cpp	optional iokitcpp
+ iokit/ndnet/NeoDarwinInterfaceNamer.cpp	optional iokitcpp
++iokit/ndnet/NeoDarwinTC956x.cpp	optional iokitcpp
+ 
+ # tightbeamc generated implementation files
+ ./Exclaves/IOService.tightbeam.c		optional iokitcpp config_exclaves
