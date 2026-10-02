@@ -125,6 +125,7 @@ SBSA_PATCHES = [
     "patches/0040-sbsa-kernel-split-seg-info.patch",
     "patches/0041-generic-arm64-physmap-end-covers-twig-padding.patch",
     "patches/0042-bsd-export-file-offset-kpi.patch",
+    "patches/0043-serial-keyboard-thread-dump-boot-arg.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.

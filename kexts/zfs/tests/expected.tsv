@@ -172,7 +172,7 @@ cli_root/zfs_snapshot/zfs_snapshot_005_neg	PASS
 cli_root/zfs_snapshot/zfs_snapshot_006_pos	PASS	
 cli_root/zfs_snapshot/zfs_snapshot_007_neg	PASS	
 cli_root/zfs_snapshot/zfs_snapshot_008_neg	PASS	
-cli_root/zfs_snapshot/zfs_snapshot_009_pos	PASS	
+cli_root/zfs_snapshot/zfs_snapshot_009_pos	FLAKY	.zfs/snapshot listed 4 of a re-created dataset's 5 snapshots once (2026-10-02, 4 runs): the macOS layer's ctldir readdir (checkpoint 3, .zfs)
 cli_root/zpool_create/cleanup	FAIL	partitions DISKS with diskutil and gpt, macOS tools NeoDarwin lacks; GPT labels are checkpoint 3
 cli_root/zpool_create/create-o_ashift	PASS	
 cli_root/zpool_create/setup	PASS	
@@ -197,7 +197,7 @@ cli_root/zpool_create/zpool_create_020_pos	PASS
 cli_root/zpool_create/zpool_create_021_pos	PASS	
 cli_root/zpool_create/zpool_create_022_pos	PASS	
 cli_root/zpool_create/zpool_create_023_neg	FAIL	NFS sharing: no NFS server (share options are not validated)
-cli_root/zpool_create/zpool_create_024_pos	FLAKY	concurrent zpool create/destroy: passed in most runs; KILLED in others, and then ZFS is wedged ("pool is busy") and the rest of zpool_create SKIPs
+cli_root/zpool_create/zpool_create_024_pos	FLAKY	128 concurrent pools (about 10,000 kernel threads) are CPU-bound past the 240 s cap on two TCG CPUs: KILLED in all 11 runs of 2026-10-02, passed in 77 s with four; not a hang (thread dumps), and nd-zfs-tests removes what it leaves
 cli_root/zpool_create/zpool_create_crypt_combos	PASS	
 cli_root/zpool_create/zpool_create_draid_001_pos	FLAKY	failed once with FILEDIR full (HFS+ allocates file vdevs; FILEDIR is 64 GB since)
 cli_root/zpool_create/zpool_create_draid_002_pos	FAIL	dRAID file vdevs: truncate of the files in TESTDIR fails (to investigate)
@@ -211,8 +211,8 @@ cli_root/zpool_create/zpool_create_features_003_pos	PASS
 cli_root/zpool_create/zpool_create_features_004_neg	PASS	
 cli_root/zpool_create/zpool_create_features_005_pos	PASS	
 cli_root/zpool_create/zpool_create_features_006_pos	PASS	
-cli_root/zpool_create/zpool_create_features_007_pos	KILLED	over the 240 s per-test cap under TCG, or hangs (to investigate)
-cli_root/zpool_create/zpool_create_features_008_pos	FAIL	compatibility feature sets: to investigate
+cli_root/zpool_create/zpool_create_features_007_pos	FLAKY	near the 240 s cap under TCG: KILLED in most runs, passed once (2026-10-02) when zpool_create_024_pos's pools had been removed
+cli_root/zpool_create/zpool_create_features_008_pos	PASS	
 cli_root/zpool_create/zpool_create_features_009_pos	PASS	
 cli_root/zpool_create/zpool_create_tempname	PASS	
 cli_root/zpool_destroy/zpool_destroy_001_pos	FAIL	needs zvols (checkpoint 3)
@@ -251,7 +251,7 @@ cli_root/zpool_import/zpool_import_008_pos	PASS
 cli_root/zpool_import/zpool_import_009_neg	PASS	
 cli_root/zpool_import/zpool_import_010_pos	FLAKY	creates and destroys five pools (one dRAID): near the 240 s cap under TCG (KILLED in some runs)
 cli_root/zpool_import/zpool_import_011_neg	FLAKY	fails when zpool_import_010_pos is KILLED (its destroyed pools hold the disk files)
-cli_root/zpool_import/zpool_import_012_pos	FAIL	NFS sharing: no NFS server (share options are not validated)
+cli_root/zpool_import/zpool_import_012_pos	FLAKY	fails on NFS sharing (no NFS server; share options are not validated); once (2026-10-02) its zpool import testpool hung in the kernel and ZFS was wedged (to investigate, §7.2)
 cli_root/zpool_import/zpool_import_013_neg	FAIL	needs bzcat (bzip2 is not in the base; P3-02)
 cli_root/zpool_import/zpool_import_014_pos	PASS	
 cli_root/zpool_import/zpool_import_015_pos	PASS	

@@ -165,6 +165,13 @@
 #   ND_QEMU_DUMP_CPUS_ON=TEXT
 #                     as --dump-cpus-on TEXT, for a run whose arguments are
 #                     fixed (a Bazel test: --test_env=ND_QEMU_DUMP_CPUS_ON=...)
+#   ND_QEMU_DUMP_ON_QUIET=SECS
+#                     with --dump-cpus-on, also dump the CPUs (once) when
+#                     serial has been silent for SECS seconds
+#   ND_QEMU_THREADS_KEY=1
+#                     after each CPU dump, type Ctrl-] on serial: with the
+#                     kernel boot-arg nd_threaddump=1 (kernel patch 0043) it
+#                     prints every thread's kernel stack ("ndthr" lines)
 set -euo pipefail
 esp_files=(); mem=""; smp=1; cpu=""; until_lines=0; sends=(); machine=virt; firmware=""; firmware_ns=""
 devices=(); drives=(); screendump=""; screen_font=""; screen_lines=(); until_screen=0; absent=(); mopts=""
@@ -416,7 +423,8 @@ cat > "$work/watch.pl" <<'WATCH_PL'
 	sysopen(my $in, "$ser.in", O_RDWR) or die "ser.in: $!";
 	open(my $lf, ">>", $log) or die; $lf->autoflush(1);
 	my ($text, $pos, $due) = ("", 0, undef);
-	sub drain { my $buf; while (sysread($out, $buf, 65536)) { print $lf $buf; $buf =~ s/\r//g; $text .= $buf } }
+	my $last_out = time;
+	sub drain { my $buf; while (sysread($out, $buf, 65536)) { print $lf $buf; $buf =~ s/\r//g; $text .= $buf; $last_out = time } }
 	# --host-cmd-after: the command runs in a child of its own while serial
 	# is drained; its output, then its status, join the log and the text
 	# as "host: " lines.
@@ -567,6 +575,12 @@ cat > "$work/watch.pl" <<'WATCH_PL'
 		mon_cmd($m, "cpu 0"); mon_cmd($m, "cont"); close $m;
 		if (open(my $cf, ">>", $ENV{ND_CPUS_TXT})) { print $cf "=== $why\n$regs\n", @chains; close $cf }
 		my $note = "cpus: stopped on $why\n" . join("", @chains); print $lf $note;
+		# ND_QEMU_THREADS_KEY: then the kernel's thread dump (nd_threaddump
+		# boot-arg, Ctrl-] on serial), given 20 seconds to print.
+		if (length($ENV{ND_QEMU_THREADS_KEY} // "")) {
+			syswrite($in, "\x1d");
+			my $until = time + 20; while (time < $until) { drain(); select(undef, undef, undef, 0.1) }
+		}
 	}
 	my $pid = fork(); if (!$pid) { exec @cmd or die "exec: $!" }
 	# Stopped from outside (the peer's watchdog, when the run is over): QEMU too.
@@ -608,6 +622,12 @@ cat > "$work/watch.pl" <<'WATCH_PL'
 		for my $d (@dump_on) {
 			next if $dumped{$d} || index($text, $d) < 0;
 			$dumped{$d} = 1; dump_cpus("\"$d\"");
+		}
+		# ND_QEMU_DUMP_ON_QUIET=SECS: the same once serial has been silent
+		# that long (a guest that hung without a word).
+		my $quiet = $ENV{ND_QEMU_DUMP_ON_QUIET} // "";
+		if (@dump_on && $quiet =~ /^\d+$/ && !$dumped{"\0quiet"} && time - $last_out >= $quiet) {
+			$dumped{"\0quiet"} = 1; dump_cpus("$quiet s without output");
 		}
 		# ND_QEMU_STOP_ON: a line that ends the run at once (a panic in a
 		# long run), after five seconds more of serial.

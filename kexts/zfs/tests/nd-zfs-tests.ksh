@@ -9,9 +9,14 @@
 # the post script (cleanup), whatever happened. A test's result is its exit
 # status as logapi.shlib sets it: 0 PASS, 4 SKIP (log_unsupported), any
 # other FAIL; a test still running at its timeout is sent SIGTERM, is
-# KILLED, and the failsafe callback (zinject -c all) runs. If zpool list
-# then hangs, ZFS is wedged: the run prints where processes sleep and
-# reports every test still to run as SKIP.
+# KILLED, and the failsafe callback (zinject -c all) runs. A killed test's
+# own cleanup (log_onexit) never runs, so the runner then ends what the
+# test left: every process it started (test-runner.py signals the script
+# alone, and zpool_create_024_pos's 128 background workers went on for
+# ten minutes, KILLing the next tests), the pools that weren't there
+# before it (unless destroying one hangs), and the files it added to
+# FILEDIR. If zpool list then hangs, ZFS is wedged: the run prints where
+# processes sleep and reports every test still to run as SKIP.
 #
 #   nd-zfs-tests [-l RUNLIST] [-t SECONDS] GROUP...
 #
@@ -127,6 +132,74 @@ function bounded
 	wait $pid 2>/dev/null
 }
 
+# descendants PID...: the processes below the PIDs, from ps's parent links.
+function descendants
+{
+	ps -axo pid=,ppid= | awk -v roots=" $* " '
+		{ par[$1] = $2 }
+		END {
+			for (c in par) {
+				x = par[c]
+				for (n = 0; n < 64 && x > 1; n++) {
+					if (index(roots, " " x " ")) { print c; break }
+					x = par[x]
+				}
+			}
+		}'
+}
+
+# killtree PID...: stop the PIDs and everything below them (so nothing
+# forks meanwhile), then kill them all.
+function killtree
+{
+	typeset all="$*" more
+	kill -STOP $all 2>/dev/null
+	more=$(descendants $all)
+	while [[ -n "$more" ]]; do
+		kill -STOP $more 2>/dev/null
+		all="$all $more"
+		more=$(descendants $all | grep -vxF -f <(print -r -- "${all// /$'\n'}"))
+	done
+	kill -KILL $all 2>/dev/null
+}
+
+# destroy_pool POOL: zpool destroy -f, errors to leftovers.err.
+function destroy_pool
+{
+	zpool destroy -f $1 2>>$logdir/leftovers.err
+}
+
+# leftovers BEFORE_POOLS BEFORE_FILES: after a killed test, destroy the pools
+# and remove the FILEDIR entries that weren't there before it (what its
+# cleanup would have removed). A pool whose destroy takes over two minutes
+# (a frozen pool's unmount waits for a txg that never syncs) is left as it
+# is, as is the rest after two such.
+function leftovers
+{
+	typeset bpools=$1 bfiles=$2 p f
+	typeset -a pools=() files=() stuck=()
+	for p in $(zpool list -H -o name 2>/dev/null); do
+		[[ $'\n'$bpools$'\n' == *$'\n'$p$'\n'* ]] || pools+=($p)
+	done
+	for f in $(ls -A $FILEDIR); do
+		[[ $'\n'$bfiles$'\n' == *$'\n'$f$'\n'* ]] || files+=($f)
+	done
+	(( ${#pools[@]} + ${#files[@]} > 0 )) || return 0
+	print "ZTS|  nd-zfs-tests: the killed test left ${#pools[@]} pools and ${#files[@]} files in FILEDIR: removing them"
+	for p in "${pools[@]}"; do
+		bounded 120 destroy_pool $p
+		if (( $? == 124 )); then
+			stuck+=($p)
+			(( ${#stuck[@]} < 2 )) || break
+		fi
+	done
+	sed 's/.*: //' $logdir/leftovers.err 2>/dev/null | sort | uniq -c | sed 's/^/ZTS|  nd-zfs-tests: zpool destroy: /'
+	rm -f $logdir/leftovers.err
+	(( ${#stuck[@]} == 0 )) || print "ZTS|  nd-zfs-tests: zpool destroy hangs on ${stuck[*]}: left as it is"
+	(cd $FILEDIR && rm -rf -- "${files[@]}")
+	return 0
+}
+
 # run PATH TIMEOUT: run the script PATH (without .ksh) with a timeout;
 # sets $res and prints its line.
 function run
@@ -137,14 +210,21 @@ function run
 	if [[ ! -x $script ]]; then
 		print "ZTS: $path [FAIL] 0s"; print "ZTS|  no executable $script"; res=FAIL; return
 	fi
+	# What there is before the test, for a killed test's leftovers.
+	typeset bpools=$(zpool list -H -o name 2>/dev/null) bfiles=$(ls -A $FILEDIR)
+	t0=$SECONDS
 	(cd $logdir && exec $script) > $log 2>&1 &	# test-runner.py runs in its output directory
 	typeset pid=$!
 	while kill -0 $pid 2>/dev/null; do
 		if (( SECONDS - t0 >= to )); then
-			killed=1; kill -TERM $pid 2>/dev/null
+			killed=1
+			typeset kids=$(descendants $pid)
+			kill -TERM $pid 2>/dev/null
 			typeset -i w=0
 			while kill -0 $pid 2>/dev/null && (( w < 10 )); do sleep 1; w+=1; done
-			kill -KILL $pid 2>/dev/null
+			# The test and every process it started (they outlive
+			# its shell, and a worker would go on forking).
+			killtree $pid $kids
 			break
 		fi
 		sleep 0.2
@@ -171,7 +251,13 @@ function run
 		# pool): then every later test would hang to its timeout too.
 		# Show where processes sleep, and stop the run.
 		bounded 60 zpool list
-		if (( $? == 124 )); then
+		st=$?
+		if (( st != 124 )); then
+			leftovers "$bpools" "$bfiles"
+			bounded 60 zpool list
+			st=$?
+		fi
+		if (( st == 124 )); then
 			print "ZTS-WEDGED: zpool list hangs after $path was killed"
 			ps -axo pid,stat,wchan,command | grep -v ' ps -axo' | sed 's/^/ZTS|  /'
 			wedged=1

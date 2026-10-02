@@ -1,0 +1,126 @@
+From: NeoDarwin
+Subject: [PATCH] console: blocked threads' kernel stacks on a serial key (nd_threaddump)
+
+A debugging aid for hangs in which every CPU is idle and threads sleep in
+the kernel, where a CPU dump (tools/efi/qemu_efi_test.sh --dump-cpus-on)
+shows nothing: P3-01's OpenZFS test suite wedged ZFS with processes asleep
+on a suspended pool, and once stopped the guest altogether. Off by
+default. With the boot-arg nd_threaddump=1, a Ctrl-] (0x1d) received by
+the serial keyboard's poll thread isn't passed to the tty but prints one
+"ndthr" line per thread: the thread, its id, its task's pid and name, its
+state, wait event, block hint and continuation and, for a thread
+with a kernel stack, the frame-pointer chain saved when it last left a CPU
+(return addresses, unslid). The poll thread walks the global thread list
+under tasks_threads_lock when it can take it, else without it. Symbolize
+as docs/kernel/arm64-sbsa-bringup.md §2.1.9 describes;
+qemu_efi_test.sh's ND_QEMU_THREADS_KEY sends the key when it dumps the
+CPUs (docs/architecture/filesystems.md §7.2).
+
+Rebase-risk: low (one function and two hooks in serial_general.c).
+---
+diff --git a/osfmk/console/serial_general.c b/osfmk/console/serial_general.c
+--- a/osfmk/console/serial_general.c
++++ b/osfmk/console/serial_general.c
+@@ -38,9 +38,76 @@
+ #include <kern/thread.h>
+ #include <console/serial_protos.h>
+ #include <libkern/section_keywords.h>
++#if defined(__arm64__)
++#include <kern/processor.h>
++#include <kern/task.h>
++#include <pexpert/pexpert.h>
++#endif
+ 
+ extern void cons_cinput(char ch);               /* The BSD routine that gets characters */
+ 
++#if defined(__arm64__)
++/*
++ * NeoDarwin: the blocked threads' kernel stacks on the console, for a hang.
++ * Off unless the nd_threaddump boot-arg is set (nd_threaddump=1): then a
++ * Ctrl-] (0x1d) typed on the serial console isn't passed to the tty but
++ * prints, for every thread, its task (pid and name), state, wait event,
++ * block hint and continuation and, for a thread with a kernel stack,
++ * the frame-pointer chain saved when it last left a CPU (return addresses,
++ * unslid as the kernel runs; stale for a thread running on another CPU).
++ * Threads sleeping in the kernel are on no CPU, so a CPU dump
++ * misses them. Walked with tasks_threads_lock if it can be had, else
++ * without it (a debugging aid: the system is presumed wedged).
++ */
++static int nd_threaddump_key = -1;
++extern char *proc_name_address(void *p);
++extern int proc_pid(void *p);
++
++static void
++nd_threaddump(void)
++{
++	thread_t thread, self = current_thread();
++	boolean_t locked = lck_mtx_try_lock(&tasks_threads_lock);
++	unsigned int n = 0;
++
++	printf("nd_threaddump: begin%s\n", locked ? "" : " (tasks_threads_lock held: unlocked walk)");
++	queue_iterate(&threads, thread, thread_t, threads) {
++		void *p = thread->t_tro ? get_bsdtask_info(get_threadtask(thread)) : NULL;
++		vm_offset_t stack = thread->kernel_stack;
++		char line[512];
++		int len;
++
++		n++;
++		len = snprintf(line, sizeof(line), "ndthr %p tid %llu pid %d %s st 0x%x ev 0x%llx hint %d cont %p:",
++		    thread, thread->thread_id, p ? proc_pid(p) : -1, p ? proc_name_address(p) : "kernel",
++		    thread->state, (unsigned long long)thread->wait_event, (int)thread->block_hint,
++		    (void *)VM_KERNEL_UNSLIDE(thread->continuation));
++		if (thread != self && stack != 0) {
++			arm_kernel_saved_state_t *ss = &thread_get_kernel_state(thread)->machine.ss;
++			uint64_t fp = ss->fp, lr = ss->lr;
++			vm_offset_t lo = stack, hi = stack + kernel_stack_size;
++
++			for (int i = 0; i < 40 && len < (int)sizeof(line) - 20; i++) {
++				len += snprintf(line + len, sizeof(line) - len, " %llx", (unsigned long long)VM_KERNEL_UNSLIDE(lr));
++				if (fp < lo || fp + 16 > hi || (fp & 7)) {
++					break;
++				}
++				lr = ((uint64_t *)fp)[1];
++				fp = ((uint64_t *)fp)[0];
++				if (lr == 0) {
++					break;
++				}
++			}
++		}
++		printf("%s\n", line);
++	}
++	printf("nd_threaddump: end, %u threads\n", n);
++	if (locked) {
++		lck_mtx_unlock(&tasks_threads_lock);
++	}
++}
++#endif /* __arm64__ */
++
+ SECURITY_READ_ONLY_LATE(unsigned int) serialmode;                               /* Serial mode keyboard and console control */
+ 
+ /*
+@@ -58,6 +125,12 @@
+ 		return;
+ 	}
+ 
++#if defined(__arm64__)
++	unsigned int nd_on = 0;
++	if (PE_parse_boot_argn("nd_threaddump", &nd_on, sizeof(nd_on)) && nd_on) {
++		nd_threaddump_key = 0x1d;
++	}
++#endif
+ 	kprintf("Serial keyboard started\n");
+ 	result = kernel_thread_start_priority((thread_continue_t)serial_keyboard_start, NULL, MAXPRI_KERNEL, &thread);
+ 	if (result != KERN_SUCCESS) {
+@@ -86,6 +159,12 @@
+ 		if (chr < 0) { /* The serial buffer is empty */
+ 			break;
+ 		}
++#if defined(__arm64__)
++		if (chr == nd_threaddump_key) {
++			nd_threaddump();
++			continue;
++		}
++#endif
+ 		cons_cinput((char)chr); /* Buffer up the character */
+ 	}
+ 
