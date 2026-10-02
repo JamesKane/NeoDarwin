@@ -1,0 +1,114 @@
+From: NeoDarwin
+Subject: [PATCH] libzutil: pools in /dev; whole disks unlabelled
+
+macOS finds pools in /var/run/disk/by-{id,path,serial}, which the
+InvariantDisks daemon keeps, and skips /dev outside DEBUG builds; NeoDarwin
+has no InvariantDisks, so the default import path is /dev, as on FreeBSD,
+read through block devices and regular files only: some character devices
+in /dev block on read (klog, auditpipe), and rdisk duplicates disk.
+zpool create on a whole disk writes a GPT and uses its first partition on
+macOS, which DiskArbitration has probed and published; NeoDarwin follows
+the FreeBSD layer and uses the device as given (zfs_dev_is_whole_disk()
+is false).
+
+Rebase-risk: low
+---
+diff --git a/lib/libzutil/os/neodarwin/zutil_device_path_os.c b/lib/libzutil/os/neodarwin/zutil_device_path_os.c
+index bbcfe0f..1061832 100644
+--- a/lib/libzutil/os/neodarwin/zutil_device_path_os.c
++++ b/lib/libzutil/os/neodarwin/zutil_device_path_os.c
+@@ -136,6 +136,16 @@ zfs_get_underlying_path(const char *dev_name)
+ boolean_t
+ zfs_dev_is_whole_disk(const char *dev_name)
+ {
++#ifdef __NEODARWIN__
++	/*
++	 * NeoDarwin follows the FreeBSD layer: a pool uses the device it is
++	 * given, a whole disk included, without writing a GPT to it first
++	 * (zpool_label_disk). On macOS DiskArbitration then has the new
++	 * partitions probed and published; NeoDarwin has no DiskArbitration.
++	 */
++	(void) dev_name;
++	return (B_FALSE);
++#else
+ 	struct dk_gpt *label;
+ 	int fd;
+ 
+@@ -151,6 +161,7 @@ zfs_dev_is_whole_disk(const char *dev_name)
+ 	(void) close(fd);
+ 
+ 	return (B_TRUE);
++#endif
+ }
+ 
+ /*
+diff --git a/lib/libzutil/os/neodarwin/zutil_import_os.c b/lib/libzutil/os/neodarwin/zutil_import_os.c
+index 6b3137f..e66a9ca 100644
+--- a/lib/libzutil/os/neodarwin/zutil_import_os.c
++++ b/lib/libzutil/os/neodarwin/zutil_import_os.c
+@@ -79,10 +79,22 @@
+  * DEFAULT_IMPORT_PATH_SIZE is decremented by one to remove /dev!
+  * See below in zpool_find_import_blkid() to skip.
+  */
+-#define	DEFAULT_IMPORT_PATH_SIZE	4
+-
+ #define	DEV_BYID_PATH "/private/var/run/disk/by-id/"
+ 
++#ifdef __NEODARWIN__
++/*
++ * NeoDarwin has no InvariantDisks to keep /var/run/disk: pools are found
++ * in /dev, as on FreeBSD.
++ */
++#define	DEFAULT_IMPORT_PATH_SIZE	1
++
++static const char *
++zpool_default_import_path[DEFAULT_IMPORT_PATH_SIZE] = {
++	"/dev"
++};
++#else
++#define	DEFAULT_IMPORT_PATH_SIZE	4
++
+ static const char *
+ zpool_default_import_path[DEFAULT_IMPORT_PATH_SIZE] = {
+ 	"/private/var/run/disk/by-id",
+@@ -90,6 +102,7 @@ zpool_default_import_path[DEFAULT_IMPORT_PATH_SIZE] = {
+ 	"/private/var/run/disk/by-serial",
+ 	"/dev"	/* Only with DEBUG build */
+ };
++#endif
+ 
+ static boolean_t
+ is_watchdog_dev(const char *dev)
+@@ -252,11 +265,23 @@ zpool_open_func(void *arg)
+ 	/*
+ 	 * Ignore failed stats.  We only want regular files and block devices.
+ 	 */
++#ifdef __NEODARWIN__
++	/*
++	 * NeoDarwin scans /dev itself (above), where character devices
++	 * include some whose reads block (klog, auditpipe): disks are read
++	 * through their block nodes, and rdisk is skipped.
++	 */
++	if (stat(rn->rn_name, &statbuf) != 0 ||
++	    (!S_ISREG(statbuf.st_mode) &&
++	    !S_ISBLK(statbuf.st_mode)))
++		return;
++#else
+ 	if (stat(rn->rn_name, &statbuf) != 0 ||
+ 	    (!S_ISREG(statbuf.st_mode) &&
+ 	    !S_ISBLK(statbuf.st_mode) &&
+ 	    !S_ISCHR(statbuf.st_mode)))
+ 		return;
++#endif
+ 
+ 	fd = open(rn->rn_name, O_RDONLY);
+ 	if ((fd < 0) && (errno == EINVAL))
+@@ -421,7 +446,7 @@ zpool_find_import_blkid(libpc_handle_t *hdl, pthread_mutex_t *lock,
+ 		int dfd;
+ 		DIR *dirp;
+ 
+-#ifndef DEBUG
++#if !defined(DEBUG) && !defined(__NEODARWIN__)
+ 		/*
+ 		 * We skip imports in /dev/ in release builds, due to the
+ 		 * danger of cache/log devices and drive renumbering.

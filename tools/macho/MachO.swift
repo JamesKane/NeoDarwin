@@ -6,6 +6,7 @@
 public enum MH {
     public static let magic64: UInt32 = 0xfeed_facf
     public static let execute: UInt32 = 0x2
+    public static let kextBundle: UInt32 = 0xb
     public static let fileset: UInt32 = 0xc
     public static let noUndefs: UInt32 = 0x1
     public static let pie: UInt32 = 0x20_0000
@@ -64,7 +65,51 @@ public enum NList {
     public static let size = 16
     public static let stab: UInt8 = 0xe0
     public static let typeMask: UInt8 = 0x0e
+    public static let undefined: UInt8 = 0x0
     public static let sect: UInt8 = 0x0e
+    public static let ext: UInt8 = 0x01
+}
+
+/// One nlist_64 entry of a symbol table.
+public struct Symbol: Sendable {
+    public let index: Int
+    public let name: String
+    public let type: UInt8
+    public let section: UInt8
+    public let value: UInt64
+
+    public var isStab: Bool { type & NList.stab != 0 }
+    public var isDefinedInSection: Bool { !isStab && type & NList.typeMask == NList.sect }
+    public var isUndefined: Bool { !isStab && type & NList.typeMask == NList.undefined }
+    public var isExternal: Bool { type & NList.ext != 0 }
+}
+
+extension MachOImage {
+    /// Every entry of LC_SYMTAB, with its name.
+    public func symbols() throws -> [Symbol] {
+        guard let lc = command(LC.symtab) else { return [] }
+        let st = try SymtabCommand(bytes, lc)
+        let strBase = base + Int(st.stroff), strEnd = strBase + Int(st.strsize)
+        try bytes.check(strBase, Int(st.strsize))
+        var out: [Symbol] = []
+        out.reserveCapacity(Int(st.nsyms))
+        for i in 0..<Int(st.nsyms) {
+            let e = base + Int(st.symoff) + i * NList.size
+            let strx = Int(try bytes.u32(e))
+            let name = strx == 0 ? "" : try bytes.cString(strBase + strx, limit: strEnd)
+            out.append(Symbol(index: i, name: name, type: try bytes.u8(e + 4), section: try bytes.u8(e + 5),
+                              value: try bytes.u64(e + 8)))
+        }
+        return out
+    }
+
+    /// Sections in load-command order; section number N (n_sect, split-seg
+    /// index) is element N-1.
+    public var allSections: [(segment: Int, section: Section64)] {
+        var out: [(Int, Section64)] = []
+        for (i, s) in segments.enumerated() { for sec in s.sections { out.append((i, sec)) } }
+        return out
+    }
 }
 
 public struct LoadCommand: Sendable {

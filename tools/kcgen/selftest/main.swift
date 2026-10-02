@@ -83,6 +83,37 @@ do {
     expect(false, "kcgen builds the synthetic kernel: \(error)")
 }
 
+// A codeless kext (xnu's pseudo-kexts, built-in families) is entered in
+// __PRELINK_INFO with kOSKextCodelessKextLoadAddr; the kernel stays where it was.
+do {
+    let plist = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <plist version="1.0">
+        <dict>
+        \t<key>CFBundleIdentifier</key>
+        \t<string>com.example.codeless</string>
+        \t<key>CFBundleVersion</key>
+        \t<string>###KERNEL_VERSION_LONG###</string>
+        </dict>
+        </plist>
+        """
+    var options = KernelCollectionOptions()
+    options.kernelVersion = "25.0.0"
+    let (kc, report) = try KernelCollection.build(
+        kernel: kernel, kexts: [KextInput(infoPlist: plist, executable: nil, bundlePath: "/S/L/E/Codeless.kext")], options: options)
+    let r = KCCheck.check(collection: kc, kernel: kernel)
+    for i in r.issues { print("     \(i)") }
+    expect(r.ok, "a collection with a codeless kext passes kcheck with round-trip")
+    let text = String(decoding: kc, as: UTF8.self)
+    expect(text.contains("<string>com.example.codeless</string>") && text.contains("<string>25.0.0</string>")
+        && text.contains("<key>_PrelinkExecutableLoadAddr</key>\n\t\t<integer size=\"64\">0x7fffffffffffffff</integer>")
+        && text.contains("<string>/S/L/E/Codeless.kext</string>"),
+        "the codeless kext's Info.plist, version and load address are in __PRELINK_INFO")
+    expect(report.codeless == ["com.example.codeless"], "the report names the codeless kext")
+} catch {
+    expect(false, "kcgen builds a collection with a codeless kext: \(error)")
+}
+
 var pcrel = SyntheticKernel()
 pcrel.relocationOverride = { out, locreloff in out[locreloff + 7] |= 0x01 }  // r_pcrel
 do {

@@ -1,0 +1,229 @@
+From: NeoDarwin
+Subject: [PATCH] libzfs, libefi: no IOKit, CoreFoundation, DiskArbitration or diskutil
+
+NeoDarwin's userland has no IOKit framework, CoreFoundation,
+DiskArbitration or diskutil. Where the macOS layer used them, the FreeBSD
+layer is the reference:
+- unmounting is unmount(2) (MNT_FORCE for -f), not `diskutil unmount`;
+- a /dev/disk path is never a ZFS dataset (no ZFSDatasetProxy lookup in
+  the IORegistry when reading the mount table);
+- exporting a pool ejects no zvol media: zvols aren't published as IOKit
+  media on NeoDarwin yet;
+- libefi asks DiskArbitration only whether a disk is a CoreStorage
+  logical volume, which never exists on NeoDarwin.
+The OS layer's two includes of macOS-layer headers by path name the
+NeoDarwin copies.
+
+Rebase-risk: low
+---
+diff --git a/lib/libefi/rdwr_efi_macos.c b/lib/libefi/rdwr_efi_macos.c
+index 59d8062..551a45a 100644
+--- a/lib/libefi/rdwr_efi_macos.c
++++ b/lib/libefi/rdwr_efi_macos.c
+@@ -155,6 +155,19 @@ int efi_debug = 0;
+ static int efi_read(int, struct dk_gpt *);
+ /* Additional macOS support functions */
+ 
++#ifdef __NEODARWIN__
++/*
++ * NeoDarwin has no DiskArbitration, and no CoreStorage logical volumes for
++ * it to report: no device is virtual.
++ */
++static int
++osx_device_isvirtual(char *device)
++{
++	(void) device;
++	return (0);
++}
++#else
++
+ #include <CoreFoundation/CoreFoundation.h>
+ #include <CoreFoundation/CFString.h>
+ #include <IOKit/storage/IOStorageProtocolCharacteristics.h>
+@@ -275,6 +288,8 @@ osx_device_isvirtual(char *device)
+ 	return (isCoreStorageLV /* || isVirtualInterface*/);
+ }
+ 
++#endif /* __NEODARWIN__ */
++
+ /*
+  * Return a 32-bit CRC of the contents of the buffer.  Pre-and-post
+  * one's conditioning will be handled by crc32() internally.
+diff --git a/lib/libzfs/os/neodarwin/libzfs_getmntany.c b/lib/libzfs/os/neodarwin/libzfs_getmntany.c
+index 8dc35de..cd4d090 100644
+--- a/lib/libzfs/os/neodarwin/libzfs_getmntany.c
++++ b/lib/libzfs/os/neodarwin/libzfs_getmntany.c
+@@ -182,6 +182,19 @@ optadd(char *mntopts, size_t size, const char *opt)
+ }
+ 
+ 
++/*
++ * NeoDarwin: ZFS datasets are mounted as zfs, never through a
++ * ZFSDatasetProxy disk, and there is no IOKit framework in userland: a
++ * /dev/disk path is never a dataset.
++ */
++static int
++expand_disk_to_zfs(char *devname, int len)
++{
++	(void) devname, (void) len;
++	return (0);
++}
++
++#if 0
+ #include <CoreFoundation/CoreFoundation.h>
+ #include <CoreServices/CoreServices.h>
+ #include <IOKit/IOKitLib.h>
+@@ -259,6 +272,7 @@ expand_disk_to_zfs(char *devname, int len)
+ 	}
+ 	return (0);
+ }
++#endif
+ 
+ void
+ statfs2mnttab(struct statfs *sfs, struct mnttab *mp)
+diff --git a/lib/libzfs/os/neodarwin/libzfs_mount_os.c b/lib/libzfs/os/neodarwin/libzfs_mount_os.c
+index d837172..1ba87c3 100644
+--- a/lib/libzfs/os/neodarwin/libzfs_mount_os.c
++++ b/lib/libzfs/os/neodarwin/libzfs_mount_os.c
+@@ -45,7 +45,7 @@
+ #include <sys/stat.h>
+ #include <sys/vfs.h>
+ #include <sys/dsl_crypt.h>
+-#include <os/macos/zfs/sys/zfs_mount.h>
++#include <os/neodarwin/zfs/sys/zfs_mount.h>
+ #include "../../libzfs_impl.h"
+ #include <libzfs.h>
+ 
+@@ -54,9 +54,6 @@
+ #include <libzutil.h>
+ #include <libdiskmgt.h>
+ 
+-#include <IOKit/IOBSD.h>
+-#include <IOKit/IOKitLib.h>
+-#include <IOKit/storage/IOMedia.h>
+ 
+ /*
+  * The default OpenZFS icon. Compare against known values to see if it needs
+@@ -550,8 +547,20 @@ do_mount(zfs_handle_t *zhp, const char *dir, const char *optptr, int mflag)
+ 	return (rv);
+ }
+ 
++/*
++ * NeoDarwin: unmount(2), as the FreeBSD layer does. There is no diskutil,
++ * and no Spotlight or DiskArbitration holding the mount.
++ */
+ static int
+ do_unmount_impl(const char *mntpt, int flags)
++{
++	if (unmount(mntpt, (flags & MS_FORCE) ? MNT_FORCE : 0) != 0)
++		return (errno);
++	return (0);
++}
++
++static int __attribute__((unused))
++do_unmount_impl_macos(const char *mntpt, int flags)
+ {
+ 	const char force_opt[] = "force";
+ 	const char *argv[7] = {
+@@ -890,83 +899,14 @@ do_unmount_volume(const char *mntpt, int flags)
+ 	return (rc ? EINVAL : 0);
+ }
+ 
++/*
++ * NeoDarwin: zvols are not published as IOKit media yet (P3-01), so there
++ * is no volume to eject before a pool is exported.
++ */
+ void
+ zpool_disable_volume_os(const char *name)
+ {
+-	CFMutableDictionaryRef matching = 0;
+-	char *fullname = NULL;
+-	int result;
+-	io_service_t service = 0;
+-	io_service_t child;
+-	char bsdstr[MAXPATHLEN];
+-	char bsdstr2[MAXPATHLEN];
+-	CFStringRef bsdname;
+-	CFStringRef bsdname2;
+-	io_iterator_t iter;
+-
+-	if (asprintf(&fullname, "ZVOL %s Media", name) < 0)
+-		return;
+-
+-	matching = IOServiceNameMatching(fullname);
+-	if (matching == 0)
+-		goto out;
+-	service = IOServiceGetMatchingService(kIOMainPortDefault, matching);
+-	if (service == 0)
+-		goto out;
+-	// printf("GetMatching said %p\n", service);
+-
+-	// Get BSDName?
+-	bsdname = IORegistryEntryCreateCFProperty(service,
+-	    CFSTR(kIOBSDNameKey), kCFAllocatorDefault, 0);
+-	if (bsdname &&
+-	    CFStringGetCString(bsdname, bsdstr, sizeof (bsdstr),
+-	    kCFStringEncodingUTF8)) {
+-		// printf("BSDName '%s'\n", bsdstr);
+-
+-		// Now loop through and check if apfs has any synthesized
+-		// garbage attached, as they didnt make "diskutil unmountdisk"
+-		// handle it, we have to do it manually. (minus 1 apple!)
+-
+-		result = IORegistryEntryCreateIterator(service,
+-		    kIOServicePlane,
+-		    kIORegistryIterateRecursively,
+-		    &iter);
+-
+-		// printf("iterating ret %d \n", result);
+-		if (result == 0) {
+-			while ((child = IOIteratorNext(iter)) != 0) {
+-
+-				bsdname2 = IORegistryEntryCreateCFProperty(
+-				    child, CFSTR(kIOBSDNameKey),
+-				    kCFAllocatorDefault, 0);
+-
+-				if (bsdname2 &&
+-				    CFStringGetCString(bsdname2, bsdstr2,
+-				    sizeof (bsdstr2), kCFStringEncodingUTF8)) {
+-					CFRelease(bsdname2);
+-					printf(
+-					    "... asking apfs to eject '%s'\n",
+-					    bsdstr2);
+-					do_unmount_volume(bsdstr2, 0);
+-
+-				} // Has BSDName?
+-
+-				IOObjectRelease(child);
+-			}
+-			IOObjectRelease(iter);
+-		} // iterate
+-
+-		CFRelease(bsdname);
+-		printf("... asking ZVOL to export '%s'\n", bsdstr);
+-		do_unmount_volume(bsdstr, 0);
+-	}
+-
+-out:
+-	if (service != 0)
+-		IOObjectRelease(service);
+-	if (fullname != NULL)
+-		free(fullname);
+-
++	(void) name;
+ }
+ 
+ static int
+diff --git a/lib/libzfs_core/os/neodarwin/libzfs_core_ioctl.c b/lib/libzfs_core/os/neodarwin/libzfs_core_ioctl.c
+index 79efe57..27fc9fa 100644
+--- a/lib/libzfs_core/os/neodarwin/libzfs_core_ioctl.c
++++ b/lib/libzfs_core/os/neodarwin/libzfs_core_ioctl.c
+@@ -22,7 +22,7 @@
+ #include <sys/param.h>
+ #include <sys/sysctl.h>
+ #include <sys/zfs_ioctl.h>
+-#include <os/macos/zfs/sys/zfs_ioctl_compat.h>
++#include <os/neodarwin/zfs/sys/zfs_ioctl_compat.h>
+ #include <err.h>
+ #include <libzfs_core.h>
+ #include "libzfs_core_impl.h"

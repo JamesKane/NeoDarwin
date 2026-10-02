@@ -67,7 +67,7 @@ epics:
     title: "Verify OpenZFS macOS layer upstream status; create mirror-openzfs"
     phase: 0
     owner: storage
-    status: todo
+    status: done
     depends: [P0-01]
     exit: "upstream.lock for openzfs points at a tagged commit with module/os/macos present"
     doc: docs/architecture/filesystems.md
@@ -350,7 +350,7 @@ epics:
     title: "zfs.kext on NeoDarwin (module/os/neodarwin from macOS layer; KPI exports as kernel patches)"
     phase: 3
     owner: storage
-    status: todo
+    status: doing
     depends: [P0-08, P1-10]
     exit: "zpool create/import on a data disk; zfs test suite subset passes"
     doc: docs/architecture/filesystems.md

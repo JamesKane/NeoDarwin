@@ -121,6 +121,8 @@ SBSA_PATCHES = [
     "patches/0036-iokit-build-virtio-net-and-interface-namer.patch",
     "patches/0037-iokit-build-tc956x-ethernet.patch",
     "patches/0038-generic-arm64-machine-timeouts-in-real-time.patch",
+    "patches/0039-config-sbsa-export-iostoragefamily.patch",
+    "patches/0040-sbsa-kernel-split-seg-info.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -229,6 +231,37 @@ sh_test(
     data = [
         ":sbsa_kc",
         ":sbsa_release",
+        "//tools/kcheck",
+    ],
+    tags = ["manual", "kernel"],
+)
+
+# P3-01: the same kernel with zfs.kext (//kexts/zfs), the first collection
+# with a kext. kcgen moves the kernel's segments apart around the kext's
+# (split-segment info, patch 0040), resolves its imports against the
+# kernel's exports (IOStorageFamily's since patch 0039) and enters it, xnu's
+# System.kext pseudo-kexts and IOStorageFamily as codeless kexts in
+# __PRELINK_INFO (docs/architecture/filesystems.md §7).
+kext_collection(
+    name = "sbsa_zfs_kc",
+    codeless = {"//kernel/neodarwin/storage:IOStorageFamily.plist": "/System/Library/Extensions/IOStorageFamily.kext"},
+    kernel = ":sbsa_release",
+    kernel_components = "@apple_xnu//:all",
+    kernel_version = DARWIN_VERSION,
+    kexts = ["//kexts/zfs"],
+    out = "kernelcache.zfs.release.sbsa",
+)
+
+sh_test(
+    name = "sbsa_zfs_kc_check",
+    size = "small",
+    srcs = ["//tools/kcheck:kcheck_kexts_test.sh"],
+    args = [
+        "$(rootpath //tools/kcheck)",
+        "$(rootpath :sbsa_zfs_kc)",
+    ],
+    data = [
+        ":sbsa_zfs_kc",
         "//tools/kcheck",
     ],
     tags = ["manual", "kernel"],
@@ -701,6 +734,55 @@ sh_test(
         "'unmounted-42'",
     ],
     data = ["//images:session_disk"],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P3-01 checkpoint 1 (docs/architecture/filesystems.md §7): zfs.kext in the
+# boot collection (//kernel:sbsa_zfs_kc) loads, its SPL and ZFS start, and
+# on a second, blank virtio-blk disk the session creates a pool and a
+# dataset, writes and reads a file, exports the pool, imports it from /dev
+# with the file intact, and scrubs it clean. zpool and zfs are
+# //kexts/zfs:zfs_commands at /sbin. The scratch disk is the whole disk
+# without slices (the root is the other disk's s2).
+ZFS_POOL_LINES = [
+    "'ZFS: Loaded module v2.4.1-p1, ZFS pool version 5000, ZFS filesystem version 5'",
+    "'data-disk=/dev/disk'",
+    "'created-42'",
+    "'tank on /tank (zfs, local'",
+    "'tank/fs on /tank/fs (zfs, local'",
+    "'round-trip-42'",
+    "'exported-42'",
+    "'no pools available'",
+    "'imported-42'",
+    "'round-trip-42-after-import'",
+    "'scan: scrub repaired 0B in '",
+    "' with 0 errors on '",
+    "'errors: No known data errors'",
+    "'scrubbed-42'",
+]
+
+sh_test(
+    name = "sbsa_zfs_pool_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--mem 2G",
+        "--disk $(rootpath //images:zfs_session_disk)",
+        "--drive data=256M",
+        "--device virtio-blk-pci,drive=data,disable-legacy=on",
+        "--until-lines",
+        "--absent 'panic('",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'd=; for x in /dev/disk[0-9]; do [ -e $${x}s1 ] || d=$$x; done; echo data-disk=$$d\\n'",
+        "--send-after 'root@localhost ~ # ' 'zpool create tank $$d && zfs create tank/fs && echo created-$$((6*7))\\n'",
+        "--send-after 'root@localhost ~ # ' 'zfs list; mount; echo round-trip-$$((6*7)) > /tank/fs/file && cat /tank/fs/file\\n'",
+        "--send-after 'root@localhost ~ # ' 'zpool export tank && echo exported-$$((6*7)); zpool list\\n'",
+        "--send-after 'root@localhost ~ # ' 'zpool import tank && echo imported-$$((6*7)) && echo $$(cat /tank/fs/file)-after-import\\n'",
+        "--send-after 'root@localhost ~ # ' 'zpool scrub -w tank && zpool status tank && echo scrubbed-$$((6*7))\\n'",
+        "-",
+        "180",
+    ] + ZFS_POOL_LINES,
+    data = ["//images:zfs_session_disk"],
     tags = ["manual", "kernel", "qemu"],
 )
 

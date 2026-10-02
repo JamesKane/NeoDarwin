@@ -1,0 +1,56 @@
+From: NeoDarwin
+Subject: [PATCH] SPL: generic arm64 CPU numbers, no i386 headers
+
+The OS layer at module/os/neodarwin and include/os/neodarwin is a copy of
+the macOS layer (kexts/zfs/common.sh); this series is what NeoDarwin
+changes in it.
+
+getcpuid() numbered CPUs from MPIDR_EL1 the way Apple silicon lays it out
+(Aff2 1 for performance cores, Aff0 the core), which on a generic Arm core
+gives every CPU of a DynamIQ cluster (cores in Aff1, Aff0 0, as on the
+Radxa Dragon Q8B) the same number; CPU_SEQID indexes per-CPU state with it.
+NeoDarwin asks the kernel (cpu_number(), as the layer does on x86_64).
+<sys/proc.h> included <i386/locks.h> on every architecture; NeoDarwin's
+Kernel.framework carries the arm64 headers only.
+
+Rebase-risk: low
+---
+diff --git a/include/os/neodarwin/spl/sys/proc.h b/include/os/neodarwin/spl/sys/proc.h
+index 8d7971b..c9e2a20 100644
+--- a/include/os/neodarwin/spl/sys/proc.h
++++ b/include/os/neodarwin/spl/sys/proc.h
+@@ -29,7 +29,9 @@
+ #define	_SPL_PROC_H
+ 
+ #include <sys/ucred.h>
++#if defined(__x86_64__)
+ #include <i386/locks.h>
++#endif
+ #include_next <sys/proc.h>
+ #include <sys/kernel_types.h>
+ #include <sys/vnode.h>
+diff --git a/module/os/neodarwin/spl/spl-processor.c b/module/os/neodarwin/spl/spl-processor.c
+index 278281c..0d97640 100644
+--- a/module/os/neodarwin/spl/spl-processor.c
++++ b/module/os/neodarwin/spl/spl-processor.c
+@@ -52,7 +52,7 @@ static uint64_t _spl_cpuid_id_aa64isar1_el1 = 0ULL;
+ uint32_t
+ getcpuid(void)
+ {
+-#if defined(__aarch64__)
++#if defined(__aarch64__) && !defined(__NEODARWIN__)
+ 	uint64_t mpidr_el1;
+ 
+ 	asm volatile("mrs %0, mpidr_el1" : "=r" (mpidr_el1));
+@@ -70,6 +70,11 @@ getcpuid(void)
+ 		return ((max_ncpus -1) - (uint32_t)(mpidr_el1 & 0xff));
+ 
+ #else
++	/*
++	 * NeoDarwin: MPIDR's affinity fields say nothing about Apple's P and
++	 * E clusters on a generic Arm core (DynamIQ cores number themselves
++	 * in Aff1), so ask the kernel for the CPU's number.
++	 */
+ 	return ((uint32_t)cpu_number());
+ #endif
+ }

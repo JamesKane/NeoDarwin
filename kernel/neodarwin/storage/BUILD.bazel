@@ -29,6 +29,10 @@ filegroup(
     srcs = SRCS,
 )
 
+# IOStorageFamily as a codeless kext for kernel collections with kexts
+# (//kernel:sbsa_zfs_kc).
+exports_files(["IOStorageFamily.plist"])
+
 lang_audit_test(
     name = "storage_lang_audit",
     srcs = SRCS,

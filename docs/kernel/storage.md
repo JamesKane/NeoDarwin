@@ -223,6 +223,10 @@ disk FBD5E4A4-C478-5801-973B-F0B4B28C3152
 
 The file system contents themselves are not byte-reproducible (hdiutil's timestamps and volume identifiers). The GPT code is neoboot's `Portable/GPT.swift`, compiled for the host as dtdump compiles the device-tree code, so the writer and the reader share the layout and the CRC.
 
+## Kexts on the stack (P3-01)
+
+The family is built into the kernel, but kexts can link against it as against `IOStorageFamily.kext` on macOS: patch 0039 exports its classes from the kernel, and kernel collections with kexts carry a codeless `com.apple.iokit.IOStorageFamily` (2.1, compatible back to 1.0; `kernel/neodarwin/storage/IOStorageFamily.plist`) for their `OSBundleLibraries` to resolve (`arm64-sbsa-bringup.md` §2.1.1). The first such kext is `zfs.kext` (`docs/architecture/filesystems.md` §7): its vdevs open `/dev/disk` nodes and do I/O through IOMedia (`ldi_iokit.cpp`), and its `ZFSDatasetScheme` personality probes every whole IOMedia, as on macOS. Neither virtio-blk nor NVMe publishes a physical block size, so ZFS logs `couldn't get physical blocksize - using preferred` and uses the logical one. `//kernel:sbsa_zfs_pool_test` puts a pool on a whole blank virtio-blk disk.
+
 ## Tests
 
 | Target | Machine | Asserts |

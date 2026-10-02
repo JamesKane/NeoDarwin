@@ -532,6 +532,24 @@ filegroup(
     urls = ["https://github.com/apple-oss-distributions/IONetworkingFamily/archive/refs/tags/IONetworkingFamily-186.tar.gz"],
 )
 
+# OpenZFS with the macOS OS layer (module/os/macos), which upstream openzfs/zfs
+# has not merged (no zfs-2.x tag has it; openzfs/zfs#12110 is open): the
+# OpenZFS on OS X fork's latest release, tag zfs-macOS-2.4.1p1, pinned by its
+# commit because the tag has been moved once (kexts/zfs/upstream.lock,
+# docs/architecture/filesystems.md §2). CDDL-1.0. zfs.kext and the userland
+# are built from it (kexts/zfs, P3-01).
+http_archive(
+    name = "openzfs",
+    build_file_content = """filegroup(
+    name = "all",
+    srcs = glob(["cmd/**", "include/**", "lib/**", "module/**", "COPYRIGHT", "LICENSE", "META", "NOTICE"]),
+    visibility = ["//visibility:public"],
+)""",
+    sha256 = "b20049676667b1d5700b5ef4935c23ae8683d908ded57e6d0b52ff0e49ac37c1",
+    strip_prefix = "openzfs-fork-a4c1b11ab900dc9db701ecff92c712dfe2d967d3",
+    urls = ["https://github.com/openzfsonosx/openzfs-fork/archive/a4c1b11ab900dc9db701ecff92c712dfe2d967d3.tar.gz"],
+)
+
 # xnu's corecrypto subset and headers, for ndcrypto's host tests: the same
 # archive as apple_xnu (the repository cache serves it once), with its own
 # BUILD file so the kernel's inputs are untouched.

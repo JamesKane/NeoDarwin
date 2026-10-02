@@ -237,3 +237,37 @@ gpt_disk_image(
     root = ":session_root_volume",
     tags = ["manual"],
 )
+
+# P3-01 (docs/architecture/filesystems.md §7): the session disk with zfs.kext
+# in its kernel collection (//kernel:sbsa_zfs_kc) and zpool and zfs at /sbin
+# (//kexts/zfs:zfs_commands), for //kernel:sbsa_zfs_pool_test.
+hfs_ramdisk(
+    name = "zfs_session_root_volume",
+    dirs = _SYSTEM_DIRS,
+    files = {
+        "//base/launchctl": "bin/launchctl",
+        "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
+    } | _NETWORK_FILES,
+    journaled = True,
+    links = _SYSTEM_LINKS,
+    modes = _NETWORK_MODES,
+    volume_size = "192m",
+    tags = ["manual"],
+    tree_modes = _SYSTEM_MODES,
+    trees = [
+        "//base:system_root",
+        "//base:launchd_daemon",
+        "//kexts/zfs:zfs_commands",
+    ],
+)
+
+gpt_disk_image(
+    name = "zfs_session_disk",
+    esp = {
+        "//boot/neoboot": "EFI/BOOT/BOOTAA64.EFI",
+        "//kernel:sbsa_zfs_kc": "NeoDarwin/kernelcache",
+        ":zfs_session_root_volume_trustcache": "NeoDarwin/trustcache",
+    },
+    root = ":zfs_session_root_volume",
+    tags = ["manual"],
+)

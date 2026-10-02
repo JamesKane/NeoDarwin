@@ -55,3 +55,4 @@ dhcp6c               wide-dhcpv6 47f37dfab0cc      v20080615.2, hrs-allbsd/wide-
 libcrypt             freebsd-src 050683bb8e13      lib/libcrypt, secure/lib/libcrypt (bcrypt), sys/crypto MD5 and SHA-2; pinned per file in base/libc/freebsd.lock (crypt(3)'s non-DES schemes, Libc patch 0001)
 pfctl                openbsd/src fd47049c620b      sbin/pfctl (OpenBSD 4.3), sys/net/pf_ruleset.c, etc/pf.os; pinned per file in base/pfctl/openbsd.lock (Apple publishes no pfctl; xnu's pf is OpenBSD's of early 2008)
 ntp                  ntp-139                       sha256:ec5ddb29e33b667c535d8ca2f616927772682d817f25205db80071b4e7b32ac7  (ntp 4.2.8p10; sntp only; the last ntp Apple published, macOS 10.15; outside the release set)
+openzfs              zfs-macOS-2.4.1p1             pinned in kexts/zfs/upstream.lock (zpool, zfs and their libraries; github.com/openzfsonosx/openzfs-fork a4c1b11ab900, OpenZFS 2.4.1 with the macOS OS layer; CDDL-1.0)

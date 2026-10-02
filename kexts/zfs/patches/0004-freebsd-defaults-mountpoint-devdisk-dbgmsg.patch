@@ -1,0 +1,74 @@
+From: NeoDarwin
+Subject: [PATCH] FreeBSD's defaults: pools at /<pool>, no proxy disks, quiet console
+
+Three macOS conventions that NeoDarwin, with no Finder, DiskArbitration
+or unified log, takes from the FreeBSD and Linux layers instead:
+- a dataset's default mountpoint is /<pool>/..., not /Volumes/<pool>/...;
+- com.apple.devdisk defaults to off: macOS mounts a pool's root dataset
+  from a ZFSDatasetProxy IOMedia (/dev/diskNsM) for DiskArbitration, and
+  on NeoDarwin libzfs then couldn't match that mount to the dataset, so
+  `zpool export` found the pool busy;
+- zfs_dbgmsg() messages go to the dbgmsg kstat only. The macOS layer also
+  printed each one, which on macOS reaches the log and on NeoDarwin the
+  serial console.
+
+Rebase-risk: low
+---
+diff --git a/lib/libzfs/libzfs_dataset.c b/lib/libzfs/libzfs_dataset.c
+index d800734..fe10e4e 100644
+--- a/lib/libzfs/libzfs_dataset.c
++++ b/lib/libzfs/libzfs_dataset.c
+@@ -2766,8 +2766,11 @@ zfs_prop_get(zfs_handle_t *zhp, zfs_prop_t prop, char *propbuf, size_t proplen,
+ 			    relpath[0] != '\0'))
+ 				str++;
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(__NEODARWIN__)
+ 			/*
++			 * NeoDarwin mounts a pool at /<pool>, as FreeBSD and
++			 * Linux do.
++			 *
+ 			 * On OSX by default we mount pools under /Volumes
+ 			 * unless the dataset property mountpoint specifies
+ 			 * otherwise.
+diff --git a/module/os/neodarwin/zfs/zfs_debug.c b/module/os/neodarwin/zfs/zfs_debug.c
+index 2c4938c..7a71cdf 100644
+--- a/module/os/neodarwin/zfs/zfs_debug.c
++++ b/module/os/neodarwin/zfs/zfs_debug.c
+@@ -243,8 +243,10 @@ __dprintf(boolean_t dprint, const char *file, const char *func,
+ 
+ 	__zfs_dbgmsg(buf);
+ 
+-	/* Also emit string to log/console */
+-	printf("%s\n", buf);
++	/*
++	 * NeoDarwin: kept in the dbgmsg kstat only, as on FreeBSD and Linux;
++	 * the kernel's printf is the serial console, not a log.
++	 */
+ 
+ 	kmem_free(buf, size);
+ }
+diff --git a/module/zcommon/zfs_prop.c b/module/zcommon/zfs_prop.c
+index 7e24fea..21d8103 100644
+--- a/module/zcommon/zfs_prop.c
++++ b/module/zcommon/zfs_prop.c
+@@ -652,7 +652,19 @@ zfs_prop_init(void)
+ 	zprop_register_index(ZFS_PROP_MIMIC, "com.apple.mimic", 0,
+ 	    PROP_INHERIT, ZFS_TYPE_FILESYSTEM, "off | hfs | apfs",
+ 	    "COM.APPLE.MIMIC_HFS", mimic_table, sfeatures);
++	/*
++	 * NeoDarwin: no proxy disk by default. macOS publishes a pool's root
++	 * dataset as an IOMedia (ZFSDatasetProxy) for DiskArbitration and the
++	 * Finder, which NeoDarwin's userland doesn't have; mounted from a
++	 * /dev/disk node, the dataset is unknown to the mount table libzfs
++	 * reads, which then neither unmounts it nor exports its pool.
++	 */
++#ifdef __NEODARWIN__
++	zprop_register_index(ZFS_PROP_DEVDISK, "com.apple.devdisk",
++	    ZFS_DEVDISK_OFF,
++#else
+ 	zprop_register_index(ZFS_PROP_DEVDISK, "com.apple.devdisk", 0,
++#endif
+ 	    PROP_INHERIT, ZFS_TYPE_FILESYSTEM, "poolonly | on | off",
+ 	    "COM.APPLE.DEVDISK", devdisk_table, sfeatures);
+ 	/* __APPLE__ */

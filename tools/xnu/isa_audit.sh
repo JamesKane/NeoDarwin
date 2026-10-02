@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
 # ISA audit for generic Arm kernels.
-#   isa_audit.sh [--mattr FEATURES] FILE... BASELINE   (the *.unstripped kernel among FILEs is audited)
+#   isa_audit.sh [--mattr FEATURES] FILE... BASELINE   (the *.unstripped kernel among FILEs is audited,
+#                                                     or a kext bundle's executable: FILE is the .kext)
 # Lists every instruction a generic Arm core would fault on or mis-execute:
 #   - MRS/MSR to op0=3, CRn=15 (S3_<op1>_C15_<CRm>_<op2>), the IMPLEMENTATION
 #     DEFINED register space where Apple keeps PMCs, HID and IPI registers;
@@ -25,8 +26,8 @@ set -euo pipefail
 mattr=""
 [ "${1:-}" = "--mattr" ] && { mattr="$2"; shift 2; }
 baseline="${@: -1}"; kernel=""
-for f in "${@:1:$#-1}"; do case "$f" in *.unstripped) kernel="$f" ;; esac; done
-[ -n "$kernel" ] || { echo "no *.unstripped kernel among inputs"; exit 1; }
+for f in "${@:1:$#-1}"; do case "$f" in *.unstripped) kernel="$f" ;; *.kext) kernel="$f/Contents/MacOS/$(basename "$f" .kext)" ;; esac; done
+[ -n "$kernel" ] || { echo "no *.unstripped kernel or .kext bundle among inputs"; exit 1; }
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 objdump="$(xcrun -f llvm-objdump)"
 # Instruction lines as "address<TAB>word<TAB>text"; function labels as "<name>".

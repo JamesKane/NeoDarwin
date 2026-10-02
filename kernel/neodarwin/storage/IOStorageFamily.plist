@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- SPDX-License-Identifier: BSD-2-Clause -->
+<!--
+  IOStorageFamily as a codeless kext in a kernel collection (rules/kc.bzl):
+  the family is built into the SBSA kernel (patch 0025) and its classes are
+  kernel exports (patch 0039), so a kext that names com.apple.iokit.IOStorageFamily
+  in OSBundleLibraries (zfs.kext) links against the kernel. The identifier and
+  versions are IOStorageFamily-331's Info.plist's (2.1, compatible back to
+  1.0). Like xnu's System.kext pseudo-kexts it is a kernel resource with a
+  CFBundleExecutable: OSKext then loads it as an interface and gives it the
+  kmod_info that dependents' reference lists point at.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>IOStorageFamily</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.apple.iokit.IOStorageFamily</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>IOStorageFamily</string>
+	<key>CFBundlePackageType</key>
+	<string>KEXT</string>
+	<key>CFBundleShortVersionString</key>
+	<string>2.1</string>
+	<key>CFBundleVersion</key>
+	<string>2.1</string>
+	<key>OSBundleCompatibleVersion</key>
+	<string>1.0</string>
+	<key>OSBundleRequired</key>
+	<string>Root</string>
+	<key>OSKernelResource</key>
+	<true/>
+</dict>
+</plist>

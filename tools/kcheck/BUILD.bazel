@@ -15,4 +15,4 @@ nd_swift_binary(
     deps = [":kcheck_lib"],
 )
 
-exports_files(["kcheck_test.sh"])
+exports_files(["kcheck_test.sh", "kcheck_kexts_test.sh"])

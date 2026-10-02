@@ -1,0 +1,68 @@
+# OpenZFS for NeoDarwin (P3-01, docs/architecture/filesystems.md): zfs.kext
+# and the zpool and zfs commands, from the OpenZFS on OS X fork's macOS OS
+# layer (@openzfs, kexts/zfs/upstream.lock) with NeoDarwin's layer at
+# os/neodarwin (patches/). CDDL-1.0 (THIRD_PARTY_NOTICES.md).
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:base.bzl", "base_library")
+load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:kext.bzl", "nd_kext")
+
+package(default_visibility = ["//visibility:public"])
+
+_PORT = glob([
+    "include/*.h",
+    "patches/*.patch",
+]) + ["common.sh"]
+
+# zfs.kext: SPL, ZFS, ICP, Lua and zstd in one kext, as on macOS; linked
+# into //kernel:sbsa_zfs_kc.
+nd_kext(
+    name = "zfs",
+    bundle = "zfs.kext",
+    data = _PORT + [
+        "kext_sources.txt",
+        "//kernel/neodarwin/pthread:kernel_srcs",  # compat/TargetConditionals.h
+    ],
+    script = "kext.sh",
+    srcs = "@openzfs//:all",
+    upstream_headers = ["@apple_iostoragefamily//:headers"],
+)
+
+# zpool and zfs, at /sbin.
+base_library(
+    name = "zfs_commands",
+    data = _PORT + glob(["compat/*"]) + ["//base:commands.sh"],
+    deps = [
+        "//base:root",
+        "//base:libcrypto_dylib",
+    ],
+    script = "userland.sh",
+    srcs = "@openzfs//:all",
+    sysroot = "//base:sysroot",
+)
+
+# The kext against the SBSA baseline (//kernel:sbsa_isa_audit's): no
+# instruction past Armv8.2 except the runtime-gated ones in isa_audit.txt.
+sh_test(
+    name = "zfs_isa_audit",
+    size = "small",
+    srcs = ["//tools/xnu:isa_audit.sh"],
+    args = [
+        "--mattr +v8.2a,+rcpc,+dotprod,+aes,+sha2,+fullfp16",
+        "$(rootpath :zfs)",
+        "$(rootpath isa_audit.txt)",
+    ],
+    data = [
+        "isa_audit.txt",
+        ":zfs",
+    ],
+    tags = ["kernel"],
+)
+
+lang_audit_test(
+    name = "zfs_lang_audit",
+    srcs = glob([
+        "compat/*",
+        "include/*.h",
+    ]),
+)

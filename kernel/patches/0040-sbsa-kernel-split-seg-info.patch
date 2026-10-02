@@ -1,0 +1,37 @@
+From: NeoDarwin
+Subject: [PATCH] makedefs: the SBSA kernel carries split-segment info
+
+A fileset kernel collection places each kext's __TEXT_EXEC right after
+the kernel's __LAST, its __DATA_CONST after __LASTDATA_CONST and its
+__DATA after __PRELINK_DATA (arm_vm_init()), so the collection linker
+has to move the kernel's segments apart. kmutil does this with the
+split-segment info arm64e kernels are linked with
+(LDFLAGS_KERNEL_ONLY_SUBARCH_arm64e); the SBSA kernel is plain arm64 and
+had none. It now links with -add_split_seg_info too, and kcgen uses the
+info to move the kernel's segments, as it does each kext's (P3-01). The
+kernel is still linked without -kernel: kcgen turns its local
+relocations into kernel-cache chained fixups.
+
+Rebase-risk: low (one linker flag for one machine config).
+---
+diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
+index 62a85fb..6a445cd 100644
+--- a/makedefs/MakeInc.def
++++ b/makedefs/MakeInc.def
+@@ -1074,6 +1074,16 @@ LDFLAGS_KERNEL_ONLY_SUBARCH_x86_64 = \
+ 	-Wl,-kernel
+ LDFLAGS_KERNEL_ONLY_SUBARCH_x86_64h = $(LDFLAGS_KERNEL_ONLY_SUBARCH_x86_64)
+ 
++# NeoDarwin: the SBSA kernel is plain arm64 and is not linked with -kernel
++# (kcgen reads its local relocations), but it carries split-segment info as
++# arm64e kernels do, so kcgen can move its segments apart and place kexts
++# between them in a fileset collection (docs/kernel/arm64-sbsa-bringup.md
++# 2.1.1).
++ifeq ($(CURRENT_MACHINE_CONFIG),SBSA)
++LDFLAGS_KERNEL_ONLY_SUBARCH_arm64 = \
++	-Wl,-add_split_seg_info
++endif
++
+ LDFLAGS_KERNEL	= $(LDFLAGS_KERNEL_GEN) \
+ 		  $(LDFLAGS_KERNEL_SDK) \
+ 		  $($(addsuffix $(CURRENT_ARCH_CONFIG),ARCH_FLAGS_)) \

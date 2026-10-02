@@ -5,6 +5,9 @@ load("//rules:cc.bzl", "lang_audit_test")
 
 package(default_visibility = ["//visibility:public"])
 
+# The command projects' shared helpers, also for kexts/zfs's userland.
+exports_files(["commands.sh"])
+
 base_sysroot(
     name = "sysroot",
     availability = "@apple_availability_versions//:all",

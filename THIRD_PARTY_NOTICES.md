@@ -49,9 +49,18 @@ NeoDarwin's own code is under the BSD 2-Clause licence (`LICENSE`). NeoDarwin al
 | OpenSSL | openssl-3.5.9 (upstream release; FreeBSD's base library, the 3.5 LTS line) | Apache-2.0 (`LICENSE.txt`; the archive has no `NOTICE` file) | `libcrypto.3.dylib`, `libssl.3.dylib`, the legacy provider (`/usr/lib/ossl-modules`), the `capi` and `loader_attic` engines (`/usr/lib/engines-3`), `/usr/bin/openssl` and `/etc/ssl/openssl.cnf` |
 | OpenSSH | OpenSSH-354.0.3 (OpenSSH 10.0p2) | BSD-style: the `LICENCE` file's terms (BSD-2-Clause and BSD-3-Clause, ISC, and public-domain parts, per file) | `ssh`, `sshd`, `sshd-session`, `sshd-auth`, `ssh-keygen`, `ssh-add`, `ssh-agent`, `ssh-keyscan`, `scp`, `sftp`, `sftp-server`, `/etc/ssh`, `/etc/pam.d/sshd` and `ssh.plist` |
 | Swift Embedded standard library | swift.org toolchain 6.3.2 | Apache-2.0 WITH Swift runtime library exception | linked into neoboot and NeoDarwin's Swift programs |
+| OpenZFS (with the OpenZFS on OS X macOS OS layer) | zfs-macOS-2.4.1p1, openzfsonosx/openzfs-fork commit a4c1b11ab900 (`kexts/zfs/upstream.lock`; OpenZFS 2.4.1) | **CDDL-1.0** (file-level copyleft; notice below), with the permissive parts its files name: BSD-2-Clause (`lz4.c`, `lz4_zfs.c`, `spl-debug.c`), BSD-2-Clause OR GPL-2.0-only (`zfs_fletcher_superscalar*.c`, **used under BSD-2-Clause**), BSD-3-Clause OR GPL-2.0-only (zstd under `module/zstd`, **used under BSD-3-Clause**), MIT (Lua 5.2 in `module/lua`, `cityhash.c`, `spl-qsort.c`, `sysctl_os.c`), public domain (Skein, `vdev_draid_rand.c`), the OpenSSL licence (`aesv8-armx.S`, `ghashv8-armx.S`; acknowledgement below), Apache-2.0 (`sha256-armv8.S`, `sha512-armv8.S`), BSD (`setjmp.S`, NeXT and the Regents) | `zfs.kext`, a separate kext in the boot kernel collection (never linked into the kernel image; `//kernel:sbsa_zfs_kc`), and `/sbin/zpool` and `/sbin/zfs` with libzfs, libzfs_core, libnvpair, libzutil, libspl and libefi linked in. The Linux SPL (`module/os/linux/spl`, GPL-2.0) and the rest of the Linux layer aren't built. NeoDarwin's own files beside it (`kexts/zfs/compat`, the build scripts) are BSD-2-Clause; its changes to OpenZFS files are `kexts/zfs/patches`, under CDDL-1.0 |
 | TF-A, EDK2, edk2-platforms | TF-A v2.15.0 (with upstream fix 5c33fafc for `qemu_sbsa`), edk2-stable202608, edk2-platforms 061beb4c (SbsaQemu) | BSD-3-Clause, BSD-2-Clause-Patent | test firmware for QEMU `virt,secure=on` and `sbsa-ref` only (`third_party/qemu_firmware`); not part of NeoDarwin images |
 
 The authoritative licence of a component is the one in its pinned archive. This table summarises it; where they disagree, the archive wins.
+
+## OpenZFS
+
+OpenZFS is under the Common Development and Distribution License, version 1.0 (`LICENSE` and `COPYRIGHT` in the pinned archive), except where a file says otherwise. The CDDL's copyleft is per file: the source of every CDDL file NeoDarwin distributes in executable form, including NeoDarwin's modifications to it, must be available under the CDDL. For NeoDarwin that source is the pinned archive (URL and hash in `MODULE.bazel` and `kexts/zfs/upstream.lock`) with the patches in `kexts/zfs/patches`, which `kexts/zfs/common.sh` applies after copying the macOS OS layer to `os/neodarwin`. Files that aren't CDDL keep their own notices in their headers; the archive's `COPYRIGHT` lists the third-party licence files.
+
+`zfs.kext` contains, in `aesv8-armx.S` and `ghashv8-armx.S`, software under the OpenSSL licence, which asks binary distributions to carry this acknowledgement:
+
+> This product includes software developed by the OpenSSL Project for use in the OpenSSL Toolkit (http://www.openssl.org/)
 
 ## ACPICA
 
