@@ -90,6 +90,20 @@
 #                     QEMU: for a kernel whose console is the framebuffer alone,
 #                     which prints nothing on serial
 #   --absent TEXT     fail if TEXT appears on serial; repeatable
+#   --dump-cpus-on TEXT
+#                     for a hang: once TEXT appears on serial, and when the
+#                     run times out, stop the guest and record every CPU's
+#                     registers (the monitor's `info registers -a`) and its
+#                     frame-pointer chain (PC, LR, then each frame's saved
+#                     LR, read through that CPU's own translation), then let
+#                     it run on. Written to cpus.txt in
+#                     $TEST_UNDECLARED_OUTPUTS_DIR (or ND_QEMU_LOG_DIR), the
+#                     chains also to the test log. Repeatable; e.g.
+#                     'Attempting to forcibly halt cpu' catches CPUs that
+#                     ignore the debugger's IPI while they are still stuck.
+#                     Symbolize with atos -o kernel.release.sbsa.unstripped
+#                     -l 0xfffffe000700c000 (the kernel's __TEXT in the
+#                     kernelcache; neoboot loads it unslid)
 #   --user-net DEV    a NIC on QEMU's user-mode network (slirp: the guest is
 #                     10.0.2.15, the gateway 10.0.2.2, DNS 10.0.2.3), e.g.
 #                     virtio-net-pci,mac=52:54:00:12:34:56: -netdev user and
@@ -117,11 +131,17 @@
 # Environment:
 #   ND_QEMU           qemu-system-aarch64 to use
 #   ND_QEMU_DEBUG=DIR keep serial.log there and add QEMU's exception trace (-d int)
+#   ND_QEMU_LOG_DIR=DIR
+#                     keep serial.log (and cpus.txt) there, without the trace
+#   ND_QEMU_DUMP_CPUS_ON=TEXT
+#                     as --dump-cpus-on TEXT, for a run whose arguments are
+#                     fixed (a Bazel test: --test_env=ND_QEMU_DUMP_CPUS_ON=...)
 set -euo pipefail
 esp_files=(); mem=""; smp=1; cpu=""; until_lines=0; sends=(); machine=virt; firmware=""; firmware_ns=""
 devices=(); drives=(); screendump=""; screen_font=""; screen_lines=(); until_screen=0; absent=(); mopts=""
 disk=""; disk_in_place=0; disk_device="virtio-blk-pci,disable-legacy=on"
-user_net=""; hostfwd=""; host_setups=()
+user_net=""; hostfwd=""; host_setups=(); dump_cpus_on=()
+[ -n "${ND_QEMU_DUMP_CPUS_ON:-}" ] && dump_cpus_on+=("$ND_QEMU_DUMP_CPUS_ON")
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--esp) esp_files+=("$2"); shift 2 ;;
@@ -146,6 +166,7 @@ while [ $# -gt 0 ]; do
 		--screen-line) screen_lines+=("$2"); shift 2 ;;
 		--until-screen) until_screen=1; shift ;;
 		--absent) absent+=("$2"); shift 2 ;;
+		--dump-cpus-on) dump_cpus_on+=("$2"); shift 2 ;;
 		--user-net) user_net="$2"; shift 2 ;;
 		--hostfwd) hostfwd="$2"; shift 2 ;;
 		--host-setup) host_setups+=("$2"); shift 2 ;;
@@ -289,12 +310,20 @@ for cmd in ${host_setups[@]+"${host_setups[@]}"}; do
 	(cd "$host_dir" && HOME="$host_dir" bash -c "$cmd") || { echo "FAIL: --host-setup failed: $cmd"; exit 1; }
 done
 logdir="$work"; debug=()
+if [ -n "${ND_QEMU_LOG_DIR:-}" ]; then
+	logdir="$ND_QEMU_LOG_DIR"; mkdir -p "$logdir"
+fi
 if [ -n "${ND_QEMU_DEBUG:-}" ]; then
 	logdir="$ND_QEMU_DEBUG"; mkdir -p "$logdir"; debug=(-d int,guest_errors,unimp -D "$logdir/qemu.log")
 fi
 log="$logdir/serial.log"; : > "$log"
 patterns="$work/expect"; printf '%s\n' "$@" > "$patterns"
 screen_need="$work/screen_need"; printf '%s\n' ${screen_lines[@]+"${screen_lines[@]}"} > "$screen_need"
+dump_on="$work/dump_on"; printf '%s\n' ${dump_cpus_on[@]+"${dump_cpus_on[@]}"} > "$dump_on"
+cpus_txt=""
+if [ ${#dump_cpus_on[@]} -gt 0 ]; then
+	cpus_txt="${TEST_UNDECLARED_OUTPUTS_DIR:-$logdir}/cpus.txt"; mkdir -p "$(dirname "$cpus_txt")"; rm -f "$cpus_txt"
+fi
 if [ "$until_screen" -eq 1 ] && { [ -z "$screendump" ] || [ -z "$screen_font" ]; }; then
 	echo "--until-screen needs --screendump and --screen-font"; exit 1
 fi
@@ -318,13 +347,14 @@ monitor=(-monitor none); dump=""
 if [ -n "$screendump" ]; then
 	dump="${TEST_UNDECLARED_OUTPUTS_DIR:-$logdir}/$screendump"; mkdir -p "$(dirname "$dump")"; rm -f "$dump"
 fi
-if [ -n "$screendump" ] || [ "$has_keys" -eq 1 ]; then
+if [ -n "$screendump" ] || [ "$has_keys" -eq 1 ] || [ -n "$cpus_txt" ]; then
 	# A short path: Unix socket names are limited to about 100 bytes, and
 	# Bazel's TMPDIR is long.
 	mon_dir="$(mktemp -d /tmp/ndmon.XXXXXX)"; trap 'rm -rf "$work" "$mon_dir"' EXIT
 	monitor=(-monitor unix:"$mon_dir/mon",server=on,wait=off)
 fi
 status=0
+export ND_DUMP_ON="$dump_on" ND_CPUS_TXT="$cpus_txt"
 # Watchdog in perl: QEMU ignores SIGALRM. It copies serial output to the log,
 # types each --send-after step once its line has appeared, and in
 # --until-lines mode stops QEMU once every expected line is there (and,
@@ -449,6 +479,48 @@ perl -e '
 		unlink $dump; screendump();
 		return system("perl", $screen_pl, $dump, $font, "$need.last", "last") == 0;
 	}
+	# --dump-cpus-on: the guest stopped, the registers of each CPU and
+	# its frame-pointer chain through the monitor, then the guest resumed.
+	my @dump_on = (); my %dumped;
+	if (open(my $df, "<", $ENV{ND_DUMP_ON} // "")) { @dump_on = grep { length } map { chomp; $_ } <$df> }
+	sub mon_cmd {
+		my ($m, $cmd) = @_; my ($reply, $buf) = ("", "");
+		print $m "$cmd\n" if defined $cmd;
+		my $until = time + 20;
+		while (time < $until) {
+			drain();
+			if (sysread($m, $buf, 65536)) { $reply .= $buf; last if $reply =~ /\(qemu\) $/ } else { select(undef, undef, undef, 0.02) }
+		}
+		$reply =~ s/\e\[[0-9;?]*[A-Za-z]//g; $reply =~ s/\r//g; $reply =~ s/\(qemu\) $//;
+		$reply =~ s/\A[^\n]*\n// if defined $cmd;    # the echoed command line
+		return $reply;
+	}
+	sub dump_cpus {
+		my ($why) = @_;
+		my $m = IO::Socket::UNIX->new(Type => SOCK_STREAM(), Peer => $mon) or return;
+		$m->blocking(0); mon_cmd($m, undef);
+		mon_cmd($m, "stop");
+		my $regs = mon_cmd($m, "info registers -a");
+		my (@chains, $n);
+		for my $cpu (split /(?=CPU#\d+)/, $regs) {
+			next unless $cpu =~ /^CPU#(\d+)/; $n = $1;
+			my ($pc) = $cpu =~ /\bPC=([0-9a-f]+)/; my ($fp) = $cpu =~ /\bX29=([0-9a-f]+)/;
+			my ($lr) = $cpu =~ /\bX30=([0-9a-f]+)/; my ($ps) = $cpu =~ /\bPSTATE=([0-9a-f]+)/;
+			next unless defined $pc;
+			my @frames = ($pc, $lr // "?");
+			mon_cmd($m, "cpu $n");
+			my %seen;
+			for (1 .. 32) {
+				last unless defined $fp && $fp =~ /^ffff/ && hex($fp) % 8 == 0 && !$seen{$fp}++;
+				my ($next, $ret) = mon_cmd($m, sprintf("x /2gx 0x%s", $fp)) =~ /:\s*0x([0-9a-f]+)\s+0x([0-9a-f]+)/ or last;
+				push @frames, $ret; $fp = $next;
+			}
+			push @chains, sprintf("cpus: cpu %d PSTATE %s: %s\n", $n, $ps // "?", join(" ", map { "0x$_" } @frames));
+		}
+		mon_cmd($m, "cpu 0"); mon_cmd($m, "cont"); close $m;
+		if (open(my $cf, ">>", $ENV{ND_CPUS_TXT})) { print $cf "=== $why\n$regs\n", @chains; close $cf }
+		my $note = "cpus: stopped on $why\n" . join("", @chains); print $lf $note;
+	}
 	my $pid = fork(); if (!$pid) { exec @cmd or die "exec: $!" }
 	my $deadline = time + $t;
 	while (1) {
@@ -478,7 +550,14 @@ perl -e '
 		if ($until && !@send && host_poll() && !grep({ index($text, $_) < 0 } @want) && screen_ready()) {
 			screendump() unless $until_screen; kill 9, $pid; waitpid($pid, 0); exit 0
 		}
-		if (time >= $deadline) { kill 9, -$host_pid if defined $host_pid; screendump(); kill 9, $pid; waitpid($pid, 0); exit 124 }
+		for my $d (@dump_on) {
+			next if $dumped{$d} || index($text, $d) < 0;
+			$dumped{$d} = 1; dump_cpus("\"$d\"");
+		}
+		if (time >= $deadline) {
+			dump_cpus("the timeout") if @dump_on;
+			kill 9, -$host_pid if defined $host_pid; screendump(); kill 9, $pid; waitpid($pid, 0); exit 124
+		}
 		select(undef, undef, undef, 0.2);
 	}
 ' "$timeout" "$until_lines" "$log" "$patterns" "$steps" "$work/ser" "${mon_dir:-}/mon" "$dump" \
@@ -491,6 +570,10 @@ perl -e '
 # applied (line editors such as zsh's back up and redraw), lines split.
 clean="$(perl -0777 -pe 's/\e\[[0-9;?]*[A-Za-z]//g; 1 while s/[^\x08\n]\x08//; s/\x08//g; tr/\r/\n/' < "$log" | grep -av '^\s*$' || true)"
 echo "$clean" | tail -n 60
+# --dump-cpus-on: the chains, wherever the tail cut them off.
+if [ -n "$cpus_txt" ] && [ -s "$cpus_txt" ]; then
+	echo "--- cpus ($cpus_txt) ---"; grep -a -e '^===' -e '^cpus: ' "$cpus_txt"; echo "--------------"
+fi
 # The screen's text too, even when the run failed.
 screen=""
 if [ -n "$screen_font" ] && [ -s "$dump" ]; then

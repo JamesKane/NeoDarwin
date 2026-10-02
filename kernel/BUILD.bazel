@@ -120,6 +120,7 @@ SBSA_PATCHES = [
     "patches/0035-iokit-build-ionetworkingfamily.patch",
     "patches/0036-iokit-build-virtio-net-and-interface-namer.patch",
     "patches/0037-iokit-build-tc956x-ethernet.patch",
+    "patches/0038-generic-arm64-machine-timeouts-in-real-time.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.

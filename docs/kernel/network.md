@@ -142,6 +142,8 @@ route -n add default 10.0.2.2
 
 Checkpoint 1's tests configured en0 by hand (`ifconfig`, `route`); since checkpoint 2 the same three tests take the lease at boot and resolve names ("Checkpoint 2", "Tests").
 
+Until patch 0038, `sbsa_ref_net_test` panicked about one run in five just after the lease (`Ticket spinlock[...] timeout` on `pset0.sched_lock`, after "failed to halt" for the other CPUs). Neither the driver nor the ITS was involved: XNU's lock and debugger timeouts are 24 MHz tick counts, 41.7 times too short at sbsa-ref's 1 GHz counter, and the network's work at boot (slirp and virtio-net under QEMU's iothread lock, the extra processes) held a vCPU past 3 ms (`arm64-sbsa-bringup.md` §2.1.9).
+
 **ssh from the host.** The harness runs the host's own `ssh`, and keeps the run sealed:
 
 - `--host-setup` makes an ed25519 key with `ssh-keygen` in a directory of the run's own (also `HOME` for host commands), deleted with the run.

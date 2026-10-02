@@ -1,0 +1,77 @@
+From: NeoDarwin
+Subject: [PATCH] generic arm64: built-in machine timeouts as durations, not 24 MHz ticks
+
+XNU's MACHINE_TIMEOUT defaults in MACHINE_TIMEOUT_UNIT_TIMEBASE are raw
+timebase ticks written for Apple silicon's 24 MHz timebase: "lock" 6e6
+(0.25 s), from which ml_init_lock_timeout derives the ticket-lock timeout
+(3e6, 0.125 s), "lock-panic" 0xc00000 (0.52 s), "debug-ack" 240000 (10 ms),
+the trace-phy delays and, with SCHED_HYGIENE_DEBUG, the interrupt-masked
+and preemption thresholds. A generic Arm counter runs at CNTFRQ_EL0, which
+the loader passes as each cpu node's timebase-frequency: 1 GHz on every
+Armv8.6 or later core (FEAT_ECV's fixed frequency) and on QEMU sbsa-ref's
+neoverse-n2, 19.2 MHz on the Radxa Dragon Q8B. At 1 GHz every timeout is
+41.7 times shorter than its author meant: a ticket lock panics after 3 ms
+of spinning and the debugger gives the other CPUs 240 us to answer its
+cross-call. Under QEMU TCG a vCPU that holds the scheduler's pset lock can
+be held up that long (its thread preempted on the host, or waiting for
+QEMU's iothread lock in a GIC system register or MMIO access), and
+//kernel:sbsa_ref_net_test panicked about one run in five: "Ticket
+spinlock[pset0.sched_lock] timeout after 3104000 ticks", after
+"Attempting to forcibly halt cpu N ... halt not supported" for CPUs that
+were answering, only later than 240 us (docs/kernel/arm64-sbsa-bringup.md
+§2.1.9).
+
+For GENERIC_ARM64_PLATFORM, machine_timeout_init_with_suffix() converts a
+built-in timebase-unit default to the duration it stands for (ticks *
+125/3 ns) and then to this timebase's ticks; rtclock_early_init has set
+the conversion by then. Values from /machine-timeouts, /chosen or
+ml-timeout-* boot-args are durations already and keep upstream's
+conversion; scales apply as before. Other board configs are unchanged.
+
+Rebase-risk: low (one block in machine_timeout_init_with_suffix, an include).
+---
+--- a/osfmk/kern/machine.c
++++ b/osfmk/kern/machine.c
+@@ -102,6 +102,10 @@
+ #include <machine/commpage.h>
+ #include <machine/machine_routines.h>
+ 
++#if defined(__arm64__)
++#include <pexpert/arm64/board_config.h>
++#endif
++
+ #if HIBERNATION
+ #include <IOKit/IOHibernatePrivate.h>
+ #endif
+@@ -1646,6 +1650,31 @@
+ 		scale *= global_scale;
+ 	}
+ 
++#if defined(__arm64__) && GENERIC_ARM64_PLATFORM
++	/*
++	 * NeoDarwin: a built-in MACHINE_TIMEOUT_UNIT_TIMEBASE default counts
++	 * ticks of Apple silicon's 24 MHz timebase (the lock timeout's 6e6 is
++	 * "0.25s"); a generic Arm counter runs at whatever CNTFRQ_EL0 says, 1 GHz on
++	 * every Armv8.6 or later core and on QEMU sbsa-ref, where the ticket-lock
++	 * timeout became 3 ms and the debugger's acknowledgement 240 us.
++	 * Express the default as the duration it was written for, in this
++	 * timebase (rtclock_early_init has run). Values from the device tree
++	 * or a boot-arg are durations already and are converted below.
++	 */
++	if (!found && timeout > 0 && spec->unit_scale == MACHINE_TIMEOUT_UNIT_TIMEBASE) {
++		uint64_t nanoseconds;
++
++		if (os_mul_overflow(timeout, 125, &nanoseconds)) {
++			nanoseconds = UINT64_MAX;
++		}
++		nanoseconds /= 3;       /* 24 MHz ticks: 1000/24 = 125/3 ns each */
++		nanoseconds_to_absolutetime(nanoseconds, &timeout);
++		if (timeout == 0) {
++			timeout = 1;
++		}
++	}
++#endif /* __arm64__ && GENERIC_ARM64_PLATFORM */
++
+ 	/* Compute the final timeout, and done. */
+ 	if (found && timeout > 0) {
+ 		/* Only apply inherent unit scale if the value came in
