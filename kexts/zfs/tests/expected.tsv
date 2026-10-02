@@ -30,7 +30,7 @@ cli_root/zfs_destroy/zfs_clone_livelist_condense_races	FAIL	to investigate
 cli_root/zfs_destroy/zfs_clone_livelist_dedup	FAIL	to investigate
 cli_root/zfs_destroy/zfs_destroy_001_pos	FAIL	needs zvols (checkpoint 3)
 cli_root/zfs_destroy/zfs_destroy_002_pos	PASS	
-cli_root/zfs_destroy/zfs_destroy_003_pos	PASS	
+cli_root/zfs_destroy/zfs_destroy_003_pos	FLAKY	hung once in five runs after removing zvols (zvolRemoveDeviceTerminate): the guest stopped printing and the shard ran to its timeout (checkpoint 3, zvols)
 cli_root/zfs_destroy/zfs_destroy_004_pos	PASS	
 cli_root/zfs_destroy/zfs_destroy_005_neg	FAIL	needs zvols (checkpoint 3)
 cli_root/zfs_destroy/zfs_destroy_006_neg	PASS	
@@ -53,10 +53,10 @@ cli_root/zfs_get/zfs_get_001_pos	KILLED	over the 240 s per-test cap under TCG, o
 cli_root/zfs_get/zfs_get_002_pos	FAIL	to investigate
 cli_root/zfs_get/zfs_get_003_pos	PASS	
 cli_root/zfs_get/zfs_get_004_pos	PASS	
-cli_root/zfs_get/zfs_get_005_neg	FLAKY	passed in one full run, KILLED in another
+cli_root/zfs_get/zfs_get_005_neg	FLAKY	KILLED at the 240 s cap in most runs, passed in others (slow under TCG, or hangs: to investigate)
 cli_root/zfs_get/zfs_get_006_neg	PASS	
 cli_root/zfs_get/zfs_get_007_neg	PASS	
-cli_root/zfs_get/zfs_get_008_pos	FAIL	to investigate
+cli_root/zfs_get/zfs_get_008_pos	FLAKY	failed in most runs, passed in one (to investigate)
 cli_root/zfs_get/zfs_get_009_pos	KILLED	over the 240 s per-test cap under TCG, or hangs (to investigate)
 cli_root/zfs_get/zfs_get_010_neg	PASS	
 cli_root/zfs_mount/cleanup	PASS	
@@ -124,9 +124,9 @@ cli_root/zfs_send/zfs_send_002_pos	FAIL	to investigate
 cli_root/zfs_send/zfs_send_003_pos	PASS	
 cli_root/zfs_send/zfs_send_004_neg	PASS	
 cli_root/zfs_send/zfs_send_005_pos	PASS	
-cli_root/zfs_send/zfs_send_006_pos	PASS	
+cli_root/zfs_send/zfs_send_006_pos	FLAKY	writes 448 MB from /dev/urandom: near the 240 s cap under TCG (KILLED in some runs)
 cli_root/zfs_send/zfs_send_007_pos	PASS	
-cli_root/zfs_send/zfs_send_encrypted	PASS	
+cli_root/zfs_send/zfs_send_encrypted	FLAKY	fails when zfs_send_006_pos is KILLED (its testpool/testfs1 is left behind)
 cli_root/zfs_send/zfs_send_encrypted_unloaded	PASS	
 cli_root/zfs_send/zfs_send_raw	PASS	
 cli_root/zfs_send/zfs_send_skip_missing	PASS	
@@ -197,9 +197,9 @@ cli_root/zpool_create/zpool_create_020_pos	PASS
 cli_root/zpool_create/zpool_create_021_pos	PASS	
 cli_root/zpool_create/zpool_create_022_pos	PASS	
 cli_root/zpool_create/zpool_create_023_neg	FAIL	NFS sharing: no NFS server (share options are not validated)
-cli_root/zpool_create/zpool_create_024_pos	FLAKY	passed in one full run, KILLED in another
+cli_root/zpool_create/zpool_create_024_pos	FLAKY	concurrent zpool create/destroy: passed in most runs; KILLED in others, and then ZFS is wedged ("pool is busy") and the rest of zpool_create SKIPs
 cli_root/zpool_create/zpool_create_crypt_combos	PASS	
-cli_root/zpool_create/zpool_create_draid_001_pos	PASS	
+cli_root/zpool_create/zpool_create_draid_001_pos	FLAKY	failed once with FILEDIR full (HFS+ allocates file vdevs; FILEDIR is 64 GB since)
 cli_root/zpool_create/zpool_create_draid_002_pos	FAIL	dRAID file vdevs: truncate of the files in TESTDIR fails (to investigate)
 cli_root/zpool_create/zpool_create_draid_003_pos	PASS	
 cli_root/zpool_create/zpool_create_draid_004_pos	FAIL	draidcfg.gz is left out of the image (21 MB)
@@ -226,8 +226,8 @@ cli_root/zpool_export/zpool_export_003_neg	PASS
 cli_root/zpool_export/zpool_export_004_pos	PASS	
 cli_root/zpool_export/zpool_export_parallel_admin	PASS	
 cli_root/zpool_export/zpool_export_parallel_pos	FAIL	timing assertion (parallel speed-up) under TCG
-cli_root/zpool_import/cleanup	FAIL	to investigate
-cli_root/zpool_import/import_cachefile_device_added	PASS	
+cli_root/zpool_import/cleanup	SKIP	ZFS is wedged after zpool_import_parallel_admin (see it)
+cli_root/zpool_import/import_cachefile_device_added	FLAKY	fails when zpool_import_all_001_pos is KILLED (its exported pools hold the disk files)
 cli_root/zpool_import/import_cachefile_device_removed	PASS	
 cli_root/zpool_import/import_cachefile_device_replaced	PASS	
 cli_root/zpool_import/import_cachefile_mirror_attached	PASS	
@@ -249,16 +249,16 @@ cli_root/zpool_import/zpool_import_006_pos	PASS
 cli_root/zpool_import/zpool_import_007_pos	PASS	
 cli_root/zpool_import/zpool_import_008_pos	PASS	
 cli_root/zpool_import/zpool_import_009_neg	PASS	
-cli_root/zpool_import/zpool_import_010_pos	PASS	
-cli_root/zpool_import/zpool_import_011_neg	PASS	
+cli_root/zpool_import/zpool_import_010_pos	FLAKY	creates and destroys five pools (one dRAID): near the 240 s cap under TCG (KILLED in some runs)
+cli_root/zpool_import/zpool_import_011_neg	FLAKY	fails when zpool_import_010_pos is KILLED (its destroyed pools hold the disk files)
 cli_root/zpool_import/zpool_import_012_pos	FAIL	NFS sharing: no NFS server (share options are not validated)
 cli_root/zpool_import/zpool_import_013_neg	FAIL	needs bzcat (bzip2 is not in the base; P3-02)
 cli_root/zpool_import/zpool_import_014_pos	PASS	
 cli_root/zpool_import/zpool_import_015_pos	PASS	
 cli_root/zpool_import/zpool_import_016_pos	PASS	
 cli_root/zpool_import/zpool_import_017_pos	PASS	
-cli_root/zpool_import/zpool_import_all_001_pos	PASS	
-cli_root/zpool_import/zpool_import_encrypted	PASS	
+cli_root/zpool_import/zpool_import_all_001_pos	FLAKY	creates, exports and imports many pools: near the 240 s cap under TCG (KILLED in some runs)
+cli_root/zpool_import/zpool_import_encrypted	FLAKY	fails when zpool_import_all_001_pos is KILLED (its exported pools hold the disk files)
 cli_root/zpool_import/zpool_import_encrypted_load	PASS	
 cli_root/zpool_import/zpool_import_errata3	FAIL	needs bzcat (bzip2 is not in the base; P3-02)
 cli_root/zpool_import/zpool_import_errata4	FAIL	needs bzcat (bzip2 is not in the base; P3-02)
@@ -268,11 +268,11 @@ cli_root/zpool_import/zpool_import_features_003_pos	PASS
 cli_root/zpool_import/zpool_import_missing_001_pos	FAIL	dRAID file vdevs: truncate of the files in TESTDIR fails (to investigate)
 cli_root/zpool_import/zpool_import_missing_002_pos	FAIL	to investigate
 cli_root/zpool_import/zpool_import_missing_003_pos	SKIP	the test skips itself, or its group is skipped
-cli_root/zpool_import/zpool_import_parallel_admin	KILLED	over the 240 s per-test cap under TCG, or hangs (to investigate)
+cli_root/zpool_import/zpool_import_parallel_admin	KILLED	zpool_import_parallel_pos fails (a tunable) and leaves testpool1, which zpool_import_parallel_neg suspends by truncating its files; this test hangs on it and ZFS is wedged
 cli_root/zpool_import/zpool_import_parallel_neg	PASS	
 cli_root/zpool_import/zpool_import_parallel_pos	FAIL	sets a tunable the macOS layer does not have
 cli_root/zpool_import/zpool_import_rename_001_pos	PASS	
-cli_root/zpool_import/zpool_import_status	FAIL	sets a tunable the macOS layer does not have
+cli_root/zpool_import/zpool_import_status	KILLED	sets a tunable the macOS layer does not have, then runs to the 240 s cap
 cli_root/zpool_scrub/cleanup	PASS	
 cli_root/zpool_scrub/setup	PASS	
 cli_root/zpool_scrub/zpool_error_scrub_001_pos	FAIL	needs fio (not in the base)

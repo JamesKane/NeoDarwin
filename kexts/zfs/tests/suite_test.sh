@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # //kernel:sbsa_zfs_suite_test (P3-01 checkpoint 2, docs/architecture/filesystems.md §7):
 # boot //images:zfs_test_disk on QEMU virt with four blank virtio-blk disks
-# (a 32 GB one for FILEDIR, HFS+ file vdevs being allocated, and three 4 GB DISKS),
+# (a 64 GB one for FILEDIR, HFS+ file vdevs being allocated, and three 4 GB DISKS;
+# sparse on the host),
 # run one shard's groups of the OpenZFS test suite with nd-zfs-tests, and
 # hold the results to the ratchet in expected.tsv.
 #   suite_test.sh QEMU_EFI_TEST DISK GROUPS EXPECTED [QEMU_OPTION...]
@@ -47,7 +48,7 @@ status=0
 ND_QEMU_LOG_DIR="$logdir" ND_QEMU_STOP_ON='panic(cpu' "$qemu_test" "$@" \
 	--dump-cpus-on 'panic(cpu' \
 	--disk "$disk" \
-	--drive zts0=32G --device virtio-blk-pci,drive=zts0,disable-legacy=on \
+	--drive zts0=64G --device virtio-blk-pci,drive=zts0,disable-legacy=on \
 	--drive zts1=4G --device virtio-blk-pci,drive=zts1,disable-legacy=on \
 	--drive zts2=4G --device virtio-blk-pci,drive=zts2,disable-legacy=on \
 	--drive zts3=4G --device virtio-blk-pci,drive=zts3,disable-legacy=on \

@@ -109,6 +109,24 @@ typeset -A result
 typeset -a order
 typeset -i npass=0 nfail=0 nskip=0 nkilled=0 wedged=0
 
+# bounded SECONDS COMMAND...: run COMMAND, output discarded, for at most
+# SECONDS; 124 if it was still running. timeout(1) would wait for a
+# process asleep in the kernel, which SIGKILL doesn't end: this leaves it.
+function bounded
+{
+	typeset -i to=$1 t0=$SECONDS; shift
+	"$@" > /dev/null 2>&1 &
+	typeset pid=$!
+	while kill -0 $pid 2>/dev/null; do
+		if (( SECONDS - t0 >= to )); then
+			kill -KILL $pid 2>/dev/null
+			return 124
+		fi
+		sleep 0.2
+	done
+	wait $pid 2>/dev/null
+}
+
 # run PATH TIMEOUT: run the script PATH (without .ksh) with a timeout;
 # sets $res and prints its line.
 function run
@@ -131,7 +149,11 @@ function run
 		fi
 		sleep 0.2
 	done
-	wait $pid 2>/dev/null; st=$?
+	# A process asleep in the kernel (a suspended pool) outlives SIGKILL:
+	# don't wait for it.
+	if (( killed )) && kill -0 $pid 2>/dev/null; then st=137
+	else wait $pid 2>/dev/null; st=$?
+	fi
 	if (( killed )); then res=KILLED
 	elif (( st == 0 )); then res=PASS
 	elif (( st == 4 )); then res=SKIP
@@ -143,12 +165,12 @@ function run
 		tail -n 25 $log | sed 's/^/ZTS|  /'
 	fi
 	if [[ $res == KILLED ]]; then
-		timeout 60 $STF_SUITE/callbacks/zfs_failsafe.ksh > /dev/null 2>&1
+		bounded 60 $STF_SUITE/callbacks/zfs_failsafe.ksh
 		# A test killed in the kernel can leave ZFS wedged (a zpool
-		# command asleep holding the namespace lock): then every later
-		# test would hang to its timeout too. Show where processes
-		# sleep, and stop the run.
-		timeout 60 zpool list > /dev/null 2>&1
+		# command asleep holding the namespace lock, or a suspended
+		# pool): then every later test would hang to its timeout too.
+		# Show where processes sleep, and stop the run.
+		bounded 60 zpool list
 		if (( $? == 124 )); then
 			print "ZTS-WEDGED: zpool list hangs after $path was killed"
 			ps -axo pid,stat,wchan,command | grep -v ' ps -axo' | sed 's/^/ZTS|  /'
