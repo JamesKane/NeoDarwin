@@ -128,6 +128,31 @@
 #                     output goes into it
 #   In --send-after TEXT, {hostfile:NAME} is the first line of file NAME in
 #   the host directory (made by --host-setup), e.g. a public key to install
+# A second guest, the peer, on a private Ethernet segment with this one
+# (opt-in; docs/kernel/network.md, "rtadvd"):
+#   --link-net DEV    a NIC on the run's private segment, e.g.
+#                     virtio-net-pci,mac=52:54:00:00:01:01, after any
+#                     --user-net NIC. The segment is two Unix datagram
+#                     sockets in a directory of the run's own (QEMU's
+#                     -netdev dgram, local.type=unix): no host port, no
+#                     multicast, nothing else on it. macOS limits a Unix
+#                     datagram to 2048 bytes and buffers 4096 per socket, so
+#                     it carries Ethernet frames (virtio-net has no
+#                     offloads on it) and drops them under a burst
+#   --peer-net DEV    start the peer: a second QEMU with the same machine,
+#                     firmware, CPU, RAM and boot drive (its own copy) and
+#                     DEV, its NIC on the segment; no --device or --drive.
+#                     Its serial is logged as peer-serial.log. With
+#                     --until-lines the run stops once the peer has passed
+#                     too (its steps done, its lines there); the peer keeps
+#                     running until then
+#   --peer-user-net DEV
+#                     also give the peer a NIC on its own user-mode network
+#                     (no forwards), ahead of its segment NIC
+#   --peer-send-after LINE TEXT
+#                     as --send-after, on the peer's serial (in order among
+#                     themselves, independent of this guest's steps)
+#   --peer-line TEXT  require TEXT on the peer's serial; repeatable
 # Environment:
 #   ND_QEMU           qemu-system-aarch64 to use
 #   ND_QEMU_DEBUG=DIR keep serial.log there and add QEMU's exception trace (-d int)
@@ -141,6 +166,7 @@ esp_files=(); mem=""; smp=1; cpu=""; until_lines=0; sends=(); machine=virt; firm
 devices=(); drives=(); screendump=""; screen_font=""; screen_lines=(); until_screen=0; absent=(); mopts=""
 disk=""; disk_in_place=0; disk_device="virtio-blk-pci,disable-legacy=on"
 user_net=""; hostfwd=""; host_setups=(); dump_cpus_on=()
+link_net=""; peer_net=""; peer_user_net=""; peer_sends=(); peer_lines=()
 [ -n "${ND_QEMU_DUMP_CPUS_ON:-}" ] && dump_cpus_on+=("$ND_QEMU_DUMP_CPUS_ON")
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -171,6 +197,11 @@ while [ $# -gt 0 ]; do
 		--hostfwd) hostfwd="$2"; shift 2 ;;
 		--host-setup) host_setups+=("$2"); shift 2 ;;
 		--host-cmd-after) sends+=(host "$2" "$3"); shift 3 ;;
+		--link-net) link_net="$2"; shift 2 ;;
+		--peer-net) peer_net="$2"; shift 2 ;;
+		--peer-user-net) peer_user_net="$2"; shift 2 ;;
+		--peer-send-after) peer_sends+=("$2" "$3"); shift 3 ;;
+		--peer-line) peer_lines+=("$2"); shift 2 ;;
 		*) break ;;
 	esac
 done
@@ -306,6 +337,17 @@ if [ -n "$user_net" ]; then
 	fi
 	devices+=(-netdev "$netdev" -device "$user_net,netdev=ndnet0")
 fi
+# The private segment: this guest's end is socket a, the peer's b. A short
+# path, as for the monitor below.
+link_dir=""
+if [ -n "$peer_user_net" ] && [ -z "$peer_net" ]; then echo "--peer-user-net needs --peer-net"; exit 1; fi
+if [ -n "$link_net" ] || [ -n "$peer_net" ]; then
+	link_dir="$(mktemp -d /tmp/ndlink.XXXXXX)"; trap 'rm -rf "$work" "$link_dir"' EXIT
+fi
+if [ -n "$link_net" ]; then
+	devices+=(-netdev "dgram,id=ndlink0,local.type=unix,local.path=$link_dir/a,remote.type=unix,remote.path=$link_dir/b"
+		-device "$link_net,netdev=ndlink0")
+fi
 for cmd in ${host_setups[@]+"${host_setups[@]}"}; do
 	(cd "$host_dir" && HOME="$host_dir" bash -c "$cmd") || { echo "FAIL: --host-setup failed: $cmd"; exit 1; }
 done
@@ -350,7 +392,7 @@ fi
 if [ -n "$screendump" ] || [ "$has_keys" -eq 1 ] || [ -n "$cpus_txt" ]; then
 	# A short path: Unix socket names are limited to about 100 bytes, and
 	# Bazel's TMPDIR is long.
-	mon_dir="$(mktemp -d /tmp/ndmon.XXXXXX)"; trap 'rm -rf "$work" "$mon_dir"' EXIT
+	mon_dir="$(mktemp -d /tmp/ndmon.XXXXXX)"; trap 'rm -rf "$work" "$mon_dir" ${link_dir:+"$link_dir"}' EXIT
 	monitor=(-monitor unix:"$mon_dir/mon",server=on,wait=off)
 fi
 status=0
@@ -359,8 +401,9 @@ export ND_DUMP_ON="$dump_on" ND_CPUS_TXT="$cpus_txt"
 # types each --send-after step once its line has appeared, and in
 # --until-lines mode stops QEMU once every expected line is there (and,
 # with --until-screen, every screen line). QEMU stalls if its output isn't
-# drained, so the loop always reads it.
-perl -e '
+# drained, so the loop always reads it. The peer has its own watchdog, the
+# same program.
+cat > "$work/watch.pl" <<'WATCH_PL'
 	use Fcntl; use Time::HiRes qw(time); use IO::Socket::UNIX;
 	my ($t, $until, $log, $pat, $steps, $ser, $mon, $dump, $until_screen, $screen_pl, $font, $need, @cmd) = @ARGV;
 	open(my $pf, "<", $pat) or die; my @want = grep { length } map { chomp; $_ } <$pf>;
@@ -522,6 +565,13 @@ perl -e '
 		my $note = "cpus: stopped on $why\n" . join("", @chains); print $lf $note;
 	}
 	my $pid = fork(); if (!$pid) { exec @cmd or die "exec: $!" }
+	# Stopped from outside (the peer's watchdog, when the run is over): QEMU too.
+	$SIG{TERM} = sub { kill 9, $pid; kill 9, -$host_pid if defined $host_pid; exit 143 };
+	# With a peer, --until-lines also waits for the peer to pass (or end).
+	# The peer's own watchdog, once it has passed, says so in a file and
+	# keeps its QEMU running, on the segment, until this run is over.
+	sub peer_done { my $f = $ENV{ND_PEER_DONE} // ""; return !length($f) || -e "$f.passed" || -e "$f.status" }
+	my $passed = 0;
 	my $deadline = time + $t;
 	while (1) {
 		drain();
@@ -547,8 +597,9 @@ perl -e '
 			}
 			shift @send; undef $due;
 		}
-		if ($until && !@send && host_poll() && !grep({ index($text, $_) < 0 } @want) && screen_ready()) {
-			screendump() unless $until_screen; kill 9, $pid; waitpid($pid, 0); exit 0
+		if (!$passed && $until && !@send && host_poll() && !grep({ index($text, $_) < 0 } @want) && peer_done() && screen_ready()) {
+			if (length($ENV{ND_PASSED} // "")) { open(my $pf, ">", $ENV{ND_PASSED}) or die; close $pf; $passed = 1 }
+			else { screendump() unless $until_screen; kill 9, $pid; waitpid($pid, 0); exit 0 }
 		}
 		for my $d (@dump_on) {
 			next if $dumped{$d} || index($text, $d) < 0;
@@ -556,20 +607,77 @@ perl -e '
 		}
 		if (time >= $deadline) {
 			dump_cpus("the timeout") if @dump_on;
-			kill 9, -$host_pid if defined $host_pid; screendump(); kill 9, $pid; waitpid($pid, 0); exit 124
+			kill 9, -$host_pid if defined $host_pid; screendump(); kill 9, $pid; waitpid($pid, 0); exit($passed ? 0 : 124)
 		}
 		select(undef, undef, undef, 0.2);
 	}
-' "$timeout" "$until_lines" "$log" "$patterns" "$steps" "$work/ser" "${mon_dir:-}/mon" "$dump" \
+WATCH_PL
+# The peer: the same machine with its own copy of the boot drive and of
+# sbsa-ref's flash1, its own serial pipes and no monitor, in the background.
+peer_job=""
+if [ -n "$peer_net" ]; then
+	peer_machine_args=()
+	for a in "${machine_args[@]}"; do
+		if [ "$a" = "if=pflash,unit=1,format=raw,file=$work/flash1.fd" ]; then
+			cp "$work/flash1.fd" "$work/peer-flash1.fd"; a="if=pflash,unit=1,format=raw,file=$work/peer-flash1.fd"
+		fi
+		peer_machine_args+=("$a")
+	done
+	if [ -n "$disk" ]; then
+		cp "$disk" "$work/peer-disk.img"; chmod u+w "$work/peer-disk.img"
+		peer_boot_drive=(-drive "if=none,id=bootdisk,format=raw,file=$work/peer-disk.img" -device "$disk_device,drive=bootdisk,bootindex=0")
+	else
+		cp -R "$work/esp" "$work/peer-esp"
+		peer_boot_drive=(-drive format=raw,file=fat:rw:"$work/peer-esp")
+	fi
+	peer_devices=()
+	[ -n "$peer_user_net" ] && peer_devices+=(-netdev user,id=ndpeer0 -device "$peer_user_net,netdev=ndpeer0")
+	peer_devices+=(-netdev "dgram,id=ndlink1,local.type=unix,local.path=$link_dir/b,remote.type=unix,remote.path=$link_dir/a"
+		-device "$peer_net,netdev=ndlink1")
+	peer_log="$logdir/peer-serial.log"; : > "$peer_log"
+	printf '%s\n' ${peer_lines[@]+"${peer_lines[@]}"} > "$work/peer-expect"
+	: > "$work/peer-sends"
+	i=0; while [ $i -lt ${#peer_sends[@]} ]; do
+		printf 'serial\t%s\t%s\n' "${peer_sends[$i]}" "${peer_sends[$((i + 1))]}" >> "$work/peer-sends"
+		i=$((i + 2))
+	done
+	mkfifo "$work/peer-ser.in" "$work/peer-ser.out"
+	(
+		ND_DUMP_ON="" ND_CPUS_TXT="" ND_PEER_DONE="" ND_PASSED="$work/peer.passed" perl "$work/watch.pl" "$timeout" "$until_lines" "$peer_log" \
+			"$work/peer-expect" "$work/peer-sends" "$work/peer-ser" "" "" 0 "$work/screen.pl" "" "" \
+			"$qemu" "${peer_machine_args[@]}" -cpu "$cpu" -smp "$smp" -m "$mem" -nographic -no-reboot \
+			"${peer_devices[@]}" "${peer_boot_drive[@]}" -chardev pipe,id=ser,path="$work/peer-ser" \
+			-serial chardev:ser -monitor none > /dev/null 2>&1
+		echo $? > "$work/peer.status.tmp"; mv "$work/peer.status.tmp" "$work/peer.status"
+	) &
+	peer_job=$!
+	export ND_PEER_DONE="$work/peer"
+fi
+perl "$work/watch.pl"  "$timeout" "$until_lines" "$log" "$patterns" "$steps" "$work/ser" "${mon_dir:-}/mon" "$dump" \
 	"$until_screen" "$work/screen.pl" "$screen_font" "$screen_need" \
 	"$qemu" "${machine_args[@]}" -cpu "$cpu" -smp "$smp" -m "$mem" \
 	-nographic -no-reboot ${devices[@]+"${devices[@]}"} \
 	"${boot_drive[@]}" -chardev pipe,id=ser,path="$work/ser" -serial chardev:ser "${monitor[@]}" \
 	${debug[@]+"${debug[@]}"} || status=$?
+# The peer's watchdog: stopped (with its QEMU) now that this guest's run is
+# over. Its status: 0 if it passed, else 124 if it timed out, 143 if it was
+# still running, or QEMU's.
+peer_status=0
+if [ -n "$peer_job" ]; then
+	[ -e "$work/peer.status" ] || pkill -TERM -P "$peer_job" 2>/dev/null || true
+	wait "$peer_job" 2>/dev/null || true
+	peer_status="$(cat "$work/peer.status" 2>/dev/null || echo 1)"
+	[ -e "$work/peer.passed" ] && peer_status=0
+fi
 # The log as a terminal shows it: escape sequences dropped, backspaces
 # applied (line editors such as zsh's back up and redraw), lines split.
 clean="$(perl -0777 -pe 's/\e\[[0-9;?]*[A-Za-z]//g; 1 while s/[^\x08\n]\x08//; s/\x08//g; tr/\r/\n/' < "$log" | grep -av '^\s*$' || true)"
 echo "$clean" | tail -n 60
+peer_clean=""
+if [ -n "$peer_job" ]; then
+	peer_clean="$(perl -0777 -pe 's/\e\[[0-9;?]*[A-Za-z]//g; 1 while s/[^\x08\n]\x08//; s/\x08//g; tr/\r/\n/' < "$peer_log" | grep -av '^\s*$' || true)"
+	echo "--- peer ---"; echo "$peer_clean" | tail -n 40; echo "------------"
+fi
 # --dump-cpus-on: the chains, wherever the tail cut them off.
 if [ -n "$cpus_txt" ] && [ -s "$cpus_txt" ]; then
 	echo "--- cpus ($cpus_txt) ---"; grep -a -e '^===' -e '^cpus: ' "$cpus_txt"; echo "--------------"
@@ -582,12 +690,23 @@ if [ -n "$screen_font" ] && [ -s "$dump" ]; then
 fi
 [ "$status" -eq 124 ] && { echo "FAIL: timed out after ${timeout}s"; }
 [ "$status" -ne 0 ] && [ "$status" -ne 124 ] && echo "FAIL: QEMU exited with status $status"
+# Here-strings, not `echo | grep -q`: grep -q exits at the first match,
+# and with pipefail a log larger than the pipe's buffer makes echo's
+# SIGPIPE fail the check although the line is there.
 for want in "$@"; do
-	echo "$clean" | grep -aqF -- "$want" || { echo "FAIL: missing serial line: $want"; exit 1; }
+	grep -aqF -- "$want" <<<"$clean" || { echo "FAIL: missing serial line: $want"; exit 1; }
 done
 for unwanted in ${absent[@]+"${absent[@]}"}; do
-	if echo "$clean" | grep -aqF -- "$unwanted"; then echo "FAIL: unexpected serial line: $unwanted"; exit 1; fi
+	if grep -aqF -- "$unwanted" <<<"$clean"; then echo "FAIL: unexpected serial line: $unwanted"; exit 1; fi
 done
+if [ -n "$peer_job" ]; then
+	for want in ${peer_lines[@]+"${peer_lines[@]}"}; do
+		grep -aqF -- "$want" <<<"$peer_clean" || { echo "FAIL: missing peer serial line: $want"; exit 1; }
+	done
+	[ "$peer_status" -eq 124 ] && { echo "FAIL: the peer timed out"; exit 1; }
+	[ "$peer_status" -eq 143 ] && { echo "FAIL: the peer had not passed when this guest's run ended"; exit 1; }
+	[ "$peer_status" -ne 0 ] && { echo "FAIL: the peer's QEMU exited with status $peer_status"; exit 1; }
+fi
 [ "$status" -eq 0 ] || exit 1
 if [ -n "$screendump" ]; then
 	[ -s "$dump" ] || { echo "FAIL: no screendump (is there a display device?)"; exit 1; }
@@ -595,7 +714,7 @@ if [ -n "$screendump" ]; then
 fi
 if [ -n "$screen_font" ]; then
 	for want in ${screen_lines[@]+"${screen_lines[@]}"}; do
-		echo "$screen" | grep -aqF -- "$want" || { echo "FAIL: missing screen line: $want"; exit 1; }
+		grep -aqF -- "$want" <<<"$screen" || { echo "FAIL: missing screen line: $want"; exit 1; }
 	done
 fi
-echo "PASS: $# expected line(s) on serial${screen_lines[@]+, ${#screen_lines[@]} on screen}"
+echo "PASS: $# expected line(s) on serial${screen_lines[@]+, ${#screen_lines[@]} on screen}${peer_lines[@]+, ${#peer_lines[@]} on the peer}"

@@ -20,9 +20,18 @@
 //    on macOS: IPv6 attached to the interface (SIOCPROTOATTACH_IN6),
 //    `ifconfig <if> inet6 -ifdisabled`, the link-local address started
 //    (SIOCLL_START) and router advertisements accepted (SIOCAUTOCONF_START);
-//    then, whenever the link comes up, `rtsol <if>` solicits a router. The
-//    kernel takes the prefixes, addresses and default route from the
-//    advertisements;
+//    then `rtsold -f -R /sbin/resolvconf ... <if>` (FreeBSD's rtsold, in
+//    the foreground, restarted 10 seconds after it exits) solicits routers
+//    whenever the link comes up and reads every advertisement. The kernel
+//    takes the prefixes, addresses and default route from the
+//    advertisements; rtsold hands their DNS servers and search domains
+//    (RDNSS, DNSSL) to resolvconf(8), and starts DHCPv6 by the
+//    ifconfig_<interface>_dhcp6 line (then ifconfig_DEFAULT_dhcp6, then
+//    AUTO): AUTO, dhcp6c when an advertisement's M flag (stateful: an
+//    address and the name servers) or O flag (stateless, Information-Request:
+//    the name servers) turns on; INFORM or ADDRESS, stateless or stateful
+//    DHCPv6 after the first advertisement whatever its flags; NONE, never.
+//    rtsold_flags adds rtsold options (FreeBSD's rc.conf name);
 //  - static: `ifconfig <if> <args>` (e.g. "inet6 2001:db8::10 prefixlen 64"),
 //    then `route -n add -inet6 default <ipv6_defaultrouter>` once, if set;
 //  - NONE: nothing.
@@ -41,8 +50,11 @@ let configPath = "/etc/netconfigd.conf"
 let dhclient = "/sbin/dhclient"
 let ifconfig = "/sbin/ifconfig"
 let route = "/sbin/route"
-let rtsol = "/sbin/rtsol"
-let restartDelay = 10          // seconds before a dhclient that exited runs again
+let rtsold = "/usr/sbin/rtsold"
+let resolvconf = "/sbin/resolvconf"
+let dhcp6Managed = "/usr/libexec/dhcp6c-managed"   // rtsold's M script: stateful DHCPv6
+let dhcp6Other = "/usr/libexec/dhcp6c-other"       // rtsold's O script: stateless DHCPv6
+let restartDelay = 10          // seconds before a dhclient or rtsold that exited runs again
 let scanInterval: Int32 = 5000 // milliseconds between scans without routing messages
 
 func log(_ message: String) {
@@ -193,15 +205,24 @@ enum IPv6Mode {
     case none
 }
 
+/// When DHCPv6 runs on an autoconfiguring interface.
+enum DHCPv6Mode {
+    case auto       // as router advertisements' M and O flags say
+    case inform     // stateless (Information-Request) on the first advertisement
+    case address    // stateful (an address too) on the first advertisement
+    case none
+}
+
 struct Interface {
     var name: String
     var mode: Mode
     var ipv6: IPv6Mode
+    var dhcp6: DHCPv6Mode
     var client: pid_t? = nil      // dhclient's pid while it runs
-    var solicitor: pid_t? = nil   // rtsol's pid while it runs
+    var solicitor: pid_t? = nil   // rtsold's pid while it runs
     var autoconfStarted = false   // IPv6 attached and accepting router advertisements
-    var linkWasActive = false     // the link's state when last looked at
     var restartAt: Int = 0        // when to start dhclient again (seconds, CLOCK_MONOTONIC)
+    var solicitorRestartAt: Int = 0   // when to start rtsold again
 }
 
 func now() -> Int {
@@ -229,6 +250,15 @@ func ipv6Mode(of name: String, _ mode: Mode, _ config: [(String, String)]) -> IP
     }
     if caseInsensitiveEqual(value, "NONE") || value.isEmpty { return .none }
     return .manual(args)
+}
+
+func dhcp6Mode(of name: String, _ config: [(String, String)]) -> DHCPv6Mode {
+    let value = lookup(config, "ifconfig_\(name)_dhcp6") ?? lookup(config, "ifconfig_DEFAULT_dhcp6") ?? "AUTO"
+    if caseInsensitiveEqual(value, "INFORM") { return .inform }
+    if caseInsensitiveEqual(value, "ADDRESS") { return .address }
+    if caseInsensitiveEqual(value, "NONE") || value.isEmpty { return .none }
+    if !caseInsensitiveEqual(value, "AUTO") { log("\(name): ifconfig_\(name)_dhcp6=\"\(value)\": not AUTO, INFORM, ADDRESS or NONE; AUTO") }
+    return .auto
 }
 
 /// Configures a new interface: brings it up, and starts its DHCP client or
@@ -316,30 +346,31 @@ func configureIPv6(_ interface: inout Interface, _ config: [(String, String)], d
         }
         interface.autoconfStarted = true
         log("\(name): IPv6 autoconfiguration (link-local address started, router advertisements accepted)")
+        startSolicitor(&interface, config)
     }
 }
 
-/// Whether the interface's link is up (SIOCGIFMEDIA's IFM_ACTIVE); an
-/// interface without media status counts as up. rtsol ignores an
-/// interface whose link is down (and, run once, exits at once), so it is
-/// started when the link comes up, as IPConfiguration solicits on link up.
-func linkActive(_ name: String) -> Bool {
-    let s = socket(AF_INET, SOCK_DGRAM, 0)
-    guard s >= 0 else { return false }
-    defer { _ = close(s) }
-    var ifmr = ifmediareq()
-    setInterfaceName(&ifmr.ifm_name, name)
-    guard nd_ioctl(s, ND_SIOCGIFMEDIA, &ifmr) == 0 else { return true }
-    guard ifmr.ifm_status & IFM_AVALID != 0 else { return true }
-    return ifmr.ifm_status & IFM_ACTIVE != 0
-}
-
-/// rtsol: router solicitations until an advertisement comes (or three
-/// went unanswered); the kernel processes the advertisement.
-func startSolicitor(_ interface: inout Interface) {
-    interface.solicitor = spawn([rtsol, interface.name])
+/// rtsold for an autoconfiguring interface, in the foreground (its
+/// messages on netconfigd's standard error): it solicits routers when the
+/// link comes up (and checks the link every few seconds when idle), passes
+/// RDNSS and DNSSL to resolvconf, and runs the DHCPv6 scripts by the
+/// interface's dhcp6 mode. The kernel processes the advertisements itself.
+func startSolicitor(_ interface: inout Interface, _ config: [(String, String)]) {
+    var argv = [rtsold, "-f", "-R", resolvconf]
+    switch interface.dhcp6 {
+    case .auto: argv += ["-M", dhcp6Managed, "-O", dhcp6Other]
+    case .inform: argv += ["-A", dhcp6Other]
+    case .address: argv += ["-A", dhcp6Managed]
+    case .none: break
+    }
+    argv += words(lookup(config, "rtsold_flags") ?? "")
+    argv.append(interface.name)
+    interface.solicitor = spawn(argv)
     if let pid = interface.solicitor {
-        log("\(interface.name): IPv6 autoconfiguration (rtsol \(interface.name), pid \(pid))")
+        let shown = argv.map { $0 == rtsold ? "rtsold" : $0 }.joined(separator: " ")
+        log("\(interface.name): IPv6 autoconfiguration (\(shown), pid \(pid))")
+    } else {
+        interface.solicitorRestartAt = now() + restartDelay
     }
 }
 
@@ -370,7 +401,8 @@ func netconfigdMain(_ argc: Int32, _ argv: UnsafeMutablePointer<UnsafeMutablePoi
         // New interfaces.
         for name in ethernetInterfaces() where !interfaces.contains(where: { $0.name == name }) {
             let ipv4 = mode(of: name, config)
-            var interface = Interface(name: name, mode: ipv4, ipv6: ipv6Mode(of: name, ipv4, config))
+            var interface = Interface(name: name, mode: ipv4, ipv6: ipv6Mode(of: name, ipv4, config),
+                dhcp6: dhcp6Mode(of: name, config))
             configure(&interface, config, defaultRouterAdded: &defaultRouterAdded,
                 ipv6DefaultRouterAdded: &ipv6DefaultRouterAdded)
             interfaces.append(interface)
@@ -382,8 +414,9 @@ func netconfigdMain(_ argc: Int32, _ argv: UnsafeMutablePointer<UnsafeMutablePoi
             let pid = waitpid(-1, &status, WNOHANG)
             if pid <= 0 { break }
             for i in interfaces.indices where interfaces[i].solicitor == pid {
-                log("\(interfaces[i].name): rtsol exited (status \(describe(status)))")
+                log("\(interfaces[i].name): rtsold exited (status \(describe(status))); again in \(restartDelay) s")
                 interfaces[i].solicitor = nil
+                interfaces[i].solicitorRestartAt = now() + restartDelay
             }
             for i in interfaces.indices where interfaces[i].client == pid {
                 log("\(interfaces[i].name): dhclient exited (status \(describe(status))); again in \(restartDelay) s")
@@ -393,17 +426,15 @@ func netconfigdMain(_ argc: Int32, _ argv: UnsafeMutablePointer<UnsafeMutablePoi
         }
         let present = ethernetInterfaces()
 
-        // Router solicitation whenever an autoconfiguring interface's link
-        // comes up (at boot, the link comes up after `ifconfig up`).
-        for i in interfaces.indices where interfaces[i].autoconfStarted && present.contains(interfaces[i].name) {
-            let active = linkActive(interfaces[i].name)
-            if active && !interfaces[i].linkWasActive && interfaces[i].solicitor == nil {
-                startSolicitor(&interfaces[i])
-            }
-            interfaces[i].linkWasActive = active
-        }
-
         var nextRestart = Int.max
+        for i in interfaces.indices where interfaces[i].autoconfStarted && interfaces[i].solicitor == nil {
+            guard present.contains(interfaces[i].name) else { continue }
+            if now() >= interfaces[i].solicitorRestartAt {
+                startSolicitor(&interfaces[i], config)
+            } else {
+                nextRestart = min(nextRestart, interfaces[i].solicitorRestartAt)
+            }
+        }
         for i in interfaces.indices {
             guard case .dhcp = interfaces[i].mode, interfaces[i].client == nil else { continue }
             guard present.contains(interfaces[i].name) else { continue }

@@ -1,0 +1,21 @@
+# FreeBSD's usr.sbin/rtsold (KAME's router solicitation daemon, with
+# RFC 8106 RDNSS and DNSSL and the M, O and "always" scripts), which
+# base/rtsold/build.sh builds as /usr/sbin/rtsold and /sbin/rtsol
+# (docs/kernel/network.md, "IPv6 DNS: RDNSS and DHCPv6"). Apple's rtsol
+# (network_cmds-726) is the same program before RDNSS; macOS installs neither.
+# sbin/rtsol/Makefile builds rtsol from the same sources. Fetched unmodified
+# by //rules:pinned_files.bzl; base/rtsold/patches applies NeoDarwin's changes.
+# Repository: https://github.com/freebsd/freebsd-src
+# commit: 050683bb8e136981e4a1f66e845ab05c135630f4
+# Format: shasum -a 256 (hash, two spaces, path). Regenerate with tools/pinned/lock.sh.
+b2a65af250021a3023153aa40743e9e05c3abcceac514619a4d7c655572d56d8  sbin/rtsol/Makefile
+3228597b49a04b55075e0d0d45ebf75e1c2618cb37da6715cb2a95675b25a6af  usr.sbin/rtsold/Makefile
+19641e0c2b24507cd50f94f88659f37788aa4349e517bef9ea8db5db20c59d9c  usr.sbin/rtsold/cap_llflags.c
+10e17499bb0d2a8f2bb7b0a72c0d6006de4ad9910761dee4a12d907e882630f7  usr.sbin/rtsold/cap_script.c
+dc911f3daf92363836c06dc082eeef7b107e2d5dcc66b6bcdefb9daeb48b885b  usr.sbin/rtsold/cap_sendmsg.c
+7abc2c86af416e57c665cc13e52fdb782874001bdb909ee494eabefe351a5826  usr.sbin/rtsold/dump.c
+07f584e0ee50cf8e1f073b951ef66f6e99a797387128e77f55702aef9acc36a4  usr.sbin/rtsold/if.c
+e48f077b907df52c84678f7e67912cc5a95458437ded26247aa3e446fb9d16f8  usr.sbin/rtsold/rtsock.c
+a26465cc666a1f4348c12fc7ae4cfad5d3367470267e3a8e34c5ac0b4760ec7f  usr.sbin/rtsold/rtsol.c
+5ec5124f312d5bd48e40e132c85bcd842a4d474d1e028985cf562b9fa1bef1a6  usr.sbin/rtsold/rtsold.c
+8742207c3289612b0db7cb073ee907da58647b286a5affe32b90643c10e516d1  usr.sbin/rtsold/rtsold.h

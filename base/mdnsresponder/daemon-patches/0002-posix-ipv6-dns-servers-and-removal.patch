@@ -1,0 +1,137 @@
+From: NeoDarwin
+Subject: [PATCH] mDNSPosix: IPv6 DNS servers, and servers removed from resolv.conf
+
+ParseDNSServers() reads only IPv4 name servers (inet_aton, a 16-byte
+buffer), so the IPv6 ones that router advertisements (RDNSS) and DHCPv6
+give were ignored: on an IPv6-only network there was no unicast DNS. It
+now takes IPv6 addresses too (the platform already sends unicast DNS over
+IPv6, on its unicastSocket6 or a query's own socket), except link-local
+ones, which would need their zone on every send.
+
+The daemon added the servers on every SIGHUP and never removed one: a
+server gone from resolv.conf (an expired lease or RDNSS lifetime, a
+resolvconf -d) stayed in use. And at start, uDNS_SetupDNSConfig(), run
+after mDNSPlatformInit() had read resolv.conf, marked every server for
+deletion and deleted them, as mDNSPlatformSetDNSConfig() added none back:
+a daemon started with resolv.conf in place had no servers until the next
+SIGHUP. The servers are now read in mDNSPlatformSetDNSConfig(), where
+macOS's daemon takes configd's, so uDNS_SetupDNSConfig() keeps those still
+listed and drops the rest; Reconfigure() (start and SIGHUP) calls it
+instead of reading the file itself (which daemon-patches/0001 had put under
+the lock; uDNS_SetupDNSConfig() takes it).
+
+Rebase-risk: low (ParseDNSServers(), mDNSPlatformSetDNSConfig(),
+Reconfigure()).
+--- a/mDNSPosix/PosixDaemon.c
++++ b/mDNSPosix/PosixDaemon.c
+@@ -46,6 +46,7 @@
+ 
+ #include "mDNSEmbeddedAPI.h"
+ #include "DNSCommon.h"      // For mDNS_Lock()
++#include "uDNS.h"           // For uDNS_SetupDNSConfig()
+ #include "mDNSPosix.h"
+ #include "mDNSUNP.h"        // For daemon()
+ #include "uds_daemon.h"
+@@ -95,10 +96,9 @@
+     mDNSAddr DynDNSIP;
+     const mDNSAddr dummy = { mDNSAddrType_IPv4, { { { 1, 1, 1, 1 } } } };;
+     mDNS_SetPrimaryInterfaceInfo(m, NULL, NULL, NULL);
+-    mDNS_Lock(m);
+-    if (ParseDNSServers(m, uDNS_SERVERS_FILE) < 0)
+-        LogMsg("Unable to parse DNS server list. Unicast DNS-SD unavailable");
+-    mDNS_Unlock(m);
++    // The servers are read in mDNSPlatformSetDNSConfig(), as configd's are
++    // on macOS, so that those no longer listed are removed.
++    uDNS_SetupDNSConfig(m);
+     ReadDDNSSettingsFromConfFile(m, CONFIG_FILE, &DynDNSHostname, &DynDNSZone, NULL);
+     mDNSPlatformSourceAddrForDest(&DynDNSIP, &dummy);
+     if (DynDNSHostname.c[0]) mDNS_AddDynDNSHostName(m, &DynDNSHostname, NULL, NULL);
+--- a/mDNSPosix/mDNSPosix.c
++++ b/mDNSPosix/mDNSPosix.c
+@@ -935,10 +935,23 @@
+ mDNSexport mDNSBool mDNSPlatformSetDNSConfig(mDNSBool setservers, mDNSBool setsearch, domainname *const fqdn, DNameListElem **RegDomains,
+     DNameListElem **BrowseDomains, mDNSBool ackConfig)
+ {
+-    (void) setservers;
+     (void) setsearch;
+     (void) ackConfig;
+ 
++#ifndef UNICAST_DISABLED
++    // uDNS_SetupDNSConfig() has marked every server for deletion; those still
++    // in resolv.conf are kept (mDNS_AddDNSServer() resurrects them), the
++    // others go. The core's lock is held.
++    if (setservers)
++    {
++        extern mDNS mDNSStorage;
++        if (ParseDNSServers(&mDNSStorage, uDNS_SERVERS_FILE) < 0)
++            LogMsg("Unable to parse DNS server list. Unicast DNS-SD unavailable");
++    }
++#else
++    (void) setservers;
++#endif
++
+     if (fqdn         ) fqdn->c[0]      = 0;
+     if (RegDomains   ) *RegDomains     = NULL;
+     if (BrowseDomains) *BrowseDomains  = NULL;
+@@ -986,7 +999,7 @@
+ mDNSexport int ParseDNSServers(mDNS *m, const char *filePath)
+ {
+     char line[256];
+-    char nameserver[16];
++    char nameserver[64];
+     char keyword[11];
+     int numOfServers = 0;
+     FILE *fp = fopen(filePath, "r");
+@@ -995,7 +1008,7 @@
+     {
+         struct in_addr ina;
+         line[255]='\0';     // just to be safe
+-        if (sscanf(line,"%10s %15s", keyword, nameserver) != 2) continue;   // it will skip whitespaces
++        if (sscanf(line,"%10s %63s", keyword, nameserver) != 2) continue;   // it will skip whitespaces
+         if (strncasecmp(keyword,"nameserver",10)) continue;
+         if (inet_aton(nameserver, (struct in_addr *)&ina) != 0)
+         {
+@@ -1005,6 +1018,28 @@
+             mDNS_AddDNSServer(m, NULL, mDNSInterface_Any, 0, &DNSAddr, UnicastDNSPort, kScopeNone, 0, mDNSfalse, mDNSfalse, mDNSfalse, mDNSfalse, 0, mDNStrue, mDNStrue, mDNSfalse);
+             numOfServers++;
+         }
++#if HAVE_IPV6
++        else
++        {
++            // An IPv6 server (RDNSS, DHCPv6). A link-local one would need
++            // its zone (fe80::1%en0) on every query, which the platform's
++            // unicast sends don't set: skipped.
++            struct in6_addr in6;
++            char *zone = strchr(nameserver, '%');
++            if (zone) *zone = '\0';
++            if (inet_pton(AF_INET6, nameserver, &in6) != 1) continue;
++            if (IN6_IS_ADDR_LINKLOCAL(&in6))
++            {
++                LogMsg("ParseDNSServers: link-local name server %s not supported; skipped", nameserver);
++                continue;
++            }
++            mDNSAddr DNSAddr;
++            DNSAddr.type = mDNSAddrType_IPv6;
++            mDNSPlatformMemCopy(&DNSAddr.ip.v6, &in6, sizeof(DNSAddr.ip.v6));
++            mDNS_AddDNSServer(m, NULL, mDNSInterface_Any, 0, &DNSAddr, UnicastDNSPort, kScopeNone, 0, mDNSfalse, mDNSfalse, mDNSfalse, mDNSfalse, 0, mDNStrue, mDNStrue, mDNSfalse);
++            numOfServers++;
++        }
++#endif
+     }
+     fclose(fp);
+     return (numOfServers > 0) ? 0 : -1;
+@@ -1959,12 +1994,8 @@
+     // Tell mDNS core about the network interfaces on this machine.
+     if (err == mStatus_NoError) err = SetupInterfaceList(m);
+ 
+-#ifndef UNICAST_DISABLED
+-    // Tell mDNS core about DNS Servers
+-    mDNS_Lock(m);
+-    if (err == mStatus_NoError) ParseDNSServers(m, uDNS_SERVERS_FILE);
+-    mDNS_Unlock(m);
+-#endif
++    // The DNS servers: mDNS_Init() calls uDNS_SetupDNSConfig() next, which
++    // reads them (mDNSPlatformSetDNSConfig()).
+ 
+     if (err == mStatus_NoError)
+     {

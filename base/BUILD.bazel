@@ -488,9 +488,40 @@ base_library(
 base_library(
     name = "network_commands",
     data = glob(["network_cmds/**"]) + ["commands.sh"],
-    deps = [":root"],
+    deps = [":root", ":libpcap_dylib", ":libipsec_dylib"],
     script = "network_cmds/build.sh",
     srcs = "@apple_network_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+# Packet capture (docs/kernel/network.md, "libpcap and tcpdump"): Apple's
+# libpcap (libpcap.A.dylib, which traceroute's TCP probes use) and tcpdump;
+# libipsec (ipsec's policy parser, which ping6 and traceroute6 link). (Not
+# named libpcap, tcpdump or libipsec: see below.)
+base_library(
+    name = "libpcap_dylib",
+    data = glob(["libpcap/**"]),
+    deps = [":root"],
+    script = "libpcap/build.sh",
+    srcs = "@apple_libpcap//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libipsec_dylib",
+    data = glob(["libipsec/**"]),
+    deps = [":root"],
+    script = "libipsec/build.sh",
+    srcs = "@apple_ipsec//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "tcpdump_command",
+    data = glob(["tcpdump/**", "libpcap/compat/**"]) + ["commands.sh"],
+    deps = [":root", ":libpcap_dylib", ":libcrypto_dylib"],
+    script = "tcpdump/build.sh",
+    srcs = "@apple_tcpdump//:all",
     sysroot = ":sysroot",
 )
 
@@ -538,6 +569,51 @@ base_library(
     deps = [":root", ":libutil_dylib"],
     script = "dhclient/build.sh",
     srcs = "@freebsd_dhclient//:all",
+    sysroot = ":sysroot",
+)
+
+# IPv6 DNS (docs/kernel/network.md, "IPv6 DNS: RDNSS and DHCPv6"): FreeBSD's
+# rtsold and rtsol (RDNSS and DNSSL from router advertisements), its
+# resolvconf(8) (openresolv), which merges every source's name servers into
+# /var/run/resolv.conf, and the WIDE DHCPv6 client (FreeBSD's net/dhcp6
+# port) with NeoDarwin's scripts. (Not named rtsold, resolvconf or dhcp6c:
+# see above.)
+base_library(
+    name = "router_solicitation",
+    data = glob(["rtsold/**"]) + ["commands.sh"],
+    deps = [":root", ":libutil_dylib"],
+    script = "rtsold/build.sh",
+    srcs = "@freebsd_rtsold//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "resolver_config",
+    data = glob(["resolvconf/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "resolvconf/build.sh",
+    srcs = "@freebsd_resolvconf//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "dhcp6_client",
+    data = glob(["dhcp6c/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "dhcp6c/build.sh",
+    srcs = "@wide_dhcpv6//:all",
+    sysroot = ":sysroot",
+)
+
+# FreeBSD's rtadvd, the IPv6 router advertisement daemon, and
+# /etc/rtadvd.conf (docs/kernel/network.md, "rtadvd"). (Not named rtadvd:
+# see above.)
+base_library(
+    name = "router_advertiser",
+    data = glob(["rtadvd/**"]) + ["commands.sh"],
+    deps = [":root", ":libutil_dylib"],
+    script = "rtadvd/build.sh",
+    srcs = "@freebsd_rtadvd//:all",
     sysroot = ":sysroot",
 )
 
@@ -609,11 +685,18 @@ base_root(
         ":libedit_dylib",
         ":bash_shell",
         ":network_commands",
+        ":libpcap_dylib",
+        ":libipsec_dylib",
+        ":tcpdump_command",
         ":launchproxy",
         ":libcrypto_dylib",
         ":openssh",
         ":libresolv_dylib",
         ":dhcp_client",
+        ":router_solicitation",
+        ":resolver_config",
+        ":dhcp6_client",
+        ":router_advertiser",
         ":mdns_responder",
         ":packet_filter",
         ":ntp_client",
@@ -678,6 +761,8 @@ base_root(
     ("libauditd", ":bsm_audit", "usr/lib/libauditd.0.dylib", "openbsm/exports/libauditd.0.txt"),
     ("libedit", ":libedit_dylib", "usr/lib/libedit.3.dylib", "libedit/exports.txt"),
     ("libresolv", ":libresolv_dylib", "usr/lib/libresolv.9.dylib", "libresolv/exports.txt"),
+    ("libpcap", ":libpcap_dylib", "usr/lib/libpcap.A.dylib", "libpcap/exports.txt"),
+    ("libipsec", ":libipsec_dylib", "usr/lib/libipsec.A.dylib", "libipsec/exports.txt"),
     ("libsystem", ":libsystem_b", "usr/lib/libSystem.B.dylib", "libsystem/exports.txt"),
     ("libcompiler_rt", ":llvm_runtimes", "usr/lib/system/libcompiler_rt.dylib", "llvm/exports/libcompiler_rt.txt"),
     ("libunwind", ":llvm_runtimes", "usr/lib/system/libunwind.dylib", "llvm/exports/libunwind.txt"),
@@ -718,8 +803,10 @@ lang_audit_test(
         "libm/src/*.c",
         "libm/compat/**/*.h",
         "dhclient/compat/**/*.h",
+        "rtsold/compat/**/*.h",
+        "rtadvd/compat/**/*.h",
         "pfctl/compat/**/*.h",
-        "network_cmds/compat/**/*.h",
+        "libpcap/compat/*.h",
         "file_cmds/compat/*.h",
         "shell_cmds/compat/**/*.h",
         "system_cmds/compat/**/*.h",

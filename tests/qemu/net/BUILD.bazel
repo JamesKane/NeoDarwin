@@ -1,0 +1,16 @@
+# The net tests' /etc/netconfigd.conf (docs/kernel/network.md, "IPv6 DNS:
+# RDNSS and DHCPv6"): the system's, with stateless DHCPv6 on every
+# interface whatever router advertisements say. QEMU's user network
+# (libslirp) answers DHCPv6 Information-Requests with its DNS proxy,
+# fec0::3, but its advertisements set neither the M nor the O flag, so the
+# default (AUTO) never asks. //images:pam_session_root has it.
+package(default_visibility = ["//visibility:public"])
+
+genrule(
+    name = "netconfigd_conf",
+    srcs = ["//base/netconfigd:netconfigd.conf"],
+    outs = ["netconfigd.conf"],
+    cmd = "cat $< > $@ && printf '%s\\n' '' " +
+          "'# The net tests (tests/qemu/net): slirp advertises neither M nor O.' " +
+          "'ifconfig_DEFAULT_dhcp6=\"INFORM\"' >> $@",
+)

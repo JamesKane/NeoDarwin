@@ -99,6 +99,6 @@ The rest of the suite is unchanged: pf is off and both jobs are Disabled in ever
 ## Limits
 
 - pfctl is OpenBSD 4.3's: no `match` rules, `divert-to` or `rdr-to`/`nat-to` syntax (OpenBSD 4.7 and later). OpenBSD 4.3's pf.conf(5) is the reference, plus `scrub-anchor` and `dummynet-anchor`; the man pages aren't installed yet.
-- No ALTQ, no dummynet pipes (`dnctl`), no NAT64 rules from pfctl; no `pflog` reader (`tcpdump -i pflog0` needs libpcap, not built).
+- No ALTQ, no dummynet pipes (`dnctl`), no NAT64 rules from pfctl; `tcpdump` is built (`docs/kernel/network.md`, "libpcap and tcpdump"), but reading `pflog0` with it is untested.
 - `launchctl load -w` doesn't persist yet (no overrides database), so a job turned on that way is off again after a reboot; edit the plist's `Disabled` key to keep it on.
 - The NTP client steps or slews once per run; it doesn't discipline the clock's frequency as ntpd does, and it serves no time. No NTS, no authentication by default (`-a`/`-k` work with a key file).

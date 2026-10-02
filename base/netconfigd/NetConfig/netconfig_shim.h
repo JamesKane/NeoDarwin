@@ -9,7 +9,6 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <net/if_dl.h>
-#include <net/if_media.h>
 #include <net/route.h>
 #include <netinet/in.h>
 #include <netinet6/in6_var.h>
@@ -41,6 +40,4 @@ static inline int nd_ioctl(int fd, unsigned long request, void *_Nonnull arg) {
 static const unsigned long ND_SIOCPROTOATTACH_IN6 = _IOWR('i', 110, struct in6_aliasreq);
 static const unsigned long ND_SIOCLL_START = _IOWR('i', 130, struct in6_aliasreq);
 static const unsigned long ND_SIOCAUTOCONF_START = _IOWR('i', 132, struct in6_ifreq);
-// An interface's link state, as rtsol reads it.
-static const unsigned long ND_SIOCGIFMEDIA = SIOCGIFMEDIA;
 #endif

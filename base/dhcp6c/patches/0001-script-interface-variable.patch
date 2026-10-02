@@ -1,0 +1,81 @@
+From: NeoDarwin
+Subject: [PATCH] dhcp6c: the interface in the script's environment
+
+dhcp6c runs its script with REASON and the options it received, but not
+the interface they came from, which a script feeding resolvconf(8) needs as
+its key (dhclient-script has $interface). NeoDarwin runs one dhcp6c per
+interface (/usr/libexec/dhcp6c-other and -managed), so each could have a
+script of its own; one variable is simpler. The script gets
+interface=<name>, EXIT included.
+
+Rebase-risk: low (one argument, one variable).
+--- a/dhcp6c.c
++++ b/dhcp6c.c
+@@ -149,7 +149,7 @@
+ int client6_start __P((struct dhcp6_if *));
+ static void info_printf __P((const char *, ...));
+ 
+-extern int client6_script __P((char *, int, struct dhcp6_optinfo *));
++extern int client6_script __P((char *, char *, int, struct dhcp6_optinfo *));
+ 
+ #define MAX_ELAPSED_TIME 0xffff
+ 
+@@ -501,7 +501,7 @@
+ 			return;
+ 	}
+ 	for (ifp = dhcp6_if; ifp; ifp = ifp->next)
+-		client6_script(ifp->scriptpath, DHCP6S_EXIT, NULL);
++		client6_script(ifp->scriptpath, ifp->ifname, DHCP6S_EXIT, NULL);
+ 
+ 	/* We have no existing event.  Do exit. */
+ 	d_printf(LOG_INFO, FNAME, "exiting");
+@@ -1948,7 +1948,7 @@
+ 	 * Call the configuration script, if specified, to handle various
+ 	 * configuration parameters.
+ 	 */
+-	client6_script(ifp->scriptpath, state, optinfo);
++	client6_script(ifp->scriptpath, ifp->ifname, state, optinfo);
+ 
+ 	dhcp6_remove_event(ev);
+ 
+--- a/dhcp6c_script.c
++++ b/dhcp6c_script.c
+@@ -73,8 +73,9 @@
+ static char bcmcsname_str[] = "new_bcmcs_name";
+ 
+ int
+-client6_script(scriptpath, state, optinfo)
++client6_script(scriptpath, ifname, state, optinfo)
+ 	char *scriptpath;
++	char *ifname;
+ 	int state;
+ 	struct dhcp6_optinfo *optinfo;
+ {
+@@ -108,7 +109,7 @@
+ 	nispnamelen = 0;
+ 	bcmcsservers = 0;
+ 	bcmcsnamelen = 0;
+-	envc = 2;     /* we at least include the reason and the terminator */
++	envc = 3;     /* we at least include the reason, the interface and the terminator */
+ 	if (state == DHCP6S_EXIT)
+ 		goto setenv;
+ 
+@@ -179,9 +180,18 @@
+ 	if ((envp[i++] = strdup(reason)) == NULL) {
+ 		d_printf(LOG_NOTICE, FNAME,
+ 		    "failed to allocate reason strings");
++		ret = -1;
++		goto clean;
++	}
++	/* interface, as dhclient-script has it */
++	elen = sizeof("interface=") + strlen(ifname);
++	if ((s = envp[i++] = malloc(elen)) == NULL) {
++		d_printf(LOG_NOTICE, FNAME,
++		    "failed to allocate the interface string");
+ 		ret = -1;
+ 		goto clean;
+ 	}
++	snprintf(s, elen, "interface=%s", ifname);
+ 	if (state == DHCP6S_EXIT)
+ 		goto launch;
+ 

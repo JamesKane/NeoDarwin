@@ -1,0 +1,15 @@
+# FreeBSD's resolvconf(8): openresolv 3.17.4 (contrib/openresolv), built as
+# sbin/resolvconf/Makefile does, by base/resolvconf/build.sh
+# (docs/kernel/network.md, "IPv6 DNS: RDNSS and DHCPv6"). Every source of
+# name servers (dhclient-script, rtsold's RDNSS, dhcp6c's script) hands its
+# lines to it, and it writes the merged /var/run/resolv.conf. macOS merges
+# them in configd's DNS configuration instead. Fetched unmodified by
+# //rules:pinned_files.bzl.
+# Repository: https://github.com/freebsd/freebsd-src
+# commit: 050683bb8e136981e4a1f66e845ab05c135630f4
+# Format: shasum -a 256 (hash, two spaces, path). Regenerate with tools/pinned/lock.sh.
+25b7ba247cb033130035a09751d78be40786ee449a93f31c61b93409dabd54ea  contrib/openresolv/libc.in
+384740bf5e19e7628d20f4dcc22925062fdc6020e9a6f074e567d4d797be57a0  contrib/openresolv/LICENSE
+7d32732be299ba10151d137e00b304b8912b4d2e6f03c08385c40d7d02f2b2ad  contrib/openresolv/resolvconf.conf
+eeea196e19d4b08afa3a5f811fa799122811c969f7794324670237300e874d3b  contrib/openresolv/resolvconf.in
+71d44f4ee01f2752c079c305df8ffc0941f9282a75c85795267671edfadda360  sbin/resolvconf/Makefile

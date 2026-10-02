@@ -2300,11 +2300,35 @@ NET_SSH = ("ssh -F /dev/null -i id_ed25519 -o IdentitiesOnly=yes -o IdentityAgen
            "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=60 " +
            "-p $$ND_HOSTFWD_PORT test@127.0.0.1")
 
+# A lookup through slirp's IPv6 DNS proxy alone ("IPv6 DNS: RDNSS and
+# DHCPv6"): with the DHCP lease's servers withdrawn (resolvconf -d en0),
+# resolv.conf names only fec0::3, and mDNSResponder asks it over IPv6. slirp
+# forwards fec0::3 only to an IPv6 name server of the host's, and puts RDNSS
+# in its advertisements only then: the guest looks the name up only when an
+# RDNSS record (en0:slaac) came, and the host checks the answer
+# only when it has an IPv6 name server and can resolve the name itself.
+NET_DNS6 = [
+    "--send-after 'root@localhost ~ # ' 'case $$(resolvconf -l) in *en0:slaac*) resolvconf -l en0 > /tmp/en0.rc; resolvconf -d en0; cat /etc/resolv.conf; " +
+    "for i in 1 2 3; do ping -c 1 -t 10 " + NET_DNS_NAME + " > /tmp/dns6.txt 2>&1; case $$(cat /tmp/dns6.txt) in PING*) break;; esac; sleep 2; done; " +
+    "resolvconf -a en0 < /tmp/en0.rc;; *) echo \"no RDNSS on en0\" > /tmp/dns6.txt;; esac; cat /tmp/dns6.txt\\n'",
+]
+
+NET_DNS6_HOST = (
+    "--host-cmd-after 'host: exit' 'if ! scutil --dns 2>/dev/null | grep nameserver | grep -q \" : .*:\"; then " +
+    "echo \"dns6: skipped: the host has no IPv6 name server, so slirp sends no RDNSS and fec0::3 forwards nowhere\"; " +
+    "elif ! host -W 5 " + NET_DNS_NAME + " > /dev/null 2>&1; then echo \"dns6: skipped: the host resolves no names (no network?)\"; " +
+    "elif " + NET_SSH + " cat /tmp/dns6.txt | grep -q \"^PING " + NET_DNS_NAME + " (\"; then echo \"dns6: " + NET_DNS_NAME + " resolved through fec0::3\"; " +
+    "else echo \"dns6: FAILED: the host has an IPv6 name server and resolves " + NET_DNS_NAME + ", the guest did not through fec0::3\"; fi'"
+)
+
 # P4-24 (docs/kernel/network.md, "P4-24: the rest of network_cmds and
 # IPv6"): the rest of network_cmds and IPv6 autoconfiguration. netconfigd
-# starts SLAAC on en0 and runs rtsol; slirp's router (fe80::2, the gateway
-# fec0::2) advertises fec0::/64. Wait for rtsol to finish and the IPv6
-# default route, then: the gateway in the ARP table, traceroute to it by
+# starts SLAAC on en0 and runs rtsold; slirp's router (fe80::2, the gateway
+# fec0::2) advertises fec0::/64. The image's netconfigd.conf asks for
+# stateless DHCPv6 (tests/qemu/net: slirp's advertisements set neither M
+# nor O), which slirp answers with its DNS proxy, fec0::3 ("IPv6 DNS: RDNSS
+# and DHCPv6"). Wait for dhcp6c's reply and the IPv6 default route, then:
+# the gateway in the ARP table, traceroute to it by
 # ICMP (slirp answers an echo to 10.0.2.2 whatever its hop limit; UDP
 # probes to it would reach the host's loopback), traceroute run by test
 # (setuid root: -I needs a raw socket), en0's link-local and EUI-64 SLAAC
@@ -2312,17 +2336,21 @@ NET_SSH = ("ssh -F /dev/null -i id_ed25519 -o IdentitiesOnly=yes -o IdentityAgen
 # to the gateway.
 NET_TOOLS = [
     "--send-after 'root@localhost ~ # ' 'for i in {1..30}; do case $$(cat /var/log/netconfigd.log; netstat -rn -f inet6) in " +
-    "*\"rtsol exited\"*default*) break;; esac; sleep 1; done; cat /var/log/netconfigd.log\\n'",
+    "*\"dhcp6c-script: en0: INFOREQ\"*default*) break;; esac; sleep 1; done; cat /var/log/netconfigd.log\\n'",
     "--send-after 'root@localhost ~ # ' 'ping -c 1 10.0.2.2 > /dev/null; arp -an; traceroute -n -I -m 3 10.0.2.2\\n'",
     "--send-after 'root@localhost ~ # ' 'su test -c \"traceroute -n -I -m 1 10.0.2.2\" > /tmp/tr.txt 2>&1; " +
     "case $$(cat /tmp/tr.txt) in *\" 1  10.0.2.2 \"*) echo traceroute-as-test-$$((6*7));; *) cat /tmp/tr.txt;; esac\\n'",
     "--send-after 'root@localhost ~ # ' 'ifconfig en0 inet6; ndp -an; netstat -rn -f inet6; ping6 -c 2 fec0::2\\n'",
+    "--send-after 'root@localhost ~ # ' 'resolvconf -l; cat /etc/resolv.conf\\n'",
+] + NET_DNS6 + [
 ]
 
 NET_TOOLS_LINES = [
     "'netconfigd: en0: IPv6 autoconfiguration (link-local address started, router advertisements accepted)'",
-    "'netconfigd: en0: IPv6 autoconfiguration (rtsol en0, pid '",
-    "'netconfigd: en0: rtsol exited (status 0)'",
+    "'netconfigd: en0: IPv6 autoconfiguration (rtsold -f -R /sbin/resolvconf -A /usr/libexec/dhcp6c-other en0, pid '",
+    "'dhcp6c-other: en0: DHCPv6 (other) for router fe80::2: dhcp6c -f -d -c /var/run/dhcp6c.en0.conf en0'",
+    "'client6_recvreply: no server ID option in a reply to Information-Request; taken'",
+    "'dhcp6c-script: en0: INFOREQ: name servers fec0::3'",
     "'? (10.0.2.2) at 52:55:a:0:2:2 on en0 ifscope [ethernet]'",
     "'traceroute to 10.0.2.2 (10.0.2.2), 3 hops max, 48 byte packets'",
     "' 1  10.0.2.2  '",
@@ -2334,6 +2362,9 @@ NET_TOOLS_LINES = [
     "'fec0::/64                               link#'",
     "'16 bytes from fec0::2, icmp_seq=1 hlim=255 '",
     "'--- fec0::2 ping6 statistics ---'",
+    "'# resolv.conf from en0:dhcp6'",
+    "'# Generated by resolvconf'",
+    "'nameserver fec0::3'",
 ]
 
 # Log in as root and wait for en0's DHCP lease: netconfigd runs dhclient
@@ -2368,6 +2399,7 @@ NET_SESSION = [
     "echo \"dns: skipped: the host resolves no names (no network?)\"; " +
     "elif " + NET_SSH + " cat /tmp/dns.txt | grep -q \"^PING " + NET_DNS_NAME + " (\"; then echo \"dns: " + NET_DNS_NAME + " resolved\"; " +
     "else echo \"dns: FAILED: the host resolves " + NET_DNS_NAME + ", the guest did not\"; fi'",
+    NET_DNS6_HOST,
     "--send-after 'host: exit' 'netstat -I en0; cat /var/log/sshd.log\\n'",
 ]
 
@@ -2388,6 +2420,7 @@ NET_SESSION_LINES = [
     "'host: Darwin localhost '",
     "'host: transfer-ok'",
     "'host: dns: '",
+    "'host: dns6: '",
     "'Accepted publickey for test from 10.0.2.2'",
 ] + NET_TOOLS_LINES
 
@@ -2409,6 +2442,7 @@ sh_test(
         "--absent 'is not a receive buffer'",
         "--absent 'host: timed out'",
         "--absent 'host: dns: FAILED'",
+        "--absent 'host: dns6: FAILED'",
     ] + NET_SESSION + [
         "$(rootpath //boot/neoboot)",
         "300",
@@ -2417,6 +2451,67 @@ sh_test(
         "'rx queue: first completion by its interrupt (MSI-X vector 1, LPI '",
         "'tx queue: first completion by its interrupt (MSI-X vector 2, LPI '",
     ] + NET_SESSION_LINES,
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pam_session_root",
+        "//images:pam_session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# Packet capture (docs/kernel/network.md, "libpcap and tcpdump"), its own
+# run so the net tests keep their time: log in as root and wait for en0's
+# DHCP address, then tcpdump sees the guest's own ping to the gateway on en0 and
+# lists en0 (-D); /dev/bpf0 is root's, mode 0600, and test's tcpdump is
+# refused it; traceroute's TCP probes (-P tcp) get their answer through
+# libpcap. They go to 10.0.2.2 at this run's --hostfwd port (no sshd needs
+# to listen behind it): slirp passes a TCP connection to the gateway to the
+# host's loopback, where QEMU's own forward listens (a port no other
+# program has), and answers the SYN once it connects.
+NET_CAPTURE = [
+    "--hostfwd 22",
+    "--host-setup 'echo $$ND_HOSTFWD_PORT > hostfwd_port'",
+    "--send-after 'login: ' 'root\\n'",
+    "--send-after 'root@localhost ~ # ' 'until case $$(ifconfig en0) in *\"inet 10.0.2.15 \"*) true;; *) false;; esac; do sleep 1; done; " +
+    "echo lease-$$((6*7))\\n'",
+    "--send-after 'lease-42' 'tcpdump -n -c 2 -i en0 icmp > /tmp/td.txt 2> /tmp/td.err & sleep 3; " +
+    "ping -c 2 10.0.2.2 > /dev/null; sleep 1; kill %1 2> /dev/null; wait; cat /tmp/td.err /tmp/td.txt; tcpdump -D\\n'",
+    "--send-after 'root@localhost ~ # ' 'ls -l /dev/bpf0; su test -c \"tcpdump -n -c 1 -i en0\" > /tmp/tdu.txt 2>&1; " +
+    "case $$(cat /tmp/tdu.txt) in *\"/dev/bpf0: Permission denied\"*) echo bpf-denied-$$((6*7));; *) cat /tmp/tdu.txt;; esac\\n'",
+    "--send-after 'root@localhost ~ # ' 'traceroute -n -e -P tcp -p {hostfile:hostfwd_port} -m 3 -q 1 10.0.2.2 > /tmp/trt.txt 2>&1; " +
+    "case $$(cat /tmp/trt.txt) in *\" 1  10.0.2.2 \"*) echo traceroute-tcp-$$((6*7));; esac; cat /tmp/trt.txt\\n'",
+]
+
+NET_CAPTURE_LINES = [
+    "'lease-42'",
+    "'listening on en0, link-type EN10MB (Ethernet), '",
+    "' IP 10.0.2.15 > 10.0.2.2: ICMP echo request, id '",
+    "' IP 10.0.2.2 > 10.0.2.15: ICMP echo reply, id '",
+    "'2 packets captured'",
+    "'1.en0 [Up, Running'",
+    "'crw-------  1 root  wheel '",
+    "'bpf-denied-42'",
+    "'traceroute-tcp-42'",
+]
+
+# virt, as sbsa_net_test.
+sh_test(
+    name = "sbsa_net_capture_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pam_session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pam_session_root_trustcache)",
+        "--user-net virtio-net-pci,disable-legacy=on,mac=" + NET_MAC,
+        "--until-lines",
+    ] + NET_CAPTURE + [
+        "$(rootpath //boot/neoboot)",
+        "300",
+    ] + NET_CAPTURE_LINES,
     data = [
         ":sbsa_kc",
         "//boot/neoboot",
@@ -2443,6 +2538,7 @@ sh_test(
         "--absent 'is not a receive buffer'",
         "--absent 'host: timed out'",
         "--absent 'host: dns: FAILED'",
+        "--absent 'host: dns6: FAILED'",
     ] + NET_SESSION + [
         "$(rootpath //boot/neoboot)",
         "300",
@@ -2479,6 +2575,7 @@ sh_test(
         "--absent 'is not a receive buffer'",
         "--absent 'host: timed out'",
         "--absent 'host: dns: FAILED'",
+        "--absent 'host: dns6: FAILED'",
     ] + NET_SESSION + [
         "$(rootpath //boot/neoboot)",
         "480",
@@ -2491,6 +2588,101 @@ sh_test(
         "'tx queue: first completion by its interrupt (MSI-X vector 2, LPI '",
     ] + NET_SESSION_LINES,
     data = SBSA_REF_FIRMWARE + [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pam_session_root",
+        "//images:pam_session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# rtadvd (docs/kernel/network.md, "rtadvd"): two guests on a private
+# Ethernet segment (the harness's --link-net and --peer-net: QEMU dgram
+# netdevs over Unix sockets in the run's directory, nothing on the host's
+# network). The peer is the router, with one NIC, en0, on the segment (a
+# second, user-mode NIC would make the names depend on which driver
+# instance attaches first). It waits for en0's link-local address, turns on
+# forwarding, puts en0 in router mode (xnu's IPV6_ROUTER_MODE_EXCLUSIVE: no
+# RAs accepted, no SLAAC addresses, as Apple's run-rtadvd does), gives it
+# 2001:db8:1::1/64 and runs rtadvd on it, advertising the prefix (learned
+# from en0's addresses), a DNS server (RDNSS) and a search domain (DNSSL),
+# every 3 to 4 s. This guest is the host: its one NIC, en0, is on the
+# segment, and netconfigd's IPv6 autoconfiguration takes the prefix and the
+# router from the advertisements. It checks its SLAAC address, the router
+# in ndp -rn and the default route, pings the router, and solicits a router
+# with rtsol (a solicited RA). The router pings the host's SLAAC address
+# and waits (up to 6 min) for the host's solicitation in rtadvd's log
+# (the router's own rtsold solicits too, so the host's is picked out by its
+# link-local address); it prints the RDNSS and
+# DNSSL options' lengths in 8-octet units (3 each: 8 octets of header and
+# one address; header and "example.test" encoded and padded).
+RTADVD_ROUTER_MAC = "52:54:00:00:01:01"
+
+RTADVD_HOST_MAC = "52:54:00:00:01:02"
+
+RTADVD_ROUTER_LL = "fe80::5054:ff:fe00:101"
+
+RTADVD_HOST_LL = "fe80::5054:ff:fe00:102"
+
+# As ifconfig, ndp and ping6 print it (KAME's style: the zero group isn't
+# compressed to ::).
+RTADVD_HOST_ADDR = "2001:db8:1:0:5054:ff:fe00:102"
+
+sh_test(
+    name = "sbsa_rtadvd_test",
+    size = "large",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pam_session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pam_session_root_trustcache)",
+        "--link-net virtio-net-pci,disable-legacy=on,mac=" + RTADVD_HOST_MAC,
+        "--peer-net virtio-net-pci,disable-legacy=on,mac=" + RTADVD_ROUTER_MAC,
+        "--until-lines",
+        "--absent 'NeoDarwinInterfaceNamer: cannot'",
+        "--absent 'is not a receive buffer'",
+        # The router.
+        "--peer-send-after 'login: ' 'root\\n'",
+        "--peer-send-after 'root@localhost ~ # ' 'until case $$(ifconfig en0 inet6) in *" + RTADVD_ROUTER_LL + "*) true;; *) false;; esac; do sleep 1; done; " +
+        "sysctl -w net.inet6.ip6.forwarding=1; ifconfig en0 inet6 routermode enabled; " +
+        "ifconfig en0 inet6 2001:db8:1::1 prefixlen 64; ifconfig en0 inet6; ifconfig en0 inet6 routermode\\n'",
+        "--peer-send-after 'root@localhost ~ # ' 'echo en0:rdnss=\\\"2001:db8:1::1\\\":dnssl=\\\"example.test\\\":rltime#1800:maxinterval#4:mininterval#3: > /tmp/rtadvd.conf; " +
+        "rtadvd -f -D -c /tmp/rtadvd.conf en0 > /tmp/rtadvd.log 2>&1 & sleep 1; echo rtadvd-started-$$((6*7))\\n'",
+        "--peer-send-after 'rtadvd-started-42' 'for i in {1..120}; do ping6 -c 1 " + RTADVD_HOST_ADDR + " > /tmp/p6.txt 2>&1 && break; sleep 1; done; cat /tmp/p6.txt\\n'",
+        "--peer-send-after 'root@localhost ~ # ' 'for i in {1..360}; do case $$(cat /tmp/rtadvd.log) in *\"RS received from " + RTADVD_HOST_LL + " on en0\"*) break;; esac; sleep 1; done; " +
+        "a=; b=; c=; while read -r l; do case $$l in *nd_opt_dnss_len*) [ -z \"$$a\" ] && echo \"$$l\"; a=1;; *nd_opt_dnssl_len*) [ -z \"$$b\" ] && echo \"$$l\"; b=1;; " +
+        "*\"RS received from " + RTADVD_HOST_LL + "\"*) [ -z \"$$c\" ] && echo \"$$l\"; c=1;; esac; done < /tmp/rtadvd.log; ndp -an\\n'",
+        "--peer-line 'net.inet6.ip6.forwarding: 0 -> 1'",
+        "--peer-line 'inet6 2001:db8:1::1 prefixlen 64'",
+        "--peer-line 'rtadvd-started-42'",
+        "--peer-line '16 bytes from " + RTADVD_HOST_ADDR + ", icmp_seq=0 hlim=64 '",
+        "--peer-line '<make_packet>: nd_opt_dnss_len = 3'",
+        "--peer-line '<make_packet>: nd_opt_dnssl_len = 3'",
+        "--peer-line '<rs_input> RS received from " + RTADVD_HOST_LL + " on en0'",
+        # The host.
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'for i in {1..180}; do case $$(ifconfig en0 inet6; netstat -rn -f inet6) in " +
+        "*\"" + RTADVD_HOST_ADDR + " \"*default*" + RTADVD_ROUTER_LL + "*) break;; esac; sleep 1; done; cat /var/log/netconfigd.log\\n'",
+        "--send-after 'root@localhost ~ # ' 'ifconfig en0 inet6; ndp -rn; ndp -an; netstat -rn -f inet6; ping6 -c 2 2001:db8:1::1\\n'",
+        "--send-after 'root@localhost ~ # ' 'rtsol en0; echo rtsol-$$?-$$((6*7)); cat /var/run/resolv.conf\\n'",
+        "$(rootpath //boot/neoboot)",
+        "420",
+        "'netconfigd: en0: IPv6 autoconfiguration (link-local address started, router advertisements accepted)'",
+        "'inet6 " + RTADVD_HOST_LL + "%en0 prefixlen 64 scopeid 0x'",
+        "'inet6 " + RTADVD_HOST_ADDR + " prefixlen 64 autoconf'",
+        "'" + RTADVD_ROUTER_LL + "%en0 if=en0'",
+        "'default                                 " + RTADVD_ROUTER_LL + "%en0'",
+        "'2001:db8:1::/64                         link#'",
+        "'16 bytes from 2001:db8:1::1, icmp_seq=1 hlim=64 '",
+        "'rtsol-0-42'",
+        # RDNSS and DNSSL, through rtsold and resolvconf ("IPv6 DNS: RDNSS
+        # and DHCPv6").
+        "'nameserver 2001:db8:1::1'",
+        "'search example.test'",
+    ],
+    data = [
         ":sbsa_kc",
         "//boot/neoboot",
         "//images:pam_session_root",

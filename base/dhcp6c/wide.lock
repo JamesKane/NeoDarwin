@@ -1,0 +1,41 @@
+# The WIDE project's DHCPv6 client (KAME's dhcp6c), as FreeBSD's ports build
+# it: net/dhcp6 (20080615.2) is Hiroki Sato's (hrs@FreeBSD.org) maintained
+# fork of WIDE-DHCPv6 20080615. base/dhcp6c/build.sh builds the client,
+# /usr/sbin/dhcp6c (docs/kernel/network.md, "IPv6 DNS: RDNSS and DHCPv6");
+# the server, relay and control tool aren't built. FreeBSD's base has no
+# DHCPv6 client; Apple's is IPConfiguration's, a configd plugin. Fetched
+# unmodified by //rules:pinned_files.bzl; base/dhcp6c/patches applies
+# NeoDarwin's changes.
+# Repository: https://github.com/hrs-allbsd/wide-dhcpv6 (tag v20080615.2)
+# commit: 47f37dfab0cc789ab73ca772ced23e45ec7277cb
+# Format: shasum -a 256 (hash, two spaces, path). Regenerate with tools/pinned/lock.sh.
+0985c25756748f057fafa960ff45f7b7638a2580376c18dec6754d2dcdbaa8ff  addrconf.c
+a60ab0966d58e39e305c13795435be88741a52f4ecb64c0afcd5d3e31acdfaed  addrconf.h
+2aa7b387b5a92cfa7d0d454dd1fbe040224ccc01b125ec90098cad820ddad1c6  auth.c
+2b318515687c68a7e2b5087c7373dd745dc96912ab5204c714b6cb67d3252dbb  auth.h
+41255d90296d455f1a84835f2f4be46ca2e15fca2ed77df94ae4ab8bebc17a91  base64.c
+a0cc56b9d9e3052720893e1c7efd6558b063dfc7e5fb271d910b7d8d5ed19ac4  base64.h
+a676d4a22193a797c3fa70d829f5243713d887d8c44428e1acf7beb7c465793b  cfparse.y
+aa0e5bf95a956813edd252e3f9cf40c3f1fbf831778572722ef116bba2bc1e1e  cftoken.l
+34cf6a1f32536cd23580fc59561df8b4e357bb95aa4993806e89097056f92298  common.c
+50004f3e921ca420c5ee8567c283afbb68a49e7f6f26cdec879c5c03e40fc823  common.h
+4bc8a82c815ee3e50d495cb6dbca8330d58b8a0f701c8ef9265582fe487779ac  config.c
+e1782a395cac214c813f3cff30240524ee1e03e0c3f034422a56bdf997b94475  config.h
+32c54b7a4f1c9e5b98ebd0796ece3951ffc75ba3dfe678ec73af12752213c1cb  control.h
+de49caaca650d3e2725cfe3043b8122d650c7bc866fe3c629ca6982c07828f71  COPYRIGHT
+6743c3da0ef13206780f2a7ce712ba04d32aa71728dfce0c6db36a4cb0423329  dhcp6_ctl.c
+559f146fa72ef8b3150d5c9772109465c92f16be041baa7ad4591805b8ee1201  dhcp6_ctl.h
+dd9482a98e6168c5e513db940b492cb5a2f49646f4a04e2b09ac0e2e3a34e208  dhcp6.h
+c5f421631af532725732dcf1fe37930f360536dac1431ae533d7cc1797cbbef2  dhcp6c_ia.c
+8a4b02354de7d00a13bd8d09504781bb5abe168e7f0d1dc3a3fad8c4e919ded6  dhcp6c_ia.h
+246fb8030ee0748bf09049c5e7cb9d8c9e648b4b512a0538e55d2e256f85d662  dhcp6c_script.c
+987c7df8e54dcb8d6595e247a2612a156cc5e1c0ebecb64dfadb46f4dc74b92f  dhcp6c.c
+751dde72e09c91259de5529301d6fb465ec8ff318438c5c8dab3c94417ee85dc  dhcp6c.h
+4bc1e3ada45a0d2d7b3a85e0977b410b07b1ed26b654e78818fcd2569e478101  if.c
+3336ecd1574ec8cd87b8c0f4d0a4594c35dc398c6ebf81327731920b5e5dcc7a  lease.c
+4817985e3a0af3a46481721cbd1b64cfc776ca6a6a4cb295ddc7b4138881ba27  lease.h
+8cbc2d6537a151a851d0a69dacd0f61dac3c5adc50e7fa473ed586350b601a30  Makefile.in
+ba386d5f1a88ceb7f0ee24a20689eb2a6302bc3f5ee8632cb6471916930f35a8  prefixconf.c
+8bc8e74e79eeb5caad2aa5a8c51b68f9e40f736dc119f76ad5172947f63b6d20  prefixconf.h
+abd9c3f0ee897cfafc5e289a037165fcfff9f83f01166e9703d55a0bc8b7016f  timer.c
+4e1ceaeae13aec195c58ca89506a7bee79900507b84fbbee3bd3607bff886e14  timer.h

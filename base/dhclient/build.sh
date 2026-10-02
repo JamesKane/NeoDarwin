@@ -23,7 +23,8 @@
 # first in every source (nitems, setproctitle, daemonfd, reallocarray).
 # patches/: 0001 the BPF and routing-socket requests xnu doesn't have, the
 # pid file's directory, and Darwin's one-way pipes and setuid(2); 0002 dhclient-script for Darwin's ifconfig and
-# NeoDarwin's resolv.conf and mDNSResponder.
+# route. The script hands the name servers to resolvconf(8) as FreeBSD's
+# does (base/resolvconf).
 source "$(dirname "$0")/../../tools/base/common.sh"
 source "$(dirname "$0")/../commands.sh"
 OUT="$(abspath "$1")"; D="$(abspath "$2")"; SYSROOT="$(abspath "$3")"; shift 3

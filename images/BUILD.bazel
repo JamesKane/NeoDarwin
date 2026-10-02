@@ -131,7 +131,8 @@ hfs_ramdisk(
 # its user and group databases (tests/qemu/pam), test (group admin) and
 # guest, and their home directories, which they own, and chpass_editor, an
 # EDITOR for chpass. Booted by //kernel:sbsa_pam_session_test and
-# //kernel:sbsa_accounts_test.
+# //kernel:sbsa_accounts_test, and by the net tests, for which its
+# /etc/netconfigd.conf also asks for DHCPv6 (tests/qemu/net).
 hfs_ramdisk(
     name = "pam_session_root",
     dirs = _SYSTEM_DIRS + [
@@ -145,7 +146,11 @@ hfs_ramdisk(
         "//tests/qemu/pam:group": "private/etc/group",
         "//tests/qemu/pam:master.passwd": "private/etc/master.passwd",
         "//tests/qemu/pam:passwd": "private/etc/passwd",
-    } | _NETWORK_FILES,
+    } | {k: v for k, v in _NETWORK_FILES.items() if v != "private/etc/netconfigd.conf"} | {
+        # The net tests' (tests/qemu/net): stateless DHCPv6, which slirp's
+        # router advertisements don't ask for.
+        "//tests/qemu/net:netconfigd_conf": "private/etc/netconfigd.conf",
+    },
     links = _SYSTEM_LINKS,
     modes = {
         "private/etc/group": "0644",

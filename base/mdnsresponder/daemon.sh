@@ -25,10 +25,11 @@
 # libsystem_dnssd connects; the Makefile's /var/run/mdnsd is for a Linux
 # install. patches/ (build.sh's, the client library's files) are applied
 # too, then daemon-patches/: 0001 takes the core's lock where the daemon
-# re-reads resolv.conf (install_headers.sh applies patches/ to the client's
+# re-reads resolv.conf; 0002 reads IPv6 name servers too and drops those
+# gone from resolv.conf (install_headers.sh applies patches/ to the client's
 # headers alone, so the daemon's patches live apart). The pid file is
-# uds_daemon.c's default, /var/run/mDNSResponder.pid (dhclient-script
-# signals the daemon through it).
+# uds_daemon.c's default, /var/run/mDNSResponder.pid (resolvconf(8)
+# signals the daemon through it: /etc/resolvconf.conf's libc_restart).
 source "$(dirname "$0")/../../tools/base/common.sh"
 source "$(dirname "$0")/../commands.sh"
 OUT="$(abspath "$1")"; M="$(abspath "$2")"; SYSROOT="$(abspath "$3")"; shift 3

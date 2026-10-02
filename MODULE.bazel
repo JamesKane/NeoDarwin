@@ -308,6 +308,34 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/network_cmds/archive/refs/tags/network_cmds-726.tar.gz"],
 )
 
+# Packet capture (docs/kernel/network.md, "libpcap and tcpdump"): macOS
+# 26.0's libpcap (1.10.1, /usr/lib/libpcap.A.dylib) and tcpdump (4.99.1).
+http_archive(
+    name = "apple_libpcap",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "1ce77bc42d72443a7beab66e477fee23758b545493a231280c6025767213ca55",
+    strip_prefix = "libpcap-libpcap-144",
+    urls = ["https://github.com/apple-oss-distributions/libpcap/archive/refs/tags/libpcap-144.tar.gz"],
+)
+
+http_archive(
+    name = "apple_tcpdump",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "03413606d8f54b4e9f2d50a744671c1dd54e6ecbb7d151b66e0cf072791c827f",
+    strip_prefix = "tcpdump-tcpdump-153",
+    urls = ["https://github.com/apple-oss-distributions/tcpdump/archive/refs/tags/tcpdump-153.tar.gz"],
+)
+
+# libipsec from macOS 26.0's ipsec (KAME's, as ipsec-tools 0.7 ships it):
+# the policy parser ping6 and traceroute6 link.
+http_archive(
+    name = "apple_ipsec",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "09f8e2813c438c730f63f71f73f9ab8807732d3391acd34096853444faabca45",
+    strip_prefix = "ipsec-ipsec-1125",
+    urls = ["https://github.com/apple-oss-distributions/ipsec/archive/refs/tags/ipsec-1125.tar.gz"],
+)
+
 http_archive(
     name = "apple_openssh",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
@@ -541,6 +569,42 @@ pinned_files(
     name = "freebsd_dhclient",
     build_file = "//base:dhclient/freebsd.BUILD",
     lockfile = "//base:dhclient/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
+# IPv6 DNS (docs/kernel/network.md, "IPv6 DNS: RDNSS and DHCPv6"): FreeBSD's
+# usr.sbin/rtsold (RDNSS and DNSSL; replaces network_cmds' older rtsol) and
+# its resolvconf(8), openresolv (base/rtsold, base/resolvconf); the WIDE
+# DHCPv6 client as FreeBSD's ports build it (net/dhcp6, hrs@'s fork;
+# base/dhcp6c). Apple's client for all three is IPConfiguration, a configd
+# plugin.
+pinned_files(
+    name = "freebsd_rtsold",
+    build_file = "//base:rtsold/freebsd.BUILD",
+    lockfile = "//base:rtsold/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
+pinned_files(
+    name = "freebsd_resolvconf",
+    build_file = "//base:resolvconf/freebsd.BUILD",
+    lockfile = "//base:resolvconf/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
+pinned_files(
+    name = "wide_dhcpv6",
+    build_file = "//base:dhcp6c/wide.BUILD",
+    lockfile = "//base:dhcp6c/wide.lock",
+    url_template = "https://raw.githubusercontent.com/hrs-allbsd/wide-dhcpv6/{commit}/{path}",
+)
+
+# FreeBSD's usr.sbin/rtadvd, the IPv6 router advertisement daemon
+# (base/rtadvd): network_cmds-726 has no rtadvd sources.
+pinned_files(
+    name = "freebsd_rtadvd",
+    build_file = "//base:rtadvd/freebsd.BUILD",
+    lockfile = "//base:rtadvd/freebsd.lock",
     url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
 )
 

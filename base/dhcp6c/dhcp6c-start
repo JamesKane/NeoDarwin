@@ -1,0 +1,60 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# dhcp6c-managed and dhcp6c-other (one script, two names): rtsold(8)'s M and
+# O scripts (docs/kernel/network.md, "IPv6 DNS: RDNSS and DHCPv6"). rtsold
+# runs them, with no environment, as
+#   dhcp6c-managed <interface> <router>   when a router advertisement's
+#                                         M (managed) flag turns on
+#   dhcp6c-other <interface> <router>     when its O (other configuration)
+#                                         flag turns on, and M is off
+# and, as its -A ("always") script, after the first advertisement whatever
+# its flags, when netconfigd's ifconfig_<interface>_dhcp6 asks for DHCPv6
+# regardless (ADDRESS: dhcp6c-managed; INFORM: dhcp6c-other).
+#
+# Each starts dhcp6c(8) for the interface, unless one runs already: managed,
+# a stateful client (an address, IA_NA, and the name servers); other, a
+# stateless one (Information-Request: the name servers and search domains
+# only). A stateless client is replaced when M turns on. dhcp6c runs in the
+# foreground with its messages on rtsold's standard error (netconfigd's
+# log); its script, /usr/libexec/dhcp6c-script, hands what it learns to
+# resolvconf(8). The kernel's own autoconfiguration (SLAAC) is untouched.
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export PATH
+ifname="$1"
+router="$2"
+[ -n "$ifname" ] || { echo "usage: ${0##*/} interface [router]" >&2; exit 1; }
+case "${0##*/}" in
+*managed) mode=managed ;;
+*) mode=other ;;
+esac
+conf="/var/run/dhcp6c.$ifname.conf"
+pidfile="/var/run/dhcp6c.$ifname.pid"
+modefile="/var/run/dhcp6c.$ifname.mode"
+
+if [ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+	case "$(cat "$modefile" 2>/dev/null)/$mode" in
+	managed/*|other/other)
+		exit 0 ;;
+	esac
+	kill "$(cat "$pidfile")"
+	sleep 1
+fi
+
+{
+	echo "# Written by ${0##*/} for $ifname (router $router)."
+	echo "interface $ifname {"
+	if [ "$mode" = managed ]; then
+		echo "	send ia-na 0;"
+	else
+		echo "	information-only;"
+	fi
+	echo "	request domain-name-servers;"
+	echo "	request domain-name;"
+	echo "	script \"/usr/libexec/dhcp6c-script\";"
+	echo "};"
+	[ "$mode" = managed ] && echo "id-assoc na 0 { };"
+} > "$conf"
+echo "$mode" > "$modefile"
+echo "${0##*/}: $ifname: DHCPv6 ($mode) for router $router: dhcp6c -f -d -c $conf $ifname" >&2
+dhcp6c -f -d -c "$conf" -p "$pidfile" "$ifname" < /dev/null &
+exit 0

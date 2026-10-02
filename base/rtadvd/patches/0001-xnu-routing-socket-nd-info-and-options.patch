@@ -1,0 +1,218 @@
+From: NeoDarwin
+Subject: [PATCH] rtadvd: xnu's routing socket, ND interface info and option structures
+
+xnu's routing socket pads each address to 32 bits (rtsock.c's ROUNDUP32),
+not to a long as FreeBSD's does, so with FreeBSD's NEXT_SA every address
+after the first sockaddr_in6 (28 bytes) was read 4 bytes off: the prefixes
+from the routing table and from RTM_NEWADDR came out wrong. It sends no
+interface announcements (RTM_IFANNOUNCE): an interface rtadvd hasn't seen
+shows itself with RTM_IFINFO when it comes up, which on xnu stands for its
+arrival; a departing one goes down first. xnu's SIOCGIFINFO_IN6 is encoded
+with struct in6_ondireq (the fields rtadvd reads are at the same offsets)
+and never sets ND6_IFF_ACCEPT_RTADV: whether an interface takes router
+advertisements is its extended flag IFEF_ACCEPT_RTADV (SIOCGIFEFLAGS), which
+is reported as the ND flag, so the check that keeps a router lifetime off an
+interface that accepts RAs works. xnu's RDNSS and DNSSL structures include
+the first address and the first 8 octets of domains (24 and 16 bytes, not
+8), so the options' fixed part is taken by offsetof; its PREF64 structure
+names its fields differently. Each change is compiled only on Darwin, so
+upstream is unchanged on FreeBSD.
+
+Rebase-risk: low (preprocessor guards).
+--- a/config.c
++++ b/config.c
+@@ -67,6 +67,19 @@
+ #include "if.h"
+ #include "config.h"
+ 
++/*
++ * The fixed part of the RDNSS and DNSSL options (8 octets).  xnu's
++ * <netinet/icmp6.h> structures also hold the first server address and the
++ * first 8 octets of domains, so their sizes are 24 and 16.
++ */
++#ifdef __APPLE__
++#define	ND_OPT_RDNSS_FIXLEN	offsetof(struct nd_opt_rdnss, nd_opt_rdnss_addr)
++#define	ND_OPT_DNSSL_FIXLEN	offsetof(struct nd_opt_dnssl, nd_opt_dnssl_domains)
++#else
++#define	ND_OPT_RDNSS_FIXLEN	sizeof(struct nd_opt_rdnss)
++#define	ND_OPT_DNSSL_FIXLEN	sizeof(struct nd_opt_dnssl)
++#endif
++
+ /* label of tcapcode + number + domain name + zero octet */
+ static char entbuf[10 + 3 + NI_MAXHOST + 1];
+ static char oentbuf[10 + 3 + NI_MAXHOST + 1];
+@@ -1447,14 +1460,14 @@
+ 	TAILQ_FOREACH(rdn, &rai->rai_rdnss, rd_next) {
+ 		struct rdnss_addr *rdna;
+ 
+-		packlen += sizeof(struct nd_opt_rdnss);
++		packlen += ND_OPT_RDNSS_FIXLEN;
+ 		TAILQ_FOREACH(rdna, &rdn->rd_list, ra_next)
+ 			packlen += sizeof(rdna->ra_dns);
+ 	}
+ 	TAILQ_FOREACH(dns, &rai->rai_dnssl, dn_next) {
+ 		struct dnssl_addr *dnsa;
+ 
+-		packlen += sizeof(struct nd_opt_dnssl);
++		packlen += ND_OPT_DNSSL_FIXLEN;
+ 		len = 0;
+ 		TAILQ_FOREACH(dnsa, &dns->dn_list, da_next)
+ 			len += dnsa->da_len;
+@@ -1589,7 +1602,7 @@
+ 		ndopt_rdnss->nd_opt_rdnss_len = 0;
+ 		ndopt_rdnss->nd_opt_rdnss_reserved = 0;
+ 		ndopt_rdnss->nd_opt_rdnss_lifetime = htonl(rdn->rd_ltime);
+-		buf += sizeof(struct nd_opt_rdnss);
++		buf += ND_OPT_RDNSS_FIXLEN;
+ 
+ 		TAILQ_FOREACH(rdna, &rdn->rd_list, ra_next) {
+ 			memcpy(buf, &rdna->ra_dns, sizeof(rdna->ra_dns));
+@@ -1610,7 +1623,7 @@
+ 		ndopt_dnssl->nd_opt_dnssl_len = 0;
+ 		ndopt_dnssl->nd_opt_dnssl_reserved = 0;
+ 		ndopt_dnssl->nd_opt_dnssl_lifetime = htonl(dns->dn_ltime);
+-		buf += sizeof(*ndopt_dnssl);
++		buf += ND_OPT_DNSSL_FIXLEN;
+ 
+ 		TAILQ_FOREACH(dnsa, &dns->dn_list, da_next) {
+ 			memcpy(buf, dnsa->da_dom, dnsa->da_len);
+@@ -1636,6 +1649,11 @@
+ 		ndopt_pref64 = (struct nd_opt_pref64 *)buf;
+ 		ndopt_pref64->nd_opt_pref64_type = ND_OPT_PREF64;
+ 		ndopt_pref64->nd_opt_pref64_len = 2;
++#ifdef __APPLE__
++		/* xnu's <netinet/icmp6.h> names the fields differently. */
++#define	nd_opt_pref64_sl_plc	nd_opt_pref64_scaled_lifetime_plc
++#define	nd_opt_prefix		nd_opt_pref64_prefix
++#endif
+ 		ndopt_pref64->nd_opt_pref64_sl_plc =
+ 			(htons(prf64->p64_sl << 3)) |
+ 			htons((prf64->p64_plc & 0x7));
+--- a/if.c
++++ b/if.c
+@@ -60,10 +60,20 @@
+ #define ROUNDUP(a, size)					\
+ 	(((a) & ((size)-1)) ? (1 + ((a) | ((size)-1))) : (a))
+ 
++/*
++ * The routing socket's addresses are padded to a long on FreeBSD; xnu's
++ * rtsock pads them to 32 bits (ROUNDUP32), as rtsol's if.c does.
++ */
++#ifdef __APPLE__
++#define	RT_SA_ALIGN	sizeof(uint32_t)
++#else
++#define	RT_SA_ALIGN	sizeof(u_long)
++#endif
++
+ #define	NEXT_SA(ap)							\
+ 	(ap) = (struct sockaddr *)((caddr_t)(ap) +			\
+-	    ((ap)->sa_len ? ROUNDUP((ap)->sa_len, sizeof(u_long)) :	\
+-	    sizeof(u_long)))
++	    ((ap)->sa_len ? ROUNDUP((ap)->sa_len, RT_SA_ALIGN) :	\
++	    RT_SA_ALIGN))
+ 
+ struct sockaddr_in6 sin6_linklocal_allnodes = {
+         .sin6_len =     sizeof(sin6_linklocal_allnodes),
+@@ -242,7 +252,9 @@
+ 			return (char *)rtm;
+ 			/* NOTREACHED */
+ 		case RTM_IFINFO:
++#ifdef RTM_IFANNOUNCE
+ 		case RTM_IFANNOUNCE:
++#endif
+ 			/* found */
+ 			*lenp = rtm->rtm_msglen;
+ 			return (char *)rtm;
+@@ -379,7 +391,13 @@
+ int
+ update_ifinfo_nd_flags(struct ifinfo *ifi)
+ {
++#ifdef __APPLE__
++	/* xnu's SIOCGIFINFO_IN6 is encoded with the shorter in6_ondireq. */
++	struct in6_ondireq nd;
++	struct ifreq ifr;
++#else
+ 	struct in6_ndireq nd;
++#endif
+ 	int s;
+ 	int error;
+ 
+@@ -400,6 +418,20 @@
+ 		return (1);
+ 	}
+ 	ifi->ifi_nd_flags = nd.ndi.flags;
++#ifdef __APPLE__
++	/*
++	 * xnu never sets ND6_IFF_ACCEPT_RTADV: whether an interface accepts
++	 * router advertisements is its extended flag IFEF_ACCEPT_RTADV
++	 * (SIOCAUTOCONF_START sets it; "ifconfig ... inet6 routermode
++	 * enabled" clears it).  Report it as the ND flag.
++	 */
++	ifi->ifi_nd_flags &= ~ND6_IFF_ACCEPT_RTADV;
++	memset(&ifr, 0, sizeof(ifr));
++	strlcpy(ifr.ifr_name, ifi->ifi_ifname, sizeof(ifr.ifr_name));
++	if (ioctl(s, SIOCGIFEFLAGS, (caddr_t)&ifr) == 0 &&
++	    (ifr.ifr_eflags & IFEF_ACCEPT_RTADV) != 0)
++		ifi->ifi_nd_flags |= ND6_IFF_ACCEPT_RTADV;
++#endif
+ 	close(s);
+ 
+ 	return (0);
+--- a/rtadvd.c
++++ b/rtadvd.c
+@@ -468,7 +468,9 @@
+ 	size_t len;
+ 	char msg[2048], *next, *lim;
+ 	char ifname[IFNAMSIZ];
++#ifdef RTM_IFANNOUNCE
+ 	struct if_announcemsghdr *ifan;
++#endif
+ 	struct rt_msghdr *rtm;
+ 	struct prefix *pfx;
+ 	struct rainfo *rai;
+@@ -511,8 +513,11 @@
+ 		    RTADV_TYPE2BITMASK(RTM_DELETE) |
+ 		    RTADV_TYPE2BITMASK(RTM_NEWADDR) |
+ 		    RTADV_TYPE2BITMASK(RTM_DELADDR) |
+-		    RTADV_TYPE2BITMASK(RTM_IFINFO) |
+-		    RTADV_TYPE2BITMASK(RTM_IFANNOUNCE));
++		    RTADV_TYPE2BITMASK(RTM_IFINFO)
++#ifdef RTM_IFANNOUNCE
++		    | RTADV_TYPE2BITMASK(RTM_IFANNOUNCE)
++#endif
++		    );
+ 		if (len == 0)
+ 			break;
+ 		type = ((struct rt_msghdr *)next)->rtm_type;
+@@ -527,7 +532,23 @@
+ 			break;
+ 		case RTM_IFINFO:
+ 			ifindex = (int)((struct if_msghdr *)next)->ifm_index;
++#ifndef RTM_IFANNOUNCE
++			/*
++			 * xnu sends no interface announcements: an interface
++			 * this daemon hasn't seen yet first shows itself with
++			 * RTM_IFINFO (when it comes up), so treat that as its
++			 * arrival.  A departing one goes down first.
++			 */
++			if (if_indextoifinfo(ifindex) == NULL) {
++				syslog(LOG_NOTICE,
++				    "interface added (idx=%d)", ifindex);
++				update_ifinfo(&ifilist, ifindex);
++				loadconfig_index(ifindex);
++				continue;
++			}
++#endif
+ 			break;
++#ifdef RTM_IFANNOUNCE
+ 		case RTM_IFANNOUNCE:
+ 			ifan = (struct if_announcemsghdr *)next;
+ 			switch (ifan->ifan_what) {
+@@ -569,6 +590,7 @@
+ 				break;
+ 			}
+ 			continue;
++#endif
+ 		default:
+ 			/* should not reach here */
+ 			syslog(LOG_DEBUG,

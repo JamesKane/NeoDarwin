@@ -1,0 +1,71 @@
+From: NeoDarwin
+Subject: [PATCH] tcpdump: no copies to the unified log without a log store
+
+On macOS, tcpdump copies its command line, every line it writes to
+standard error (darwin_log_init() puts a funopen() stream in front of
+stderr) and, with -v, its closing statistics to the unified log with
+os_log(). NeoDarwin has no log store: its libsystem_trace stand-in writes
+os_log() messages to standard error, so each would appear twice on the
+terminal, and the stand-in has no _os_log_impl (default-level messages).
+With NEODARWIN_NO_LOG_STORE (base/tcpdump/build.sh) the copies are left
+out and standard error is written as by tcpdump.org's tcpdump
+(docs/kernel/network.md, "libpcap and tcpdump").
+
+--- a/tcpdump/pktaputil.c
++++ b/tcpdump/pktaputil.c
+@@ -318,7 +318,9 @@
+ 		char saved = *eol_ptr;
+ 		*eol_ptr = '\0';
+ 		consumed = buflen;
++#ifndef NEODARWIN_NO_LOG_STORE
+ 		os_log(OS_LOG_DEFAULT, "%s", nt_fun_cookie->fun_buf);
++#endif
+ 		*eol_ptr = saved;
+ 	}
+ 
+--- a/tcpdump/tcpdump.c
++++ b/tcpdump/tcpdump.c
+@@ -481,6 +481,7 @@
+ 	(void) sigaction(sig, &new, &old);
+ }
+ 
++#ifndef NEODARWIN_NO_LOG_STORE
+ static void
+ log_arguments(int argc, char **argv)
+ {
+@@ -513,6 +514,7 @@
+ 
+ 	free(log_line);
+ }
++#endif /* NEODARWIN_NO_LOG_STORE */
+ #endif /* __APPLE__ */
+ 
+ static void
+@@ -1718,9 +1720,11 @@
+ 	ndo->ndo_tflag = 0;
+ 	ndo->ndo_t0flag = 0;
+ 
++#ifndef NEODARWIN_NO_LOG_STORE
+ 	log_arguments(argc, argv);
+ 
+ 	darwin_log_init();
++#endif /* NEODARWIN_NO_LOG_STORE */
+ #endif /* __APPLE__ */
+ 
+ 	cnt = -1;
+@@ -3501,6 +3505,7 @@
+ 		putc('\n', stderr);
+ 
+ #ifdef __APPLE__
++#ifndef NEODARWIN_NO_LOG_STORE
+ 	if (verbose) {
+ 		os_log(OS_LOG_DEFAULT, "%lu packet%s captured, %u packet%s received by filter, %u packet%s dropped by kernel, %u drop%s by metadata filter",
+ 		       packets_captured, PLURAL_SUFFIX(packets_captured),
+@@ -3508,6 +3513,7 @@
+ 		       stats.ps_drop, PLURAL_SUFFIX(stats.ps_drop),
+ 		       packets_mtdt_fltr_drop, PLURAL_SUFFIX(packets_mtdt_fltr_drop));
+ 	}
++#endif /* NEODARWIN_NO_LOG_STORE */
+ 
+ 	char buffer[256];
+ 	if (pcap_get_compression_stats(pd, buffer, sizeof(buffer)) == 0) {

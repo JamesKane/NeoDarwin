@@ -1,0 +1,39 @@
+From: NeoDarwin
+Subject: [PATCH] dhcp6c: take a stateless reply without a Server Identifier
+
+RFC 8415 (as RFC 3315 before it) has a client discard a Reply without a
+Server Identifier option, and dhcp6c does. QEMU's user network, libslirp
+4.x (dhcpv6.c), answers Information-Request with the DNS servers and the
+client's ID but no server ID, so dhcp6c logged "no server ID option" and
+retried forever. A reply to Information-Request configures nothing a
+server ID would name later (no lease, no renewal to that server), so it
+is now taken with a notice; replies in every other state still need one.
+
+Rebase-risk: low (one check in client6_recvreply()).
+--- a/dhcp6c.c
++++ b/dhcp6c.c
+@@ -1787,10 +1787,21 @@
+ 		break;          
+ 	}
+ 
+-	/* A Reply message must contain a Server ID option */
++	/*
++	 * A Reply message must contain a Server ID option. QEMU's user
++	 * network (libslirp's dhcpv6.c), a common place to meet DHCPv6,
++	 * answers an Information-Request without one; a stateless reply
++	 * configures no lease that the server's ID would identify, so it
++	 * is taken, with a note.
++	 */
+ 	if (optinfo->serverID.duid_len == 0) {
+-		d_printf(LOG_INFO, FNAME, "no server ID option");
+-		return (-1);
++		if (state != DHCP6S_INFOREQ) {
++			d_printf(LOG_INFO, FNAME, "no server ID option");
++			return (-1);
++		}
++		d_printf(LOG_NOTICE, FNAME,
++		    "no server ID option in a reply to Information-Request; "
++		    "taken");
+ 	}
+ 
+ 	/*

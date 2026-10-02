@@ -1,0 +1,45 @@
+From: NeoDarwin
+Subject: [PATCH] dhclient-script: Darwin's ifconfig and route
+
+Darwin's ifconfig has no -n (FreeBSD's "don't load modules"). The ARP
+flush is skipped where there is no arp. Looking for the default route
+before there is one, Darwin's route prints "not in table" on standard
+error, which reaches netconfigd's log; it is discarded.
+
+The name servers go to resolvconf(8) as on FreeBSD (resolvconf_enable
+YES, the default): NeoDarwin's is FreeBSD's openresolv (base/resolvconf),
+whose /etc/resolvconf.conf writes the merged file to /var/run/resolv.conf
+(/etc/resolv.conf links to it, as on macOS) and signals mDNSResponder.
+Until P4-24's IPv6 DNS work this patch wrote /var/run/resolv.conf itself.
+
+Rebase-risk: low (three lines).
+--- a/dhclient-script
++++ b/dhclient-script
+@@ -20,7 +20,7 @@
+ 
+ ARP=/usr/sbin/arp
+ HOSTNAME=/bin/hostname
+-IFCONFIG='/sbin/ifconfig -n'
++IFCONFIG='/sbin/ifconfig'
+ 
+ LOCALHOST=127.0.0.1
+ 
+@@ -47,7 +47,8 @@
+ }
+ 
+ arp_flush() {
+-	arp -an -i $interface | \
++	[ -x $ARP ] || return 0
++	$ARP -an -i $interface | \
+ 		sed -n -e 's/^.*(\(.*\)) at .*$/arp -d \1/p' | \
+ 		sh >/dev/null 2>&1
+ }
+@@ -276,7 +277,7 @@
+ # commands that are available prior to /usr being mounted.
+ is_default_interface()
+ {
+-	routeget="`route -n get -inet default`"
++	routeget="`route -n get -inet default 2>/dev/null`"
+ 	oldifs="$IFS"
+ 	IFS="
+ "

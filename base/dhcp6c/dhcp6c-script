@@ -1,0 +1,42 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# dhcp6c's script (docs/kernel/network.md, "IPv6 DNS: RDNSS and DHCPv6").
+# dhcp6c(8) runs it after each exchange with REASON (INFOREQ, REPLY, RENEW,
+# REBIND, RELEASE, or EXIT when it stops), interface (dhcp6c patch 0001),
+# new_domain_name_servers and new_domain_name in its environment and nothing
+# else. The servers and search domains go to resolvconf(8) under the key
+# <interface>:dhcp6, beside the DHCPv4 lease's (<interface>) and router
+# advertisements' (<interface>:slaac); resolvconf writes them,
+# merged, to /var/run/resolv.conf and has mDNSResponder reread it.
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export PATH
+key="${interface:-unknown}:dhcp6"
+
+case "$REASON" in
+RELEASE|EXIT)
+	resolvconf -f -d "$key"
+	echo "dhcp6c-script: $interface: $REASON: name servers withdrawn" >&2
+	exit 0
+	;;
+esac
+
+conf=""
+if [ -n "$new_domain_name" ]; then
+	conf="search $new_domain_name
+"
+fi
+for ns in $new_domain_name_servers; do
+	case "$ns" in
+	[Ff][Ee]80:*) ns="$ns%$interface" ;;   # a link-local server needs its zone
+	esac
+	conf="${conf}nameserver $ns
+"
+done
+if [ -n "$conf" ]; then
+	printf '%s' "$conf" | resolvconf -a "$key"
+	echo "dhcp6c-script: $interface: $REASON: name servers $new_domain_name_servers${new_domain_name:+, search $new_domain_name}" >&2
+else
+	resolvconf -f -d "$key"
+	echo "dhcp6c-script: $interface: $REASON: no name servers" >&2
+fi
+exit 0

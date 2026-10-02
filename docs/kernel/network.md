@@ -1,7 +1,13 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
 # Bring-up Ethernet: IONetworkingFamily, virtio-net, DHCP, a resolver and the TC956x (P1-19)
 
+**P4-24, libpcap and tcpdump** ("libpcap and tcpdump", below): Apple's `libpcap.A.dylib` (all 200 of macOS 26's exports), `libipsec.A.dylib` and `/usr/sbin/tcpdump`; traceroute's TCP probes work, and root captures on en0 (`/dev/bpf*` are root's, 0600, as on macOS).
+
+**P4-24, IPv6 DNS** ("IPv6 DNS: RDNSS and DHCPv6", below): name servers from router advertisements (RDNSS, DNSSL; FreeBSD's `rtsold`, which replaces 726's `rtsol`) and DHCPv6 (`dhcp6c`, FreeBSD's `net/dhcp6` port, stateless on the O flag, stateful on M), merged with the DHCP lease's by FreeBSD's `resolvconf(8)` into `/var/run/resolv.conf`; mDNSResponder asks IPv6 servers too. On slirp en0 gets fec0::3 by DHCPv6.
+
 **P4-24, the rest of network_cmds and IPv6** ("P4-24: the rest of network_cmds and IPv6", below): `arp`, `ndp`, `ping6`, `traceroute` and `traceroute6` (setuid), `rtsol`, `rarpd`, `spray` and `kdumpd` from network_cmds-726, installed as macOS installs them; en* interfaces **autoconfigure IPv6** at boot, netconfigd making IPConfiguration's interface requests and running `rtsol`. On slirp en0 gets fec0::/64 addresses and an IPv6 default route, and `ping6` reaches the gateway.
+
+**P4-24, rtadvd** ("rtadvd", below): FreeBSD's `usr.sbin/rtadvd` as `/usr/sbin/rtadvd` with `/etc/rtadvd.conf` (network_cmds-726 has none), adapted to xnu's routing socket, ND interface information and option structures. `//kernel:sbsa_rtadvd_test` boots two guests on a private segment (the harness's new `--link-net`/`--peer-net`): the router advertises 2001:db8:1::/64 with RDNSS and DNSSL, the host autoconfigures through netconfigd, and each pings the other.
 
 **P1-19, checkpoint 3** ("Checkpoint 3: the Radxa Dragon Q8B's TC956x", below): a driver for the board's **Toshiba TC956x** PCIe Ethernet (PCI 1179:0220, two functions, one MAC each), `NeoDarwinTC956x`, with its hardware logic ported from FreeBSD's `tcx` (written for and run on this board) into a C header that also builds on the host. QEMU has no TC956x, so it is proven by a **register model** of the chip (`//kernel/neodarwin/network:tc956x_sim_test`, FreeBSD's bring-up order with an SError for any access to a block in reset, the SerDes/PCS/PHY link machine at every speed, the rings, interrupts and offloads) and **29 planted bugs** it must catch (`tc956x_mutation_tests`). The kernel builds with it and every QEMU test is unchanged. The board exit (a DHCP lease on the TC956x and ssh from the Mac) waits for board time: P1-19 stays *doing*.
 
@@ -184,7 +190,7 @@ Until patch 0038, `sbsa_ref_net_test` panicked about one run in five just after 
 | DHCP client | **FreeBSD's `dhclient`** (`sbin/dhclient`, pinned file by file at the commit libm and libxo use: `base/dhclient/freebsd.lock`), with its `dhclient-script` | The reuse order (`docs/repository.md` §3.1): Apple's client, `IPConfiguration` in bootp-527, is a configd plugin and needs configd and SystemConfiguration, which NeoDarwin doesn't build; FreeBSD's comes before new code. It is the OpenBSD-derived ISC client, in production for twenty years, with privilege separation, lease files, renewal and rebinding, classless static routes, and an exit-hook script for local policy. A first-party Swift client would be new protocol code to get right and keep right. Its needs are small: BPF (xnu has `/dev/bpf*`), a routing socket, `sh`, `ifconfig` and `route`, all in the base. The port is compat headers for Capsicum and Casper (`base/dhclient/compat`) and two patches |
 | What brings interfaces up | **`netconfigd`**, a small first-party Embedded Swift launchd job (`com.neodarwin.netconfigd`, KeepAlive), with `/etc/netconfigd.conf` (FreeBSD `rc.conf` style: `ifconfig_<if>="DHCP"`, a static `ifconfig` line, or `NONE`; `ifconfig_DEFAULT`; `defaultrouter`) | dhclient serves one interface per process and exits when it loses the interface; something has to find the interfaces, start a client for each and restart it. On macOS configd's IPConfiguration does this. A launchd job, loaded by `launchctl bootstrap` with the other LaunchDaemons, keeps launchctl's bootstrap to what launchctl-842's does (lo0 only), handles en* interfaces present at boot and those that appear later (a routing-socket message or a 5-second scan), and needs no boot-arg |
 | Resolver | **(a) mDNSResponder's daemon**, from the published `mDNSPosix` sources of mDNSResponder-2881.0.25, installed as `/usr/sbin/mDNSResponder` with `dns-sd`; plus **libresolv-93** (`/usr/lib/libresolv.9.dylib`) | macOS fidelity: on macOS every `getaddrinfo`, `gethostbyname` and Libinfo `res_query` goes to mDNSResponder through `libsystem_dnssd` (Libinfo's mdns module), and the client library was already built. The published POSIX daemon has the same core (`mDNSCore`), the same client server (`uds_daemon.c`) and wire protocol, does unicast DNS from `/etc/resolv.conf` and `.local` by multicast, and built with one patch. (b), a libresolv module patched into Libinfo, would be a NeoDarwin-only resolver path to maintain and would leave `libsystem_dnssd`, `dns-sd` and `.local` dead. libresolv is the macOS 26.0 library for the programs that call it directly (`res_9_query`, `dns_*`), OpenSSH's SSHFP lookups among them |
-| `/etc/resolv.conf` | macOS's: a link to `/var/run/resolv.conf` (the image's), written by `dhclient-script` and reread by mDNSResponder on `SIGHUP` | `/var/run` is emptied at boot, so a stale lease's servers never survive a reboot |
+| `/etc/resolv.conf` | macOS's: a link to `/var/run/resolv.conf` (the image's), written by `dhclient-script` and reread by mDNSResponder on `SIGHUP`; since P4-24's IPv6 DNS, written by `resolvconf(8)`, which merges the DHCP lease's servers with IPv6's ("IPv6 DNS: RDNSS and DHCPv6") | `/var/run` is emptied at boot, so a stale lease's servers never survive a reboot |
 | OpenSSH patch 0003 (SSHFP off) | **dropped**: OpenSSH links libresolv (`-lresolv`) as Apple's build does | libresolv exists now |
 | `if_attach_nx` default | **kept** (the kernel's Skywalk default, a compat netif on every Ethernet interface); `netstat -I` undercounts input packets on IONetworkingFamily interfaces, documented ("Findings") | The input-counter loss is cosmetic: the driver's `Statistics` and `netstat -I`'s output counts are right, and DHCP, BPF and the stack don't depend on it. The default is xnu's own for an arm64 non-macOS kernel (macOS's own default also attaches compat netifs), and changing it from neoboot would make NeoDarwin's stack differ from the one Apple tests, for one counter. P3-08 decides again, with its dexts, which on macOS reach the stack through Skywalk |
 | The interface namer | **stays in the kernel** (`NeoDarwinInterfaceNamer`) | Naming has to happen before anything in user space can see the interface; a user-space namer with a persistent table is a configd- or `netd`-sized job (P3-08). netconfigd only configures interfaces that already have names |
@@ -213,8 +219,8 @@ launchd (PID 1)
           dhclient [priv]                  BPF: DHCPDISCOVER, OFFER, REQUEST, ACK
             dhclient-script BOUND          ifconfig en0 inet 10.0.2.15 netmask 255.255.255.0 ...
                                            route add default 10.0.2.2
-                                           /var/run/resolv.conf: nameserver 10.0.2.3
-                                           kill -HUP mDNSResponder  -> rereads resolv.conf
+                                           resolvconf -a en0: nameserver 10.0.2.3
+                                             /var/run/resolv.conf (merged), kill -HUP mDNSResponder
     com.apple.getty, ...
 ```
 
@@ -234,7 +240,7 @@ bound to 10.0.2.15 -- renewal in 43200 seconds.
 
 dhclient runs in the foreground (`-d`) under netconfigd, which runs `ifconfig <if> up` first (dhclient waits for the link, and the driver reports it only once the interface is enabled) and restarts the client 10 seconds after it exits. dhclient splits into a privileged process (BPF writes, the script) and an unprivileged one (`nobody`, chrooted to `/var/empty`; FreeBSD's `_dhcp` user isn't in macOS's user database, hence the one-line warning). Leases persist in `/var/db/dhclient.leases.en0`; renewal and rebinding are dhclient's own. The script is FreeBSD's, adapted by patch 0002:
 - Darwin's `ifconfig` has no `-n`; `arp` isn't built yet (P4-24), so the ARP flush is skipped.
-- `resolvconf_enable=NEODARWIN` (the new default): the name servers and search domain go to `/var/run/resolv.conf` (`RESOLV_CONF`), then `SIGHUP` to mDNSResponder (`/var/run/mDNSResponder.pid`). An expired lease removes the file. FreeBSD's other modes stay.
+- The name servers and search domain go to `resolvconf -a <interface>`, as on FreeBSD (`resolvconf_enable` YES, FreeBSD's default), and an expired lease takes them away (`resolvconf -d`). NeoDarwin's `resolvconf(8)` is FreeBSD's openresolv, which writes the merged `/var/run/resolv.conf` and sends `SIGHUP` to mDNSResponder ("IPv6 DNS: RDNSS and DHCPv6"). Until then patch 0002 wrote `/var/run/resolv.conf` itself (a `resolvconf_enable=NEODARWIN` mode).
 - Local policy goes in `/etc/dhclient-enter-hooks` and `/etc/dhclient-exit-hooks`, as on FreeBSD; options in `/etc/dhclient.conf`.
 
 A static interface: `ifconfig_en0="inet 192.0.2.10/24"` and `defaultrouter="192.0.2.1"` in `/etc/netconfigd.conf`; name servers then go in a plain `/etc/resolv.conf` replacing the link.
@@ -272,7 +278,7 @@ Every other image with launchd now starts mDNSResponder and netconfigd too, so `
 | After the OFFER: `buf_read: Bad file descriptor`, `short write`. dhclient's two processes talk both ways over a `pipe()`; FreeBSD's pipes are bidirectional, Darwin's aren't | patch 0001: a socket pair on Darwin |
 | `can't drop privileges: Operation not permitted`: Darwin's `setuid()` without privilege takes only the real or saved ID, so FreeBSD's `seteuid()` then `setuid()` fails | patch 0001: `setuid()` as root, which sets all three |
 | xnu's BPF has no `BIOCSETWF`, `BIOCLOCK`, `BIOCSETVLANPCP`; the routing socket no `RTM_IFANNOUNCE` or `RTM_IEEE80211`; there is no Capsicum, Casper or netlink | patch 0001 guards; `compat/`; `-DWITHOUT_NETLINK`. The unprivileged process's descriptors aren't limited (no Capsicum, no write filter): its sandbox is the chroot and `nobody` |
-| `dhclient-script`'s `ifconfig -n` and `resolvconf(8)` are FreeBSD's | patch 0002 |
+| `dhclient-script`'s `ifconfig -n` and `resolvconf(8)` are FreeBSD's | patch 0002; since "IPv6 DNS: RDNSS and DHCPv6" `resolvconf(8)` is built (FreeBSD's openresolv) and the script uses it unchanged |
 | mDNSResponder's POSIX daemon rereads `resolv.conf` (start, `SIGHUP`) without the core's lock and logs "Lock failure ... caller: mDNS_AddDNSServer" | `daemon-patches/0001` |
 | The mDNS core advertises the host name's address records only while a service with an automatic target is registered (`AdvertiseInterfaceIfNeeded`, `AutoTargetServices`), so `localhost.local` doesn't resolve on an idle system (the host name is `localhost`, too) | expected; the test registers its own record with `dns-sd -P` |
 | `dns-sd -P` logs `getaddrinfo] dlopen("...libnetwork.dylib") failed`: Libinfo tries Network.framework's closed `libnetwork` for some lookups | expected; Libinfo falls back to its own path |
@@ -281,7 +287,7 @@ Every other image with launchd now starts mDNSResponder and netconfigd too, so `
 
 ### Limits
 
-- IPv4 only: no DHCPv6 and no router solicitation handling beyond the kernel's own (IPv6 link-local only); the IPv6-only option (RFC 8925) is never honoured (no netlink). Since P4-24, IPv6 autoconfigures ("P4-24: the rest of network_cmds and IPv6").
+- IPv4 only: no DHCPv6 and no router solicitation handling beyond the kernel's own (IPv6 link-local only); the IPv6-only option (RFC 8925) is never honoured (no netlink). Since P4-24, IPv6 autoconfigures ("P4-24: the rest of network_cmds and IPv6"), with RDNSS and DHCPv6 ("IPv6 DNS: RDNSS and DHCPv6").
 - Interfaces are found by name (`en*`); one default route, the first lease's (dhclient-script's `is_default_interface`).
 - netconfigd doesn't stop a client when its interface is removed (dhclient exits when the interface goes down) and doesn't reread its configuration (restart the job).
 - No `arp`, `ndp` or `traceroute` (built since P4-24), no `nslookup`/`dig` (macOS's are BIND's, not in the release set).
@@ -443,15 +449,15 @@ Part of **P4-24** (its status is set in `roadmap/backlog.yaml`, not here). The r
 |---|---|---|---|
 | `arp` | `/usr/sbin/arp` | 0555 | |
 | `ndp` | `/usr/sbin/ndp` | 0555 | |
-| `ping6` | `/sbin/ping6` | 0555 | still its own program in 726 (ping has no `-6`), as `/sbin/ping6` on macOS 26. The target links libipsec but doesn't define `IPSEC`, so nothing uses it: built the same, without it |
-| `traceroute` | `/usr/sbin/traceroute` | 4555 | links libpcap, but only for TCP probes (`-P tcp`); NeoDarwin has no libpcap yet, so `compat/pcap/pcap.h` makes `pcap_create` fail: `-P tcp` exits with `pcap_open_live(en0) failed: libpcap is not built`. UDP (the default) and ICMP (`-I`) probes work |
-| `traceroute6` | `/usr/sbin/traceroute6` | 4555 | the same for TCP probes; Apple defines `IPSEC` and links libipsec for an IPsec bypass policy on its sockets: built without it (NeoDarwin has no libipsec) |
-| `rtsol`, `rtsold` | `/sbin/rtsol`, `/usr/sbin/rtsold` (a hard link, as the target's install phase makes) | 0555 | one program: a name not ending in `d` is the one-shot solicitor. **macOS doesn't install it** (no aggregate target includes it; IPConfiguration solicits routers itself); NeoDarwin's netconfigd runs it (below). Patch 0002 |
+| `ping6` | `/sbin/ping6` | 0555 | still its own program in 726 (ping has no `-6`), as `/sbin/ping6` on macOS 26. The target links libipsec but doesn't define `IPSEC`, so nothing calls it; linked as on macOS ("libpcap and tcpdump") |
+| `traceroute` | `/usr/sbin/traceroute` | 4555 | links libpcap (`/usr/lib/libpcap.A.dylib`), used only for TCP probes (`-P tcp`): the target's SYN-ACK or RST reaches no socket, so traceroute captures it on the outgoing interface ("libpcap and tcpdump") |
+| `traceroute6` | `/usr/sbin/traceroute6` | 4555 | the same for TCP probes; `IPSEC` defined and libipsec linked, as Apple builds it, for an IPsec bypass policy on its sockets |
+| `rtsol`, `rtsold` | — | — | **no longer built from 726** ("IPv6 DNS: RDNSS and DHCPv6"): `/sbin/rtsol` and `/usr/sbin/rtsold` are FreeBSD's newer program (`base/rtsold`), with RDNSS, DNSSL and the M/O scripts. macOS installs neither (no aggregate target includes 726's; IPConfiguration solicits routers itself). 726's patch 0002 went with it, its fix carried over (rtsold patch 0001) |
 | `rarpd` | `/usr/sbin/rarpd` | 0555 | built as on macOS, `TFTP_DIR` `/tftpboot`; nothing runs it |
 | `spray` | `/usr/sbin/spray` | 0555 | Sun RPC (Libinfo's) |
 | `kdumpd` | `/usr/libexec/kdumpd`, `com.apple.kdumpd.plist` | 0555, 0644 | the kernel-core receiver; its job (UDP 1069, through launchproxy) is `Disabled`, as on macOS |
 
-Not built: **rtadvd**, because network_cmds-726 has no sources for it (`rtadvd.tproj` holds only `run-rtadvd`, a test script; macOS's `/usr/sbin/rtadvd` comes from elsewhere); **dnctl**, dummynet's control, which belongs with pf; and `network_cmds_lib_test`, a test tool.
+Not built from 726: **rtadvd**, because network_cmds-726 has no sources for it (`rtadvd.tproj` holds only `run-rtadvd`, a test script; macOS's `/usr/sbin/rtadvd` comes from elsewhere): FreeBSD's is built instead ("rtadvd", below); **dnctl**, dummynet's control, which belongs with pf; and `network_cmds_lib_test`, a test tool.
 
 ### IPv6 autoconfiguration
 
@@ -463,10 +469,10 @@ On macOS, IPConfiguration's automatic-v6 service starts IPv6 on an interface wit
 | enable it | `ND6_IFF_IFDISABLED` cleared | `ifconfig en0 inet6 -ifdisabled` |
 | link-local address | `SIOCLL_START` (with CGA parameters on current macOS) | `SIOCLL_START`: EUI-64, optimistic DAD |
 | accept router advertisements | `SIOCAUTOCONF_START` | the same ioctl |
-| solicit a router | IPConfiguration's own solicitations, on link up | `rtsol en0`, each time the link comes up (`SIOCGIFMEDIA`) |
+| solicit a router | IPConfiguration's own solicitations, on link up | `rtsol en0`, each time the link comes up (`SIOCGIFMEDIA`); since "IPv6 DNS: RDNSS and DHCPv6", FreeBSD's `rtsold -f` for the interface, which solicits when the link comes up and reads every advertisement |
 | prefixes, addresses (with RFC 4941 temporary ones), default route | the kernel (`nd6_rtr.c`) | the kernel, unchanged |
-| DNS servers from RDNSS | IPConfiguration, to configd's DNS configuration | not read (below) |
-| DHCPv6 (the M and O flags) | IPConfiguration's DHCPv6 client | **not done** (out of scope) |
+| DNS servers from RDNSS | IPConfiguration, to configd's DNS configuration | rtsold, to `resolvconf(8)` ("IPv6 DNS: RDNSS and DHCPv6") |
+| DHCPv6 (the M and O flags) | IPConfiguration's DHCPv6 client | rtsold's M and O scripts start `dhcp6c` ("IPv6 DNS: RDNSS and DHCPv6") |
 
 The three requests are `PRIVATE` in xnu's `<netinet6/in6_var.h>` (the SDK's copy leaves them out), so `netconfig_shim.h` defines their codes, with an `nd_ioctl` wrapper as launchctl's shim has. `/etc/netconfigd.conf` takes FreeBSD's `rc.conf` names: `ifconfig_<if>_ipv6` (then `ifconfig_DEFAULT_ipv6`) is `AUTOCONF` (the default; FreeBSD's `inet6 accept_rtadv` means the same), `NONE`, or a static `ifconfig` argument list such as `inet6 2001:db8::10 prefixlen 64`, with `ipv6_defaultrouter`. An interface whose IPv4 line is `NONE` gets no IPv6 unless it has its own line.
 
@@ -475,8 +481,7 @@ On QEMU 11.1.1's user network (libslirp 4.9.5: prefix fec0::/64, gateway fec0::2
 ```
 netconfigd: en0: DHCP (dhclient -d en0, pid 12)
 netconfigd: en0: IPv6 autoconfiguration (link-local address started, router advertisements accepted)
-netconfigd: en0: IPv6 autoconfiguration (rtsol en0, pid 14)
-netconfigd: en0: rtsol exited (status 0)
+netconfigd: en0: IPv6 autoconfiguration (rtsold -f -R /sbin/resolvconf -M /usr/libexec/dhcp6c-managed -O /usr/libexec/dhcp6c-other en0, pid 14)
 $ ifconfig en0 inet6
         inet6 fe80::5054:ff:fe12:3456%en0 prefixlen 64 scopeid 0x4
         inet6 fec0::5054:ff:fe12:3456 prefixlen 64 autoconf
@@ -485,11 +490,11 @@ $ netstat -rn -f inet6
 default                                 fe80::2%en0                             UGcIg                 en0
 ```
 
-**DNS.** xnu doesn't read RDNSS options (on macOS IPConfiguration does, and gives the servers to configd), and rtsol-726 doesn't either. `/etc/resolv.conf` keeps the DHCP lease's servers (10.0.2.3 on slirp), so mDNSResponder asks over IPv4, AAAA queries included. On an IPv6-only network there is no unicast DNS until RDNSS or DHCPv6 is handled.
+**DNS.** xnu doesn't read RDNSS options (on macOS IPConfiguration does, and gives the servers to configd), and rtsol-726 doesn't either. `/etc/resolv.conf` keeps the DHCP lease's servers (10.0.2.3 on slirp), so mDNSResponder asks over IPv4, AAAA queries included. On an IPv6-only network there was no unicast DNS until RDNSS and DHCPv6 were handled: "IPv6 DNS: RDNSS and DHCPv6" (rtsold, dhcp6c, resolvconf, and mDNSResponder's IPv6 servers).
 
 ### Tests
 
-`NET_TOOLS` in `kernel/BUILD.bazel`, part of `NET_SESSION`, so `sbsa_net_test`, `sbsa_net_intx_test` and `sbsa_ref_net_test` all run it. Root waits (up to 30 s) for rtsol to finish and the IPv6 default route, then checks:
+`NET_TOOLS` in `kernel/BUILD.bazel`, part of `NET_SESSION`, so `sbsa_net_test`, `sbsa_net_intx_test` and `sbsa_ref_net_test` all run it. Root waits (up to 30 s) for rtsol to finish and the IPv6 default route (since "IPv6 DNS: RDNSS and DHCPv6", for dhcp6c's reply), then checks:
 - netconfigd's log lines above;
 - `arp -an`: `? (10.0.2.2) at 52:55:a:0:2:2 on en0 ifscope [ethernet]` (after a ping);
 - `traceroute -n -I -m 3 10.0.2.2`: hop 1 is 10.0.2.2. ICMP probes, because slirp answers an echo to the gateway whatever its hop limit, while UDP probes to 10.0.2.2 are forwarded to the host's loopback;
@@ -503,21 +508,246 @@ default                                 fe80::2%en0                             
 
 | Finding | Fix |
 |---|---|
-| rtsol run at boot exited at once with status 0 and sent nothing: xnu gives a new link-local address optimistic DAD, rtsol's `interface_up()` reports `IFS_OPTIMISTIC`, which neither caller handles, so the interface counts as down, and the one-shot rtsol exits when every interface is down. A manual `rtsol en0` a few seconds later worked | network_cmds patch 0002: optimistic is treated as tentative (wait for DAD, then solicit; RFC 4429 asks that of a solicitation carrying a link-layer address option). macOS never runs rtsol, which is why the bug went unnoticed |
-| The one-shot rtsol also gives up on an interface whose link is down | netconfigd starts it when the link comes up (and again after every link-down), not when it configures the interface |
-| traceroute and traceroute6 link libpcap; traceroute6 and ping6 link libipsec; NeoDarwin builds neither | a failing `pcap.h` for TCP probes (`base/network_cmds/compat`); traceroute6 without `IPSEC` |
+| rtsol run at boot exited at once with status 0 and sent nothing: xnu gives a new link-local address optimistic DAD, rtsol's `interface_up()` reports `IFS_OPTIMISTIC`, which neither caller handles, so the interface counts as down, and the one-shot rtsol exits when every interface is down. A manual `rtsol en0` a few seconds later worked | network_cmds patch 0002: optimistic is treated as tentative (wait for DAD, then solicit; RFC 4429 asks that of a solicitation carrying a link-layer address option). macOS never runs rtsol, which is why the bug went unnoticed (FreeBSD's rtsold, which replaced it, has the same fix: rtsold patch 0001) |
+| The one-shot rtsol also gives up on an interface whose link is down | netconfigd starts it when the link comes up (and again after every link-down), not when it configures the interface (since "IPv6 DNS", rtsold runs as a daemon and watches the link itself) |
+| traceroute and traceroute6 link libpcap; traceroute6 and ping6 link libipsec; NeoDarwin built neither | first a failing `pcap.h` and traceroute6 without `IPSEC`; since "libpcap and tcpdump", both libraries are built and the three link them as on macOS |
 | traceroute6 includes traceroute's `as.h`, which Xcode finds through its header map | `-Itraceroute.tproj` |
 | slirp forwards UDP to 10.0.2.2 to the host's 127.0.0.1, so a UDP traceroute to the gateway probes the host | the tests use ICMP probes (`-I`) |
-| `ld` warns that traceroute's 64 KiB `pcap_buffer` has its `__common` alignment reduced | harmless (the buffer is unused without libpcap) |
+| `ld` warns that traceroute's 64 KiB `pcap_buffer` has its `__common` alignment reduced | harmless: the buffer needs no more than 16 KiB alignment |
 
 ### Deferred
 
-- DHCPv6 (stateful addresses, or other configuration on the O flag) and RDNSS/DNSSL.
-- rtadvd and router mode (no sources in 726); dnctl (with pf).
-- libpcap (traceroute's TCP probes) and libipsec (IPsec policies in ping6 and traceroute6).
+- DHCPv6 (stateful addresses, or other configuration on the O flag) and RDNSS/DNSSL: done since "IPv6 DNS: RDNSS and DHCPv6".
+- rtadvd and router mode (no sources in 726): done since "rtadvd", with FreeBSD's; dnctl (with pf).
 - CGA or stable-privacy link-local addresses as current macOS uses; NeoDarwin's are EUI-64.
-- dhclient-script still skips its ARP flush (dhclient patch 0002), written when there was no `arp`.
+- dhclient-script skipped its ARP flush (dhclient patch 0002) while there was no `arp`; with `arp` built the flush runs (the guard stays, for a system without it).
+
+## libpcap and tcpdump
+
+Part of **P4-24**. Apple's packet-capture library and `tcpdump`, from the macOS 26.0 release set, and Apple's libipsec, which ping6 and traceroute6 link. traceroute's TCP probes (`-P tcp`) now work, and root can capture on en0, as on macOS and FreeBSD (both ship `tcpdump` in the base).
+
+| Image | Installed | Source | Notes |
+|---|---|---|---|
+| `libpcap.A.dylib` (+ `libpcap.dylib` link) | `/usr/lib`, install name `/usr/lib/libpcap.A.dylib`, versions 1/1 | libpcap-144 (libpcap 1.10.1 with Apple's pktap, pcapng writer and process/interface tables) | `base/libpcap/build.sh` replays the Xcode target: the drop's `config.h`, `grammar.y`/`scanner.l` through the toolchain's bison 2.3 and flex 2.6.4, `PRIVATE` and `HAVE_PKTAP_API`, hidden by default. Exports: all **200** of the SDK's `libpcap.A.tbd` (`//base:libpcap_exports_test`). Headers (private variants) build-only in `usr/local/include` |
+| `libipsec.A.dylib` (+ `libipsec.dylib`) | `/usr/lib`, install name `/usr/lib/libipsec.A.dylib`, current 300, compatibility 1 | ipsec-1125 (KAME's libipsec as ipsec-tools 0.7 ships it); only the library | five sources and a yacc/lex parser; exports all **45** of the SDK's `libipsec.A.tbd` (`//base:libipsec_exports_test`) |
+| `tcpdump` | `/usr/sbin/tcpdump`, 0755 root:wheel as on macOS | tcpdump-153 (tcpdump 4.99.1 with Apple's pktap, pcapng and metadata-filter printing) | links `libpcap.A.dylib` and OpenSSL 3.5's `libcrypto.3.dylib` (ESP decryption, `-E`; macOS links LibreSSL's `libcrypto.46` and `libssl.48`); signed ad hoc without Apple's `com.apple.private.skywalk.observe-all`. Patch 0001 |
+
+traceroute (`-lpcap`), traceroute6 (`-lpcap -lipsec`, `IPSEC` defined) and ping6 (`-lipsec`) now link what their targets link, so their load commands match macOS 26's; network_cmds' patch series is unchanged (no new patch was needed), and its failing `compat/pcap/pcap.h` is gone.
+
+**BPF devices.** xnu's `bpf_init()` makes `/dev/bpf0`… at boot and one more each time the last is opened, `root:wheel` mode **0600** (`bpf_make_dev_t`), as on macOS: no kernel change. So `tcpdump` is root's. traceroute is setuid root but drops privileges at start-up, before it opens its capture, so `-P tcp` works for root only, as on macOS.
+
+**Closed pieces.** None needed: libpcap's `pcap-darwin.c` uses xnu's private `net/pktap.h` and `net/iptap.h` and `libproc`, all in the sysroot. Two differences from Apple's build environment:
+
+- Apple's internal SDK defines `SPI_AVAILABLE` (and `SPI_DEPRECATED_WITH_REPLACEMENT`) as availability attributes, and clang gives a declaration with one default visibility; the public SDK's are empty. Under `GCC_SYMBOLS_PRIVATE_EXTERN` that hid 95 of the 200 exports (the pcapng writer, pktap, the process and interface tables). `base/libpcap/compat/nd_spi_available.h`, force-included into libpcap and tcpdump, defines them as default visibility.
+- tcpdump copies its command line, everything it writes to standard error and its `-v` statistics to the unified log (`os_log`). NeoDarwin's libsystem_trace stand-in writes `os_log` to standard error, so each line would appear twice, and it has no `_os_log_impl`. tcpdump patch 0001 leaves the copies out under `NEODARWIN_NO_LOG_STORE`.
+
+### Tests
+
+`//kernel:sbsa_net_capture_test` (`NET_CAPTURE` in `kernel/BUILD.bazel`): its own boot on virt with virtio-net on slirp, so the three net tests keep their time budgets; root waits for en0's DHCP address, then (about 16 s in all):
+
+```
+# tcpdump -n -c 2 -i en0 icmp > /tmp/td.txt 2> /tmp/td.err & sleep 3; ping -c 2 10.0.2.2 > /dev/null; ...
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on en0, link-type EN10MB (Ethernet), snapshot length 524288 bytes
+2 packets captured
+4 packets received by filter
+0 packets dropped by kernel
+02:11:35.112771 IP 10.0.2.15 > 10.0.2.2: ICMP echo request, id 50432, seq 0, length 64
+02:11:35.113036 IP 10.0.2.2 > 10.0.2.15: ICMP echo reply, id 50432, seq 0, length 64
+# tcpdump -D
+1.en0 [Up, Running, Connected]
+2.lo0 [Up, Running, Loopback]
+3.gif0 [none]
+4.stf0 [none]
+# ls -l /dev/bpf0
+crw-------  1 root  wheel  0x17000000 Oct  2 02:10 /dev/bpf0
+# traceroute -n -e -P tcp -p $ND_HOSTFWD_PORT -m 3 -q 1 10.0.2.2
+traceroute to 10.0.2.2 (10.0.2.2), 3 hops max, 40 byte packets
+ 1  10.0.2.2  3.164 ms
+```
+
+- `test`'s `tcpdump -i en0` fails with `/dev/bpf0: Permission denied` (`bpf-denied-42`).
+- The TCP traceroute goes to the gateway at the run's `--hostfwd` port (a `--host-setup` writes it for `{hostfile:hostfwd_port}`), with a fixed port (`-e`). slirp hands a TCP connection to 10.0.2.2 to the host's loopback and answers the SYN once that connects: here QEMU's own forward listener, a port no other program holds, so the check is hermetic and never touches a host service. The SYN-ACK reaches no socket of traceroute's: only the capture sees it, so hop 1 proves libpcap works. (A closed port would get slirp's RST, also a TCP answer, but would probe whatever the host runs there.)
+- On the host, the built tcpdump reads tcpdump's own pcap and pcapng test captures and decrypts its ESP sample (`-E`, 3DES) through OpenSSL 3.5.
+
+### Findings
+
+| Finding | Fix |
+|---|---|
+| libpcap built with the drop's settings exported 105 of 200 symbols | `nd_spi_available.h` (above) |
+| tcpdump's unified-log copies would double its standard error with the trace stand-in, which also lacks `_os_log_impl` | tcpdump patch 0001 |
+| tcpdump-153's target compiles every `print-*.c` but tcpdump.org's `print-pktap.c` (Apple's `print_pktap.c` replaces it) | the build leaves it out |
+| libipsec's `policy_token.l` includes the parser's header as `y.tab.h`, and `policy_parse.y` includes racoon's `var.h`, both through Xcode's header map | the build copies the header to `y.tab.h` and searches `racoon/` |
+| traceroute's `-P tcp` reports a failed `pcap_activate()` with its own (empty) error buffer, not `pcap_geterr()` (from the source) | upstream behaviour, unchanged; it shows only when the capture can't be opened, e.g. for a non-root user |
+
+### Deferred
+
+- Capture on pktap (macOS's default when no `-i` is given, and `-i pktap,…`), process metadata (`-k`) and pcapng output (`-P`) are built but untested: they need xnu's pktap interface, which nothing here exercises.
+- tcpdump's `-E` uses OpenSSL 3.5's default provider; ciphers moved to the legacy provider (e.g. Blowfish, CAST) need it loaded.
+- Man pages (`tcpdump.1`, `pcap*.3`) wait for the man-page work, as for the other programs.
+
+## rtadvd
+
+Part of **P4-24** (its status is set in `roadmap/backlog.yaml`, not here). `/usr/sbin/rtadvd`, the IPv6 router advertisement daemon, and `/etc/rtadvd.conf` (FreeBSD's, every entry commented out: with no entry rtadvd advertises the prefixes of the interfaces it is given). It is router-side: nothing runs it at boot, and a NeoDarwin machine is a host unless root makes it a router.
+
+**Source.** network_cmds-726 has no rtadvd sources: `rtadvd.tproj` holds only `run-rtadvd`, a test script for a newer Apple rtadvd (its configuration uses keywords FreeBSD's lacks, `rdnssaddrs#`, `pvd`), and macOS's `/usr/sbin/rtadvd` is built from sources Apple doesn't publish. By the reuse order (`docs/repository.md` §3.1) FreeBSD's `usr.sbin/rtadvd` (KAME's, rewritten by Hiroki Sato in 2011) comes next, pinned per file at freebsd-src 050683bb8e13 by `base/rtadvd/freebsd.lock` (`@freebsd_rtadvd`, as `base/dhclient`). `base/rtadvd/build.sh` builds its Makefile's sources with `LIBADD util` (Apple's libutil has `pidfile(3)`), `__APPLE_USE_RFC_3542` (RFC 3542's `IPV6_RECVPKTINFO` and `IPV6_RECVHOPLIMIT`) and System.framework's PrivateHeaders (xnu's private `nd6.h`, `in6_var.h`, `if_private.h`, `sockio_private.h`), as network_cmds' rtsol and ndp are built. RDNSS, DNSSL, route information and PREF64 options are all kept. `run-rtadvd` isn't installed (its configuration is for the other rtadvd), but its steps are the ones to follow, and the test's (on its one interface, en0):
+
+```
+sysctl -w net.inet6.ip6.forwarding=1          # rtadvd sends no RA with a router lifetime without it
+ifconfig en0 inet6 routermode enabled         # IPV6_ROUTER_MODE_EXCLUSIVE: other routers' RAs ignored
+ifconfig en0 inet6 2001:db8:1::1 prefixlen 64
+rtadvd -c /etc/rtadvd.conf en0                # e.g. en0:rdnss="2001:db8:1::1":dnssl="example.test":
+```
+
+**What differs on xnu** (`compat/nd_rtadvd_compat.h`: `nitems`, `CLOCK_MONOTONIC_FAST` as `CLOCK_MONOTONIC`, `INFTIM`; patch 0001 for the rest, each change under `__APPLE__`):
+
+| FreeBSD | xnu | Patch 0001 |
+|---|---|---|
+| the routing socket pads addresses to a `long` | to 32 bits (`rtsock.c`, `ROUNDUP32`) | `NEXT_SA` pads to `uint32_t`, as rtsol's `if.c` does |
+| `RTM_IFANNOUNCE` for an interface's arrival and departure | none | an `RTM_IFINFO` from an unknown interface is its arrival; a departing one goes down first |
+| `SIOCGIFINFO_IN6` takes `struct in6_ndireq` | encoded with the shorter `struct in6_ondireq` | `in6_ondireq` (the fields read are at the same offsets) |
+| `ND6_IFF_ACCEPT_RTADV` says the interface takes RAs | never set ("APPLE: not used"); the flag is `IFEF_ACCEPT_RTADV` (`SIOCGIFEFLAGS`) | `IFEF_ACCEPT_RTADV` is reported as the ND flag, so rtadvd still refuses a non-zero router lifetime on an interface that accepts RAs |
+| `struct nd_opt_rdnss`, `nd_opt_dnssl`: the 8-octet fixed part | also hold the first address and 8 octets of domains (24 and 16 bytes) | the fixed part by `offsetof`; with `sizeof` each option would carry 16 stray zero octets (an extra `::` server, a mangled domain list) |
+| `nd_opt_pref64_sl_plc`, `nd_opt_prefix` | `nd_opt_pref64_scaled_lifetime_plc`, `nd_opt_pref64_prefix` | the names |
+| `SIOCSIFINFO_IN6` (rtadvd sets the kernel's hop limit and timers) | none | none: upstream already compiles it only where it exists |
+
+Router renumbering (`rrenum.c`) uses the prefix ioctls xnu has withdrawn (`EOPNOTSUPP`, "prefix ioctls are now invalidated"), as FreeBSD has. `rtadvctl`, the control client, isn't built (the control socket, `/var/run/rtadvd.sock`, is).
+
+### Two guests
+
+The harness boots one QEMU, and slirp's router can't be the device under test. `qemu_efi_test.sh` now has an opt-in second guest (`arm64-sbsa-bringup.md` §2.1.9, "Two guests"): `--peer-net DEV` starts it with the same kernel and image, `--link-net DEV` puts this guest on the same segment, a QEMU `dgram` netdev over two Unix datagram sockets in the run's own directory (no host port, no multicast). Two guests rather than one with two NICs: one machine can't be both, since `ip6.forwarding` is global and xnu accepts a locally generated RA on the advertising interface (`nd6_ra_input`, "for convenience"), and a ping between two of its own addresses never leaves it.
+
+`//kernel:sbsa_rtadvd_test` (virt, `neoverse-n2`, two guests of 2 GiB, `pam_session_root`):
+
+| Router (the peer) | Host (this guest) |
+|---|---|
+| one NIC, en0 (52:54:00:00:01:01), on the segment | one NIC, en0 (52:54:00:00:01:02), on the segment |
+| waits for en0's link-local address; `ip6.forwarding` on, en0 in router mode, 2001:db8:1::1/64 on it | netconfigd at boot: link-local address, `SIOCAUTOCONF_START`, the solicitor (no answer yet); dhclient finds no server |
+| `rtadvd -f -D` on en0 with `rdnss="2001:db8:1::1":dnssl="example.test":rltime#1800:maxinterval#4:mininterval#3:` (the prefix learned from en0) | the kernel takes the unsolicited RAs: `2001:db8:1:0:5054:ff:fe00:102 autoconf` (and a temporary address), the router in `ndp -rn` (`flags=IT, pref=medium`), the default route `UGcIg` via `fe80::5054:ff:fe00:101%en0`, `2001:db8:1::/64` on en0 |
+| pings the host's SLAAC address: answered (`hlim=64`) | pings 2001:db8:1::1: both answered |
+| waits for the host's solicitation in rtadvd's log (`<rs_input> RS received from fe80::5054:ff:fe00:102 on en0`); prints the RDNSS and DNSSL lengths and `ndp -an` | `rtsol en0` (exit 0; a solicited RA); prints `/var/run/resolv.conf` |
+
+Neither guest has a user-mode NIC: with two NICs the en* names follow the order in which the driver instances attach, not the PCI slots (a run gave the segment's NIC en0 and slirp's en1), so the router's interface wouldn't be known.
+
+
+xnu only checks the RDNSS and DNSSL options' lengths; the router's log checks they are encoded as RFC 8106 has them: `nd_opt_dnss_len = 3` (8 octets and one address, in units of 8) and `nd_opt_dnssl_len = 3` (8 octets and `example.test`, 14 octets, padded to 16); with `sizeof` they would be 5 and 4. The host's resolv.conf (rtsold and resolvconf, "IPv6 DNS: RDNSS and DHCPv6") is printed but not required: at the time of writing it read `search test` and no nameserver, which is what a reader that skips xnu's 24- and 16-byte structures instead of 8 octets makes of these options (the first address, and `\x07example`, skipped): the same structure difference on the receiving side.
+
+### Findings
+
+| Finding | Fix |
+|---|---|
+| xnu's routing socket pads addresses to 32 bits; FreeBSD's rtadvd steps by a `long` | patch 0001 (`NEXT_SA`) |
+| xnu's RDNSS and DNSSL structures are 16 bytes longer than the options' fixed part | patch 0001 (`offsetof`); the same applies to any FreeBSD RA reader built on xnu (rtsold) |
+| rtadvd's "accepts RAs" check reads `ND6_IFF_ACCEPT_RTADV`, which xnu never sets | patch 0001 reads `IFEF_ACCEPT_RTADV` |
+| No `RTM_IFANNOUNCE` on xnu | patch 0001: an unknown interface's `RTM_IFINFO` is its arrival |
+| The router autoconfigures from its own RAs: en0 got `2001:db8:1:0:5054:ff:fe00:101` and a temporary address beside the static one, though router mode (`EXCLUSIVE`) clears `IFEF_ACCEPT_RTADV` | none: xnu accepts a locally generated RA on the advertising interface by design (`nd6_ra_input`; `in6_autoconf`'s comment, "autoconfigured via a locally-generated RA"), as macOS does |
+| `ifconfig en0 inet6 routermode enabled` logs `en0: enable allmulti failed (102)`: NeoDarwinVirtioNet doesn't implement all-multicast | none needed here (rtadvd joins ff02::2 and receives solicitations); a router with multicast routing would need it |
+| ndp, ifconfig and ping6 print `2001:db8:1:0:5054:…` (KAME's form, no `::` for a single zero group) | the test matches that form |
+| The harness ran one guest | `--link-net`, `--peer-net` (above) |
+
+## IPv6 DNS: RDNSS and DHCPv6
+
+Part of **P4-24** (its status is set in `roadmap/backlog.yaml`, not here). IPv6 name servers now reach the resolver: from router advertisements (RFC 8106 RDNSS and DNSSL) and from DHCPv6, stateless (Information-Request, when an advertisement's O flag is set) or stateful (an address too, when M is set). Every source's servers merge in `/var/run/resolv.conf` with the DHCPv4 lease's, and mDNSResponder asks IPv6 servers too. The kernel still does the address autoconfiguration (SLAAC); nothing else touches addresses or routes from advertisements.
+
+### Decisions
+
+| Question | Decision | Why |
+|---|---|---|
+| Apple's client | **not usable**: IPConfiguration (bootp-534) has an RDNSS reader (`RTADVSocket.c`) and a DHCPv6 client (`DHCPv6Client.c`), but they are parts of its service state machine (`ipconfigd_threads.h`, `interfaces.h`), on CoreFoundation and SystemConfiguration's private SPI (`SCPrivate.h`), and give their results to configd | the reuse order (`docs/repository.md` §3.1): Apple first where it can do the job standalone; it can't |
+| Router advertisements | **FreeBSD's `rtsold`** (`usr.sbin/rtsold`, pinned per file, `base/rtsold/freebsd.lock`), replacing network_cmds-726's `rtsol`. Installed as FreeBSD installs it: `/usr/sbin/rtsold`, and `/sbin/rtsol` (the same program; the one-shot name) | 726's rtsol is KAME's program from before RDNSS: no RDNSS or DNSSL, no `-M`/`-O` scripts. FreeBSD's is the same program fifteen years on: RDNSS and DNSSL to `resolvconf -a`, with their lifetimes, and scripts on the M and O flags. macOS installs neither rtsol, so nothing of macOS's layout changes. It only reads advertisements and solicits; the kernel goes on doing SLAAC |
+| DHCPv6 client | **WIDE-DHCPv6's `dhcp6c`**, as FreeBSD's ports build it (`net/dhcp6`: hrs@'s fork, tag v20080615.2; `base/dhcp6c/wide.lock`), the client only | FreeBSD's base has no DHCPv6 client. Of the ports, `dhcp6c` is KAME's (rtsold's lineage) and speaks only DHCPv6; `dhcpcd` (BSD-2, `docs/architecture/freebsd-parity.md`'s fallback for DHCP) would also take router advertisements and SLAAC from the kernel (two daemons on the same job) and has no Darwin port. Darwin is a KAME stack (`__KAME__`), and `dhcp6c` built with its configure's answers and two patches |
+| Merging the servers | **FreeBSD's `resolvconf(8)`**, openresolv 3.17.4 (`contrib/openresolv`, `base/resolvconf`), fed by dhclient-script (key `en0`), rtsold (`en0:slaac`) and dhcp6c's script (`en0:dhcp6`) | the way FreeBSD does it, and the three feeders already speak it (dhclient-script and rtsold unchanged). `/etc/resolvconf.conf` is NeoDarwin's: the merged file is `/var/run/resolv.conf` (`/etc/resolv.conf` links to it, as on macOS), written atomically, and `libc_restart` sends `SIGHUP` to mDNSResponder. openresolv is plain `sh` with `cat`, `mkdir`, `rm`, `mv` and `sed`, all in the base |
+| What starts them | **netconfigd**: `rtsold -f` per autoconfiguring interface (restarted 10 s after it exits, like dhclient), with the M/O scripts by `ifconfig_<if>_dhcp6` | one supervisor for every interface's clients, as before; the scripts start `dhcp6c` when the flags ask |
+
+### Pieces
+
+| Where | What |
+|---|---|
+| `//base:router_solicitation` (`base/rtsold`) | `/usr/sbin/rtsold`, `/sbin/rtsol`. `compat/`: Capsicum and Casper as no-ops (built without `WITH_CASPER`, the services' functions are called directly), `nd_rtsold_compat.h` (`nitems`, `__DECONST`, `CLOCK_MONOTONIC_FAST`, `closefrom`, xnu's extended interface flags). Patch 0001 |
+| `//base:resolver_config` (`base/resolvconf`) | `/sbin/resolvconf`, `/usr/libexec/resolvconf/libc` (the only subscriber: `resolv.conf`), `/etc/resolvconf.conf` |
+| `//base:dhcp6_client` (`base/dhcp6c`) | `/usr/sbin/dhcp6c` (parser and scanner through the toolchain's yacc and lex); `/usr/libexec/dhcp6c-managed` and `dhcp6c-other` (one script, `dhcp6c-start`), rtsold's M and O scripts; `/usr/libexec/dhcp6c-script`, dhcp6c's. Patches 0001 and 0002 |
+| `base/dhclient` patch 0002 | the script hands its servers to `resolvconf` as FreeBSD's does (its own `/var/run/resolv.conf` writer is gone) |
+| `base/mdnsresponder` `daemon-patches/0002` | IPv6 name servers; servers gone from `resolv.conf` dropped |
+| `base/netconfigd` | rtsold instead of the one-shot rtsol; `ifconfig_<if>_dhcp6`, `rtsold_flags` |
+| `tests/qemu/net` | the net tests' `/etc/netconfigd.conf`: the system's, with `ifconfig_DEFAULT_dhcp6="INFORM"` |
+
+### Configuration
+
+`/etc/netconfigd.conf`, with `rc.conf`'s names where FreeBSD has one:
+
+| Name | Values | Default |
+|---|---|---|
+| `ifconfig_<if>_ipv6`, `ifconfig_DEFAULT_ipv6` | `AUTOCONF` (or FreeBSD's `inet6 accept_rtadv`): SLAAC and rtsold; `NONE`; a static `ifconfig` argument list | `AUTOCONF` (`NONE` for an interface whose IPv4 line is `NONE`) |
+| `ifconfig_<if>_dhcp6`, `ifconfig_DEFAULT_dhcp6` (NeoDarwin's; FreeBSD's base has no DHCPv6) | `AUTO`: as advertisements say (rtsold `-M dhcp6c-managed -O dhcp6c-other`); `INFORM`: stateless whatever the flags (`-A dhcp6c-other`, after the first advertisement); `ADDRESS`: stateful whatever the flags (`-A dhcp6c-managed`); `NONE` | `AUTO` |
+| `rtsold_flags` (FreeBSD's) | more `rtsold` options, e.g. `-d` (informational messages), `-u` (one resolvconf key per router) | none |
+
+A static interface adds no servers: `resolvconf -a <name> < file`, or replace the `/etc/resolv.conf` link with a file. `resolvconf -l` lists each source's lines.
+
+### How it runs
+
+```
+netconfigd
+  en0: SIOCPROTOATTACH_IN6, -ifdisabled, SIOCLL_START, SIOCAUTOCONF_START
+  rtsold -f -R /sbin/resolvconf -M /usr/libexec/dhcp6c-managed -O /usr/libexec/dhcp6c-other en0
+    solicits; each advertisement:      the kernel: prefix, addresses, default route
+      RDNSS, DNSSL                     resolvconf -a en0:slaac       (removed when their lifetime ends)
+      M on                             dhcp6c-managed en0 <router>   dhcp6c: Solicit/Request (IA_NA)
+      O on (M off)                     dhcp6c-other en0 <router>     dhcp6c: Information-Request
+        dhcp6c-script (REASON, interface, new_domain_name_servers, new_domain_name)
+                                       resolvconf -a en0:dhcp6       (-d on RELEASE, EXIT)
+  dhclient-script BOUND                resolvconf -a en0             (-d on EXPIRE)
+resolvconf: /var/run/resolv.conf (en0, then en0:dhcp6, en0:slaac; duplicates once), kill -HUP mDNSResponder
+```
+
+`dhcp6c` runs in the foreground, one per interface (`/var/run/dhcp6c.<if>.{conf,pid,mode}`), its messages in netconfigd's log; a stateless client is replaced by a stateful one when M turns on. Its DUID is `/var/db/dhcp6c_duid` (DUID-LLT from the first interface's MAC). There is no control key (`/etc/dhcp6cctlkey`), so no control port.
+
+On QEMU's user network (libslirp 4.9.5): its advertisements set neither M nor O, and carry RDNSS (fec0::3) **only when the host itself has an IPv6 name server** (`get_dns6_addr`); its DHCPv6 server answers Information-Request with fec0::3 always; fec0::3 forwards only to the host's IPv6 name server. The net tests' image therefore asks for `INFORM`. A run's log (`/var/log/netconfigd.log`; this host has IPv4 name servers only, so no RDNSS):
+
+```
+netconfigd: en0: IPv6 autoconfiguration (rtsold -f -R /sbin/resolvconf -A /usr/libexec/dhcp6c-other en0, pid 15)
+dhcp6c-other: en0: DHCPv6 (other) for router fe80::2: dhcp6c -f -d -c /var/run/dhcp6c.en0.conf en0
+client6_send: Sending Information Request
+client6_recvreply: dhcp6c Received INFOREQ
+client6_recvreply: no server ID option in a reply to Information-Request; taken
+dhcp6c-script: en0: INFOREQ: name servers fec0::3
+$ resolvconf -l
+# resolv.conf from en0
+nameserver 10.0.2.3
+# resolv.conf from en0:dhcp6
+nameserver fec0::3
+$ cat /etc/resolv.conf
+# Generated by resolvconf
+nameserver 10.0.2.3
+nameserver fec0::3
+```
+
+### Tests
+
+- The three net tests (`NET_TOOLS`, `NET_DNS6`): the log lines above, `resolvconf -l` and the merged `resolv.conf` (both servers). Then, if an RDNSS record came (`en0:slaac`), the DHCP lease's servers are withdrawn (`resolvconf -d en0`), `example.com` is looked up through fec0::3 alone, and the lease's are put back; the host checks the answer (`host: dns6: ...`) only when it has an IPv6 name server of its own and resolves the name, as the IPv4 check does, and otherwise says why it skipped (`host: dns6: skipped: the host has no IPv6 name server, ...` on this machine).
+- RDNSS and DNSSL hermetically: `//kernel:sbsa_rtadvd_test` ("rtadvd"), whose router advertises RDNSS 2001:db8:1::1 and DNSSL `example.test`: the host's `resolv.conf` has `nameserver 2001:db8:1::1` and `search example.test`.
+
+### Findings
+
+| Finding | Fix |
+|---|---|
+| Apple's rtsol-726 has no RDNSS, DNSSL or M/O scripts | FreeBSD's rtsold replaces it (`base/rtsold`); network_cmds no longer builds 726's, and its patch 0002 (optimistic DAD) moved to rtsold patch 0001 |
+| FreeBSD's rtsold reads "IPv6 disabled" and "accepts RAs" as ND flags (`SIOCGIFINFO_IN6`, `ND6_IFF_*`), which xnu keeps as extended interface flags (`IFEF_IPV6_DISABLED`, `IFEF_ACCEPT_RTADV`); xnu has no `RTM_IFANNOUNCE`; the SDK no `<netinet6/ip6_var.h>` | rtsold patch 0001: `SIOCGIFEFLAGS` (`nd_ifeflags`); `-F` only warns (netconfigd's `SIOCAUTOCONF_START` sets the flag) |
+| xnu's `struct nd_opt_rdnss` and `nd_opt_dnssl` include the first address and 8 octets of domains (24 and 16 bytes; FreeBSD's are the 8-octet header), so rtsold took the addresses at `sizeof()` and skipped the first: an RA with one RDNSS address gave a `search` line and no server (seen in `sbsa_rtadvd_test`, as rtadvd's agent found on the sending side) | rtsold patch 0001: `offsetof()` of the address and domain fields, 8 on both |
+| libslirp answers Information-Request without a Server Identifier, which RFC 8415 has a client discard: dhcp6c logged "no server ID option" and retried forever | dhcp6c patch 0002: a reply to Information-Request is taken without one, with a notice; every other reply still needs it |
+| dhcp6c runs its script with `REASON` and the options, not the interface, which a `resolvconf` key needs | dhcp6c patch 0001: `interface=<name>`, as dhclient-script has |
+| mDNSResponder's POSIX daemon read only IPv4 name servers (`inet_aton`, a 16-byte buffer): IPv6 servers were ignored | `daemon-patches/0002`: IPv6 addresses too (not link-local: the platform's unicast sends set no zone) |
+| The daemon added servers on every `SIGHUP` and never removed one (a withdrawn lease's server stayed); and at start, `uDNS_SetupDNSConfig()` deleted the servers `mDNSPlatformInit()` had just read, so a daemon started with `resolv.conf` in place had none until a `SIGHUP` | `daemon-patches/0002`: servers are read in `mDNSPlatformSetDNSConfig()`, as configd's on macOS, so the core keeps those listed and drops the rest; `Reconfigure()` calls `uDNS_SetupDNSConfig()` |
+| libslirp's advertisements carry RDNSS and its fec0::3 proxy forwards only when the host has an IPv6 name server (this one has none) | the guest's IPv6-only lookup and the host's check are conditional (above); the hermetic RDNSS check is the two-guest rtadvd test |
+| dhcp6c built with `-ll`'s `yywrap()` | `lex --noyywrap`, which is what `-ll` gives |
+
+### Limits
+
+- One `dhcp6c` per interface, each bound to port 546 with `SO_REUSEPORT`: with DHCPv6 on two interfaces at once a reply may reach the other interface's client, which drops it (wrong transaction) and retries.
+- Link-local IPv6 name servers (`fe80::1%en0`) are kept in `resolv.conf` but skipped by mDNSResponder.
+- mDNSPosix keeps one socket per query, of the family of the first server it asked; a query that fails over between an IPv4 and an IPv6 server can't send on it.
+- No DHCPv6 prefix delegation (IA_PD) or `rtsold` on a router; no RFC 8925 IPv6-only preference; Information-Request's refresh time is dhcp6c's (a day unless the server says).
+- A stateful address from `dhcp6c` (IA_NA) is added with `SIOCAIFADDR_IN6`, /128, as on FreeBSD; no QEMU test has a stateful server.
 
 ## What P4-24 still needs
 
-**P4-24** (the networking userland) builds on this. Done: the rest of network_cmds and SLAAC ("P4-24: the rest of network_cmds and IPv6"); pf with OpenBSD 4.3's `pfctl`, macOS's `/etc/pf.conf` and `com.apple.pfctl`, and an NTP client, Apple's `sntp` under `com.neodarwin.sntp` (`docs/base/pf-ntp.md`). Still to do: DHCPv6 and RDNSS; a persistent interface namer (with P3-08's `netd`); and whether NeoDarwin keeps FreeBSD's dhclient or moves to bootp's IPConfiguration once configd is built. Checkpoint 3 needed nothing more from the userland: netconfigd starts dhclient on whatever en* interface the TC956x driver attaches.
+**P4-24** (the networking userland) builds on this. Done: the rest of network_cmds and SLAAC ("P4-24: the rest of network_cmds and IPv6"); libpcap, libipsec and tcpdump ("libpcap and tcpdump"); pf with OpenBSD 4.3's `pfctl`, macOS's `/etc/pf.conf` and `com.apple.pfctl`, and an NTP client, Apple's `sntp` under `com.neodarwin.sntp` (`docs/base/pf-ntp.md`); IPv6 DNS, RDNSS and DHCPv6, merged with DHCP's by `resolvconf(8)` ("IPv6 DNS: RDNSS and DHCPv6"); a router's side, FreeBSD's `rtadvd` ("rtadvd"). Still to do: a persistent interface namer (with P3-08's `netd`); and whether NeoDarwin keeps FreeBSD's dhclient or moves to bootp's IPConfiguration once configd is built. Checkpoint 3 needed nothing more from the userland: netconfigd starts dhclient on whatever en* interface the TC956x driver attaches.

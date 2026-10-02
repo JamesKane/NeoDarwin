@@ -48,6 +48,7 @@ CI publishes the coverage (every status except `todo`, as a share of all rows) a
 | Periodic jobs | `cron`, `periodic` | `cron`, `periodic` under launchd | |
 | Firewall | `pf`, `pfctl`, `/etc/pf.conf` | `pf` (in xnu) and `pfctl` (OpenBSD 4.3's, built against xnu's `pfvar.h`, with xnu's `-E`/`-X` references and `scrub-anchor`/`dummynet-anchor`); `/etc/pf.conf` is macOS's, and `com.apple.pfctl` enables pf at boot when it isn't `Disabled` (P4-24, `docs/base/pf-ntp.md`) | FreeBSD's `ipfw` has no counterpart; recorded as `n/a`. No ALTQ: xnu has none |
 | Time | `ntpd`, `ntpdate`, `/etc/ntp.conf` | Apple's `sntp` (ntp-139) run by the `com.neodarwin.sntp` job from `/etc/ntp.conf`'s `server` and `pool` lines (P4-24, `docs/base/pf-ntp.md`) | a client only: no `ntpd` (Apple's links closed libraries; FreeBSD's ntpd remains the way to serve time). Off by default, as `ntpd_enable="NO"` |
+| Resolver and IPv6 autoconfiguration | `resolvconf` (openresolv) and `/etc/resolvconf.conf`; `rtsold` (RDNSS, DNSSL, `-M`/`-O` scripts); DHCPv6 from ports (`net/dhcp6`'s `dhcp6c`, or `dhcpcd`); `ifconfig_<if>_ipv6` in `/etc/rc.conf` | the same programs: FreeBSD's `resolvconf` and `rtsold`/`rtsol`, and `net/dhcp6`'s `dhcp6c` in the base, run by netconfigd, which takes `rc.conf`'s names from `/etc/netconfigd.conf` (`ifconfig_<if>_ipv6`, and NeoDarwin's `ifconfig_<if>_dhcp6` and `rtsold_flags`) (P4-24, `docs/kernel/network.md`, "IPv6 DNS: RDNSS and DHCPv6") | the merged file is `/var/run/resolv.conf` (`/etc/resolv.conf` links to it, as on macOS); mDNSResponder answers lookups and rereads it; the kernel does SLAAC, as with `accept_rtadv` |
 | Tracing | `dtrace` | `dtrace` (xnu's kernel side and Apple's open userland) | |
 | Documentation | `man`, `apropos` (mandoc) | mandoc, and every base program's page installed | |
 
@@ -84,6 +85,6 @@ These tasks are adapted from the FreeBSD Handbook. They run as scripts against a
 | Question | Options | Decide by |
 |---|---|---|
 | Partitioning tool | port FreeBSD's `gpt`-era tool onto IOStorageFamily, or write a GPT-only `ndpart` | P3-03, which needs a partitioning step in the installer |
-| DHCP client | Apple's open `bootp` and `IPConfiguration` source if it builds without closed dependencies, otherwise FreeBSD's `dhclient`, otherwise `dhcpcd` (BSD-2) | P4-24 |
+| DHCP client | Apple's open `bootp` and `IPConfiguration` source if it builds without closed dependencies, otherwise FreeBSD's `dhclient`, otherwise `dhcpcd` (BSD-2). IPv6 **decided (P4-24)**: IPConfiguration's DHCPv6 and RDNSS code is bound to its service threads, CoreFoundation and SystemConfiguration's private interfaces, so FreeBSD's `rtsold` (RDNSS, DNSSL) and `resolvconf`, and `net/dhcp6`'s `dhcp6c`, which leaves SLAAC to the kernel as `dhcpcd` wouldn't (`docs/kernel/network.md`, "IPv6 DNS: RDNSS and DHCPv6") | P4-24 |
 | NTP | **decided (P4-24)**: Apple's open `ntp` drop, ntp-139, for its `sntp`; its `ntpd` needs closed libraries (`docs/base/pf-ntp.md`). FreeBSD's `ntpd` if NeoDarwin is to serve time | P4-24 |
 | Default interactive shell | `sh` (FreeBSD's default for users), `tcsh` (FreeBSD's root shell until 14), or `zsh` (Darwin's) | P4-21 |
