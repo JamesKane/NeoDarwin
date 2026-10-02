@@ -1,0 +1,10 @@
+path	status	built
+bin/bar	n/a	no
+bin/cat	apple	yes
+bin/ls	apple	no
+bin/x86only	n/a	no
+sbin/foo	freebsd	no
+sbin/group/one	equivalent	yes
+sbin/group/two	port	no
+usr.bin/hello	new	yes
+usr.sbin/daemon	todo	no

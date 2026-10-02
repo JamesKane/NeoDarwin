@@ -1,0 +1,2 @@
+PROG=	helper
+BINDIR=	/sbin

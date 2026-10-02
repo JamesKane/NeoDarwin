@@ -1,0 +1,1 @@
+PROG=	x86only

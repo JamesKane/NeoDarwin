@@ -1,0 +1,2 @@
+PROG=	foo
+SUBDIR=	helper

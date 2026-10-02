@@ -1,0 +1,5 @@
+bin/cat
+bin/sh
+usr/bin/uno
+usr/bin/hello
+private/etc/passwd

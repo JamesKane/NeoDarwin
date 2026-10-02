@@ -1,0 +1,9 @@
+bin/bar	MK_BAR	no	/bin/bar
+bin/cat		yes	/bin/cat
+bin/ls		yes	/bin/ls /bin/dir
+bin/x86only	arch=amd64	no	/bin/x86only
+sbin/foo	MK_FOO	yes	/sbin/foo /sbin/helper
+sbin/group/one		yes	/sbin/one
+sbin/group/two		yes	/sbin/two
+usr.bin/hello		yes	/usr/bin/hello
+usr.sbin/daemon		yes	/usr/sbin/daemon

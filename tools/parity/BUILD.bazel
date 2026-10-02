@@ -1,0 +1,141 @@
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:swift.bzl", "nd_swift_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# The FreeBSD parity inventory (P4-20, docs/architecture/freebsd-parity.md
+# §2, README.md here).
+nd_swift_binary(
+    name = "parity",
+    srcs = [
+        "Inventory.swift",
+        "Make.swift",
+        "Walk.swift",
+        "main.swift",
+    ],
+)
+
+exports_files(["freebsd.lock"])
+
+# FreeBSD's program set (path, cond, aarch64, names) from the pinned
+# Makefiles (@freebsd_parity, freebsd.lock).
+genrule(
+    name = "programs",
+    srcs = [
+        "freebsd.lock",
+        "@freebsd_parity//:all",
+        "@freebsd_parity//:share/mk/src.opts.mk",
+    ],
+    outs = ["programs.tsv"],
+    cmd = "$(execpath :parity) programs $$(dirname $$(dirname $$(dirname $(execpath @freebsd_parity//:share/mk/src.opts.mk)))) --lock $(execpath freebsd.lock) > $@",
+    tools = [":parity"],
+)
+
+# What the image installs: the session system's files (images/BUILD.bazel).
+_CONTENTS = "//images:session_root_contents"
+
+# The coverage report, in Markdown. CI publishes it (ci/parity.sh).
+genrule(
+    name = "coverage",
+    srcs = [
+        ":programs",
+        "inventory.tsv",
+    ],
+    outs = ["coverage.md"],
+    cmd = "$(execpath :parity) report --programs $(execpath :programs) --inventory $(execpath inventory.tsv) --out $@",
+    tools = [":parity"],
+)
+
+_CHECK_DATA = [
+    ":parity",
+    ":programs",
+    "inventory.tsv",
+    "baseline.tsv",
+    "//roadmap:backlog.yaml",
+    _CONTENTS,
+]
+
+_CHECK_ARGS = [
+    "--programs $(rootpath :programs)",
+    "--inventory $(rootpath inventory.tsv)",
+    "--baseline $(rootpath baseline.tsv)",
+    "--contents $(rootpath %s)" % _CONTENTS,
+    "--backlog $(rootpath //roadmap:backlog.yaml)",
+]
+
+# (a) one row per program directory of the pinned FreeBSD, and (b) a valid
+# status with what it needs (a source, a reason, a roadmap item).
+sh_test(
+    name = "inventory_test",
+    size = "small",
+    srcs = ["run.sh"],
+    args = ["$(rootpath :parity)", "check", "coverage", "statuses"] + _CHECK_ARGS,
+    data = _CHECK_DATA,
+)
+
+# (c) the ratchet: no row loses its status or stops being built unless
+# baseline.tsv records it (bazel run //tools/parity:accept).
+sh_test(
+    name = "ratchet_test",
+    size = "small",
+    srcs = ["run.sh"],
+    args = ["$(rootpath :parity)", "check", "ratchet"] + _CHECK_ARGS,
+    data = _CHECK_DATA,
+)
+
+# (d) the built column is what the image installs.
+sh_test(
+    name = "built_test",
+    size = "small",
+    srcs = ["run.sh"],
+    args = ["$(rootpath :parity)", "check", "built"] + _CHECK_ARGS,
+    data = _CHECK_DATA,
+)
+
+# The walker and the checks on a small tree with known answers.
+sh_test(
+    name = "selftest",
+    size = "small",
+    srcs = ["selftest.sh"],
+    args = ["$(rootpath :parity)"],
+    data = [":parity"] + glob(["testdata/**"]),
+)
+
+# bazel run //tools/parity:update — new program directories as todo rows,
+# removed ones dropped, built from the image.
+sh_binary(
+    name = "update",
+    srcs = ["update.sh"],
+    args = [
+        "update",
+        "$(rootpath :parity)",
+        "$(rootpath :programs)",
+        "$(rootpath %s)" % _CONTENTS,
+    ],
+    data = [
+        ":parity",
+        ":programs",
+        _CONTENTS,
+    ],
+)
+
+# bazel run //tools/parity:accept [-- --regress] — baseline.tsv from the
+# inventory.
+sh_binary(
+    name = "accept",
+    srcs = ["update.sh"],
+    args = [
+        "accept",
+        "$(rootpath :parity)",
+    ],
+    data = [":parity"],
+)
+
+# bazel run //tools/parity:lock -- CHECKOUT RELEASE — re-pin freebsd.lock.
+sh_binary(
+    name = "lock",
+    srcs = ["lock.sh"],
+    args = ["$(rootpath :parity)"],
+    data = [":parity"],
+)

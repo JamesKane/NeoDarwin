@@ -7,6 +7,8 @@ from a local checkout. Each file is downloaded from
 `url_template.format(commit = ..., path = ...)` and checked against its hash.
 """
 
+_PARALLEL = 32
+
 def _impl(ctx):
     lock = ctx.read(ctx.path(ctx.attr.lockfile))
     commit = None
@@ -20,12 +22,20 @@ def _impl(ctx):
             files.append((path, sha256))
     if not commit or not files:
         fail("%s: needs a '# commit:' line and at least one file" % ctx.attr.lockfile)
-    for path, sha256 in files:
-        ctx.download(
-            url = ctx.attr.url_template.format(commit = commit, path = path),
-            output = path,
-            sha256 = sha256,
-        )
+    # Up to _PARALLEL downloads at a time: a lock of a thousand files
+    # (tools/parity/freebsd.lock) takes minutes one by one.
+    for start in range(0, len(files), _PARALLEL):
+        pending = [
+            ctx.download(
+                url = ctx.attr.url_template.format(commit = commit, path = path),
+                output = path,
+                sha256 = sha256,
+                block = False,
+            )
+            for path, sha256 in files[start:start + _PARALLEL]
+        ]
+        for p in pending:
+            p.wait()
     ctx.file("BUILD.bazel", ctx.read(ctx.path(ctx.attr.build_file)))
 
 pinned_files = repository_rule(

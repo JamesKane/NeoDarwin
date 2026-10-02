@@ -626,6 +626,15 @@ pinned_files(
     url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
 )
 
+# The parity inventory's FreeBSD (tools/parity, docs/architecture/freebsd-parity.md
+# §2): the Makefiles of bin, sbin, usr.bin and usr.sbin at 15.1-RELEASE.
+pinned_files(
+    name = "freebsd_parity",
+    build_file = "//tools/parity:freebsd.BUILD",
+    lockfile = "//tools/parity:freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
 # configd-1385.0.7's dnsinfo.h, for libresolv (base/libresolv): configd
 # itself isn't built.
 pinned_files(

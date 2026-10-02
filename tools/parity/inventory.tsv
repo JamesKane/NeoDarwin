@@ -1,0 +1,757 @@
+# NeoDarwin parity inventory (P4-20, docs/architecture/freebsd-parity.md §2): one row per FreeBSD 15.1-RELEASE
+# program directory of bin, sbin, usr.bin and usr.sbin (tools/parity/freebsd.lock). Edit status, source, provides,
+# roadmap and note by hand; bazel run //tools/parity:update adds new directories and sets built from the image;
+# bazel run //tools/parity:accept records the result in baseline.tsv. docs/architecture/freebsd-parity.md §2 has the columns.
+path	status	source	provides	roadmap	built	note
+bin/cat	apple	text_cmds-197		P4-21	yes	
+bin/chflags	apple	file_cmds-475		P4-21	no	
+bin/chio	n/a				no	SCSI media changers (CAM)
+bin/chmod	apple	file_cmds-475		P4-21	yes	
+bin/cp	apple	file_cmds-475		P4-21	yes	
+bin/cpuset	n/a				no	cpuset(2); xnu has affinity tags only
+bin/csh	apple	tcsh-75		P4-21	no	
+bin/date	apple	shell_cmds-326		P4-21	yes	
+bin/dd	apple	file_cmds-475		P4-21	no	
+bin/df	apple	file_cmds-475		P4-21	yes	
+bin/domainname	freebsd	FreeBSD bin/domainname		P4-21	no	
+bin/echo	apple	shell_cmds-326		P4-21	yes	
+bin/ed	apple	text_cmds-197		P4-21	no	
+bin/expr	apple	shell_cmds-326		P4-21	no	
+bin/freebsd-version	equivalent	ndpkg system status and uname	usr/sbin/ndpkg	P2-03	no	
+bin/getfacl	freebsd	FreeBSD bin/getfacl		P4-21	no	over Darwin's acl(3) (ACL_TYPE_EXTENDED); macOS uses ls -le
+bin/hostname	apple	shell_cmds-326		P4-21	yes	
+bin/kenv	equivalent	sysctl kern.bootargs (neoboot boot.cfg)	usr/sbin/sysctl	P1-08	yes	FreeBSD's loader environment
+bin/kill	apple	shell_cmds-326		P4-21	yes	
+bin/ln	apple	file_cmds-475		P4-21	yes	
+bin/ls	apple	file_cmds-475		P4-21	yes	
+bin/mkdir	apple	file_cmds-475		P4-21	yes	
+bin/mv	apple	file_cmds-475		P4-21	yes	
+bin/nproc	freebsd	FreeBSD bin/nproc		P4-21	no	
+bin/pax	apple	file_cmds-475		P4-21	no	
+bin/pkill	apple	adv_cmds-237		P4-21	no	
+bin/ps	apple	adv_cmds-237		P4-21	yes	
+bin/pwait	freebsd	FreeBSD bin/pwait		P4-21	no	
+bin/pwd	apple	shell_cmds-326		P4-21	yes	
+bin/realpath	apple	shell_cmds-326		P4-21	no	
+bin/rm	apple	file_cmds-475		P4-21	yes	
+bin/rmail	port	mail/sendmail			no	sendmail is an option in FreeBSD too (MK_SENDMAIL)
+bin/rmdir	apple	file_cmds-475		P4-21	no	
+bin/setfacl	freebsd	FreeBSD bin/setfacl		P4-21	no	over Darwin's acl(3) (ACL_TYPE_EXTENDED); macOS uses chmod +a
+bin/sh	apple	shell_cmds-326		P4-21	yes	
+bin/sleep	apple	shell_cmds-326		P4-21	yes	
+bin/stty	apple	adv_cmds-237		P4-21	yes	
+bin/sync	apple	system_cmds-1039		P4-21	no	
+bin/test	apple	shell_cmds-326		P4-21	yes	
+bin/timeout	freebsd	FreeBSD bin/timeout		P4-21	no	not in macOS
+bin/uuidgen	freebsd	FreeBSD bin/uuidgen		P4-21	no	macOS's uuidgen is unpublished; over uuid_generate(3)
+sbin/adjkerntz	n/a				no	a local-time RTC for x86 dual boot; UEFI keeps UTC
+sbin/bectl	equivalent	ndpkg system list, activate and rollback	usr/sbin/ndpkg	P2-03	no	boot environments (§3)
+sbin/bsdlabel	n/a				no	not built for FreeBSD/arm64 (arch=amd64 || arch=i386 || arch=arm || arch=powerpc64)
+sbin/camcontrol	n/a				no	CAM; disks are IOStorageFamily (ioreg)
+sbin/ccdconfig	n/a				no	GEOM (§5); striping is ZFS
+sbin/clri	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
+sbin/comcontrol	n/a				no	uart(4) ioctls
+sbin/conscontrol	n/a				no	FreeBSD console multiplexing
+sbin/ddb	n/a				no	ddb; xnu debugs with kdp and lldb
+sbin/decryptcore	n/a				no	dump-device crash dumps; xnu dumps over kdp (kdumpd) or to a core file
+sbin/devd	equivalent	launchd jobs triggered by IOKit matching	sbin/launchd	P4-23	yes	§3
+sbin/devfs	n/a				no	devfs rules; xnu's devfs has none
+sbin/devmatch	n/a				no	IOKit matches drivers in the kernel
+sbin/dhclient	freebsd	freebsd-src 050683bb8e13		P4-24	yes	DHCP client (base/dhclient)
+sbin/dmesg	apple	system_cmds-1039		P4-21	no	
+sbin/dump	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
+sbin/dumpfs	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
+sbin/dumpon	n/a				no	dump-device crash dumps; xnu dumps over kdp (kdumpd) or to a core file
+sbin/etherswitchcfg	n/a				no	etherswitch(4) drivers
+sbin/fdisk	n/a				no	not built for FreeBSD/arm64 (arch=amd64 || arch=i386 || arch=arm || arch=powerpc64)
+sbin/ffsinfo	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
+sbin/fsck	apple	diskdev_cmds-751		P4-21	yes	
+sbin/fsck_ffs	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
+sbin/fsck_msdosfs	equivalent	fsck_msdos (msdosfs-788.0.6.0.1)	sbin/fsck_msdos	P3-04	no	
+sbin/fsdb	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
+sbin/fsirand	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
+sbin/geom	equivalent	gpt (gpt-24, FreeBSD's gpt(8) of 2007) until P3-03 settles the partitioning tool (§6)	usr/sbin/gpt	P3-03	no	GEOM (§5): mirroring and encryption are ZFS
+sbin/ggate/ggatec	n/a				no	GEOM gate (§5)
+sbin/ggate/ggated	n/a				no	GEOM gate (§5)
+sbin/ggate/ggatel	n/a				no	GEOM gate (§5)
+sbin/growfs	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
+sbin/hastctl	n/a				no	HAST, GEOM replication (§5)
+sbin/hastd	n/a				no	HAST, GEOM replication (§5)
+sbin/ifconfig	apple	network_cmds-726		P4-24	yes	
+sbin/init	equivalent	launchd-842.92.1	sbin/launchd	P1-08	yes	launchd is PID 1 (§3)
+sbin/ipf/ipf	n/a				no	IPFilter (§5): pf is the firewall
+sbin/ipf/ipfs	n/a				no	IPFilter (§5): pf is the firewall
+sbin/ipf/ipfstat	n/a				no	IPFilter (§5): pf is the firewall
+sbin/ipf/ipmon	n/a				no	IPFilter (§5): pf is the firewall
+sbin/ipf/ipnat	n/a				no	IPFilter (§5): pf is the firewall
+sbin/ipf/ippool	n/a				no	IPFilter (§5): pf is the firewall
+sbin/ipfw	n/a				no	ipfw (§5): pf is the firewall; Apple ships dnctl for dummynet
+sbin/kldconfig	equivalent	kext packages; the auxiliary collection is rebuilt (packaging.md §6)	usr/sbin/ndpkg	P2-02	no	no single-kext loading on arm64
+sbin/kldload	equivalent	kext packages; the auxiliary collection is rebuilt (packaging.md §6)	usr/sbin/ndpkg	P2-02	no	no single-kext loading on arm64
+sbin/kldstat	equivalent	a kextstat-style listing	usr/sbin/kextstat	P2-02	no	
+sbin/kldunload	equivalent	kext packages; the auxiliary collection is rebuilt (packaging.md §6)	usr/sbin/ndpkg	P2-02	no	no single-kext loading on arm64
+sbin/ldconfig	n/a				no	ELF hints; dyld resolves install names
+sbin/md5	apple	text_cmds-197		P4-21	no	
+sbin/mdconfig	new	memory and image disks over xnu md(4)		P4-21	no	Apple attaches images with the closed DiskImages
+sbin/mdmfs	n/a				no	md(4) plus UFS newfs
+sbin/mknod	apple	file_cmds-475		P4-21	no	
+sbin/mksnap_ffs	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
+sbin/mount	apple	diskdev_cmds-751		P4-21	yes	
+sbin/mount_cd9660	n/a				no	xnu's open source has no ISO 9660 file system (macOS's is closed)
+sbin/mount_fusefs	freebsd	FreeBSD sbin/mount_fusefs		P3-04	no	for ndfuse, FreeBSD's fuse ported (P3-04)
+sbin/mount_msdosfs	equivalent	mount_msdos (msdosfs-788.0.6.0.1)	sbin/mount_msdos	P3-04	no	
+sbin/mount_nfs	apple	NFS-339		P4-21	no	
+sbin/mount_nullfs	freebsd	FreeBSD sbin/mount_nullfs		P2-02	no	over xnu's nullfs (bind mounts for package activation)
+sbin/mount_udf	n/a				no	xnu's open source has no UDF (macOS's is closed)
+sbin/mount_unionfs	n/a				no	xnu has union mounts (mount -o union) but no unionfs
+sbin/natd	n/a				no	divert sockets with ipfw (§5); pf does NAT
+sbin/newfs	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
+sbin/newfs_msdos	apple	msdosfs-788.0.6.0.1		P3-04	no	
+sbin/nfsiod	apple	NFS-339		P4-21	no	
+sbin/nos-tun	n/a				no	tun(4); xnu has utun
+sbin/nvmecontrol	new	NVMe administration over the NVMe kext (P1-10)		P4-21	no	
+sbin/pfctl	equivalent	pfctl of OpenBSD 4.3 (openbsd/src fd47049c620b, base/pfctl)		P4-24	yes	the FreeBSD name over xnu's pf (docs/base/pf-ntp.md)
+sbin/pfilctl	n/a				no	pfil(9) hooks
+sbin/pflogd	freebsd	FreeBSD sbin/pflogd		P4-24	no	xnu's pf has pflog interfaces
+sbin/pflowctl	n/a				no	pflow(4); xnu's pf has none
+sbin/ping	apple	network_cmds-726		P4-24	yes	
+sbin/quotacheck	apple	diskdev_cmds-751		P4-21	no	
+sbin/rcorder	n/a				no	rc.d scripts are not run; launchd orders jobs (§3)
+sbin/reboot	apple	system_cmds-1039		P4-21	no	
+sbin/recoverdisk	freebsd	FreeBSD sbin/recoverdisk		P4-21	no	
+sbin/resolvconf	freebsd	freebsd-src 050683bb8e13		P4-24	yes	openresolv (base/resolvconf)
+sbin/restore	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
+sbin/route	apple	network_cmds-726		P4-24	yes	
+sbin/routed	freebsd	FreeBSD sbin/routed		P4-21	no	RIP
+sbin/rtsol	freebsd	freebsd-src 050683bb8e13		P4-24	yes	built from usr.sbin/rtsold, replacing network_cmds-726 rtsol (base/rtsold)
+sbin/savecore	n/a				no	dump-device crash dumps; xnu dumps over kdp (kdumpd) or to a core file
+sbin/setkey	apple	ipsec-1125		P4-24	no	ipsec-tools setkey
+sbin/shutdown	apple	system_cmds-1039		P4-21	no	
+sbin/swapon	n/a				no	xnu manages its own swap files; no swap devices
+sbin/sysctl	apple	system_cmds-1039		P4-21	yes	
+sbin/tunefs	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
+sbin/umbctl	n/a				no	umb(4) driver
+sbin/umount	apple	diskdev_cmds-751		P4-21	yes	
+sbin/veriexec	n/a				no	veriexec; code signing is AMFI with trust caches (P1-15)
+sbin/zfsbootcfg	equivalent	ndpkg system and neoboot's boot.cfg tries	usr/sbin/ndpkg	P2-03	no	
+usr.bin/addr2line	n/a				no	not built for FreeBSD/arm64 (!MK_LLVM_BINUTILS && MK_TOOLCHAIN)
+usr.bin/alias	apple	shell_cmds-326		P4-21	no	
+usr.bin/apply	apple	shell_cmds-326		P4-21	no	
+usr.bin/ar	n/a				no	not built for FreeBSD/arm64 (!MK_LLVM_BINUTILS && MK_TOOLCHAIN)
+usr.bin/asa	freebsd	FreeBSD usr.bin/asa		P4-21	no	
+usr.bin/at	apple	system_cmds-1039		P4-21	no	
+usr.bin/awk	apple	awk-40		P4-21	no	the one true awk, as on FreeBSD
+usr.bin/backlight	n/a				no	backlight(9)
+usr.bin/banner	apple	text_cmds-197		P4-21	no	
+usr.bin/basename	apple	shell_cmds-326		P4-21	no	
+usr.bin/beep	n/a				no	OSS sound
+usr.bin/biff	freebsd	FreeBSD usr.bin/biff		P4-21	no	
+usr.bin/bintrans	apple	text_cmds-197		P4-21	no	
+usr.bin/bluetooth/bthost	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.bin/bluetooth/btsockstat	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.bin/bluetooth/rfcomm_sppd	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.bin/bmake	freebsd	FreeBSD usr.bin/bmake		P4-21	no	FreeBSD's make; ports build with ndports
+usr.bin/brandelf	n/a				no	ELF; NeoDarwin binaries are Mach-O
+usr.bin/bsdcat	apple	libarchive-158		P4-21	no	macOS doesn't install it; same source as tar
+usr.bin/bsddialog	freebsd	FreeBSD usr.bin/bsddialog		P7-03	no	the installer
+usr.bin/bsdiff/bsdiff	freebsd	FreeBSD usr.bin/bsdiff/bsdiff		P4-21	no	
+usr.bin/bsdiff/bspatch	freebsd	FreeBSD usr.bin/bsdiff/bspatch		P4-21	no	
+usr.bin/bzip2	apple	bzip2-47		P4-21	no	
+usr.bin/bzip2recover	apple	bzip2-47		P4-21	no	
+usr.bin/c89	freebsd	FreeBSD usr.bin/c89		P5-10	no	
+usr.bin/c99	freebsd	FreeBSD usr.bin/c99		P5-10	no	
+usr.bin/caesar	port	games/freebsd-games			no	MK_GAMES
+usr.bin/calendar	apple	misc_cmds-45		P4-21	no	
+usr.bin/cap_mkdb	apple	adv_cmds-237		P4-22	no	
+usr.bin/chat	apple	ppp-1020.1.1		P4-21	no	
+usr.bin/chpass	apple	system_cmds-1039		P4-22	yes	
+usr.bin/cksum	apple	file_cmds-475		P4-21	no	
+usr.bin/clang/bugpoint	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/clang	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/clang-format	n/a				no	not built for FreeBSD/arm64 by default ((MK_CLANG_EXTRAS || MK_CLANG_FORMAT)))
+usr.bin/clang/clang-scan-deps	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/llc	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/lld	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/lldb	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/lldb-server	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/lli	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-ar	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/llvm-as	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-bcanalyzer	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-cov	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/llvm-cxxdump	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-cxxfilt	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/llvm-diff	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-dis	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-dwarfdump	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-dwarfutil	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-dwp	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-extract	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-link	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-lto	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-lto2	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-mc	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-mca	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-modextract	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-nm	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/llvm-objcopy	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/llvm-objdump	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/llvm-pdbutil	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-profdata	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/llvm-readobj	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/llvm-rtdyld	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/llvm-size	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/llvm-strings	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/llvm-symbolizer	apple	swiftlang/llvm-project swift-6.2-RELEASE		P5-10	no	
+usr.bin/clang/llvm-xray	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/clang/opt	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
+usr.bin/cmp	apple	patch_cmds-72		P4-21	no	
+usr.bin/col	apple	text_cmds-197		P4-21	no	
+usr.bin/colrm	apple	text_cmds-197		P4-21	no	
+usr.bin/column	apple	text_cmds-197		P4-21	no	
+usr.bin/comm	apple	text_cmds-197		P4-21	no	
+usr.bin/compile_et	n/a				no	not built for FreeBSD/arm64 (!MK_MITKRB5 && MK_KERBEROS)
+usr.bin/compress	apple	file_cmds-475		P4-21	no	
+usr.bin/cpio	apple	libarchive-158		P4-21	no	
+usr.bin/csplit	apple	text_cmds-197		P4-21	no	
+usr.bin/ctags	freebsd	FreeBSD usr.bin/ctags		P5-10	no	
+usr.bin/ctlstat	n/a				no	CAM target layer
+usr.bin/cut	apple	text_cmds-197		P4-21	no	
+usr.bin/cxxfilt	n/a				no	not built for FreeBSD/arm64 (!MK_LLVM_CXXFILT && MK_TOOLCHAIN)
+usr.bin/diff	apple	patch_cmds-72		P4-21	no	
+usr.bin/diff3	apple	patch_cmds-72		P4-21	no	FreeBSD/arm64 installs GNU diff3 (gnu/usr.bin) unless WITHOUT_GNU_DIFF
+usr.bin/dirname	apple	shell_cmds-326		P4-21	no	
+usr.bin/dpv	n/a				no	not built for FreeBSD/arm64 (MK_DIALOG)
+usr.bin/drill	freebsd	FreeBSD usr.bin/drill		P4-21	no	
+usr.bin/dtc	freebsd	FreeBSD usr.bin/dtc		P4-21	no	
+usr.bin/du	apple	file_cmds-475		P4-21	no	
+usr.bin/ee	freebsd	FreeBSD usr.bin/ee		P4-21	no	
+usr.bin/elfcopy	n/a				no	ELF; NeoDarwin binaries are Mach-O
+usr.bin/elfctl	n/a				no	ELF; NeoDarwin binaries are Mach-O
+usr.bin/elfdump	n/a				no	ELF; NeoDarwin binaries are Mach-O
+usr.bin/enigma	freebsd	FreeBSD usr.bin/enigma		P4-21	no	
+usr.bin/env	apple	shell_cmds-326		P4-21	yes	
+usr.bin/etdump	freebsd	FreeBSD usr.bin/etdump		P4-21	no	
+usr.bin/expand	apple	text_cmds-197		P4-21	no	
+usr.bin/factor	port	games/freebsd-games			no	MK_GAMES
+usr.bin/false	apple	shell_cmds-326		P4-21	no	
+usr.bin/fetch	freebsd	FreeBSD usr.bin/fetch		P4-21	no	
+usr.bin/file	apple	file-104		P4-21	no	
+usr.bin/file2c	freebsd	FreeBSD usr.bin/file2c		P5-10	no	
+usr.bin/find	apple	shell_cmds-326		P4-21	no	
+usr.bin/finger	apple	adv_cmds-237		P4-21	no	
+usr.bin/fmt	apple	text_cmds-197		P4-21	no	
+usr.bin/fold	apple	text_cmds-197		P4-21	no	
+usr.bin/fortune/fortune	port	games/freebsd-games			no	MK_GAMES
+usr.bin/fortune/strfile	port	games/freebsd-games			no	MK_GAMES
+usr.bin/fortune/unstr	port	games/freebsd-games			no	MK_GAMES
+usr.bin/from	freebsd	FreeBSD usr.bin/from		P4-21	no	
+usr.bin/fstat	equivalent	lsof (lsof-76); fuser (diskdev_cmds-751)	usr/sbin/lsof	P4-21	no	
+usr.bin/fsync	freebsd	FreeBSD usr.bin/fsync		P4-21	no	
+usr.bin/ftp	freebsd	FreeBSD usr.bin/ftp		P4-21	no	
+usr.bin/gcore	apple	system_cmds-1039		P4-21	no	
+usr.bin/gencat	apple	adv_cmds-237		P4-21	no	
+usr.bin/genl	n/a				no	Netlink
+usr.bin/getaddrinfo	freebsd	FreeBSD usr.bin/getaddrinfo		P4-21	no	
+usr.bin/getconf	apple	system_cmds-1039		P4-21	no	
+usr.bin/getent	freebsd	FreeBSD usr.bin/getent		P4-22	no	
+usr.bin/getopt	apple	shell_cmds-326		P4-21	no	
+usr.bin/gh-bc	apple	bc-35		P4-21	no	
+usr.bin/gprof	n/a				no	ELF gmon profiling; Darwin profiles with dtrace
+usr.bin/grdc	port	games/freebsd-games			no	MK_GAMES
+usr.bin/grep	apple	text_cmds-197		P4-21	no	
+usr.bin/gzip	apple	file_cmds-475		P4-21	no	
+usr.bin/head	apple	text_cmds-197		P4-21	yes	
+usr.bin/hesinfo	n/a				no	not built for FreeBSD/arm64 (MK_HESIOD)
+usr.bin/hexdump	apple	shell_cmds-326		P4-21	no	
+usr.bin/host	apple	bind9-65		P4-21	no	BIND's host; FreeBSD's is ldns's
+usr.bin/iconv	apple	libiconv-113		P4-21	no	
+usr.bin/id	apple	shell_cmds-326		P4-22	yes	
+usr.bin/ident	freebsd	FreeBSD usr.bin/ident		P4-21	no	
+usr.bin/indent	freebsd	FreeBSD usr.bin/indent		P5-10	no	
+usr.bin/ipcrm	apple	file_cmds-475		P4-21	no	
+usr.bin/ipcs	apple	file_cmds-475		P4-21	no	
+usr.bin/iscsictl	n/a				no	FreeBSD's in-kernel iSCSI initiator
+usr.bin/join	apple	text_cmds-197		P4-21	no	
+usr.bin/jot	apple	shell_cmds-326		P4-21	no	
+usr.bin/kdump	equivalent	dtruss (dtrace-413)	usr/bin/dtruss	P4-21	no	xnu has no ktrace(2)
+usr.bin/killall	apple	shell_cmds-326		P4-21	no	
+usr.bin/ktrace	equivalent	dtruss (dtrace-413)	usr/bin/dtruss	P4-21	no	xnu has no ktrace(2)
+usr.bin/ktrdump	n/a				no	ktr(4) kernel trace buffer; xnu has kdebug
+usr.bin/kyua	freebsd	FreeBSD usr.bin/kyua		P4-21	no	the FreeBSD test suite's runner, for P4-21's exit
+usr.bin/lam	apple	text_cmds-197		P4-21	no	
+usr.bin/last	apple	adv_cmds-237		P4-21	no	
+usr.bin/lastcomm	apple	shell_cmds-326		P4-21	no	
+usr.bin/ldd	equivalent	otool -L (cctools-1035.1.102)	usr/bin/otool	P5-10	no	Mach-O, not ELF
+usr.bin/ldd32	n/a				no	32-bit compatibility (lib32); arm64 NeoDarwin has none
+usr.bin/leave	apple	misc_cmds-45		P4-21	no	
+usr.bin/less	apple	less-50		P4-21	no	
+usr.bin/lessecho	apple	less-50		P4-21	no	
+usr.bin/lesskey	apple	less-50		P4-21	no	
+usr.bin/lex	freebsd	FreeBSD usr.bin/lex		P5-10	no	
+usr.bin/limits	freebsd	FreeBSD usr.bin/limits		P4-22	no	
+usr.bin/locale	apple	adv_cmds-237		P4-21	no	
+usr.bin/localedef	apple	adv_cmds-237		P4-21	no	
+usr.bin/locate/bigram	apple	shell_cmds-326		P4-21	no	
+usr.bin/locate/code	apple	shell_cmds-326		P4-21	no	
+usr.bin/locate/locate	apple	shell_cmds-326		P4-21	no	
+usr.bin/lock	freebsd	FreeBSD usr.bin/lock		P4-21	no	
+usr.bin/lockf	apple	shell_cmds-326		P4-21	no	
+usr.bin/logger	apple	remote_cmds-306		P4-21	no	
+usr.bin/login	apple	system_cmds-1039		P4-22	yes	
+usr.bin/logins	freebsd	FreeBSD usr.bin/logins		P4-22	no	
+usr.bin/logname	apple	shell_cmds-326		P4-21	no	
+usr.bin/look	apple	text_cmds-197		P4-21	no	
+usr.bin/lorder	freebsd	FreeBSD usr.bin/lorder		P5-10	no	
+usr.bin/lsvfs	apple	adv_cmds-237		P4-21	no	
+usr.bin/lzmainfo	freebsd	FreeBSD usr.bin/lzmainfo		P4-21	no	
+usr.bin/m4	freebsd	FreeBSD usr.bin/m4		P4-21	no	
+usr.bin/mail	apple	mail_cmds-41		P4-21	no	
+usr.bin/man	apple	man-62		P4-21	no	
+usr.bin/mandoc	freebsd	FreeBSD usr.bin/mandoc		P4-21	no	mandoc (contrib/mandoc); Apple's mandoc is unpublished
+usr.bin/mdo	n/a				no	mac_do(4)
+usr.bin/mesg	apple	basic_cmds-70		P4-21	no	
+usr.bin/mididump	n/a				no	OSS MIDI
+usr.bin/ministat	freebsd	FreeBSD usr.bin/ministat		P4-21	no	
+usr.bin/mkcsmapper	apple	libiconv-113		P4-21	no	
+usr.bin/mkdep	freebsd	FreeBSD usr.bin/mkdep		P5-10	no	
+usr.bin/mkesdb	apple	libiconv-113		P4-21	no	
+usr.bin/mkfifo	apple	file_cmds-475		P4-21	no	
+usr.bin/mkimg	freebsd	FreeBSD usr.bin/mkimg		P4-21	no	
+usr.bin/mkstr	freebsd	FreeBSD usr.bin/mkstr		P5-10	no	
+usr.bin/mktemp	apple	shell_cmds-326		P4-21	no	
+usr.bin/mkuzip	n/a				no	geom_uzip (§5)
+usr.bin/morse	port	games/freebsd-games			no	MK_GAMES
+usr.bin/msgs	freebsd	FreeBSD usr.bin/msgs		P4-21	no	
+usr.bin/mt	n/a				no	tape via CAM sa(4)
+usr.bin/nc	apple	netcat-56		P4-21	no	
+usr.bin/ncal	apple	misc_cmds-45		P4-21	no	
+usr.bin/ncurses	apple	ncurses-79		P4-21	no	tic, toe, tput, tset, clear, infocmp, tabs
+usr.bin/netstat	apple	network_cmds-726		P4-24	yes	
+usr.bin/newgrp	apple	system_cmds-1039		P4-22	no	
+usr.bin/nfsstat	apple	NFS-339		P4-21	no	
+usr.bin/nice	apple	shell_cmds-326		P4-21	no	
+usr.bin/nl	apple	text_cmds-197		P4-21	no	
+usr.bin/nm	n/a				no	not built for FreeBSD/arm64 (!MK_LLVM_BINUTILS && MK_TOOLCHAIN)
+usr.bin/nohup	apple	shell_cmds-326		P4-21	no	
+usr.bin/number	port	games/freebsd-games			no	MK_GAMES
+usr.bin/ofed/infiniband-diags/dump_fts	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/ibaddr	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/ibcacheedit	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/ibccconfig	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/ibccquery	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/iblinkinfo	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/ibmirror	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/ibnetdiscover	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/ibping	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/ibportstate	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/ibqueryerrors	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/ibroute	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/ibstat	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/ibsysstat	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/ibtracert	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/perfquery	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/saquery	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/sminfo	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/smpdump	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/smpquery	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/infiniband-diags/vendstat	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/libibverbs/asyncwatch	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/libibverbs/devices	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/libibverbs/devinfo	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/libibverbs/rc_pingpong	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/libibverbs/srq_pingpong	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/libibverbs/uc_pingpong	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/libibverbs/ud_pingpong	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/librdmacm/mckey	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/librdmacm/rping	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/librdmacm/ucmatose	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/librdmacm/udaddy	n/a				no	InfiniBand (OFED)
+usr.bin/ofed/opensm	n/a				no	InfiniBand (OFED)
+usr.bin/pagesize	apple	system_cmds-1039		P4-21	no	
+usr.bin/passwd	apple	system_cmds-1039		P4-22	yes	
+usr.bin/paste	apple	text_cmds-197		P4-21	no	
+usr.bin/patch	apple	patch_cmds-72		P4-21	no	
+usr.bin/pathchk	apple	file_cmds-475		P4-21	no	
+usr.bin/perror	freebsd	FreeBSD usr.bin/perror		P4-21	no	
+usr.bin/pom	port	games/freebsd-games			no	MK_GAMES
+usr.bin/posixmqcontrol	n/a				no	POSIX message queues: xnu has none
+usr.bin/posixshmcontrol	n/a				no	FreeBSD's POSIX shm listing sysctl
+usr.bin/pr	apple	text_cmds-197		P4-21	no	
+usr.bin/primes	port	games/freebsd-games			no	MK_GAMES
+usr.bin/printenv	apple	shell_cmds-326		P4-21	no	
+usr.bin/printf	apple	shell_cmds-326		P4-21	yes	
+usr.bin/proccontrol	n/a				no	procctl(2)
+usr.bin/procstat	equivalent	lsof (lsof-76) and ps	usr/sbin/lsof	P4-21	no	libprocstat reads FreeBSD kernel structures
+usr.bin/protect	n/a				no	procctl(2) PROC_SPROTECT
+usr.bin/quota	apple	diskdev_cmds-751		P4-21	no	
+usr.bin/random	port	games/freebsd-games			no	MK_GAMES
+usr.bin/rctl	n/a				no	RCTL resource limits
+usr.bin/readelf	n/a				no	not built for FreeBSD/arm64 (!MK_LLVM_BINUTILS && MK_TOOLCHAIN)
+usr.bin/renice	apple	shell_cmds-326		P4-21	no	
+usr.bin/resizewin	freebsd	FreeBSD usr.bin/resizewin		P4-21	no	
+usr.bin/rev	apple	text_cmds-197		P4-21	no	
+usr.bin/revoke	freebsd	FreeBSD usr.bin/revoke		P4-21	no	
+usr.bin/rpcgen	freebsd	FreeBSD usr.bin/rpcgen		P5-10	no	
+usr.bin/rpcinfo	freebsd	FreeBSD usr.bin/rpcinfo		P4-21	no	macOS's rpcinfo is unpublished
+usr.bin/rs	apple	text_cmds-197		P4-21	no	
+usr.bin/runat	equivalent	xattr (file_cmds-475)	usr/bin/xattr	P4-21	no	named attributes are extended attributes on Darwin
+usr.bin/rup	freebsd	FreeBSD usr.bin/rup		P4-21	no	
+usr.bin/ruptime	freebsd	FreeBSD usr.bin/ruptime		P4-21	no	
+usr.bin/rusers	freebsd	FreeBSD usr.bin/rusers		P4-21	no	
+usr.bin/rwall	freebsd	FreeBSD usr.bin/rwall		P4-21	no	
+usr.bin/rwho	freebsd	FreeBSD usr.bin/rwho		P4-21	no	
+usr.bin/script	apple	shell_cmds-326		P4-21	no	
+usr.bin/sdiff	apple	patch_cmds-72		P4-21	no	
+usr.bin/sed	apple	text_cmds-197		P4-21	yes	
+usr.bin/seq	apple	shell_cmds-326		P4-21	no	
+usr.bin/showmount	apple	NFS-339		P4-21	no	
+usr.bin/size	n/a				no	not built for FreeBSD/arm64 (!MK_LLVM_BINUTILS && MK_TOOLCHAIN)
+usr.bin/smbutil	n/a				no	not built for FreeBSD/arm64 (amd64, i386, powerpc)
+usr.bin/sockstat	equivalent	lsof -i (lsof-76)	usr/sbin/lsof	P4-21	no	
+usr.bin/soelim	freebsd	FreeBSD usr.bin/soelim		P4-21	no	
+usr.bin/sort	apple	text_cmds-197		P4-21	no	
+usr.bin/split	apple	text_cmds-197		P4-21	no	
+usr.bin/ssh-copy-id	freebsd	FreeBSD usr.bin/ssh-copy-id		P4-25	no	
+usr.bin/stat	apple	file_cmds-475		P4-21	no	
+usr.bin/stdbuf	apple	shell_cmds-326		P4-21	no	
+usr.bin/strings	apple	cctools-1035.1.102		P5-10	no	
+usr.bin/su	apple	shell_cmds-326		P4-22	yes	
+usr.bin/systat	equivalent	top (top-144)	usr/bin/top	P4-21	no	systat reads FreeBSD kernel structures
+usr.bin/tail	apple	text_cmds-197		P4-21	no	
+usr.bin/talk	apple	remote_cmds-306		P4-21	no	
+usr.bin/tar	apple	libarchive-158		P4-21	no	
+usr.bin/tcopy	n/a				no	tape
+usr.bin/tee	apple	shell_cmds-326		P4-21	no	
+usr.bin/telnet	apple	remote_cmds-306		P4-21	no	
+usr.bin/tftp	apple	remote_cmds-306		P4-21	no	
+usr.bin/time	apple	shell_cmds-326		P4-21	no	
+usr.bin/tip/tip	freebsd	FreeBSD usr.bin/tip/tip		P4-21	no	
+usr.bin/top	apple	top-144		P4-21	no	Apple's top: same purpose, different flags
+usr.bin/touch	apple	file_cmds-475		P4-21	no	
+usr.bin/tr	apple	text_cmds-197		P4-21	no	
+usr.bin/true	apple	shell_cmds-326		P4-21	no	
+usr.bin/truncate	apple	file_cmds-475		P4-21	no	
+usr.bin/truss	equivalent	dtruss (dtrace-413)	usr/bin/dtruss	P4-21	no	
+usr.bin/ts	freebsd	FreeBSD usr.bin/ts		P4-21	no	
+usr.bin/tsort	apple	misc_cmds-45		P4-21	no	
+usr.bin/tty	apple	adv_cmds-237		P4-21	yes	
+usr.bin/ul	apple	text_cmds-197		P4-21	no	
+usr.bin/uname	apple	shell_cmds-326		P4-21	yes	
+usr.bin/unexpand	apple	text_cmds-197		P4-21	no	
+usr.bin/unifdef	freebsd	FreeBSD usr.bin/unifdef		P5-10	no	
+usr.bin/uniq	apple	text_cmds-197		P4-21	no	
+usr.bin/units	apple	misc_cmds-45		P4-21	no	
+usr.bin/unvis	apple	text_cmds-197		P4-21	no	
+usr.bin/unzip	apple	zip-29		P4-21	no	
+usr.bin/usbhidaction	n/a				no	usbhid(4); HID is a dext (P3-07)
+usr.bin/usbhidctl	n/a				no	usbhid(4); HID is a dext (P3-07)
+usr.bin/users	apple	shell_cmds-326		P4-21	no	
+usr.bin/vacation	port	mail/sendmail			no	sendmail is an option in FreeBSD too (MK_SENDMAIL)
+usr.bin/vi	apple	vim-163		P4-21	no	vim as vi, ex and view, not nvi
+usr.bin/vis	apple	text_cmds-197		P4-21	no	
+usr.bin/vmstat	equivalent	vm_stat (system_cmds-1039)	usr/bin/vm_stat	P4-21	no	
+usr.bin/vtfontcvt	freebsd	FreeBSD usr.bin/vtfontcvt		P4-26	no	if the console takes vt(4)'s font format
+usr.bin/w	apple	shell_cmds-326		P4-21	no	
+usr.bin/wall	apple	remote_cmds-306		P4-21	no	
+usr.bin/wc	apple	text_cmds-197		P4-21	yes	
+usr.bin/wg	port	net/wireguard-tools			no	FreeBSD's if_wg is in the kernel; wireguard-go runs over utun
+usr.bin/what	apple	shell_cmds-326		P4-21	no	
+usr.bin/whereis	apple	shell_cmds-326		P4-21	no	
+usr.bin/which	apple	shell_cmds-326		P4-21	no	
+usr.bin/who	apple	shell_cmds-326		P4-21	no	
+usr.bin/whois	apple	adv_cmds-237		P4-21	no	
+usr.bin/write	apple	basic_cmds-70		P4-21	no	
+usr.bin/xargs	apple	shell_cmds-326		P4-21	no	
+usr.bin/xinstall	apple	file_cmds-475		P4-21	no	
+usr.bin/xo	freebsd	FreeBSD usr.bin/xo		P4-21	no	
+usr.bin/xstr	freebsd	FreeBSD usr.bin/xstr		P5-10	no	
+usr.bin/xz	freebsd	FreeBSD usr.bin/xz		P4-21	no	
+usr.bin/xzdec	freebsd	FreeBSD usr.bin/xzdec		P4-21	no	
+usr.bin/yacc	freebsd	FreeBSD usr.bin/yacc		P5-10	no	
+usr.bin/yes	apple	shell_cmds-326		P4-21	no	
+usr.bin/ypcat	n/a				no	NIS: accounts are the flat files (P4-22)
+usr.bin/ypmatch	n/a				no	NIS: accounts are the flat files (P4-22)
+usr.bin/ypwhich	n/a				no	NIS: accounts are the flat files (P4-22)
+usr.bin/zstd	freebsd	FreeBSD usr.bin/zstd		P4-21	no	
+usr.sbin/ac	apple	system_cmds-1039		P4-21	no	
+usr.sbin/accton	apple	system_cmds-1039		P4-21	no	
+usr.sbin/acpi/acpiconf	equivalent	pmset (PowerManagement-1846.0.25.0.1)	usr/bin/pmset	P7-02	no	
+usr.sbin/acpi/acpidb	freebsd	FreeBSD usr.sbin/acpi/acpidb		P4-21	no	ACPICA debugger over table files
+usr.sbin/acpi/acpidump	new	ACPI tables from the IOACPIPlatformDevice registry (as tools/dtdump on the host)		P4-21	no	
+usr.sbin/acpi/iasl	freebsd	FreeBSD usr.sbin/acpi/iasl		P4-21	no	ACPICA compiler
+usr.sbin/adduser	freebsd	FreeBSD usr.sbin/adduser		P4-22	no	
+usr.sbin/apm	n/a				no	not built for FreeBSD/arm64 (arch=amd64 && MK_APM || arch=i386 && MK_APM)
+usr.sbin/apmd	n/a				no	not built for FreeBSD/arm64 (arch=i386 && MK_APM)
+usr.sbin/arp	apple	network_cmds-726		P4-24	yes	
+usr.sbin/audit	apple	OpenBSM-21		P4-21	yes	OpenBSM, as on FreeBSD
+usr.sbin/auditd	apple	OpenBSM-21		P4-21	yes	OpenBSM, as on FreeBSD
+usr.sbin/auditdistd	freebsd	FreeBSD usr.sbin/auditdistd		P4-21	no	
+usr.sbin/auditreduce	apple	OpenBSM-21		P4-21	yes	OpenBSM, as on FreeBSD
+usr.sbin/authpf	freebsd	FreeBSD usr.sbin/authpf		P4-24	no	
+usr.sbin/autofs	apple	autofs-322		P4-21	no	
+usr.sbin/bhyve	n/a				no	bhyve (§5)
+usr.sbin/bhyvectl	n/a				no	bhyve (§5)
+usr.sbin/bhyveload	n/a				no	bhyve (§5)
+usr.sbin/binmiscctl	n/a				no	imgact_binmisc
+usr.sbin/blacklistctl	equivalent	blocklistctl (FreeBSD 15's new name)	usr/sbin/blocklistctl	P4-25	no	
+usr.sbin/blacklistd	equivalent	blocklistd (FreeBSD 15's new name)	usr/sbin/blocklistd	P4-25	no	
+usr.sbin/blocklistctl	freebsd	FreeBSD usr.sbin/blocklistctl		P4-25	no	
+usr.sbin/blocklistd	freebsd	FreeBSD usr.sbin/blocklistd		P4-25	no	pf anchors, sshd hooks
+usr.sbin/bluetooth/ath3kfw	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/bcmfw	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/bluetooth-config	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/bthidcontrol	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/bthidd	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/btpand	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/hccontrol	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/hcsecd	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/iwmbtfw	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/l2control	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/l2ping	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/rfcomm_pppd	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/rtlbtfw	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/sdpcontrol	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/bluetooth/sdpd	n/a				no	FreeBSD's netgraph Bluetooth stack
+usr.sbin/boot0cfg	n/a				no	not built for FreeBSD/arm64 (arch=amd64 || arch=i386)
+usr.sbin/bootparamd/bootparamd	freebsd	FreeBSD usr.sbin/bootparamd/bootparamd		P4-21	no	
+usr.sbin/bootparamd/callbootd	freebsd	FreeBSD usr.sbin/bootparamd/callbootd		P4-21	no	
+usr.sbin/boottrace	n/a				no	boottrace(4)
+usr.sbin/bsdconfig	n/a				no	dialog front end to FreeBSD's rc.conf and pkg; NeoDarwin administers with sysrc, service and ndpkg (§3)
+usr.sbin/bsdinstall	new	the text installer (bsdinstall-shaped)		P7-03	no	
+usr.sbin/bsnmpd/bsnmpd	equivalent	snmpd (net_snmp-1723)	usr/sbin/snmpd	P4-21	no	bsnmpd's modules read FreeBSD sysctls
+usr.sbin/bsnmpd/gensnmptree	n/a				no	bsnmpd's module generator
+usr.sbin/bsnmpd/tools/bsnmptools	equivalent	snmpget and friends (net_snmp-1723)	usr/bin/snmpget	P4-21	no	
+usr.sbin/btxld	n/a				no	not built for FreeBSD/arm64 (arch=amd64 && MK_TOOLCHAIN || arch=i386 && MK_TOOLCHAIN)
+usr.sbin/camdd	n/a				no	CAM
+usr.sbin/cdcontrol	n/a				no	CAM CD devices
+usr.sbin/certctl	freebsd	FreeBSD usr.sbin/certctl		P4-21	no	
+usr.sbin/chkgrp	freebsd	FreeBSD usr.sbin/chkgrp		P4-22	no	
+usr.sbin/chown	apple	file_cmds-475		P4-21	no	
+usr.sbin/chroot	apple	shell_cmds-326		P4-21	no	
+usr.sbin/ckdist	n/a				no	FreeBSD distribution sets
+usr.sbin/clear_locks	freebsd	FreeBSD usr.sbin/clear_locks		P4-21	no	
+usr.sbin/config	n/a				no	FreeBSD kernel configuration; NeoDarwin's kernel builds with Bazel
+usr.sbin/cpucontrol	n/a				no	not built for FreeBSD/arm64 (arch=amd64 || arch=i386)
+usr.sbin/crashinfo	n/a				no	FreeBSD crash dumps (savecore)
+usr.sbin/cron/cron	apple	cron-52		P4-23	no	
+usr.sbin/cron/crontab	apple	cron-52		P4-23	no	
+usr.sbin/crunch/crunchgen	n/a				no	crunched static binaries; libSystem links dynamically only
+usr.sbin/crunch/crunchide	n/a				no	crunched static binaries; libSystem links dynamically only
+usr.sbin/ctladm	n/a				no	CAM target layer
+usr.sbin/ctld	n/a				no	CAM target layer
+usr.sbin/cxgbetool	n/a				no	FreeBSD driver control
+usr.sbin/daemon	freebsd	FreeBSD usr.sbin/daemon		P4-21	no	
+usr.sbin/dconschat	n/a				no	FireWire dcons
+usr.sbin/devctl	n/a				no	newbus device control; IOKit (ioreg)
+usr.sbin/devinfo	equivalent	ioreg (IOKitTools-125)	usr/sbin/ioreg	P4-21	no	
+usr.sbin/diskinfo	freebsd	FreeBSD usr.sbin/diskinfo		P4-21	no	over Darwin's DKIOC ioctls
+usr.sbin/dumpcis	n/a				no	PC Card
+usr.sbin/editmap	port	mail/sendmail			no	sendmail is an option in FreeBSD too (MK_SENDMAIL)
+usr.sbin/edquota	apple	diskdev_cmds-751		P4-21	no	
+usr.sbin/efibootmgr	new	UEFI boot variables over a kernel runtime-services interface		P4-21	no	
+usr.sbin/efidp	freebsd	FreeBSD usr.sbin/efidp		P4-21	no	device-path parsing
+usr.sbin/efitable	n/a				no	efirt(4) table access
+usr.sbin/efivar	new	UEFI variables over a kernel runtime-services interface		P4-21	no	
+usr.sbin/efiwake	n/a				no	efirt(4) wake time
+usr.sbin/etcupdate	equivalent	ndpkg system upgrade	usr/sbin/ndpkg	P2-03	no	
+usr.sbin/extattr	equivalent	xattr (file_cmds-475)	usr/bin/xattr	P4-21	no	
+usr.sbin/extattrctl	n/a				no	UFS1 extended attribute backing files
+usr.sbin/fdcontrol	n/a				no	floppy disks
+usr.sbin/fdformat	n/a				no	floppy disks
+usr.sbin/fdread	n/a				no	floppy disks
+usr.sbin/fdwrite	n/a				no	floppy disks
+usr.sbin/fifolog/fifolog_create	freebsd	FreeBSD usr.sbin/fifolog/fifolog_create		P4-21	no	
+usr.sbin/fifolog/fifolog_reader	freebsd	FreeBSD usr.sbin/fifolog/fifolog_reader		P4-21	no	
+usr.sbin/fifolog/fifolog_writer	freebsd	FreeBSD usr.sbin/fifolog/fifolog_writer		P4-21	no	
+usr.sbin/flowctl	n/a				no	netgraph
+usr.sbin/freebsd-update	equivalent	ndpkg system upgrade	usr/sbin/ndpkg	P2-03	no	
+usr.sbin/fstyp	apple	diskdev_cmds-751		P4-21	no	
+usr.sbin/ftp-proxy	freebsd	FreeBSD usr.sbin/ftp-proxy		P4-24	no	
+usr.sbin/fwcontrol	n/a				no	FireWire (fwohci)
+usr.sbin/fwget	n/a				no	firmware packages for FreeBSD drivers
+usr.sbin/getfmac	n/a				no	FreeBSD's MAC label policies; xnu's MAC framework hosts AMFI
+usr.sbin/getpmac	n/a				no	FreeBSD's MAC label policies; xnu's MAC framework hosts AMFI
+usr.sbin/gpioctl	n/a				no	FreeBSD bus drivers (gpio, iicbus, spibus, pwm, smbus)
+usr.sbin/gssd	apple	gssd-85		P4-21	no	
+usr.sbin/gstat	n/a				no	GEOM statistics (§5); iostat is the disk view
+usr.sbin/hyperv/tools/kvp	n/a				no	Hyper-V guest
+usr.sbin/hyperv/tools/vss	n/a				no	Hyper-V guest
+usr.sbin/i2c	n/a				no	FreeBSD bus drivers (gpio, iicbus, spibus, pwm, smbus)
+usr.sbin/ifmcstat	equivalent	netstat -g (network_cmds-726)	usr/sbin/netstat	P4-24	yes	
+usr.sbin/inetd	equivalent	launchd sockets with launchproxy	usr/libexec/launchproxy	P1-08	yes	
+usr.sbin/iostat	apple	system_cmds-1039		P4-21	no	
+usr.sbin/iovctl	n/a				no	PCI SR-IOV
+usr.sbin/ip6addrctl	freebsd	FreeBSD usr.sbin/ip6addrctl		P4-21	no	
+usr.sbin/ipfwpcap	n/a				no	ipfw divert (§5)
+usr.sbin/iscsid	n/a				no	FreeBSD's in-kernel iSCSI initiator
+usr.sbin/jail	n/a				no	jails (§5)
+usr.sbin/jexec	n/a				no	jails (§5)
+usr.sbin/jls	n/a				no	jails (§5)
+usr.sbin/kbdcontrol	new	console tools for ndfb virtual terminals		P4-26	no	
+usr.sbin/kbdmap	new	console tools for ndfb virtual terminals		P4-26	no	
+usr.sbin/kldxref	n/a				no	kld linker hints; kexts match by IOKit personalities
+usr.sbin/lastlogin	freebsd	FreeBSD usr.sbin/lastlogin		P4-22	no	
+usr.sbin/lpr/chkprintcap	n/a				no	lpd's printcap and filters; printing is CUPS (lpd row)
+usr.sbin/lpr/filters	n/a				no	lpd's printcap and filters; printing is CUPS (lpd row)
+usr.sbin/lpr/filters.ru/koi2855	n/a				no	lpd's printcap and filters; printing is CUPS (lpd row)
+usr.sbin/lpr/filters.ru/koi2alt	n/a				no	lpd's printcap and filters; printing is CUPS (lpd row)
+usr.sbin/lpr/lp	apple	cups-522		P4-21	no	CUPS's BSD commands
+usr.sbin/lpr/lpc	apple	cups-522		P4-21	no	CUPS's BSD commands
+usr.sbin/lpr/lpd	equivalent	cupsd (cups-522)	usr/sbin/cupsd	P4-21	no	
+usr.sbin/lpr/lpq	apple	cups-522		P4-21	no	CUPS's BSD commands
+usr.sbin/lpr/lpr	apple	cups-522		P4-21	no	CUPS's BSD commands
+usr.sbin/lpr/lprm	apple	cups-522		P4-21	no	CUPS's BSD commands
+usr.sbin/lpr/lptest	freebsd	FreeBSD usr.sbin/lpr/lptest		P4-21	no	
+usr.sbin/lpr/pac	n/a				no	lpd's printcap and filters; printing is CUPS (lpd row)
+usr.sbin/lptcontrol	n/a				no	not built for FreeBSD/arm64 (arch=amd64 || arch=i386)
+usr.sbin/mailstats	port	mail/sendmail			no	sendmail is an option in FreeBSD too (MK_SENDMAIL)
+usr.sbin/mailwrapper	freebsd	FreeBSD usr.sbin/mailwrapper		P4-21	no	selects the MTA
+usr.sbin/makefs	freebsd	FreeBSD usr.sbin/makefs		P4-21	no	
+usr.sbin/makemap	port	mail/sendmail			no	sendmail is an option in FreeBSD too (MK_SENDMAIL)
+usr.sbin/manctl	freebsd	FreeBSD usr.sbin/manctl		P4-21	no	
+usr.sbin/memcontrol	n/a				no	x86 MTRRs
+usr.sbin/mfiutil	n/a				no	FreeBSD driver control
+usr.sbin/mixer	new	a mixer over NDAudioFamily		P7-08	no	FreeBSD sound is OSS
+usr.sbin/mld6query	freebsd	FreeBSD usr.sbin/mld6query		P4-21	no	
+usr.sbin/mlx5tool	n/a				no	FreeBSD driver control
+usr.sbin/mlxcontrol	n/a				no	FreeBSD driver control
+usr.sbin/mount_smbfs	port	net/samba			no	FreeBSD's smbfs is SMB1; Apple's SMBClient needs its smbfs kext
+usr.sbin/mountd	equivalent	nfsd (NFS-339), which serves mounts itself	usr/sbin/nfsd	P4-21	no	
+usr.sbin/moused/moused	n/a				no	console mouse for syscons/vt(4)
+usr.sbin/moused/msconvd	n/a				no	console mouse for syscons/vt(4)
+usr.sbin/mpsutil	n/a				no	FreeBSD driver control
+usr.sbin/mptable	n/a				no	not built for FreeBSD/arm64 (arch=amd64 || arch=i386)
+usr.sbin/mptutil	n/a				no	FreeBSD driver control
+usr.sbin/mtest	freebsd	FreeBSD usr.sbin/mtest		P4-21	no	
+usr.sbin/ndp	apple	network_cmds-726		P4-24	yes	
+usr.sbin/newsyslog	apple	syslog-404		P4-23	no	
+usr.sbin/nfscbd	n/a				no	FreeBSD's NFSv4 and pNFS; NFS is Apple's (NFS-339)
+usr.sbin/nfsd	apple	NFS-339		P4-21	no	
+usr.sbin/nfsdumpstate	n/a				no	FreeBSD's NFSv4 and pNFS; NFS is Apple's (NFS-339)
+usr.sbin/nfsrevoke	n/a				no	FreeBSD's NFSv4 and pNFS; NFS is Apple's (NFS-339)
+usr.sbin/nfsuserd	equivalent	nfs4mapid (NFS-339)	usr/sbin/nfs4mapid	P4-21	no	
+usr.sbin/ngctl	n/a				no	netgraph
+usr.sbin/nghook	n/a				no	netgraph
+usr.sbin/nmtree	apple	file_cmds-475		P4-21	no	
+usr.sbin/nologin	apple	system_cmds-1039		P4-22	no	
+usr.sbin/nscd	equivalent	mDNSResponder caches lookups (mDNSResponder-2881.0.25)	usr/sbin/mDNSResponder	P4-24	yes	
+usr.sbin/ntp/ntp-keygen	port	net/ntp			no	Apple's ntpd needs closed libraries; the base has sntp
+usr.sbin/ntp/ntpd	port	net/ntp			no	Apple's ntpd needs closed libraries; the base has sntp
+usr.sbin/ntp/ntpdate	port	net/ntp			no	Apple's ntpd needs closed libraries; the base has sntp
+usr.sbin/ntp/ntpdc	port	net/ntp			no	Apple's ntpd needs closed libraries; the base has sntp
+usr.sbin/ntp/ntpq	port	net/ntp			no	Apple's ntpd needs closed libraries; the base has sntp
+usr.sbin/ntp/ntptime	port	net/ntp			no	Apple's ntpd needs closed libraries; the base has sntp
+usr.sbin/ntp/sntp	apple	ntp-139		P4-24	yes	sntp only (docs/base/pf-ntp.md)
+usr.sbin/nvram	n/a				no	powerpc Open Firmware NVRAM (UEFI variables: efivar)
+usr.sbin/ofwdump	n/a				no	Open Firmware
+usr.sbin/pciconf	new	pciconf-compatible listing over the IOKit registry (§3)		P4-21	no	
+usr.sbin/periodic	freebsd	FreeBSD usr.sbin/periodic		P4-23	no	
+usr.sbin/pkg	equivalent	ndpkg (docs/architecture/packaging.md)	usr/sbin/ndpkg	P2-04	no	
+usr.sbin/pmc	n/a				no	hwpmc(4); xnu has kpc
+usr.sbin/pmcannotate	n/a				no	hwpmc(4); xnu has kpc
+usr.sbin/pmccontrol	n/a				no	hwpmc(4); xnu has kpc
+usr.sbin/pmcstat	n/a				no	hwpmc(4); xnu has kpc
+usr.sbin/pmcstudy	n/a				no	hwpmc(4); xnu has kpc
+usr.sbin/pnfsdscopymr	n/a				no	FreeBSD's NFSv4 and pNFS; NFS is Apple's (NFS-339)
+usr.sbin/pnfsdsfile	n/a				no	FreeBSD's NFSv4 and pNFS; NFS is Apple's (NFS-339)
+usr.sbin/pnfsdskill	n/a				no	FreeBSD's NFSv4 and pNFS; NFS is Apple's (NFS-339)
+usr.sbin/pnpinfo	n/a				no	not built for FreeBSD/arm64 (arch=i386)
+usr.sbin/powerd	n/a				no	cpufreq(4); CPU power is the kernel's (P7-02)
+usr.sbin/ppp	equivalent	pppd (ppp-1020.1.1)	usr/sbin/pppd	P4-21	no	user ppp needs tun(4); xnu has utun
+usr.sbin/pppctl	equivalent	pppd (ppp-1020.1.1)	usr/sbin/pppd	P4-21	no	
+usr.sbin/praliases	port	mail/sendmail			no	sendmail is an option in FreeBSD too (MK_SENDMAIL)
+usr.sbin/praudit	apple	OpenBSM-21		P4-21	yes	OpenBSM, as on FreeBSD
+usr.sbin/prometheus_sysctl_exporter	freebsd	FreeBSD usr.sbin/prometheus_sysctl_exporter		P4-21	no	
+usr.sbin/pstat	equivalent	sysctl vm.swapusage	usr/sbin/sysctl	P1-08	yes	swapinfo
+usr.sbin/pw	freebsd	FreeBSD usr.sbin/pw		P4-22	no	
+usr.sbin/pwd_mkdb	apple	system_cmds-1039		P4-22	yes	
+usr.sbin/pwm	n/a				no	FreeBSD bus drivers (gpio, iicbus, spibus, pwm, smbus)
+usr.sbin/quot	n/a				no	UFS
+usr.sbin/quotaon	apple	diskdev_cmds-751		P4-21	no	
+usr.sbin/rarpd	apple	network_cmds-726		P4-24	yes	
+usr.sbin/repquota	apple	diskdev_cmds-751		P4-21	no	
+usr.sbin/rip6query	freebsd	FreeBSD usr.sbin/rip6query		P4-21	no	
+usr.sbin/rmt	n/a				no	tape
+usr.sbin/route6d	freebsd	FreeBSD usr.sbin/route6d		P4-21	no	
+usr.sbin/rpc.lockd	apple	NFS-339		P4-21	no	
+usr.sbin/rpc.statd	apple	NFS-339		P4-21	no	
+usr.sbin/rpc.tlsclntd	n/a				no	kernel RPC-over-TLS
+usr.sbin/rpc.tlsservd	n/a				no	kernel RPC-over-TLS
+usr.sbin/rpc.umntall	freebsd	FreeBSD usr.sbin/rpc.umntall		P4-21	no	
+usr.sbin/rpc.yppasswdd	n/a				no	NIS: accounts are the flat files (P4-22)
+usr.sbin/rpc.ypupdated	n/a				no	NIS: accounts are the flat files (P4-22)
+usr.sbin/rpc.ypxfrd	n/a				no	NIS: accounts are the flat files (P4-22)
+usr.sbin/rpcbind	freebsd	FreeBSD usr.sbin/rpcbind		P4-21	no	macOS's rpcbind is unpublished; for NFS
+usr.sbin/rrenumd	freebsd	FreeBSD usr.sbin/rrenumd		P4-21	no	
+usr.sbin/rtadvctl	freebsd	FreeBSD usr.sbin/rtadvctl		P4-21	no	
+usr.sbin/rtadvd	freebsd	freebsd-src 050683bb8e13		P4-24	yes	network_cmds-726 has no rtadvd sources (base/rtadvd)
+usr.sbin/rtprio	n/a				no	rtprio(2) scheduling classes
+usr.sbin/rtsold	freebsd	freebsd-src 050683bb8e13		P4-24	yes	RDNSS and DNSSL (base/rtsold)
+usr.sbin/rwhod	freebsd	FreeBSD usr.sbin/rwhod		P4-21	no	
+usr.sbin/sa	apple	system_cmds-1039		P4-21	no	
+usr.sbin/sendmail	port	mail/sendmail			no	sendmail is an option in FreeBSD too (MK_SENDMAIL)
+usr.sbin/service	new	NeoDarwin service(8) over launchd		P4-23	no	
+usr.sbin/services_mkdb	n/a				no	Libinfo reads /etc/services directly
+usr.sbin/sesutil	n/a				no	SCSI enclosures via CAM
+usr.sbin/setaudit	freebsd	FreeBSD usr.sbin/setaudit		P4-21	no	
+usr.sbin/setfib	n/a				no	multiple routing tables (FIBs)
+usr.sbin/setfmac	n/a				no	FreeBSD's MAC label policies; xnu's MAC framework hosts AMFI
+usr.sbin/setpmac	n/a				no	FreeBSD's MAC label policies; xnu's MAC framework hosts AMFI
+usr.sbin/smbmsg	n/a				no	FreeBSD bus drivers (gpio, iicbus, spibus, pwm, smbus)
+usr.sbin/snapinfo	n/a				no	UFS snapshots
+usr.sbin/sndctl	new	device control over NDAudioFamily		P7-08	no	FreeBSD sound is OSS
+usr.sbin/spi	n/a				no	FreeBSD bus drivers (gpio, iicbus, spibus, pwm, smbus)
+usr.sbin/spkrtest	n/a				no	not built for FreeBSD/arm64 (arch=amd64 || arch=i386)
+usr.sbin/spray	apple	network_cmds-726		P4-24	yes	
+usr.sbin/syslogd	apple	syslog-404		P4-23	no	
+usr.sbin/sysrc	new	NeoDarwin sysrc(8): /etc/rc.conf overrides for launchd jobs		P4-23	no	
+usr.sbin/tcpdchk	port	security/tcp_wrappers			no	launchd has no TCP wrappers
+usr.sbin/tcpdmatch	port	security/tcp_wrappers			no	launchd has no TCP wrappers
+usr.sbin/tcpdrop	n/a				no	FreeBSD's net.inet.tcp.drop sysctl
+usr.sbin/tcpdump/tcpdump	apple	tcpdump-153		P4-24	yes	
+usr.sbin/tcpsso	n/a				no	FreeBSD TCP socket-option sysctl
+usr.sbin/traceroute	apple	network_cmds-726		P4-24	yes	
+usr.sbin/traceroute6	apple	network_cmds-726		P4-24	yes	
+usr.sbin/trim	freebsd	FreeBSD usr.sbin/trim		P4-21	no	DKIOCUNMAP
+usr.sbin/tzsetup	freebsd	FreeBSD usr.sbin/tzsetup		P4-21	no	
+usr.sbin/uathload	n/a				no	USB driver firmware
+usr.sbin/uefisign	freebsd	FreeBSD usr.sbin/uefisign		P4-21	no	
+usr.sbin/ugidfw	n/a				no	FreeBSD's MAC label policies; xnu's MAC framework hosts AMFI
+usr.sbin/uhsoctl	n/a				no	USB driver
+usr.sbin/unbound/anchor	n/a				no	local-unbound's tools; the local resolver is mDNSResponder
+usr.sbin/unbound/checkconf	n/a				no	local-unbound's tools; the local resolver is mDNSResponder
+usr.sbin/unbound/control	n/a				no	local-unbound's tools; the local resolver is mDNSResponder
+usr.sbin/unbound/daemon	equivalent	mDNSResponder (mDNSResponder-2881.0.25)	usr/sbin/mDNSResponder	P4-24	yes	the local resolver
+usr.sbin/unbound/setup	n/a				no	local-unbound's tools; the local resolver is mDNSResponder
+usr.sbin/usbconfig	new	usbconfig-compatible listing over the IOKit registry (§3)		P3-07	no	
+usr.sbin/usbdump	n/a				no	USB BPF
+usr.sbin/utx	freebsd	FreeBSD usr.sbin/utx		P4-22	no	
+usr.sbin/valectl	n/a				no	netmap
+usr.sbin/vidcontrol	new	console tools for ndfb virtual terminals		P4-26	no	
+usr.sbin/vigr	freebsd	FreeBSD usr.sbin/vigr		P4-22	no	
+usr.sbin/vipw	apple	system_cmds-1039		P4-22	no	
+usr.sbin/virtual_oss/virtual_bt_speaker	n/a				no	OSS sound
+usr.sbin/virtual_oss/virtual_oss	n/a				no	OSS sound
+usr.sbin/virtual_oss/virtual_oss_cmd	n/a				no	OSS sound
+usr.sbin/wake	freebsd	FreeBSD usr.sbin/wake		P4-21	no	
+usr.sbin/watch	n/a				no	snp(4) tty snooping
+usr.sbin/watchdogd	n/a				no	watchdog(4)
+usr.sbin/wlandebug	n/a				no	net80211 wireless
+usr.sbin/wlanstat	n/a				no	net80211 wireless
+usr.sbin/wpa/hostapd	n/a				no	net80211 wireless
+usr.sbin/wpa/hostapd_cli	n/a				no	net80211 wireless
+usr.sbin/wpa/wpa_cli	n/a				no	net80211 wireless
+usr.sbin/wpa/wpa_passphrase	n/a				no	net80211 wireless
+usr.sbin/wpa/wpa_supplicant	n/a				no	net80211 wireless
+usr.sbin/yp_mkdb	n/a				no	NIS: accounts are the flat files (P4-22)
+usr.sbin/ypbind	n/a				no	NIS: accounts are the flat files (P4-22)
+usr.sbin/ypldap	n/a				no	NIS: accounts are the flat files (P4-22)
+usr.sbin/yppoll	n/a				no	NIS: accounts are the flat files (P4-22)
+usr.sbin/yppush	n/a				no	NIS: accounts are the flat files (P4-22)
+usr.sbin/ypserv	n/a				no	NIS: accounts are the flat files (P4-22)
+usr.sbin/ypset	n/a				no	NIS: accounts are the flat files (P4-22)
+usr.sbin/zdump	apple	system_cmds-1039		P4-21	no	
+usr.sbin/zic	apple	system_cmds-1039		P4-21	no	
+usr.sbin/zonectl	n/a				no	SMR zones via CAM
+usr.sbin/zzz	n/a				no	not built for FreeBSD/arm64 (arch=amd64 || arch=i386)

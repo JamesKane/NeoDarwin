@@ -1,0 +1,10 @@
+path	status	source	provides	roadmap	built	note
+bin/bar	n/a				no	not built by default
+bin/cat	apple	text_cmds-197		P4-21	yes	
+bin/ls	apple	file_cmds-475		P4-21	no	
+bin/x86only	n/a				no	amd64 only
+sbin/foo	freebsd	FreeBSD sbin/foo		P4-21	no	
+sbin/group/one	equivalent	uno	usr/bin/uno	P4-21	yes	
+sbin/group/two	port	sysutils/two			no	
+usr.bin/hello	new	hello		P4-21	yes	
+usr.sbin/daemon	todo				no	

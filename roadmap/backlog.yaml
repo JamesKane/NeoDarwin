@@ -439,7 +439,7 @@ epics:
     title: "Parity inventory — tools/parity lists FreeBSD base programs from a pinned freebsd-src and records each one's NeoDarwin status (apple, freebsd, equivalent, port, not-applicable); CI publishes coverage"
     phase: 4
     owner: userland
-    status: todo
+    status: done
     depends: [P1-08]
     exit: "the inventory covers every program in bin, sbin, usr.bin and usr.sbin of the pinned release, and CI fails if a row loses its status"
     doc: docs/architecture/freebsd-parity.md

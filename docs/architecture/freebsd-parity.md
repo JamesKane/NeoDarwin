@@ -18,19 +18,62 @@ Parity is about **usage**, not source. A program counts if it exists under the F
 
 ## 2. Measuring it: the parity inventory
 
-`tools/parity` (P4-20) walks `bin/`, `sbin/`, `usr.bin/` and `usr.sbin/` of a pinned FreeBSD release (the stable 15.x line; `../freebsd-src` is 16-CURRENT and is used only as a reference). It writes `docs/base/parity.tsv` with one row per program. At the time of writing there are 633 program directories: 42 in `bin`, 85 in `sbin`, 274 in `usr.bin` and 232 in `usr.sbin`.
+`tools/parity` (P4-20) lists every program FreeBSD's base builds in `bin/`, `sbin/`, `usr.bin/` and `usr.sbin/` and records what NeoDarwin has for each. `bazel test //tools/parity:all` keeps the record honest.
+
+**Which FreeBSD.** The inventory pins **15.1-RELEASE**: tag `release/15.1.0`, freebsd-src `96841ea08dcf` (`tools/parity/freebsd.lock`). The files NeoDarwin builds from FreeBSD (msun, libxo, dhclient, rtsold, rtadvd, resolvconf, libcrypt) are pinned at `050683bb8e13` instead. That commit is on `main` (16-CURRENT, 25 September 2026), not on a release branch, and it suits a source drop. Parity is measured against what a FreeBSD administrator actually runs, and that is a release, so the inventory follows the newest RELEASE. Patch releases (`-pN`) don't change the program set. The pin moves when a new RELEASE ships (`bazel run //tools/parity:lock`), and the ratchet then shows every row the bump adds or removes. `../freebsd-src` is used only as a reference.
+
+**What a row is.** The walk (`parity programs`, run by `//tools/parity:programs`) reads the pinned Makefiles with a small bmake reader. It follows `SUBDIR`, `SUBDIR.${MK_*}` and `.if` conditions, `Makefile.<arch>` (as `bsd.arch.inc.mk` includes it) and the `Makefile.inc` chain. It reads `PROG`, `PROGNAME`, `PROGS`, `SCRIPTS`, `LINKS` and `BINDIR`, and evaluates the `MK_*` options from `share/mk`'s defaults for an arm64 build. A row is one program directory: either a top-level entry, or, under an entry that only collects others (`usr.sbin/acpi`, `usr.bin/clang`, `usr.sbin/bluetooth`), each descendant that installs a program. Helpers in a program directory's subdirectories belong to its row (bsdinstall's, routed's `rtquery`). The `tests` directories are FreeBSD's test suite, not programs. Every architecture's entries and every option's entries are included, so the set doesn't depend on the build options. `programs.tsv` records each row's condition (`cond`), whether a default arm64 build includes it (`aarch64`) and its installed names. 15.1-RELEASE has **752 rows: 41 in `bin`, 90 in `sbin`, 340 in `usr.bin` and 281 in `usr.sbin`**. 71 of them aren't built for arm64 by default (the arch-specific ones, `MK_CLANG_EXTRAS`, `MK_OFED_EXTRA` and a few others).
+
+**The inventory** is `tools/parity/inventory.tsv`, one row per program directory:
+
+| Column | Content |
+|---|---|
+| `path` | the FreeBSD directory, e.g. `usr.bin/grep` |
+| `status` | one of the statuses below |
+| `source` | where NeoDarwin's program comes from: the Apple project and version (`text_cmds-197`), the FreeBSD pin, the port's origin, or the equivalent and its project |
+| `provides` | for an `equivalent`, or a program installed under another name: the image paths that count as this row being built (`usr/sbin/ioreg`). Empty means the row's own name |
+| `roadmap` | the backlog item that builds it (P4-21 by default) |
+| `built` | `yes` if the image installs it. This is derived from the image, never claimed by hand: `bazel run //tools/parity:update` sets it, and `built_test` fails if it is wrong |
+| `note` | a short rationale; required for `n/a` |
 
 | Status | Meaning |
 |---|---|
-| `apple` | built from Apple's open source (the `*_cmds` projects and others) |
+| `apple` | built from Apple's open source (the `*_cmds` projects and others in the macOS 26 release set) |
 | `freebsd` | built from FreeBSD's source, where Apple doesn't publish the program |
-| `new` | written for NeoDarwin (for example `launchctl`, `service`, `sysrc`) |
-| `equivalent` | a different program does the job; the row names it and the differences (for example `bectl` → `ndpkg system`) |
-| `port` | not in the base, available from the ports tree |
-| `n/a` | tied to a FreeBSD subsystem that NeoDarwin does not have (§5), with the reason |
+| `new` | written for NeoDarwin (for example `service`, `sysrc`, `pciconf` over the IOKit registry) |
+| `equivalent` | a different program does the job; `source` names it (for example `bectl` → `ndpkg system`, `devinfo` → `ioreg`, `ktrace` → `dtruss`) |
+| `port` | not in the base, available from the ports tree (for example `ntpd` → `net/ntp`, sendmail) |
+| `n/a` | tied to a FreeBSD subsystem or file system that NeoDarwin doesn't have (§5: jails, bhyve, GEOM, ipfw, UFS, CAM, netgraph, OFED, NIS), or not built for FreeBSD/arm64; `note` gives the reason |
 | `todo` | not yet decided |
 
-CI publishes the coverage (every status except `todo`, as a share of all rows) and fails if a row that had a status loses it. The 1.0 gate is **no `todo` rows**, and every `apple`, `freebsd` and `new` row built, installed and passing the FreeBSD test suite's tests for that program where they exist (`/usr/tests`, Kyua).
+A program's key name is the installed name that matches its directory (`vi`, not `nvi`), or else its first name. A row counts as built when the image's `bin`, `sbin`, `usr/bin`, `usr/sbin` or `usr/libexec` has that name, or when every path in `provides` exists. The image is `//images:session_root`, read from its file list (`//images:session_root_contents`, which every `hfs_ramdisk` now has).
+
+**Checks** (in `bazel test //...`):
+
+| Test | Fails when |
+|---|---|
+| `inventory_test` (a), (b) | a program directory has no row, a row isn't a program directory of the pinned release, or rows are duplicated or unsorted; a status is unknown; an `apple`, `freebsd`, `new` or `equivalent` row has no source, or is unbuilt with no roadmap item; an `n/a` row has no reason; a roadmap item isn't in `roadmap/backlog.yaml` |
+| `ratchet_test` (c) | against `tools/parity/baseline.tsv`, a row loses its status (back to `todo`), stops being built, or disappears; or the inventory moved ahead and the baseline wasn't updated (`bazel run //tools/parity:accept`). `accept` refuses to record a regression without `-- --regress`, so losing ground is always a deliberate, reviewed change to `baseline.tsv` |
+| `built_test` (d) | a row's `built` disagrees with the image |
+| `selftest` | the walk or a check gives the wrong answer on `tools/parity/testdata` |
+
+**Coverage.** `bazel build //tools/parity:coverage` writes `coverage.md`: counts by status and directory, how much of the base is built, and the unbuilt rows grouped by roadmap item and source. That last part is P4-21's work list. `ci/parity.sh` runs the checks, builds the report and copies it to `$PARITY_OUT` (and to the job summary on GitHub and Forgejo Actions). The workflow that publishes it as an artifact waits for the CI runners (P0-05). Coverage is every status except `todo`, as a share of all rows. The 1.0 gate is **no `todo` rows**, and every `apple`, `freebsd`, `new` and `equivalent` row built, installed and passing the FreeBSD test suite's tests for that program where they exist (`/usr/tests`, Kyua).
+
+Today (P4-20 seeding, 2026-10-02), on 15.1-RELEASE's 752 rows:
+
+| Status | Rows | Built |
+|---|---:|---:|
+| `apple` | 250 | 52 |
+| `freebsd` | 120 | 5 |
+| `new` | 15 | 0 |
+| `equivalent` | 44 | 9 |
+| `port` | 28 | – |
+| `n/a` | 295 | – |
+| `todo` | 0 | – |
+
+Coverage is 100% (no `todo`). Of the 429 base rows, 66 (15.4%) are built: 52.6% of `bin`, 33.3% of `sbin`, 5.6% of `usr.bin` and 16.5% of `usr.sbin`. P4-21 holds 277 of the 363 unbuilt base rows. The largest groups are 82 FreeBSD programs (`fetch`, `ee`, `mandoc`, `bmake`, `xz`, `zstd`, `kyua`, `timeout`, `certctl`, `makefs`, ...), shell_cmds (38), text_cmds (31), file_cmds (19), system_cmds (14), adv_cmds (8) and Apple's NFS (7). The toolchain (31 rows, P5-10), accounts (13, P4-22), services (7, P4-23) and the ndpkg-backed equivalents (P2-02 to P2-04) make up the rest.
+
+**Workflow.** Reclassify a row by editing `inventory.tsv`, then run `bazel run //tools/parity:accept`. After a base change installs or removes programs, run `bazel run //tools/parity:update` then `accept`. For a new FreeBSD release, run `bazel run //tools/parity:lock -- CHECKOUT "15.2-RELEASE (tag release/15.2.0)"` on a checkout of the tag (a sparse checkout of `bin sbin usr.bin usr.sbin share/mk` is enough), then `update` (new directories arrive as `todo`), classify them, and `accept`.
 
 ## 3. Administration: FreeBSD front ends on Darwin mechanisms
 

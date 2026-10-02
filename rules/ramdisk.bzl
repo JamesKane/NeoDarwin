@@ -84,9 +84,45 @@ _hfs_ramdisk = rule(
     },
 )
 
+def _contents_impl(ctx):
+    out = ctx.actions.declare_file(ctx.label.name + ".txt")
+    args = ctx.actions.args()
+    args.add(out)
+    args.add_all(ctx.files.trees, expand_directories = False)
+    listed = ctx.actions.declare_file(ctx.label.name + ".listed.txt")
+    ctx.actions.write(listed, "".join([dest + "\n" for dest in ctx.attr.files.values() + ctx.attr.links.keys()]))
+    ctx.actions.run_shell(
+        inputs = ctx.files.trees + [listed],
+        outputs = [out],
+        arguments = [args],
+        command = """out="$1"; shift
+{ cat "%s"; for t in "$@"; do (cd "$t" && find . -mindepth 1 \\( -type f -o -type l \\) | sed 's|^\\./||'); done; } | LC_ALL=C sort -u > "$out"
+""" % listed.path,
+        mnemonic = "VolumeContents",
+        progress_message = "Listing %{label}",
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+_volume_contents = rule(
+    implementation = _contents_impl,
+    doc = "The paths of an hfs_ramdisk's files and links, one per line, sorted (no image is built).",
+    attrs = {
+        "files": attr.label_keyed_string_dict(allow_files = True),
+        "trees": attr.label_list(allow_files = True),
+        "links": attr.string_dict(),
+    },
+)
+
 def hfs_ramdisk(name, tags = [], **kwargs):
-    """An HFS+ volume (NAME, NAME.hfs) and its static trust cache (NAME_trustcache)."""
+    """An HFS+ volume (NAME, NAME.hfs), its static trust cache (NAME_trustcache) and its file list (NAME_contents)."""
     _hfs_ramdisk(name = name, tags = tags, **kwargs)
+    _volume_contents(
+        name = name + "_contents",
+        files = kwargs.get("files", {}),
+        trees = kwargs.get("trees", []),
+        links = kwargs.get("links", {}),
+        tags = tags,
+    )
     native.filegroup(
         name = name + "_trustcache",
         srcs = [":" + name],
