@@ -1,0 +1,62 @@
+From: NeoDarwin
+Subject: [PATCH] arm64: the physical aperture's end covers its twig padding
+
+On ARM_LARGE_MEMORY kernels without a page-protection monitor (Apple's
+large-memory virtual machines, and the SBSA kernel), arm_vm_init() set
+physmap_end = physmap_base + real_phys_size. arm_vm_physmap_init() maps
+the memory below the kernel at physmap_base and the memory above it right
+after, moved up so its offset within a twig matches its physical one (for
+block mappings): up to a twig (32 MB with 16K pages) of padding. When the
+kernel's own region, which the aperture skips, is smaller than that
+padding, the aperture ends past physmap_end, and copyio's
+copy_validate_kernel_addr() panics on the highest pages' aperture
+addresses ("kaddr not in kernel"). On QEMU virt with 4 GB, the OpenZFS
+test suite reached them through HFS+ writes (cluster_write ->
+uio_copyin_phys_user -> bcopy_phys -> copyin) once memory filled
+(P3-01 checkpoint 2). The !ARM_LARGE_MEMORY case already allows
+PTOV_TABLE_SIZE twigs for this; the generic case now does the same, and
+sizes the aperture's L1 entries to fit.
+
+Rebase-risk: low (two expressions in arm_vm_init()).
+---
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -1849,7 +1849,16 @@
+ #endif
+ 
+ #if defined(ARM_LARGE_MEMORY)
++#if GENERIC_ARM64_PLATFORM && !XNU_MONITOR
++	/*
++	 * Generic Arm: room for the twig-alignment padding arm_vm_physmap_slide()
++	 * puts between the physical aperture's segments (below).
++	 */
++	unsigned long physmap_l1_entries = ((real_phys_size + ARM64_PHYSMAP_SLIDE_RANGE +
++	    (PTOV_TABLE_SIZE * ARM_TT_TWIG_SIZE)) >> ARM_TT_L1_SHIFT) + 1;
++#else
+ 	unsigned long physmap_l1_entries = ((real_phys_size + ARM64_PHYSMAP_SLIDE_RANGE) >> ARM_TT_L1_SHIFT) + 1;
++#endif
+ 	physmap_base = VM_MIN_KERNEL_ADDRESS - (physmap_l1_entries << ARM_TT_L1_SHIFT);
+ #else
+ 	physmap_base = phystokv(args->topOfKernelData);
+@@ -1875,7 +1884,20 @@
+ #if defined(ARM_LARGE_MEMORY)
+ 	/* For large memory systems with no PPL such as virtual machines */
+ 	static_memory_end = phystokv(args->topOfKernelData);
++#if GENERIC_ARM64_PLATFORM
++	/*
++	 * Generic Arm: arm_vm_physmap_init() places the memory above the kernel
++	 * after the memory below it, moved up to keep its offset within a twig
++	 * (block mappings), so the aperture can end up to a twig past
++	 * physmap_base + real_phys_size when the kernel's own region is smaller
++	 * than a twig. Allow for it as the !ARM_LARGE_MEMORY case does, or
++	 * copyio's bounds check (copy_validate_kernel_addr()) rejects the
++	 * aperture addresses of the highest pages.
++	 */
++	physmap_end = physmap_base + real_phys_size + (PTOV_TABLE_SIZE * ARM_TT_TWIG_SIZE);
++#else
+ 	physmap_end = physmap_base + real_phys_size;
++#endif
+ #else
+ 	static_memory_end = physmap_base + mem_size + (PTOV_TABLE_SIZE * ARM_TT_TWIG_SIZE); // worst possible case for block alignment
+ 	physmap_end = physmap_base + real_phys_size + (PTOV_TABLE_SIZE * ARM_TT_TWIG_SIZE);

@@ -28,18 +28,84 @@ nd_kext(
     upstream_headers = ["@apple_iostoragefamily//:headers"],
 )
 
-# zpool and zfs, at /sbin.
+# The userland (user.sh): a private static zlib (Apple's zlib-100.120.1)
+# until the base has zlib (P3-02), and the libraries as static archives
+# (libs.sh: libzfs.a, libzpool.a), all in build-only usr/local paths.
+_USER = _PORT + glob(["compat/*"]) + [
+    "user.sh",
+    "//base:commands.sh",
+]
+
 base_library(
-    name = "zfs_commands",
-    data = _PORT + glob(["compat/*"]) + ["//base:commands.sh"],
+    name = "zlib",
+    data = ["//base:commands.sh"],
+    deps = ["//base:root"],
+    script = "zlib.sh",
+    srcs = "@apple_zlib//:all",
+    sysroot = "//base:sysroot",
+)
+
+base_library(
+    name = "zfs_libs",
+    data = _USER,
     deps = [
         "//base:root",
         "//base:libcrypto_dylib",
+        ":zlib",
     ],
+    script = "libs.sh",
+    srcs = "@openzfs//:all",
+    sysroot = "//base:sysroot",
+)
+
+_USER_DEPS = [
+    "//base:root",
+    "//base:libcrypto_dylib",
+    ":zlib",
+    ":zfs_libs",
+]
+
+# zpool and zfs at /sbin, zinject and zstream at /usr/bin, zdb and zhack at
+# /usr/sbin (userland.sh).
+base_library(
+    name = "zfs_commands",
+    data = _USER,
+    deps = _USER_DEPS,
     script = "userland.sh",
     srcs = "@openzfs//:all",
     sysroot = "//base:sysroot",
 )
+
+# The test suite's helpers at /usr/share/zfs/zfs-tests/bin (test_commands.sh).
+base_library(
+    name = "zfs_test_commands",
+    data = _USER,
+    deps = _USER_DEPS,
+    script = "test_commands.sh",
+    srcs = "@openzfs//:tests",
+    sysroot = "//base:sysroot",
+)
+
+# The OpenZFS test suite's scripts for the groups of tests/groups.txt, with
+# tests/patches, and the runner, nd-zfs-tests (P3-01 checkpoint 2,
+# docs/architecture/filesystems.md §7): usr/share/zfs. For
+# //images:zfs_test_disk and //kernel:sbsa_zfs_suite_test.
+base_library(
+    name = "zfs_test_suite",
+    data = glob(["tests/patches/*.patch"], allow_empty = True) + [
+        "tests/groups.txt",
+        "tests/nd-zfs-tests.ksh",
+    ],
+    script = "tests/suite.sh",
+    srcs = "@openzfs//:tests",
+    sysroot = "//base:sysroot",
+)
+
+exports_files([
+    "tests/expected.tsv",
+    "tests/groups.txt",
+    "tests/suite_test.sh",
+])
 
 # The kext against the SBSA baseline (//kernel:sbsa_isa_audit's): no
 # instruction past Armv8.2 except the runtime-gated ones in isa_audit.txt.

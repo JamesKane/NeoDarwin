@@ -1,0 +1,65 @@
+From: NeoDarwin
+Subject: [PATCH] spl: getf() starts at, and releasefp() sets, the descriptor's offset
+
+The macOS layer's getf() starts every descriptor at offset 0 and never
+moves it: XNU gives a kext no access to a descriptor's offset. zfs receive
+reads the stream through the descriptor's vnode after libzfs has read
+the BEGIN record from it, so zfs receive < file read the BEGIN record
+again as the next record and failed with "invalid backup stream" (the
+OpenZFS test suite's zfs_send and zfs_receive groups, P3-01 checkpoint 2);
+zfs send -R > file wrote over libzfs's own header. NeoDarwin's kernel
+exports file_offset_get() and file_offset_set() (kernel patch 0042):
+getf() starts a regular file at the process's offset, and releasefp(),
+from the same process, leaves it after what the module read or wrote, as
+the FreeBSD and Linux layers' zfs_file_read() and zfs_file_write() do.
+Pipes still go through libzfs's FIFO relay (libzfs_macos_wrapfd()).
+
+Rebase-risk: low (getf and releasefp only)
+---
+diff --git a/module/os/neodarwin/spl/spl-vnode.c b/module/os/neodarwin/spl/spl-vnode.c
+--- a/module/os/neodarwin/spl/spl-vnode.c
++++ b/module/os/neodarwin/spl/spl-vnode.c
+@@ -168,6 +168,11 @@
+     vfs_context_t ctx);
+ extern int file_vnode_withvid(int, struct vnode **, uint32_t *);
+ extern int file_drop(int);
++#ifdef __NEODARWIN__
++/* NeoDarwin's BSD KPI (kernel patch 0042). */
++extern int file_offset_get(int, off_t *);
++extern int file_offset_set(int, off_t);
++#endif
+ 
+ /*
+  * getf(int fd) - hold a lock on a file descriptor, to be released by calling
+@@ -216,6 +221,19 @@
+ 		if (type == VCHR || type == VBLK) {
+ 			sfp->f_file = minor(vnode_specrdev(vp));
+ 		}
++#ifdef __NEODARWIN__
++		/*
++		 * Start where the process's own I/O left a regular file
++		 * (zfs receive < file: libzfs has read the BEGIN record);
++		 * releasefp() leaves the descriptor after what the module
++		 * read or wrote, as FreeBSD's and Linux's file I/O does.
++		 */
++		if (type == VREG) {
++			off_t off;
++			if (file_offset_get(fd, &off) == 0)
++				sfp->f_offset = off;
++		}
++#endif
+ 		file_drop(fd);
+ 	}
+ 
+@@ -243,6 +261,11 @@
+ void
+ releasefp(struct spl_fileproc *fp)
+ {
++#ifdef __NEODARWIN__
++	if (fp->f_vnode != NULL && vnode_vtype(fp->f_vnode) == VREG &&
++	    fp->f_proc == current_proc())
++		(void) file_offset_set(fp->f_fd, fp->f_offset);
++#endif
+ 	if (fp->f_vnode != NULL)
+ 		vnode_put(fp->f_vnode);
+ 

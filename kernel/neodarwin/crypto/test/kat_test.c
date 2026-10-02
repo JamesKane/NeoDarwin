@@ -32,6 +32,8 @@ fill(void *out, size_t n)
 }
 void nd_platform_seed(void *out, size_t n) { fill(out, n); }
 void nd_platform_random(void *out, size_t n) { fill(out, n); }
+uintptr_t nd_platform_cpu_enter(unsigned *cpu) { *cpu = 0; return 0; }
+void nd_platform_cpu_exit(uintptr_t state) { (void)state; }
 
 static size_t
 unhex(const char *h, uint8_t *out)

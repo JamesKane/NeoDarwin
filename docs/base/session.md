@@ -128,6 +128,39 @@ NeoDarwin has macOS's three shells:
 | The finale script links `/usr/local/bin/bash` to `/bin/bash` | not installed: `usr/local` isn't part of the root |
 | libedit's `unexports` list also hides the apple-generic version symbols | not generated |
 
+### ksh
+
+`/bin/ksh` is **ksh93u+m 1.0.10** (`github.com/ksh93/ksh`, EPL-2.0; `//base:ksh_shell`, `base/ksh/build.sh`), for the OpenZFS test suite, whose scripts start `#!/bin/ksh -p` (P3-01, `docs/architecture/filesystems.md` §7). It ships only in the ZFS test image for now, not in `//base:system_root`. FreeBSD's base has no ksh either; its ports' `shells/ksh` is this one.
+
+- **Why not Apple's drop.** Apple's `ksh-42` is ksh93u+ 2012-08-01 (EPL-1.0). Its AST build fails under Xcode 27's clang: libast's `va_list` probe gives arm64 the wrong `va_listval` (`hashalloc.c`, `tokscan.c`), libdll's `dlopen` probe fails, implicit declarations and int conversions are errors, and its `main.c` includes `<sys/codesign.h>`. ksh93u+m is the maintained continuation of the same AT&T code, with those fixed; it is the `ksh93` FreeBSD's runs of the ZFS test suite use.
+- **The build** is the project's own `bin/package make` (mamake and iffe): libast, libcmd, libdll and libsum, linked statically into `ksh`, which links only libSystem. iffe has no cross-compiling mode: many feature tests run the program they built. So, unlike zsh's configure (cross-compiling, answers from `config.cache`), every probe is compiled against NeoDarwin's sysroot and linked against the runtime root, and then run on the build machine, where `/usr/lib/libSystem.B.dylib` is macOS's: a probe sees only what NeoDarwin declares and exports, and its run-time answers (type sizes, signal numbers, stdio internals) come from the same Libc and xnu lineage. `$CC` is a wrapper with those flags; links are ad hoc signed, as `link_tool`'s. About two minutes.
+- Nothing else is installed: no `fun/` files, man page or tests. ksh's builtins (libcmd's) are compiled in.
+
+### After P1-08: the ZFS test suite's commands
+
+The OpenZFS test suite (P3-01, `docs/architecture/filesystems.md` §7) and its `libtest.shlib` call about forty commands the first session lacked. They are in `//base:system_root`, each built as its Xcode target builds it, installed where macOS has it:
+
+| Project | Tag | Added |
+|---|---|---|
+| text_cmds | 197 | `cut`, `sort`, `uniq`, `tr`, `tail`, `grep` (with `egrep`, `fgrep`) |
+| shell_cmds | 326 | `basename`, `dirname`, `expr` (`/bin`), `find`, `xargs`, `mktemp`, `seq`, `which`, `true`, `false`, `tee`, `script`, `hexdump` and `od` |
+| file_cmds | 475 | `dd`, `rmdir` (`/bin`), `du`, `touch`, `stat` and `readlink`, `truncate`, `cksum` and `sum`, `mkfifo`, `chown` (`/usr/sbin`) and `chgrp`, `compress` and `uncompress` |
+| adv_cmds | 237 | `pkill` and `pgrep` |
+| system_cmds | 1039 | `sync` (`/bin`), `getconf` |
+| awk | 40 | `awk` (`//base:awk_command`) |
+| patch_cmds | 72 | `cmp`, `diff` (`//base:patch_commands`) |
+| FreeBSD `bin/timeout` | freebsd-src `050683bb8e13` | `/bin/timeout` (`//base:timeout_command`; macOS 26 has none) |
+
+| Problem | Resolution |
+|---|---|
+| grep links libbz2, liblzma and libz for `-Z`, `-J`, `--xz` and `--lzma`; the base has none of them (zlib is P3-02) | text_cmds patch 0001 (`GREP_NO_DECOMPRESSION`): compressed input fails with status 2; the `z*` and `bz*` variants aren't installed |
+| sort `-R` hashes with CommonCrypto's `CC_SHA256_*` (libcommonCrypto, closed, not reexported) | `base/text_cmds/compat/nd_cc_sha256.c`, SHA-256 per FIPS 180-4, linked into sort |
+| pkill reads the process table through libsysmon (closed; asks sysmond over XPC) | `base/adv_cmds/compat`: the `sysmon.h` and `xpc/xpc.h` subset pkill uses, answered from `sysctl(3)` (`KERN_PROC_ALL`, `KERN_PROCARGS2`) by `nd_sysmon.c`; pkill.c is unmodified |
+| FreeBSD's timeout uses `procctl(2)`'s reaper to signal and wait for the command's descendants | timeout patch 0001: the command runs in its own process group, which `killpg(2)` signals; `pipe2` and `str2sig` are local |
+| getconf's tables are gperf sources turned into C by `fake-gperf.awk` | the build machine's awk runs it, as Xcode's script phase does |
+
+Not built: `gzip` and `bzip2`/`bzcat` (zlib and libbz2 in the base are P3-02), `tar` and `cpio` (libarchive), `strings` (cctools), `bc` and `jq`.
+
 ### After P1-08: mount and fsck
 
 `/sbin/mount`, `/sbin/umount` and `/sbin/fsck` come from diskdev_cmds-751, and HFS+'s `mount_hfs`, `newfs_hfs` and `fsck_hfs` from hfs-704.0.3.0.2, the kernel's HFS pin (`//base:diskdev_commands`, `//base:hfs_commands`, both in `//base:system_root`). The HFS tools install where macOS has them, in `/System/Library/Filesystems/hfs.fs/Contents/Resources`, with `/sbin/mount_hfs`, `/sbin/fsck_hfs` and `/sbin/newfs_hfs` linked to them. There is no `/etc/fstab`, as on macOS.

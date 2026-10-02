@@ -1,0 +1,304 @@
+# The ratchet of //kernel:sbsa_zfs_suite_test (kexts/zfs/tests/suite_test.sh):
+# every test of kexts/zfs/tests/groups.txt's groups, as nd-zfs-tests runs it,
+# with its expected result. PATH (under tests/functional/) TAB RESULT TAB
+# REASON. RESULT is PASS, FAIL, SKIP, KILLED or FLAKY (any result).
+cli_root/zfs_create/cleanup	PASS	
+cli_root/zfs_create/setup	PASS	
+cli_root/zfs_create/zfs_create_001_pos	PASS	
+cli_root/zfs_create/zfs_create_002_pos	PASS	
+cli_root/zfs_create/zfs_create_003_pos	PASS	
+cli_root/zfs_create/zfs_create_004_pos	PASS	
+cli_root/zfs_create/zfs_create_005_pos	PASS	
+cli_root/zfs_create/zfs_create_006_pos	PASS	
+cli_root/zfs_create/zfs_create_007_pos	PASS	
+cli_root/zfs_create/zfs_create_008_neg	FAIL	NFS sharing: no NFS server (share options are not validated)
+cli_root/zfs_create/zfs_create_009_neg	PASS	
+cli_root/zfs_create/zfs_create_010_neg	PASS	
+cli_root/zfs_create/zfs_create_011_pos	PASS	
+cli_root/zfs_create/zfs_create_012_pos	PASS	
+cli_root/zfs_create/zfs_create_013_pos	PASS	
+cli_root/zfs_create/zfs_create_014_pos	PASS	
+cli_root/zfs_create/zfs_create_crypt_combos	PASS	
+cli_root/zfs_create/zfs_create_dryrun	PASS	
+cli_root/zfs_create/zfs_create_encrypted	PASS	
+cli_root/zfs_create/zfs_create_nomount	PASS	
+cli_root/zfs_create/zfs_create_verbose	PASS	
+cli_root/zfs_destroy/cleanup	PASS	
+cli_root/zfs_destroy/setup	PASS	
+cli_root/zfs_destroy/zfs_clone_livelist_condense_and_disable	FAIL	to investigate
+cli_root/zfs_destroy/zfs_clone_livelist_condense_races	FAIL	to investigate
+cli_root/zfs_destroy/zfs_clone_livelist_dedup	FAIL	to investigate
+cli_root/zfs_destroy/zfs_destroy_001_pos	FAIL	needs zvols (checkpoint 3)
+cli_root/zfs_destroy/zfs_destroy_002_pos	PASS	
+cli_root/zfs_destroy/zfs_destroy_003_pos	PASS	
+cli_root/zfs_destroy/zfs_destroy_004_pos	PASS	
+cli_root/zfs_destroy/zfs_destroy_005_neg	FAIL	needs zvols (checkpoint 3)
+cli_root/zfs_destroy/zfs_destroy_006_neg	PASS	
+cli_root/zfs_destroy/zfs_destroy_007_neg	PASS	
+cli_root/zfs_destroy/zfs_destroy_008_pos	FAIL	needs zvols (checkpoint 3)
+cli_root/zfs_destroy/zfs_destroy_009_pos	FAIL	needs zvols (checkpoint 3)
+cli_root/zfs_destroy/zfs_destroy_010_pos	FAIL	needs zvols (checkpoint 3)
+cli_root/zfs_destroy/zfs_destroy_011_pos	FAIL	needs zvols (checkpoint 3)
+cli_root/zfs_destroy/zfs_destroy_012_pos	FAIL	needs zvols (checkpoint 3)
+cli_root/zfs_destroy/zfs_destroy_013_neg	FAIL	needs zvols (checkpoint 3)
+cli_root/zfs_destroy/zfs_destroy_014_pos	PASS	
+cli_root/zfs_destroy/zfs_destroy_015_pos	PASS	
+cli_root/zfs_destroy/zfs_destroy_016_pos	PASS	
+cli_root/zfs_destroy/zfs_destroy_clone_livelist	PASS	
+cli_root/zfs_destroy/zfs_destroy_dev_removal	PASS	
+cli_root/zfs_destroy/zfs_destroy_dev_removal_condense	FAIL	to investigate
+cli_root/zfs_get/cleanup	PASS	
+cli_root/zfs_get/setup	PASS	
+cli_root/zfs_get/zfs_get_001_pos	KILLED	over the 240 s per-test cap under TCG, or hangs (to investigate)
+cli_root/zfs_get/zfs_get_002_pos	FAIL	to investigate
+cli_root/zfs_get/zfs_get_003_pos	PASS	
+cli_root/zfs_get/zfs_get_004_pos	PASS	
+cli_root/zfs_get/zfs_get_005_neg	FLAKY	passed in one full run, KILLED in another
+cli_root/zfs_get/zfs_get_006_neg	PASS	
+cli_root/zfs_get/zfs_get_007_neg	PASS	
+cli_root/zfs_get/zfs_get_008_pos	FAIL	to investigate
+cli_root/zfs_get/zfs_get_009_pos	KILLED	over the 240 s per-test cap under TCG, or hangs (to investigate)
+cli_root/zfs_get/zfs_get_010_neg	PASS	
+cli_root/zfs_mount/cleanup	PASS	
+cli_root/zfs_mount/setup	PASS	
+cli_root/zfs_mount/zfs_mount_001_pos	PASS	
+cli_root/zfs_mount/zfs_mount_002_pos	PASS	
+cli_root/zfs_mount/zfs_mount_003_pos	PASS	
+cli_root/zfs_mount/zfs_mount_004_pos	PASS	
+cli_root/zfs_mount/zfs_mount_005_pos	FAIL	to investigate
+cli_root/zfs_mount/zfs_mount_007_pos	FAIL	to investigate
+cli_root/zfs_mount/zfs_mount_009_neg	PASS	
+cli_root/zfs_mount/zfs_mount_010_neg	FAIL	to investigate
+cli_root/zfs_mount/zfs_mount_011_neg	FAIL	to investigate
+cli_root/zfs_mount/zfs_mount_012_pos	PASS	
+cli_root/zfs_mount/zfs_mount_all_001_pos	PASS	
+cli_root/zfs_mount/zfs_mount_all_fail	PASS	
+cli_root/zfs_mount/zfs_mount_all_mountpoints	PASS	
+cli_root/zfs_mount/zfs_mount_encrypted	PASS	
+cli_root/zfs_mount/zfs_mount_recursive	PASS	
+cli_root/zfs_mount/zfs_mount_remount	FAIL	to investigate
+cli_root/zfs_mount/zfs_mount_test_race	PASS	
+cli_root/zfs_receive/cleanup	PASS	
+cli_root/zfs_receive/receive-o-x_props_aliases	PASS	
+cli_root/zfs_receive/receive-o-x_props_override	FAIL	to investigate
+cli_root/zfs_receive/setup	PASS	
+cli_root/zfs_receive/zfs_receive_-e	PASS	
+cli_root/zfs_receive/zfs_receive_-wR-encrypted-mix	PASS	
+cli_root/zfs_receive/zfs_receive_001_pos	PASS	
+cli_root/zfs_receive/zfs_receive_002_pos	PASS	
+cli_root/zfs_receive/zfs_receive_003_pos	PASS	
+cli_root/zfs_receive/zfs_receive_004_neg	PASS	
+cli_root/zfs_receive/zfs_receive_005_neg	PASS	
+cli_root/zfs_receive/zfs_receive_006_pos	PASS	
+cli_root/zfs_receive/zfs_receive_007_neg	PASS	
+cli_root/zfs_receive/zfs_receive_008_pos	PASS	
+cli_root/zfs_receive/zfs_receive_009_neg	PASS	
+cli_root/zfs_receive/zfs_receive_010_pos	PASS	
+cli_root/zfs_receive/zfs_receive_011_pos	PASS	
+cli_root/zfs_receive/zfs_receive_012_pos	PASS	
+cli_root/zfs_receive/zfs_receive_013_pos	PASS	
+cli_root/zfs_receive/zfs_receive_014_pos	PASS	
+cli_root/zfs_receive/zfs_receive_015_pos	PASS	
+cli_root/zfs_receive/zfs_receive_016_pos	PASS	
+cli_root/zfs_receive/zfs_receive_compressed_corrective	FAIL	needs xxh128sum (not in the base)
+cli_root/zfs_receive/zfs_receive_corrective	FAIL	needs xxh128sum (not in the base)
+cli_root/zfs_receive/zfs_receive_from_encrypted	PASS	
+cli_root/zfs_receive/zfs_receive_from_zstd	PASS	
+cli_root/zfs_receive/zfs_receive_large_block_corrective	FAIL	needs xxh128sum (not in the base)
+cli_root/zfs_receive/zfs_receive_new_props	PASS	
+cli_root/zfs_receive/zfs_receive_raw	PASS	
+cli_root/zfs_receive/zfs_receive_raw_-d	PASS	
+cli_root/zfs_receive/zfs_receive_raw_incremental	PASS	
+cli_root/zfs_receive/zfs_receive_to_encrypted	PASS	
+cli_root/zfs_rollback/cleanup	PASS	
+cli_root/zfs_rollback/setup	PASS	
+cli_root/zfs_rollback/zfs_rollback_001_pos	FAIL	needs zvols (checkpoint 3)
+cli_root/zfs_rollback/zfs_rollback_002_pos	FAIL	needs zvols (checkpoint 3)
+cli_root/zfs_rollback/zfs_rollback_003_neg	PASS	
+cli_root/zfs_rollback/zfs_rollback_004_neg	PASS	
+cli_root/zfs_send/cleanup	PASS	
+cli_root/zfs_send/setup	PASS	
+cli_root/zfs_send/zfs_send-b	PASS	
+cli_root/zfs_send/zfs_send_001_pos	PASS	
+cli_root/zfs_send/zfs_send_002_pos	FAIL	to investigate
+cli_root/zfs_send/zfs_send_003_pos	PASS	
+cli_root/zfs_send/zfs_send_004_neg	PASS	
+cli_root/zfs_send/zfs_send_005_pos	PASS	
+cli_root/zfs_send/zfs_send_006_pos	PASS	
+cli_root/zfs_send/zfs_send_007_pos	PASS	
+cli_root/zfs_send/zfs_send_encrypted	PASS	
+cli_root/zfs_send/zfs_send_encrypted_unloaded	PASS	
+cli_root/zfs_send/zfs_send_raw	PASS	
+cli_root/zfs_send/zfs_send_skip_missing	PASS	
+cli_root/zfs_send/zfs_send_sparse	PASS	
+cli_root/zfs_set/cache_001_pos	PASS	
+cli_root/zfs_set/cache_002_neg	PASS	
+cli_root/zfs_set/canmount_001_pos	PASS	
+cli_root/zfs_set/canmount_002_pos	FAIL	NFS sharing: no NFS server (share options are not validated)
+cli_root/zfs_set/canmount_003_pos	PASS	
+cli_root/zfs_set/canmount_004_pos	PASS	
+cli_root/zfs_set/checksum_001_pos	PASS	
+cli_root/zfs_set/cleanup	PASS	
+cli_root/zfs_set/compression_001_pos	PASS	
+cli_root/zfs_set/mountpoint_001_pos	PASS	
+cli_root/zfs_set/mountpoint_002_pos	PASS	
+cli_root/zfs_set/mountpoint_003_pos	FAIL	uses mount -F (illumos syntax)
+cli_root/zfs_set/onoffs_001_pos	FAIL	to investigate
+cli_root/zfs_set/property_alias_001_pos	FAIL	to investigate
+cli_root/zfs_set/readonly_001_pos	FAIL	to investigate
+cli_root/zfs_set/reservation_001_neg	PASS	
+cli_root/zfs_set/ro_props_001_pos	KILLED	over the 240 s per-test cap under TCG, or hangs (to investigate)
+cli_root/zfs_set/setup	PASS	
+cli_root/zfs_set/share_mount_001_neg	PASS	
+cli_root/zfs_set/snapdir_001_pos	PASS	
+cli_root/zfs_set/user_property_001_pos	PASS	
+cli_root/zfs_set/user_property_002_pos	PASS	
+cli_root/zfs_set/user_property_003_neg	PASS	
+cli_root/zfs_set/user_property_004_pos	PASS	
+cli_root/zfs_set/version_001_neg	PASS	
+cli_root/zfs_set/zfs_set_001_neg	KILLED	over the 240 s per-test cap under TCG, or hangs (to investigate)
+cli_root/zfs_set/zfs_set_002_neg	PASS	
+cli_root/zfs_set/zfs_set_003_neg	FAIL	NFS sharing: no NFS server (share options are not validated)
+cli_root/zfs_set/zfs_set_feature_activation	PASS	
+cli_root/zfs_set/zfs_set_keylocation	FAIL	needs python3 (not in the base)
+cli_root/zfs_set/zfs_set_nomount	PASS	
+cli_root/zfs_snapshot/cleanup	PASS	
+cli_root/zfs_snapshot/setup	PASS	
+cli_root/zfs_snapshot/zfs_snapshot_001_neg	PASS	
+cli_root/zfs_snapshot/zfs_snapshot_002_neg	PASS	
+cli_root/zfs_snapshot/zfs_snapshot_003_neg	PASS	
+cli_root/zfs_snapshot/zfs_snapshot_004_neg	PASS	
+cli_root/zfs_snapshot/zfs_snapshot_005_neg	PASS	
+cli_root/zfs_snapshot/zfs_snapshot_006_pos	PASS	
+cli_root/zfs_snapshot/zfs_snapshot_007_neg	PASS	
+cli_root/zfs_snapshot/zfs_snapshot_008_neg	PASS	
+cli_root/zfs_snapshot/zfs_snapshot_009_pos	PASS	
+cli_root/zpool_create/cleanup	FAIL	partitions DISKS with diskutil and gpt, macOS tools NeoDarwin lacks; GPT labels are checkpoint 3
+cli_root/zpool_create/create-o_ashift	PASS	
+cli_root/zpool_create/setup	PASS	
+cli_root/zpool_create/zpool_create_001_pos	PASS	
+cli_root/zpool_create/zpool_create_002_pos	FAIL	in-use check: an unmounted HFS+ volume on the disk is not seen (compat libdiskmgt checks mounts only)
+cli_root/zpool_create/zpool_create_003_pos	PASS	
+cli_root/zpool_create/zpool_create_004_pos	PASS	
+cli_root/zpool_create/zpool_create_005_pos	PASS	
+cli_root/zpool_create/zpool_create_006_pos	PASS	
+cli_root/zpool_create/zpool_create_007_neg	PASS	
+cli_root/zpool_create/zpool_create_008_pos	PASS	
+cli_root/zpool_create/zpool_create_009_neg	PASS	
+cli_root/zpool_create/zpool_create_010_neg	PASS	
+cli_root/zpool_create/zpool_create_011_neg	PASS	
+cli_root/zpool_create/zpool_create_012_neg	PASS	
+cli_root/zpool_create/zpool_create_014_neg	PASS	
+cli_root/zpool_create/zpool_create_015_neg	PASS	
+cli_root/zpool_create/zpool_create_017_neg	PASS	
+cli_root/zpool_create/zpool_create_018_pos	PASS	
+cli_root/zpool_create/zpool_create_019_pos	PASS	
+cli_root/zpool_create/zpool_create_020_pos	PASS	
+cli_root/zpool_create/zpool_create_021_pos	PASS	
+cli_root/zpool_create/zpool_create_022_pos	PASS	
+cli_root/zpool_create/zpool_create_023_neg	FAIL	NFS sharing: no NFS server (share options are not validated)
+cli_root/zpool_create/zpool_create_024_pos	FLAKY	passed in one full run, KILLED in another
+cli_root/zpool_create/zpool_create_crypt_combos	PASS	
+cli_root/zpool_create/zpool_create_draid_001_pos	PASS	
+cli_root/zpool_create/zpool_create_draid_002_pos	FAIL	dRAID file vdevs: truncate of the files in TESTDIR fails (to investigate)
+cli_root/zpool_create/zpool_create_draid_003_pos	PASS	
+cli_root/zpool_create/zpool_create_draid_004_pos	FAIL	draidcfg.gz is left out of the image (21 MB)
+cli_root/zpool_create/zpool_create_dryrun_output	PASS	
+cli_root/zpool_create/zpool_create_encrypted	PASS	
+cli_root/zpool_create/zpool_create_features_001_pos	PASS	
+cli_root/zpool_create/zpool_create_features_002_pos	PASS	
+cli_root/zpool_create/zpool_create_features_003_pos	PASS	
+cli_root/zpool_create/zpool_create_features_004_neg	PASS	
+cli_root/zpool_create/zpool_create_features_005_pos	PASS	
+cli_root/zpool_create/zpool_create_features_006_pos	PASS	
+cli_root/zpool_create/zpool_create_features_007_pos	KILLED	over the 240 s per-test cap under TCG, or hangs (to investigate)
+cli_root/zpool_create/zpool_create_features_008_pos	FAIL	compatibility feature sets: to investigate
+cli_root/zpool_create/zpool_create_features_009_pos	PASS	
+cli_root/zpool_create/zpool_create_tempname	PASS	
+cli_root/zpool_destroy/zpool_destroy_001_pos	FAIL	needs zvols (checkpoint 3)
+cli_root/zpool_destroy/zpool_destroy_002_pos	PASS	
+cli_root/zpool_destroy/zpool_destroy_003_neg	PASS	
+cli_root/zpool_export/cleanup	PASS	
+cli_root/zpool_export/setup	PASS	
+cli_root/zpool_export/zpool_export_001_pos	PASS	
+cli_root/zpool_export/zpool_export_002_pos	PASS	
+cli_root/zpool_export/zpool_export_003_neg	PASS	
+cli_root/zpool_export/zpool_export_004_pos	PASS	
+cli_root/zpool_export/zpool_export_parallel_admin	PASS	
+cli_root/zpool_export/zpool_export_parallel_pos	FAIL	timing assertion (parallel speed-up) under TCG
+cli_root/zpool_import/cleanup	FAIL	to investigate
+cli_root/zpool_import/import_cachefile_device_added	PASS	
+cli_root/zpool_import/import_cachefile_device_removed	PASS	
+cli_root/zpool_import/import_cachefile_device_replaced	PASS	
+cli_root/zpool_import/import_cachefile_mirror_attached	PASS	
+cli_root/zpool_import/import_cachefile_mirror_detached	PASS	
+cli_root/zpool_import/import_cachefile_paths_changed	PASS	
+cli_root/zpool_import/import_cachefile_shared_device	PASS	
+cli_root/zpool_import/import_devices_missing	FAIL	needs xxh128sum (not in the base)
+cli_root/zpool_import/import_log_missing	PASS	
+cli_root/zpool_import/import_paths_changed	PASS	
+cli_root/zpool_import/import_rewind_config_changed	FAIL	sets a tunable the macOS layer does not have
+cli_root/zpool_import/import_rewind_device_replaced	FAIL	needs xxh128sum (not in the base)
+cli_root/zpool_import/setup	PASS	
+cli_root/zpool_import/zpool_import_001_pos	PASS	
+cli_root/zpool_import/zpool_import_002_pos	PASS	
+cli_root/zpool_import/zpool_import_003_pos	PASS	
+cli_root/zpool_import/zpool_import_004_pos	PASS	
+cli_root/zpool_import/zpool_import_005_pos	PASS	
+cli_root/zpool_import/zpool_import_006_pos	PASS	
+cli_root/zpool_import/zpool_import_007_pos	PASS	
+cli_root/zpool_import/zpool_import_008_pos	PASS	
+cli_root/zpool_import/zpool_import_009_neg	PASS	
+cli_root/zpool_import/zpool_import_010_pos	PASS	
+cli_root/zpool_import/zpool_import_011_neg	PASS	
+cli_root/zpool_import/zpool_import_012_pos	FAIL	NFS sharing: no NFS server (share options are not validated)
+cli_root/zpool_import/zpool_import_013_neg	FAIL	needs bzcat (bzip2 is not in the base; P3-02)
+cli_root/zpool_import/zpool_import_014_pos	PASS	
+cli_root/zpool_import/zpool_import_015_pos	PASS	
+cli_root/zpool_import/zpool_import_016_pos	PASS	
+cli_root/zpool_import/zpool_import_017_pos	PASS	
+cli_root/zpool_import/zpool_import_all_001_pos	PASS	
+cli_root/zpool_import/zpool_import_encrypted	PASS	
+cli_root/zpool_import/zpool_import_encrypted_load	PASS	
+cli_root/zpool_import/zpool_import_errata3	FAIL	needs bzcat (bzip2 is not in the base; P3-02)
+cli_root/zpool_import/zpool_import_errata4	FAIL	needs bzcat (bzip2 is not in the base; P3-02)
+cli_root/zpool_import/zpool_import_features_001_pos	PASS	
+cli_root/zpool_import/zpool_import_features_002_neg	PASS	
+cli_root/zpool_import/zpool_import_features_003_pos	PASS	
+cli_root/zpool_import/zpool_import_missing_001_pos	FAIL	dRAID file vdevs: truncate of the files in TESTDIR fails (to investigate)
+cli_root/zpool_import/zpool_import_missing_002_pos	FAIL	to investigate
+cli_root/zpool_import/zpool_import_missing_003_pos	SKIP	the test skips itself, or its group is skipped
+cli_root/zpool_import/zpool_import_parallel_admin	KILLED	over the 240 s per-test cap under TCG, or hangs (to investigate)
+cli_root/zpool_import/zpool_import_parallel_neg	PASS	
+cli_root/zpool_import/zpool_import_parallel_pos	FAIL	sets a tunable the macOS layer does not have
+cli_root/zpool_import/zpool_import_rename_001_pos	PASS	
+cli_root/zpool_import/zpool_import_status	FAIL	sets a tunable the macOS layer does not have
+cli_root/zpool_scrub/cleanup	PASS	
+cli_root/zpool_scrub/setup	PASS	
+cli_root/zpool_scrub/zpool_error_scrub_001_pos	FAIL	needs fio (not in the base)
+cli_root/zpool_scrub/zpool_error_scrub_002_pos	FAIL	needs fio (not in the base)
+cli_root/zpool_scrub/zpool_error_scrub_003_pos	FAIL	to investigate
+cli_root/zpool_scrub/zpool_error_scrub_004_pos	PASS	
+cli_root/zpool_scrub/zpool_scrub_001_neg	PASS	
+cli_root/zpool_scrub/zpool_scrub_002_pos	PASS	
+cli_root/zpool_scrub/zpool_scrub_003_pos	PASS	
+cli_root/zpool_scrub/zpool_scrub_004_pos	PASS	
+cli_root/zpool_scrub/zpool_scrub_005_pos	PASS	
+cli_root/zpool_scrub/zpool_scrub_date_range_001	FAIL	sets a tunable the macOS layer does not have
+cli_root/zpool_scrub/zpool_scrub_date_range_002	FAIL	sets a tunable the macOS layer does not have
+cli_root/zpool_scrub/zpool_scrub_encrypted_unloaded	PASS	
+cli_root/zpool_scrub/zpool_scrub_multiple_copies	PASS	
+cli_root/zpool_scrub/zpool_scrub_multiple_pools	PASS	
+cli_root/zpool_scrub/zpool_scrub_offline_device	PASS	
+cli_root/zpool_scrub/zpool_scrub_print_repairing	FAIL	sets a tunable the macOS layer does not have
+cli_root/zpool_status/cleanup	PASS	
+cli_root/zpool_status/setup	PASS	
+cli_root/zpool_status/zpool_status_001_pos	PASS	
+cli_root/zpool_status/zpool_status_002_pos	PASS	
+cli_root/zpool_status/zpool_status_003_pos	FAIL	needs fio (not in the base)
+cli_root/zpool_status/zpool_status_004_pos	FAIL	needs fio (not in the base)
+cli_root/zpool_status/zpool_status_005_pos	PASS	
+cli_root/zpool_status/zpool_status_006_pos	FAIL	to investigate
+cli_root/zpool_status/zpool_status_007_pos	PASS	
+cli_root/zpool_status/zpool_status_008_pos	PASS	
+cli_root/zpool_status/zpool_status_features_001_pos	PASS	

@@ -1,0 +1,200 @@
+From: NeoDarwin
+Subject: [PATCH] timeout: a process group in place of procctl(2)'s reaper
+
+FreeBSD's timeout makes itself a reaper (procctl(2) PROC_REAP_ACQUIRE) so
+that, without --foreground, the signal reaches the command's descendants
+(PROC_REAP_KILL) and it waits for all of them (PROC_REAP_STATUS). Darwin has
+no reaper. Under __APPLE__ the command runs in a process group of its own
+(setpgid(2) in the child and the parent, whichever runs first), signals go
+to that group with killpg(2), and timeout returns once the command itself
+has exited, as FreeBSD's did before the reaper (and GNU timeout does). A
+descendant that leaves the group isn't signalled. pipe2(2), str2sig(3) and
+sys_nsig, which Darwin's libc lacks, are local: pipe(2) with FD_CLOEXEC set
+by fcntl(2), a lookup in sys_signame, and NSIG.
+Rebase-risk: medium (main()'s reaper calls move with FreeBSD's changes).
+
+--- a/timeout.c
++++ b/timeout.c
+@@ -26,7 +26,9 @@
+  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+ 
++#ifndef __APPLE__
+ #include <sys/procctl.h>
++#endif
+ #include <sys/resource.h>
+ #include <sys/time.h>
+ #include <sys/wait.h>
+@@ -164,10 +166,64 @@
+ 	}
+ }
+ 
++#ifdef __APPLE__
++/*
++ * Darwin has no reaper (procctl(2)): without --foreground the command runs
++ * in a process group of its own, and signals go to that group, which
++ * reaches its descendants unless they leave it.
++ */
++#define	sys_nsig	NSIG
++#define	pipe2		nd_pipe2
++#define	str2sig		nd_str2sig
++
++static int
++pipe2(int fd[2], int flags)
++{
++	if (pipe(fd) < 0)
++		return (-1);
++	if ((flags & O_CLOEXEC) != 0 &&
++	    (fcntl(fd[0], F_SETFD, FD_CLOEXEC) < 0 ||
++	    fcntl(fd[1], F_SETFD, FD_CLOEXEC) < 0)) {
++		close(fd[0]);
++		close(fd[1]);
++		return (-1);
++	}
++	return (0);
++}
++
++/* str2sig(3): a signal's number, or its name with or without "SIG". */
++static int
++str2sig(const char *str, int *signum)
++{
++	char *end;
++	long n;
++	int i;
++
++	if (*str >= '0' && *str <= '9') {
++		n = strtol(str, &end, 10);
++		if (*end != '\0' || n < 0 || n >= NSIG)
++			return (-1);
++		*signum = (int)n;
++		return (0);
++	}
++	if (strncasecmp(str, "SIG", 3) == 0)
++		str += 3;
++	for (i = 1; i < NSIG; i++) {
++		if (strcasecmp(str, sys_signame[i]) == 0) {
++			*signum = i;
++			return (0);
++		}
++	}
++	return (-1);
++}
++#endif /* __APPLE__ */
++
+ static void
+ send_sig(pid_t pid, int signo, bool foreground)
+ {
++#ifndef __APPLE__
+ 	struct procctl_reaper_kill rk;
++#endif
+ 
+ 	logv("sending signal %s(%d) to command '%s'",
+ 	    sys_signame[signo], signo, command);
+@@ -175,6 +231,10 @@
+ 		if (kill(pid, signo) < 0 && errno != ESRCH)
+ 			warn("kill(%d, %s)", (int)pid, sys_signame[signo]);
+ 	} else {
++#ifdef __APPLE__
++		if (killpg(pid, signo) < 0 && errno != ESRCH)
++			warn("killpg(%d, %s)", (int)pid, sys_signame[signo]);
++#else
+ 		memset(&rk, 0, sizeof(rk));
+ 		rk.rk_sig = signo;
+ 		if (procctl(P_PID, getpid(), PROC_REAP_KILL, &rk) < 0 &&
+@@ -186,6 +246,7 @@
+ 			}
+ 		}
+ 		logv("signaled %u processes", rk.rk_killed);
++#endif
+ 	}
+ 
+ 	/*
+@@ -200,9 +261,13 @@
+ 		if (foreground) {
+ 			kill(pid, SIGCONT);
+ 		} else {
++#ifdef __APPLE__
++			killpg(pid, SIGCONT);
++#else
+ 			memset(&rk, 0, sizeof(rk));
+ 			rk.rk_sig = SIGCONT;
+ 			procctl(P_PID, getpid(), PROC_REAP_KILL, &rk);
++#endif
+ 		}
+ 	}
+ }
+@@ -267,7 +332,9 @@
+ int
+ main(int argc, char **argv)
+ {
++#ifndef __APPLE__
+ 	struct procctl_reaper_status info;
++#endif
+ 	siginfo_t si, child_si;
+ 	struct sigaction sa;
+ 	sigset_t zeromask, allmask, oldmask;
+@@ -332,11 +399,13 @@
+ 	argv++;
+ 	command = argv[0];
+ 
++#ifndef __APPLE__
+ 	if (!foreground) {
+ 		/* Acquire a reaper */
+ 		if (procctl(P_PID, getpid(), PROC_REAP_ACQUIRE, NULL) < 0)
+ 			err(EXIT_FAILURE, "procctl(PROC_REAP_ACQUIRE)");
+ 	}
++#endif
+ 
+ 	/* Block all signals to avoid racing against the child. */
+ 	sigfillset(&allmask);
+@@ -358,6 +427,10 @@
+ 		 * inherited, except for the signal to be sent upon timeout.
+ 		 */
+ 		signal(killsig, SIG_DFL);
++#ifdef __APPLE__
++		if (!foreground)
++			(void)setpgid(0, 0);
++#endif
+ 		if (sigprocmask(SIG_SETMASK, &oldmask, NULL) < 0)
+ 			err(EXIT_FAILURE, "sigprocmask(oldmask)");
+ 
+@@ -374,6 +447,10 @@
+ 
+ 	/* parent continues here */
+ 	(void)close(pp[0]);
++#ifdef __APPLE__
++	if (!foreground)
++		(void)setpgid(pid, pid);	/* as the child does, whichever runs first */
++#endif
+ 
+ 	/* Catch all signals in order to propagate them. */
+ 	memset(&sa, 0, sizeof(sa));
+@@ -440,6 +517,9 @@
+ 				}
+ 			}
+ 			if (child_done) {
++#ifdef __APPLE__
++				break;
++#else
+ 				if (foreground) {
+ 					break;
+ 				} else {
+@@ -448,6 +528,7 @@
+ 					if (info.rs_children == 0)
+ 						break;
+ 				}
++#endif
+ 			}
+ 		} else if (sig_alrm || sig_term) {
+ 			if (sig_alrm) {
+@@ -480,8 +561,10 @@
+ 		}
+ 	}
+ 
++#ifndef __APPLE__
+ 	if (!foreground)
+ 		procctl(P_PID, getpid(), PROC_REAP_RELEASE, NULL);
++#endif
+ 
+ 	if (timedout && !preserve) {
+ 		pstat = EXIT_TIMEOUT;

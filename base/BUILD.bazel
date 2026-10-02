@@ -404,7 +404,7 @@ base_library(
 base_library(
     name = "text_commands",
     data = glob(["text_cmds/**"]) + ["commands.sh"],
-    deps = [":root", ":libxo_dylib"],
+    deps = [":root", ":libxo_dylib", ":libutil_dylib"],
     script = "text_cmds/build.sh",
     srcs = "@apple_text_cmds//:all",
     sysroot = ":sysroot",
@@ -416,6 +416,36 @@ base_library(
     deps = [":root"],
     script = "adv_cmds/build.sh",
     srcs = "@apple_adv_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+# The ZFS test suite's commands from projects of their own
+# (docs/architecture/filesystems.md §7): awk-40, patch_cmds-72's cmp and
+# diff, and FreeBSD's timeout (macOS 26 has none).
+base_library(
+    name = "awk_command",
+    data = glob(["awk/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "awk/build.sh",
+    srcs = "@apple_awk//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "patch_commands",
+    data = glob(["patch_cmds/**"]) + ["commands.sh"],
+    deps = [":root", ":libutil_dylib"],
+    script = "patch_cmds/build.sh",
+    srcs = "@apple_patch_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "timeout_command",
+    data = glob(["timeout/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "timeout/build.sh",
+    srcs = "@freebsd_timeout//:all",
     sysroot = ":sysroot",
 )
 
@@ -480,6 +510,18 @@ base_library(
     deps = [":root", ":libncurses_dylib"],
     script = "bash/build.sh",
     srcs = "@apple_bash//:all",
+    sysroot = ":sysroot",
+)
+
+# ksh93u+m 1.0.10 as /bin/ksh, for the OpenZFS test suite's scripts
+# (#!/bin/ksh -p). Not in system_root: only the ZFS test image installs it
+# (docs/base/session.md, "ksh").
+base_library(
+    name = "ksh_shell",
+    data = glob(["ksh/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "ksh/build.sh",
+    srcs = "@ksh93//:all",
     sysroot = ":sysroot",
 )
 
@@ -703,6 +745,9 @@ base_root(
         ":mdns_responder",
         ":packet_filter",
         ":ntp_client",
+        ":awk_command",
+        ":patch_commands",
+        ":timeout_command",
     ],
 )
 
@@ -812,6 +857,9 @@ lang_audit_test(
         "libpcap/compat/*.h",
         "file_cmds/compat/*.h",
         "shell_cmds/compat/**/*.h",
+        "text_cmds/compat/*.c",
+        "adv_cmds/compat/**/*.h",
+        "adv_cmds/compat/*.c",
         "system_cmds/compat/**/*.h",
     ]),
 )

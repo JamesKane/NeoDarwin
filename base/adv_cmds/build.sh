@@ -6,7 +6,11 @@
 # the Desktop target's install-ps.sh, which installs ps (SKIP_INSTALL in its
 # target) as /bin/ps.
 #   build.sh OUT ADV_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root)
-# OUT receives bin/{ps,stty} and usr/bin/tty.
+# OUT receives bin/{ps,stty} and usr/bin/{tty,pkill,pgrep}.
+# pkill (and pgrep, its variant link) reads the process table through
+# libsysmon, which is closed and asks sysmond over XPC; compat/ has the
+# sysmon.h and xpc/xpc.h subset it uses and nd_sysmon.c, which answers from
+# sysctl(3) (KERN_PROC_ALL, KERN_PROCARGS2), linked into pkill.
 # Apple installs ps setuid root (mode 4755) with its entitlements
 # (PS_ENTITLED); NeoDarwin has no code-signing policy until P1-15, and the
 # image rule sets modes.
@@ -33,3 +37,10 @@ tool "$B" "$ROOT" "$OUT/bin/ps" "$B/ps.rsp" ps/fmt.c ps/keyword.c ps/nlist.c ps/
 tool "$B" "$ROOT" "$OUT/bin/stty" "$B/stty.rsp" stty/cchar.c stty/gfmt.c stty/key.c stty/modes.c stty/print.c \
 	stty/stty.c stty/util.c "$(vers stty)"
 tool "$B" "$ROOT" "$OUT/usr/bin/tty" "$B/tty.rsp" tty/tty.c "$(vers tty)"
+
+# pkill: INSTALL_PATH /usr/bin, __FBSDID=__RCSID as ps and tty; its
+# entitlements are for sysmond. The pgrep target's variant_links.sh makes
+# pgrep a hard link (a copy here).
+write_rsp "$B/pkill.rsp" "${base[@]}" -D__FBSDID=__RCSID -I"$PROJ/compat"
+tool "$B" "$ROOT" "$OUT/usr/bin/pkill" "$B/pkill.rsp" pkill/pkill.c "$PROJ/compat/nd_sysmon.c" "$(vers pkill)"
+cp "$OUT/usr/bin/pkill" "$OUT/usr/bin/pgrep"

@@ -5,7 +5,9 @@
 # (project settings: __FBSDID=__RCSID, _DARWIN_USE_64_BIT_INODE,
 # DEAD_CODE_STRIPPING; each target installs in /bin).
 #   build.sh OUT FILE_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root, //base:libutil, //base:libxo)
-# OUT receives bin/{ls,cp,mv,rm,mkdir,ln,chmod,df}.
+# OUT receives bin/{ls,cp,mv,rm,mkdir,ln,chmod,df,dd,rmdir},
+# usr/bin/{du,touch,stat,readlink,truncate,cksum,sum,mkfifo,chgrp,compress,
+# uncompress} and usr/sbin/chown.
 # ls links libutil for humanize_number(3). Apple builds it with COLORLS,
 # which links libcurses for termcap; NeoDarwin has no ncurses yet, so ls
 # builds without colour (ls -G is accepted and ignored).
@@ -46,3 +48,28 @@ done
 write_rsp "$B/df.rsp" "${base[@]}" -I"$UTIL/usr/local/include" -I"$XO/usr/local/include" -I"$PROJ/compat" \
 	$(cmd_sysroot_flags "$SYSROOT")
 tool "$B" "$ROOT" "$OUT/bin/df" "$B/df.rsp" df/df.c "$(vers df)" -- -L"$UTIL/usr/lib" -lutil -L"$XO/usr/lib" -lxo
+
+# The ZFS test suite's commands (docs/architecture/filesystems.md §7), as
+# their targets build them: INSTALL_PATH /usr/bin unless the target says
+# /bin (dd, rmdir) or /usr/sbin (chown). dd, du and truncate link libutil
+# (expand_number(3), humanize_number(3)); dd's entitlements are for
+# platforms other than macOS. du, mkfifo and chown include get_compat.h.
+write_rsp "$B/util.rsp" "${base[@]}" -I"$UTIL/usr/local/include" -I"$PROJ/compat" $(cmd_sysroot_flags "$SYSROOT")
+tool "$B" "$ROOT" "$OUT/bin/dd" "$B/util.rsp" dd/args.c dd/conv.c dd/conv_tab.c dd/dd.c dd/misc.c dd/position.c \
+	"$(vers dd)" -- -L"$UTIL/usr/lib" -lutil
+tool "$B" "$ROOT" "$OUT/usr/bin/du" "$B/util.rsp" du/du.c "$(vers du)" -- -L"$UTIL/usr/lib" -lutil
+tool "$B" "$ROOT" "$OUT/usr/bin/truncate" "$B/util.rsp" truncate/truncate.c "$(vers truncate)" -- -L"$UTIL/usr/lib" -lutil
+tool "$B" "$ROOT" "$OUT/bin/rmdir" "$B/cflags" rmdir/rmdir.c "$(vers rmdir)"
+tool "$B" "$ROOT" "$OUT/usr/bin/touch" "$B/cflags" touch/touch.c "$(vers touch)"
+tool "$B" "$ROOT" "$OUT/usr/bin/mkfifo" "$B/util.rsp" mkfifo/mkfifo.c "$(vers mkfifo)"
+tool "$B" "$ROOT" "$OUT/usr/sbin/chown" "$B/util.rsp" chown/chown.c "$(vers chown)"
+# stat: its target adds HAVE_CONFIG_H=0.
+{ cat "$B/cflags"; printf '%s\n' -DHAVE_CONFIG_H=0; } > "$B/stat.rsp"
+tool "$B" "$ROOT" "$OUT/usr/bin/stat" "$B/stat.rsp" stat/stat.c "$(vers stat)"
+tool "$B" "$ROOT" "$OUT/usr/bin/cksum" "$B/cflags" cksum/cksum.c cksum/crc.c cksum/crc32.c cksum/print.c \
+	cksum/sum1.c cksum/sum2.c "$(vers cksum)"
+tool "$B" "$ROOT" "$OUT/usr/bin/compress" "$B/cflags" compress/compress.c compress/zopen.c "$(vers compress)"
+# The readlink, sum, chgrp and uncompress targets' hardlink.sh phases
+# (copies here): each command tells by its name which it is.
+cp "$OUT/usr/bin/stat" "$OUT/usr/bin/readlink"; cp "$OUT/usr/bin/cksum" "$OUT/usr/bin/sum"
+cp "$OUT/usr/sbin/chown" "$OUT/usr/bin/chgrp"; cp "$OUT/usr/bin/compress" "$OUT/usr/bin/uncompress"

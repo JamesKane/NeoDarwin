@@ -1,0 +1,35 @@
+From: NeoDarwin
+Subject: [PATCH] libzfs: relay sockets to the kernel as pipes are
+
+XNU lets the module do I/O only on a vnode, so libzfs_macos_wrapfd()
+gives zfs send and zfs receive a FIFO and relays a pipe through it. A
+socket needs the same, and ksh93 (the OpenZFS test suite's shell) makes
+its pipelines of socketpairs: zfs send | zfs recv in a test passed the
+kernel a socket, which panicked it in spl_vn_rdwr() and, since patch
+0007, fails with "Bad file descriptor" (zfs_send-b,
+zfs_receive_to_encrypted and others, P3-01 checkpoint 2). Sockets are
+relayed now too.
+
+Rebase-risk: low
+---
+diff --git a/lib/libzfs/os/neodarwin/libzfs_util_os.c b/lib/libzfs/os/neodarwin/libzfs_util_os.c
+--- a/lib/libzfs/os/neodarwin/libzfs_util_os.c
++++ b/lib/libzfs/os/neodarwin/libzfs_util_os.c
+@@ -503,8 +503,17 @@
+ 	if (error != 0)
+ 		return;
+ 
++#ifdef __NEODARWIN__
++	/*
++	 * ksh93 makes its pipelines of socketpairs, which the kernel can't
++	 * do I/O on either: relay a socket as a pipe.
++	 */
++	if (!S_ISFIFO(sb.st_mode) && !S_ISSOCK(sb.st_mode))
++		return;
++#else
+ 	if (!S_ISFIFO(sb.st_mode))
+ 		return;
++#endif
+ 
+ 	if (pipe_relay_pid != 0) {
+ #ifdef VERBOSE_WRAPFD

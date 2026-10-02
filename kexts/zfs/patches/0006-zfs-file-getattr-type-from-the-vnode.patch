@@ -1,0 +1,44 @@
+From: NeoDarwin
+Subject: [PATCH] zfs_file_getattr(): the file type comes from the vnode
+
+vdev_file_open() refuses a file vdev whose zfs_file_getattr() mode isn't
+S_ISREG(). The macOS layer returns the vnode's va_mode, whose type bits
+depend on the file system: HFS+ sets them, ZFS's own getattr
+(zfs_vnops_os.c, va_mode = z_mode & ~S_IFMT) clears them. So a pool on
+files kept in a ZFS dataset, as many OpenZFS tests make one (zpool_create,
+zpool_status, zpool_import: files under TESTDIR or /testpool), failed with
+ENODEV, "no such device in pool" (P3-01 checkpoint 2). The type now comes
+from vnode_vtype(), as FreeBSD's VOP_GETATTR() and Linux's vfs_getattr()
+give it.
+
+Rebase-risk: low
+---
+diff --git a/module/os/neodarwin/zfs/zfs_file_os.c b/module/os/neodarwin/zfs/zfs_file_os.c
+--- a/module/os/neodarwin/zfs/zfs_file_os.c
++++ b/module/os/neodarwin/zfs/zfs_file_os.c
+@@ -342,6 +342,25 @@
+ 
+ 	zfattr->zfa_size = vap.va_size;
+ 	zfattr->zfa_mode = vap.va_mode;
++#ifdef __NEODARWIN__
++	/*
++	 * va_mode's file type bits are the file system's to give: HFS+
++	 * includes them, ZFS's own getattr (zfs_getattr()) leaves them
++	 * out. Take the type from the vnode, so a file vdev on a ZFS
++	 * dataset passes vdev_file_open()'s S_ISREG() check.
++	 */
++	zfattr->zfa_mode &= ~S_IFMT;
++	switch (vnode_vtype(filp->f_vnode)) {
++	case VREG: zfattr->zfa_mode |= S_IFREG; break;
++	case VDIR: zfattr->zfa_mode |= S_IFDIR; break;
++	case VBLK: zfattr->zfa_mode |= S_IFBLK; break;
++	case VCHR: zfattr->zfa_mode |= S_IFCHR; break;
++	case VLNK: zfattr->zfa_mode |= S_IFLNK; break;
++	case VSOCK: zfattr->zfa_mode |= S_IFSOCK; break;
++	case VFIFO: zfattr->zfa_mode |= S_IFIFO; break;
++	default: break;
++	}
++#endif
+ 
+ 	return (0);
+ }

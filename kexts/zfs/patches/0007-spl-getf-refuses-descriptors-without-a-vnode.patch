@@ -1,0 +1,37 @@
+From: NeoDarwin
+Subject: [PATCH] spl: getf() refuses a descriptor without a vnode
+
+getf() hands back a descriptor whatever it is, and spl_vn_rdwr(), the
+only way the macOS layer reads or writes one, VERIFYs that it has a
+vnode. libzfs relays pipes through a FIFO (libzfs_macos_wrapfd()) on the
+paths it knows, but not on all of them: zfs send -nvP to a pipe (the
+OpenZFS test zfs_send_006_pos, P3-01 checkpoint 2) reached the VERIFY
+and panicked the kernel, and any process can pass /dev/zfs an anonymous
+pipe or a socket. getf() now returns NULL for a descriptor that isn't a
+vnode, so zfs_file_get() and the ioctl fail with EBADF.
+
+Rebase-risk: low
+---
+diff --git a/module/os/neodarwin/spl/spl-vnode.c b/module/os/neodarwin/spl/spl-vnode.c
+--- a/module/os/neodarwin/spl/spl-vnode.c
++++ b/module/os/neodarwin/spl/spl-vnode.c
+@@ -235,7 +235,19 @@
+ 		}
+ #endif
+ 		file_drop(fd);
++	}
++#ifdef __NEODARWIN__
++	/*
++	 * spl_vn_rdwr() can only do I/O through a vnode: refuse a descriptor
++	 * that has none (an anonymous pipe or a socket, which libzfs's FIFO
++	 * relay doesn't wrap everywhere), so the ioctl fails with EBADF
++	 * instead of the VERIFY in spl_vn_rdwr() panicking the kernel.
++	 */
++	if (sfp->f_vnode == NULL) {
++		kmem_free(sfp, sizeof (*sfp));
++		return (NULL);
+ 	}
++#endif
+ 
+ 	mutex_enter(&spl_getf_lock);
+ 	list_insert_tail(&spl_getf_list, sfp);

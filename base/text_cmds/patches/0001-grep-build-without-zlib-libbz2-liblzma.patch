@@ -1,0 +1,72 @@
+From: NeoDarwin
+Subject: [PATCH] grep: build without zlib, libbz2 and liblzma
+
+grep.xcconfig links -lbz2 -llzma -lz for -Z, -J, --xz and --lzma (and the
+z/bz program names), reading compressed input through gzread(3),
+BZ2_bzRead(3) and lzma_code(3). NeoDarwin's base has none of the three
+libraries yet (zlib in the base is P3-02). With GREP_NO_DECOMPRESSION
+(base/text_cmds/build.sh), file.c compiles without them, and asking for
+compressed input fails with exit status 2 and a message instead of
+matching against the compressed bytes. Plain input is unchanged.
+Rebase-risk: low (file.c's __APPLE__ blocks; grep.c untouched).
+
+--- a/grep/file.c
++++ b/grep/file.c
+@@ -50,7 +50,7 @@
+ #include <wchar.h>
+ #include <wctype.h>
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(GREP_NO_DECOMPRESSION)
+ #include <zlib.h>
+ #include <lzma.h>
+ #include <bzlib.h>
+@@ -61,7 +61,7 @@
+ #define	MAXBUFSIZ	(32 * 1024)
+ #define	LNBUFBUMP	80
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(GREP_NO_DECOMPRESSION)
+ static gzFile gzbufdesc;
+ static lzma_stream lstrm = LZMA_STREAM_INIT;
+ static lzma_action laction;
+@@ -86,7 +86,7 @@
+ 	if ((refillbehave = filebehave) == FILE_MMAP)
+ 		return (0);
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(GREP_NO_DECOMPRESSION)
+ 	/*
+ 	 * Fallback to plain old read() if BZ2_bzRead() tossed BZ_DATA_ERROR_MAGIC
+ 	 * below.  We can't change filebehave without losing pertinent information
+@@ -99,7 +99,7 @@
+ 	bufrem = 0;
+ 
+ 	switch (refillbehave) {
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(GREP_NO_DECOMPRESSION)
+ 	case FILE_GZIP:
+ 		nr = gzread(gzbufdesc, buffer, MAXBUFSIZ);
+ 		break;
+@@ -312,7 +312,7 @@
+ 		buffer = grep_malloc(MAXBUFSIZ);
+ 
+ 	switch (filebehave) {
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(GREP_NO_DECOMPRESSION)
+ 	case FILE_GZIP:
+ 		if ((gzbufdesc = gzdopen(f->fd, "r")) == NULL)
+ 			goto error2;
+@@ -339,6 +339,12 @@
+ 		laction = LZMA_RUN;
+ 		break;
+ 	}
++#elif defined(__APPLE__)
++	case FILE_GZIP:
++	case FILE_BZIP:
++	case FILE_XZ:
++	case FILE_LZMA:
++		errx(2, "compressed input is not supported");
+ #endif /* __APPLE__ */
+ 	default:
+ 		break;

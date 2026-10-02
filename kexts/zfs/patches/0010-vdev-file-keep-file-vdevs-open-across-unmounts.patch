@@ -1,0 +1,38 @@
+From: NeoDarwin
+Subject: [PATCH] vdev_file: keep file vdevs open across unmounts
+
+The macOS layer closes all of a pool's file vdevs whenever any dataset of
+the pool is unmounted (CLOSE_ON_UNMOUNT, vdev_file_close_on_unmount = 1),
+so that file vdevs don't keep the host's volume busy at shutdown, and
+reopens them on the next I/O. FreeBSD and Linux hold them open for the
+pool's life, and the OpenZFS test suite relies on that:
+zpool_import_missing_001_pos unmounts a dataset, removes a vdev's file
+and expects the pool to keep working; on NeoDarwin the pool suspended,
+the test hung and the rest of the zpool_import group failed behind it
+(P3-01 checkpoint 2). The tunable isn't reachable as a sysctl here, so it
+defaults to off. Shutdown with pools imported is root on ZFS's question
+(P3-03).
+
+Rebase-risk: low
+---
+diff --git a/module/os/neodarwin/zfs/vdev_file_os.c b/module/os/neodarwin/zfs/vdev_file_os.c
+--- a/module/os/neodarwin/zfs/vdev_file_os.c
++++ b/module/os/neodarwin/zfs/vdev_file_os.c
+@@ -73,7 +73,17 @@
+  * kernel.
+  *
+  */
++#ifdef __NEODARWIN__
++/*
++ * Off: a pool keeps its file vdevs open, as on FreeBSD and Linux. On macOS
++ * they are closed whenever one of the pool's datasets is unmounted, so they
++ * don't keep the host volume busy at shutdown; a vdev file removed after
++ * that unmount then suspends the pool (zpool_import_missing_001_pos).
++ */
++static uint32_t vdev_file_close_on_unmount = 0;
++#else
+ static uint32_t vdev_file_close_on_unmount = 1;
++#endif
+ ZFS_MODULE_PARAM(zfs_vdev_file, vdev_file_, close_on_unmount, UINT, ZMOD_RW,
+ 	"close vdevs on unmount to avoid reboot hang");
+ 

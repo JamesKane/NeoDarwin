@@ -1,0 +1,99 @@
+From: NeoDarwin
+Subject: [PATCH] bsd: export file_offset_get and file_offset_set
+
+A kext that reads or writes a process's descriptor through its vnode
+(file_vnode_withvid() and vn_rdwr(), the only KPI for it) passes vn_rdwr()
+an explicit offset, and can neither learn where the process's own read(2)
+and write(2) left the descriptor nor move it past what the kext
+transferred. zfs.kext's zfs receive reads a stream from the descriptor
+after libzfs has read its BEGIN record itself, and zfs send writes after
+libzfs's own headers (-R); the macOS layer's SPL starts every descriptor
+at offset 0, so zfs receive < file failed with "invalid backup stream"
+(OpenZFS test suite, P3-01 checkpoint 2). On FreeBSD and Linux the module
+uses and advances the descriptor's offset. Two BSD KPI functions give a
+kext the same: file_offset_get() and file_offset_set() read and set the
+offset of a vnode descriptor of the current process (fg_offset, as
+lseek(2) would), and BSDKernel.exports exports them. zfs.kext's SPL uses
+them in getf() and releasefp() (kexts/zfs/patches/0005), the pairing
+docs/architecture/filesystems.md §2 asks for.
+
+Rebase-risk: low (two new functions, two export names).
+---
+diff --git a/bsd/kern/kern_descrip.c b/bsd/kern/kern_descrip.c
+--- a/bsd/kern/kern_descrip.c
++++ b/bsd/kern/kern_descrip.c
+@@ -2125,10 +2125,62 @@
+ 		if (vidp) {
+ 			*vidp = vnode_vid((struct vnode *)fp_get_data(fp));
+ 		}
++	}
++	return error;
++}
++
++/*
++ * NeoDarwin: file_offset_get, file_offset_set
++ *
++ * Description:	Get or set the file offset of a vnode descriptor of the
++ *		current process: for a kext that does I/O on the descriptor's
++ *		vnode on the process's behalf (vn_rdwr() takes an explicit
++ *		offset) and must start where the process's read(2) or
++ *		write(2) left off, and leave the offset after what it
++ *		transferred, as the descriptor's own I/O would. zfs.kext's
++ *		zfs send and zfs receive do (P3-01, its SPL's getf()).
++ *
++ * Returns:	0				Success
++ *		EINVAL				The fd does not refer to a
++ *						vnode fileproc entry
++ *	fp_lookup:EBADF				Bad file descriptor
++ */
++int file_offset_get(int fd, off_t *offp);
++int file_offset_set(int fd, off_t off);
++
++int
++file_offset_get(int fd, off_t *offp)
++{
++	proc_t p = current_proc();
++	struct fileproc *fp;
++	int error;
++
++	error = fp_get_ftype(p, fd, DTYPE_VNODE, EINVAL, &fp);
++	if (error == 0) {
++		*offp = fp->fp_glob->fg_offset;
++		fp_drop(p, fd, fp, 0);
+ 	}
+ 	return error;
+ }
+ 
++int
++file_offset_set(int fd, off_t off)
++{
++	proc_t p = current_proc();
++	struct fileproc *fp;
++	int error;
++
++	if (off < 0) {
++		return EINVAL;
++	}
++	error = fp_get_ftype(p, fd, DTYPE_VNODE, EINVAL, &fp);
++	if (error == 0) {
++		fp->fp_glob->fg_offset = off;
++		fp_drop(p, fd, fp, 0);
++	}
++	return error;
++}
++
+ /*
+  * file_socket
+  *
+diff --git a/config/BSDKernel.exports b/config/BSDKernel.exports
+--- a/config/BSDKernel.exports
++++ b/config/BSDKernel.exports
+@@ -201,6 +201,8 @@
+ _fifo_write
+ _file_drop
+ _file_flags
++_file_offset_get
++_file_offset_set
+ _file_socket
+ _file_vnode_withvid
+ _fubyte

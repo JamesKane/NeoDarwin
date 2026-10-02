@@ -1,0 +1,33 @@
+From: NeoDarwin
+Subject: [PATCH] ldi_vnode: synchronous I/O waits for its buf before freeing it
+
+buf_strategy_vnode() issues a synchronous I/O (no b_iodone) with
+VNOP_STRATEGY() and then calls ldi_vnode_io_intr(), which frees the buf,
+but VNOP_STRATEGY() only starts the I/O. When the device completed it,
+buf_biodone() worked on a freed buf, and under the OpenZFS test suite
+(zpool_import, zpool_scrub, P3-01 checkpoint 2) xnu panicked in
+free_io_buf() ("bufs_iobufinuse < 0"). It now waits with buf_biowait()
+first, as spec and file system code does for a synchronous buf.
+
+Rebase-risk: low
+---
+diff --git a/module/os/neodarwin/zfs/ldi_vnode.c b/module/os/neodarwin/zfs/ldi_vnode.c
+--- a/module/os/neodarwin/zfs/ldi_vnode.c
++++ b/module/os/neodarwin/zfs/ldi_vnode.c
+@@ -622,6 +622,16 @@
+ 
+ 	/* For synchronous IO, call completion */
+ 	if (lbp->b_iodone == NULL) {
++#ifdef __NEODARWIN__
++		/*
++		 * VNOP_STRATEGY() only starts the I/O: wait for it before
++		 * ldi_vnode_io_intr() frees the buf, or the device's
++		 * completion finds it freed (free_io_buf: bufs_iobufinuse
++		 * < 0). buf_biowait()'s error is the buf's, which
++		 * ldi_vnode_io_intr() copies out.
++		 */
++		(void) buf_biowait(bp);
++#endif
+ 		ldi_vnode_io_intr(bp, (void*)lbp);
+ 	}
+ 

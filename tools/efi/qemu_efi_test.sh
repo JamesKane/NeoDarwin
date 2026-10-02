@@ -158,6 +158,10 @@
 #   ND_QEMU_DEBUG=DIR keep serial.log there and add QEMU's exception trace (-d int)
 #   ND_QEMU_LOG_DIR=DIR
 #                     keep serial.log (and cpus.txt) there, without the trace
+#   ND_QEMU_STOP_ON=TEXT
+#                     stop QEMU as soon as TEXT appears on serial (five
+#                     seconds later), and fail: for a long run that a
+#                     panic would otherwise hold until its timeout
 #   ND_QEMU_DUMP_CPUS_ON=TEXT
 #                     as --dump-cpus-on TEXT, for a run whose arguments are
 #                     fixed (a Bazel test: --test_env=ND_QEMU_DUMP_CPUS_ON=...)
@@ -604,6 +608,13 @@ cat > "$work/watch.pl" <<'WATCH_PL'
 		for my $d (@dump_on) {
 			next if $dumped{$d} || index($text, $d) < 0;
 			$dumped{$d} = 1; dump_cpus("\"$d\"");
+		}
+		# ND_QEMU_STOP_ON: a line that ends the run at once (a panic in a
+		# long run), after five seconds more of serial.
+		my $stop_on = $ENV{ND_QEMU_STOP_ON} // "";
+		if (length($stop_on) && index($text, $stop_on) >= 0) {
+			my $until = time + 5; while (time < $until) { drain(); select(undef, undef, undef, 0.1) }
+			kill 9, -$host_pid if defined $host_pid; kill 9, $pid; waitpid($pid, 0); exit 125
 		}
 		if (time >= $deadline) {
 			dump_cpus("the timeout") if @dump_on;

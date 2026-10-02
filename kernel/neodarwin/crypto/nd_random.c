@@ -154,17 +154,25 @@ nd_kprng_ctx(void)
 	return (struct cckprng_ctx *)(void *)&kprng;
 }
 
-static void
+// The pool's spinlock is held with interrupts off, so its holder is never
+// preempted or interrupted on its CPU: kprng_generate() takes it with
+// interrupts off too, and would otherwise spin on a CPU whose own preempted
+// thread holds it.
+static uintptr_t
 lock(struct nd_kprng *k)
 {
+	unsigned cpu;
+	uintptr_t s = nd_platform_cpu_enter(&cpu);
 	while (atomic_flag_test_and_set_explicit(&k->lock, memory_order_acquire)) {
 	}
+	return s;
 }
 
 static void
-unlock(struct nd_kprng *k)
+unlock(struct nd_kprng *k, uintptr_t s)
 {
 	atomic_flag_clear_explicit(&k->lock, memory_order_release);
+	nd_platform_cpu_exit(s);
 }
 
 static void
@@ -218,10 +226,10 @@ static void
 kprng_reseed(struct cckprng_ctx *ctx, size_t nbytes, const void *seed)
 {
 	struct nd_kprng *k = (struct nd_kprng *)(void *)ctx;
-	lock(k);
+	uintptr_t s = lock(k);
 	(void)ccdrbg_reseed(&k->info, (struct ccdrbg_state *)k->drbg, nbytes, seed, 0, NULL);
 	atomic_fetch_add(&k->epoch, 1);
-	unlock(k);
+	unlock(k, s);
 }
 
 // Every ND_KPRNG_REFRESH_PERIOD calls, pull what the kernel's entropy source
@@ -248,17 +256,28 @@ kprng_generate(struct cckprng_ctx *ctx, unsigned gen_idx, size_t nbytes, void *o
 	if (gen_idx >= k->ngens || nbytes > CCKPRNG_GENERATE_MAX_NBYTES) {
 		cc_abort("ndcrypto: kernel PRNG generate contract violated");
 	}
-	uint64_t epoch = atomic_load(&k->epoch);
-	if (k->gens[gen_idx].epoch != epoch) {
-		uint8_t key[32];
-		lock(k);
-		drbg_generate(k, sizeof(key), key);
-		unlock(k);
-		gen_key(&k->gens[gen_idx].gen, key);
-		cc_clear(sizeof(key), key);
-		k->gens[gen_idx].epoch = epoch;
+	// xnu passes cpu_number() as read with preemption on (read_random()), so
+	// the thread may since have moved, and another thread, or an interrupt
+	// handler, may be using that generator. Use this CPU's generator, with
+	// interrupts off: two users of one generator race on its state (avail
+	// underflowed, and cc_clear() zeroed the memory before it, ngens among it).
+	unsigned cpu;
+	uintptr_t s = nd_platform_cpu_enter(&cpu);
+	if (cpu >= k->ngens) {
+		cc_abort("ndcrypto: kernel PRNG generate contract violated");
 	}
-	gen_bytes(&k->gens[gen_idx].gen, out, nbytes);
+	uint64_t epoch = atomic_load(&k->epoch);
+	if (k->gens[cpu].epoch != epoch) {
+		uint8_t key[32];
+		uintptr_t ls = lock(k);
+		drbg_generate(k, sizeof(key), key);
+		unlock(k, ls);
+		gen_key(&k->gens[cpu].gen, key);
+		cc_clear(sizeof(key), key);
+		k->gens[cpu].epoch = epoch;
+	}
+	gen_bytes(&k->gens[cpu].gen, out, nbytes);
+	nd_platform_cpu_exit(s);
 }
 
 const struct cckprng_funcs nd_kprng_funcs = {

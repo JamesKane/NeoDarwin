@@ -215,6 +215,25 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/adv_cmds/archive/refs/tags/adv_cmds-237.tar.gz"],
 )
 
+# awk (the one true awk) and patch_cmds' cmp and diff (base/awk,
+# base/patch_cmds): the ZFS test suite's commands
+# (docs/architecture/filesystems.md §7).
+http_archive(
+    name = "apple_awk",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "0254582eb68d292348fb825036d601eac609ad83967e6e0b65a61c0249965809",
+    strip_prefix = "awk-awk-40",
+    urls = ["https://github.com/apple-oss-distributions/awk/archive/refs/tags/awk-40.tar.gz"],
+)
+
+http_archive(
+    name = "apple_patch_cmds",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "01b59460aa5c58550fca92a7c220a0726befb92266ddf398b360c49994711cd6",
+    strip_prefix = "patch_cmds-patch_cmds-72",
+    urls = ["https://github.com/apple-oss-distributions/patch_cmds/archive/refs/tags/patch_cmds-72.tar.gz"],
+)
+
 http_archive(
     name = "apple_diskdev_cmds",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
@@ -295,6 +314,17 @@ http_archive(
     sha256 = "901e3b93d8d5bbf8a7bef318f9bdace864c12be6d7b18ba1bf1e8c93f7667af6",
     strip_prefix = "bash-bash-140",
     urls = ["https://github.com/apple-oss-distributions/bash/archive/refs/tags/bash-140.tar.gz"],
+)
+
+# ksh93u+m (EPL-2.0) for the OpenZFS test suite (docs/base/session.md, "ksh"):
+# Apple's ksh-42 (ksh93u+ 2012) doesn't build with Xcode 27's clang; ksh93u+m
+# continues the same AT&T code and is FreeBSD ports' shells/ksh.
+http_archive(
+    name = "ksh93",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "9f4c7a9531cec6941d6a9fd7fb70a4aeda24ea32800f578fd4099083f98b4e8a",
+    strip_prefix = "ksh-1.0.10",
+    urls = ["https://github.com/ksh93/ksh/archive/refs/tags/v1.0.10.tar.gz"],
 )
 
 # Loopback and sshd (docs/base/session.md, "Loopback and sshd"): network_cmds'
@@ -544,10 +574,30 @@ http_archive(
     name = "all",
     srcs = glob(["cmd/**", "include/**", "lib/**", "module/**", "COPYRIGHT", "LICENSE", "META", "NOTICE"]),
     visibility = ["//visibility:public"],
+)
+
+# The test suite (P3-01 checkpoint 2): :all and tests/, for the suite's
+# scripts and helpers (kexts/zfs:zfs_test_suite, zfs_test_commands). The
+# kext's input, :all, stays as it is.
+filegroup(
+    name = "tests",
+    srcs = [":all"] + glob(["tests/**"]),
+    visibility = ["//visibility:public"],
 )""",
     sha256 = "b20049676667b1d5700b5ef4935c23ae8683d908ded57e6d0b52ff0e49ac37c1",
     strip_prefix = "openzfs-fork-a4c1b11ab900dc9db701ecff92c712dfe2d967d3",
     urls = ["https://github.com/openzfsonosx/openzfs-fork/archive/a4c1b11ab900dc9db701ecff92c712dfe2d967d3.tar.gz"],
+)
+
+# zlib 1.2.12 from Apple's zlib-100.120.1 (zlib licence), as a private static
+# library of the ZFS userland (//kexts/zfs:zlib: resume tokens, GPT CRCs)
+# until the base carries zlib (P3-02).
+http_archive(
+    name = "apple_zlib",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "4164f788ca1d36a360c6105de0032e544885b052822dacdec683543e0978582f",
+    strip_prefix = "zlib-zlib-100.120.1",
+    urls = ["https://github.com/apple-oss-distributions/zlib/archive/refs/tags/zlib-100.120.1.tar.gz"],
 )
 
 # xnu's corecrypto subset and headers, for ndcrypto's host tests: the same
@@ -623,6 +673,15 @@ pinned_files(
     name = "freebsd_rtadvd",
     build_file = "//base:rtadvd/freebsd.BUILD",
     lockfile = "//base:rtadvd/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
+# FreeBSD's bin/timeout (base/timeout): macOS 26's release set has no
+# timeout(1).
+pinned_files(
+    name = "freebsd_timeout",
+    build_file = "//base:timeout/freebsd.BUILD",
+    lockfile = "//base:timeout/freebsd.lock",
     url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
 )
 

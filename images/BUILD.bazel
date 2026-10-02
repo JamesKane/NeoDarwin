@@ -271,3 +271,47 @@ gpt_disk_image(
     root = ":zfs_session_root_volume",
     tags = ["manual"],
 )
+
+# P3-01 checkpoint 2 (docs/architecture/filesystems.md §7): the ZFS session
+# disk plus the OpenZFS test suite: ksh at /bin/ksh (//base:ksh_shell, only
+# in this image), the suite's scripts and nd-zfs-tests in /usr/share/zfs
+# (//kexts/zfs:zfs_test_suite) and its helpers in
+# /usr/share/zfs/zfs-tests/bin (//kexts/zfs:zfs_test_commands), for
+# //kernel:sbsa_zfs_suite_test.
+hfs_ramdisk(
+    name = "zfs_test_root_volume",
+    # /etc/zfs: zpool.cache, which the kernel writes and zdb -C reads.
+    dirs = _SYSTEM_DIRS + [
+        "private/etc/zfs",
+        "private/var/tmp/zts",
+    ],
+    files = {
+        "//base/launchctl": "bin/launchctl",
+        "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
+    } | _NETWORK_FILES,
+    journaled = True,
+    links = _SYSTEM_LINKS,
+    modes = _NETWORK_MODES,
+    volume_size = "256m",
+    tags = ["manual"],
+    tree_modes = _SYSTEM_MODES,
+    trees = [
+        "//base:system_root",
+        "//base:launchd_daemon",
+        "//base:ksh_shell",
+        "//kexts/zfs:zfs_commands",
+        "//kexts/zfs:zfs_test_commands",
+        "//kexts/zfs:zfs_test_suite",
+    ],
+)
+
+gpt_disk_image(
+    name = "zfs_test_disk",
+    esp = {
+        "//boot/neoboot": "EFI/BOOT/BOOTAA64.EFI",
+        "//kernel:sbsa_zfs_kc": "NeoDarwin/kernelcache",
+        ":zfs_test_root_volume_trustcache": "NeoDarwin/trustcache",
+    },
+    root = ":zfs_test_root_volume",
+    tags = ["manual"],
+)

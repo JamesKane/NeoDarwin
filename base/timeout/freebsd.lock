@@ -1,0 +1,8 @@
+# FreeBSD's bin/timeout, which base/timeout/build.sh builds as /bin/timeout
+# (the ZFS test suite's; docs/architecture/filesystems.md §7). macOS 26's
+# release set has no timeout(1). Fetched unmodified by
+# //rules:pinned_files.bzl; base/timeout/patches applies NeoDarwin's changes.
+# Repository: https://github.com/freebsd/freebsd-src
+# commit: 050683bb8e136981e4a1f66e845ab05c135630f4
+# Format: shasum -a 256 (hash, two spaces, path). Regenerate with tools/pinned/lock.sh.
+29d5cae6d8125868e4eb74cc699a7a132db0e6ec46b8f92340013dd30e8494b1  bin/timeout/timeout.c

@@ -68,6 +68,11 @@ struct cckprng_ctx *nd_kprng_ctx(void);
 // the registered kernel PRNG afterwards.
 void nd_platform_seed(void *out, size_t nbytes);
 void nd_platform_random(void *out, size_t nbytes);
+// Exclusive use of this CPU's state: interrupts off (so neither preemption
+// nor an interrupt handler can enter it) until nd_platform_cpu_exit() with
+// the returned state; *cpu is the CPU's number.
+uintptr_t nd_platform_cpu_enter(unsigned *cpu);
+void nd_platform_cpu_exit(uintptr_t state);
 
 // crypto_digest_alg_t to descriptor, shared by the digest and HMAC multiplexers (nd_mux.c).
 const struct ccdigest_info *nd_digest_info(unsigned int alg);

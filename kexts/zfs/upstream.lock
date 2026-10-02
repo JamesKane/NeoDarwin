@@ -1,8 +1,9 @@
-# Upstream pin for zfs.kext and the ZFS userland (kexts/zfs). Must match the
-# openzfs http_archive in MODULE.bazel. The macOS OS layer (module/os/macos)
-# is in no openzfs/zfs tag (zfs-2.4.4, 2.3.9, master: module/os/{freebsd,linux}
+# Upstream pins for zfs.kext and the ZFS userland (kexts/zfs). Must match the
+# openzfs and apple_zlib http_archives in MODULE.bazel. The macOS OS layer
+# (module/os/macos) is in no openzfs/zfs tag (zfs-2.4.4, 2.3.9, master: module/os/{freebsd,linux}
 # only; openzfs/zfs#12110 "Add macOS support" is open), so the pin is the
 # OpenZFS on OS X fork's latest release, which has module/os/macos.
 # Mirror: neodarwin/mirror-openzfs, tag openzfs/zfs-macOS-2.4.1p1 (to create;
 # docs/architecture/filesystems.md §2).
 openzfs              zfs-macOS-2.4.1p1             sha256:b20049676667b1d5700b5ef4935c23ae8683d908ded57e6d0b52ff0e49ac37c1  (github.com/openzfsonosx/openzfs-fork, commit a4c1b11ab900dc9db701ecff92c712dfe2d967d3, OpenZFS 2.4.1; the tag's archive is pinned by commit because the tag was moved once)
+zlib                 zlib-100.120.1                sha256:4164f788ca1d36a360c6105de0032e544885b052822dacdec683543e0978582f  (apple-oss-distributions/zlib, zlib 1.2.12; the ZFS userland's private static zlib, //kexts/zfs:zlib, until the base has zlib, P3-02)

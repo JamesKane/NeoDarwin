@@ -6,8 +6,10 @@
 # __FBSDID=__RCSID, DEAD_CODE_STRIPPING; INSTALL_PATH /usr/bin unless the
 # target says /bin), and install-files.sh's [ link.
 #   build.sh OUT SHELL_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root, //base:libedit_dylib)
-# OUT receives bin/sh, bin/{echo,test,[,pwd,kill,sleep,date,hostname} and
-# usr/bin/{env,id,groups,whoami,printf,uname} and usr/libexec/path_helper.
+# OUT receives bin/sh, bin/{echo,test,[,pwd,kill,sleep,date,hostname,expr}
+# and usr/bin/{env,id,groups,whoami,printf,uname,basename,dirname,true,
+# false,seq,mktemp,which,tee,xargs,find,hexdump,od,script} and
+# usr/libexec/path_helper.
 # The sh target is FreeBSD's ash, which Apple installs as /usr/local/bin/ash
 # (sh.xcconfig) and links with libedit (OTHER_LDFLAGS -ledit); its /bin/sh
 # is closed. NeoDarwin installs ash as /bin/sh, built as sh.xcconfig builds
@@ -67,3 +69,26 @@ tool "$B" "$ROOT" "$OUT/usr/bin/id" "$B/id.rsp" id/id.c "$(vers id)"
 # install-files.sh: hard links, which the install tree holds as copies.
 cp "$OUT/bin/test" "$OUT/bin/["
 cp "$OUT/usr/bin/id" "$OUT/usr/bin/groups"; cp "$OUT/usr/bin/id" "$OUT/usr/bin/whoami"
+
+# The ZFS test suite's commands (docs/architecture/filesystems.md §7): one
+# source each, INSTALL_PATH /usr/bin; expr's target says /bin and adds
+# OTHER_CFLAGS -fwrapv. expr.y and find's getdate.y go through the
+# toolchain's yacc, as Xcode's yacc rule runs it.
+for t in basename dirname true false seq mktemp which tee script; do
+	tool "$B" "$ROOT" "$OUT/usr/bin/$t" "$B/cflags" "$t/$t.c" "$(vers "$t")"
+done
+xcrun yacc -o "$D/expr.c" expr/expr.y
+write_rsp "$B/expr.rsp" "${base[@]}" -D__FBSDID=__RCSID -fwrapv
+tool "$B" "$ROOT" "$OUT/bin/expr" "$B/expr.rsp" "$D/expr.c" "$(vers expr)"
+# find: its GCC_PREPROCESSOR_DEFINITIONS add _DARWIN_USE_64_BIT_INODE;
+# xargs and find include Libc's private get_compat.h (compat/).
+write_rsp "$B/find.rsp" "${base[@]}" -D__FBSDID=__RCSID -D_DARWIN_USE_64_BIT_INODE -I"$PROJ/compat" -iquote find
+xcrun yacc -o "$D/getdate.c" find/getdate.y
+tool "$B" "$ROOT" "$OUT/usr/bin/find" "$B/find.rsp" find/find.c find/function.c "$D/getdate.c" find/ls.c \
+	find/main.c find/misc.c find/operator.c find/option.c "$(vers find)"
+write_rsp "$B/xargs.rsp" "${base[@]}" -D__FBSDID=__RCSID -I"$PROJ/compat"
+tool "$B" "$ROOT" "$OUT/usr/bin/xargs" "$B/xargs.rsp" xargs/strnsubst.c xargs/xargs.c "$(vers xargs)"
+tool "$B" "$ROOT" "$OUT/usr/bin/hexdump" "$B/cflags" hexdump/conv.c hexdump/display.c hexdump/hexdump.c \
+	hexdump/hexsyntax.c hexdump/odsyntax.c hexdump/parse.c "$(vers hexdump)"
+# install-files.sh: od is a hard link to hexdump (a copy here).
+cp "$OUT/usr/bin/hexdump" "$OUT/usr/bin/od"

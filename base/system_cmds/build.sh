@@ -12,7 +12,8 @@
 # console). generate_plist.sh adds Disabled = true on macOS, where
 # loginwindow owns the console; NeoDarwin installs it as the embedded
 # platforms do, enabled. Also usr/bin/{passwd,chpass,chfn,chsh} and
-# usr/sbin/pwd_mkdb (below).
+# usr/sbin/pwd_mkdb (below), and bin/sync and usr/bin/getconf (the ZFS test
+# suite's, at the end).
 # On macOS, login authenticates through PAM and records BSM audit and
 # EndpointSecurity events (USE_PAM, USE_BSM_AUDIT; -lpam -lbsm, weak
 # libEndpointSecuritySystem). NeoDarwin builds it with USE_PAM against
@@ -80,3 +81,16 @@ tool "$B" "$ROOT" "$OUT/usr/bin/chpass" "$B/chpass.rsp" chpass/chpass.c chpass/e
 cp "$OUT/usr/bin/chpass" "$OUT/usr/bin/chfn"; cp "$OUT/usr/bin/chpass" "$OUT/usr/bin/chsh"
 { cat "$B/cflags"; printf '%s\n' -D_PW_NAME_LEN=MAXLOGNAME "-D_PW_YPTOKEN='\"__YP!\"'"; } > "$B/pwd_mkdb.rsp"
 tool "$B" "$ROOT" "$OUT/usr/sbin/pwd_mkdb" "$B/pwd_mkdb.rsp" pwd_mkdb/pwd_mkdb.c pwd_mkdb/pw_scan.c
+
+# sync (INSTALL_PATH /bin) and getconf (/usr/bin, APPLE_GETCONF_UNDERSCORE):
+# the ZFS test suite's (docs/architecture/filesystems.md §7). getconf's
+# script phase turns each *.gperf table into C with fake-gperf.awk, run by
+# the build machine's awk as Xcode runs it.
+tool "$B" "$ROOT" "$OUT/bin/sync" "$B/cflags" sync/sync.c
+G="$B/getconf"; mkdir -p "$G"
+for t in confstr limits pathconf progenv sysconf unsigned_limits; do
+	LC_ALL=C /usr/bin/awk -f getconf/fake-gperf.awk "getconf/$t.gperf" > "$G/$t.c"
+done
+{ cat "$B/cflags"; printf '%s\n' -DAPPLE_GETCONF_UNDERSCORE -iquote "$S/getconf"; } > "$B/getconf.rsp"
+tool "$B" "$ROOT" "$OUT/usr/bin/getconf" "$B/getconf.rsp" getconf/getconf.c "$G/confstr.c" "$G/limits.c" \
+	"$G/pathconf.c" "$G/progenv.c" "$G/sysconf.c" "$G/unsigned_limits.c"

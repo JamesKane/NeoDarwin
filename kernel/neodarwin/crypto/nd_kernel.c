@@ -7,7 +7,9 @@
 // does both on Apple systems.
 
 #include "ndcrypto.h"
+#include <kern/cpu_number.h>
 #include <kern/debug.h>
+#include <machine/machine_routines.h>
 #include <kern/startup.h>
 #include <prng/random.h>
 #include <sys/random.h>
@@ -28,6 +30,20 @@ void
 nd_platform_random(void *out, size_t nbytes)
 {
 	read_random(out, (u_int)nbytes);
+}
+
+uintptr_t
+nd_platform_cpu_enter(unsigned *cpu)
+{
+	boolean_t was = ml_set_interrupts_enabled(FALSE);
+	*cpu = (unsigned)cpu_number();
+	return (uintptr_t)was;
+}
+
+void
+nd_platform_cpu_exit(uintptr_t state)
+{
+	(void)ml_set_interrupts_enabled((boolean_t)state);
 }
 
 static void

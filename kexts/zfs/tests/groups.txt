@@ -1,0 +1,21 @@
+# The OpenZFS test suite's groups that //kernel:sbsa_zfs_suite_test runs
+# (P3-01 checkpoint 2, docs/architecture/filesystems.md §7), and the shard
+# that runs each: one QEMU boot per shard, //kernel:sbsa_zfs_suite_test's
+# shard_count shards, each about 25 minutes at most. GROUP SHARD; the group
+# is a directory of tests/functional/cli_root, its tests those common.run
+# lists.
+zpool_create	0
+zpool_import	1
+zpool_destroy	2
+zpool_export	2
+zpool_status	2
+zpool_scrub	2
+zfs_create	3
+zfs_destroy	3
+zfs_snapshot	4
+zfs_rollback	4
+zfs_mount	4
+zfs_set	5
+zfs_get	6
+zfs_send	7
+zfs_receive	7

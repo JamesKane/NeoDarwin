@@ -123,6 +123,8 @@ SBSA_PATCHES = [
     "patches/0038-generic-arm64-machine-timeouts-in-real-time.patch",
     "patches/0039-config-sbsa-export-iostoragefamily.patch",
     "patches/0040-sbsa-kernel-split-seg-info.patch",
+    "patches/0041-generic-arm64-physmap-end-covers-twig-padding.patch",
+    "patches/0042-bsd-export-file-offset-kpi.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -784,6 +786,35 @@ sh_test(
     ] + ZFS_POOL_LINES,
     data = ["//images:zfs_session_disk"],
     tags = ["manual", "kernel", "qemu"],
+)
+
+# P3-01 checkpoint 2 (docs/architecture/filesystems.md §7): the OpenZFS
+# test suite's cli_root groups of kexts/zfs/tests/groups.txt, run by
+# nd-zfs-tests on //images:zfs_test_disk with four blank virtio-blk disks
+# (one HFS+ volume for file vdevs, three DISKS), one boot per shard, held
+# to the ratchet in kexts/zfs/tests/expected.tsv (kexts/zfs/tests/suite_test.sh).
+sh_test(
+    name = "sbsa_zfs_suite_test",
+    size = "enormous",
+    srcs = ["//kexts/zfs:tests/suite_test.sh"],
+    args = [
+        "$(rootpath //tools/efi:qemu_efi_test.sh)",
+        "$(rootpath //images:zfs_test_disk)",
+        "$(rootpath //kexts/zfs:tests/groups.txt)",
+        "$(rootpath //kexts/zfs:tests/expected.tsv)",
+        "--mem 4G",
+        "--smp 2",
+    ],
+    data = [
+        "//images:zfs_test_disk",
+        "//kexts/zfs:tests/expected.tsv",
+        "//kexts/zfs:tests/groups.txt",
+        "//tools/efi:qemu_efi_test.sh",
+    ],
+    shard_count = 8,
+    # Not tagged qemu yet: kexts/zfs/tests/expected.tsv hasn't had a clean
+    # full run (docs/architecture/filesystems.md §7.2, "in progress").
+    tags = ["manual", "kernel"],
 )
 
 # The same disk boot on virt,secure=on with TF-A (DS = 0), as on SBSA

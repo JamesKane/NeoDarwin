@@ -59,19 +59,19 @@ A program's key name is the installed name that matches its directory (`vi`, not
 
 **Coverage.** `bazel build //tools/parity:coverage` writes `coverage.md`: counts by status and directory, how much of the base is built, and the unbuilt rows grouped by roadmap item and source. That last part is P4-21's work list. `ci/parity.sh` runs the checks, builds the report and copies it to `$PARITY_OUT` (and to the job summary on GitHub and Forgejo Actions). The workflow that publishes it as an artifact waits for the CI runners (P0-05). Coverage is every status except `todo`, as a share of all rows. The 1.0 gate is **no `todo` rows**, and every `apple`, `freebsd`, `new` and `equivalent` row built, installed and passing the FreeBSD test suite's tests for that program where they exist (`/usr/tests`, Kyua).
 
-Today (P4-20 seeding, 2026-10-02), on 15.1-RELEASE's 752 rows:
+Today (2026-10-02, after the ZFS test suite's commands, P3-01), on 15.1-RELEASE's 752 rows:
 
 | Status | Rows | Built |
 |---|---:|---:|
-| `apple` | 250 | 52 |
-| `freebsd` | 120 | 5 |
+| `apple` | 250 | 87 |
+| `freebsd` | 120 | 6 |
 | `new` | 15 | 0 |
 | `equivalent` | 44 | 9 |
 | `port` | 28 | – |
 | `n/a` | 295 | – |
 | `todo` | 0 | – |
 
-Coverage is 100% (no `todo`). Of the 429 base rows, 66 (15.4%) are built: 52.6% of `bin`, 33.3% of `sbin`, 5.6% of `usr.bin` and 16.5% of `usr.sbin`. P4-21 holds 277 of the 363 unbuilt base rows. The largest groups are 82 FreeBSD programs (`fetch`, `ee`, `mandoc`, `bmake`, `xz`, `zstd`, `kyua`, `timeout`, `certctl`, `makefs`, ...), shell_cmds (38), text_cmds (31), file_cmds (19), system_cmds (14), adv_cmds (8) and Apple's NFS (7). The toolchain (31 rows, P5-10), accounts (13, P4-22), services (7, P4-23) and the ndpkg-backed equivalents (P2-02 to P2-04) make up the rest.
+Coverage is 100% (no `todo`). Of the 429 base rows, 102 (23.8%) are built: 68.4% of `bin`, 33.3% of `sbin`, 18.2% of `usr.bin` and 17.4% of `usr.sbin`. P4-21 holds 241 of the 327 unbuilt base rows. The largest groups are 81 FreeBSD programs (`fetch`, `ee`, `mandoc`, `bmake`, `xz`, `zstd`, `kyua`, `certctl`, `makefs`, ...), shell_cmds (25), text_cmds (25), system_cmds (12), file_cmds (9), adv_cmds (7) and Apple's NFS (7). The toolchain (31 rows, P5-10), accounts (13, P4-22), services (7, P4-23) and the ndpkg-backed equivalents (P2-02 to P2-04) make up the rest.
 
 **Workflow.** Reclassify a row by editing `inventory.tsv`, then run `bazel run //tools/parity:accept`. After a base change installs or removes programs, run `bazel run //tools/parity:update` then `accept`. For a new FreeBSD release, run `bazel run //tools/parity:lock -- CHECKOUT "15.2-RELEASE (tag release/15.2.0)"` on a checkout of the tag (a sparse checkout of `bin sbin usr.bin usr.sbin share/mk` is enough), then `update` (new directories arrive as `todo`), classify them, and `accept`.
 
