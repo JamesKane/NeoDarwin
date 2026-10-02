@@ -23,6 +23,20 @@ _Shutdown_context	isa	mrs dit
 _Switch_context	isa	mrs dit
 _Switch_context	isa	msr dit
 #
+# - Data, not code: K256, the SHA-256 round constants (0x428a2f98, 0x71374491,
+#   ...), which osfmk/arm64/corecrypto/sha256_compress_arm64.s keeps in .text
+#   next to its SHA-2-instruction compression loop. That file is assembled only
+#   when __ARM_FEATURE_SHA2 is defined, which -mcpu=cortex-a76+crypto (patch 0019,
+#   2026-10-02) does; before, the kernel used corecrypto's portable SHA-256.
+K256	isa	cbgt
+K256	isa	cmpeq
+K256	isa	cmphi
+K256	isa	ldff1b
+K256	isa	ldff1h
+K256	isa	stnt1h
+K256	isa	sttp
+K256	isa	subg
+#
 # - Data, not code: words in __TEXT_EXEC that llvm-objdump decodes as SVE, SME
 #   or CB<cc> only with every feature on. _lz4_decode_asm and _lz4_encode_2gb
 #   end in constant tables (0x04030201, 0x80808081); the others are panic

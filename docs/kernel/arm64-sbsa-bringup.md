@@ -237,7 +237,7 @@ What P1-06's SMP half found:
 
 | Area | Q8B | NeoDarwin |
 |---|---|---|
-| CPUs | 8 (4 Cortex-X1C + 4 Cortex-A78C, **Armv8.2**), MPIDR 0x000–0x700: DynamIQ, cores in Aff1 | P1-17, §2.1.8: the kernel's baseline is Armv8.2 (`-march=armv8.2-a+rcpc`, no range TLBI; patch 0019), enforced by `sbsa_isa_audit`. The reset vector matched MPIDR & 0xFF, so every core (Aff0 = 0) would have run on the boot CPU's `cpu_data`; it and the other CPU lookups now use Aff2:Aff1:Aff0 (patch 0020). QEMU tests: `cortex-a76` with 8 CPUs, and 18 CPUs for Aff1 (0x100, 0x101) |
+| CPUs | 8 (4 Cortex-X1C + 4 Cortex-A78C, **Armv8.2**), MPIDR 0x000–0x700: DynamIQ, cores in Aff1 | P1-17, §2.1.8: the kernel's baseline is Armv8.2 (`-mcpu=cortex-a76+crypto`, no range TLBI; patch 0019), enforced by `sbsa_isa_audit`. The reset vector matched MPIDR & 0xFF, so every core (Aff0 = 0) would have run on the boot CPU's `cpu_data`; it and the other CPU lookups now use Aff2:Aff1:Aff0 (patch 0020). QEMU tests: `cortex-a76` with 8 CPUs, and 18 CPUs for Aff1 (0x100, 0x101) |
 | GIC | GICv3, GICD 0x17a00000, one GICR range of 8 × 128 KiB frames at 0x17a60000, ITS at 0x17a40000 | supported as is |
 | Timer | virtual timer PPI 27, level | supported |
 | PSCI | FADT: compliant, SMC | supported (P1-06) |
@@ -273,7 +273,7 @@ On the Q8B, still to check: where the firmware's framebuffer lies and what memor
 
 The Q8B's cores are Cortex-X1C and Cortex-A78C: Armv8.2 plus some later features. FreeBSD reads them as ISAR0 `CondM-8.4,DP,RDM,Atomic,CRC32,SHA2,SHA1,AES+PMULL`, ISAR1 `GPA,RCPC-8.4,APA EPAC2,DCPoP`, PFR0 without DIT, SVE or AMU, and PFR1 `SSBS`. They have no FEAT_TLBIRANGE, DIT, SHA3/SHA512, RNDR or MTE. Their MPIDRs are DynamIQ's, 0x000–0x700: the core number is in Aff1 and Aff0 is 0. QEMU's `cortex-a76` has the same Armv8.2 ISA, with RCpc at the 8.3 level (LDAPR without LDAPUR).
 
-**Baseline.** The kernel builds with `-march=armv8.2-a+rcpc` (patch 0019). Every Armv8.3+ dependency the build had, and what happened to each:
+**Baseline.** The kernel builds with `-mcpu=cortex-a76+crypto` (patch 0019). It was `-march=armv8.2-a+rcpc` until 2026-10-02. Apple clang's default arm64 CPU is `apple-m1`, and `-march` leaves that CPU's extra features enabled, so the compiler could emit instructions the Q8B lacks. zfs.kext's `arc_init` got a SHA-3 `bcax` that way and panicked on the A76. `-mcpu=cortex-a76+crypto` names the Q8B's oldest core class, so code generation stays inside the baseline instead of relying on `sbsa_isa_audit` alone. Every Armv8.3+ dependency the build had, and what happened to each:
 
 | Dependency | Where | Now |
 |---|---|---|
@@ -291,7 +291,7 @@ The Q8B's cores are Cortex-X1C and Cortex-A78C: Armv8.2 plus some later features
 
 The Armv8.4 build executed `TLBI RVALE1IS` (§2.1.2) and touched DIT on every context switch; the Armv8.2 kernel's TLB maintenance is `TLBI VMALLE1(IS)`, `ASIDE1(IS)`, `VAE1IS`, `VALE1IS`, `VAAE1IS` and `VAALE1IS` only.
 
-**Userland.** swiftc and clang target `apple-m1` for `arm64-apple-macos` unless told otherwise. On `cortex-a76` the first session boot ran the kernel and launchd, then `launchctl` died with SIGILL on `LDAPUR` (RCpc 8.4). `tools/darwin_executable/build.sh` and `tools/static_macho/build_static_macho.sh` now pass `-target-cpu cortex-a76` to swiftc and `-mcpu=cortex-a76` to clang. The Q8B has LDAPUR, but not every `apple-m1` feature (FHM, SHA3, FRINTTS, FlagM2, SB), so this matters on the board too. The C base (`tools/base/common.sh` `TARGET_FLAGS`, plain `-arch arm64`) passes the same double-disassembly check except for Apple's run-time-gated paths, which the commpage steers: DIT in `libsystem_platform`'s `timingsafe_*` and dyld's corecrypto, `CNTVCTSS_EL0` in `mach_absolute_time`, and `STG` in libunwind. It still targets Xcode clang's default CPU; pinning it to `cortex-a76`, and auditing the images, is still to do.
+**Userland.** swiftc and clang target `apple-m1` for `arm64-apple-macos` unless told otherwise. On `cortex-a76` the first session boot ran the kernel and launchd, then `launchctl` died with SIGILL on `LDAPUR` (RCpc 8.4). `tools/darwin_executable/build.sh` and `tools/static_macho/build_static_macho.sh` now pass `-target-cpu cortex-a76` to swiftc and `-mcpu=cortex-a76+crypto` to clang. The Q8B has LDAPUR, but not every `apple-m1` feature (FHM, SHA3, FRINTTS, FlagM2, SB), so this matters on the board too. The C base (`tools/base/common.sh` `TARGET_FLAGS`, plain `-arch arm64`) passes the same double-disassembly check except for Apple's run-time-gated paths, which the commpage steers: DIT in `libsystem_platform`'s `timingsafe_*` and dyld's corecrypto, `CNTVCTSS_EL0` in `mach_absolute_time`, and `STG` in libunwind. It still targets Xcode clang's default CPU; pinning it to `cortex-a76`, and auditing the images, is still to do.
 
 **DynamIQ MPIDRs.** The cpu node's `reg`, which the kernel keeps as `cpu_phys_id`, has always been MPIDR Aff2:Aff1:Aff0 (`dt-abi.md`). Without `HAS_CLUSTER`, xnu matched less of it (patch 0020 fixes each on `GENERIC_ARM64_PLATFORM`):
 - the reset vector (`start.s`) compared `MPIDR_EL1 & 0xFF` with `cpu_phys_id`. On the Q8B every core has Aff0 = 0, so every secondary would have found the boot CPU's `cpu_data` and run on it. It now compares bits 23:0; the MT bit (24), which DynamIQ cores set, is outside the mask;

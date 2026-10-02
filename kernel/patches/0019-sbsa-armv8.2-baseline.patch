@@ -6,9 +6,13 @@ Cortex-X1C and Cortex-A78C cores: Armv8.2 with RCpc (LDAPR) and more,
 but no FEAT_TLBIRANGE and no FEAT_DIT. The SBSA kernel was built for
 Armv8.4 and executed TLBI RVALE1IS, undefined on those cores.
 
-- MakeInc.def: SBSA builds with -march=armv8.2-a+rcpc. RCpc is in both
-  the Q8B's cores and QEMU's cortex-a76; nothing else past 8.2 is
-  needed by the compiler. This also turns off __ARM_ARCH_8_4__, so
+- MakeInc.def: SBSA builds with -mcpu=cortex-a76+crypto: Armv8.2 with
+  RCpc, dot product, FP16, AES and SHA-2, all in both the Q8B's cores
+  and QEMU's cortex-a76 (LLVM treats the crypto extensions as optional
+  on the A76, so they're named). -mcpu, not -march: Apple clang's default CPU for arm64 is
+  apple-m1, and -march=armv8.2-a+rcpc leaves that CPU's extra features
+  (SHA-3, for one) enabled, so the compiler may emit instructions the
+  Q8B lacks (zfs.kext's arc_init got a bcax that way). This also turns off __ARM_ARCH_8_4__, so
   os_atomic no longer treats a 16-byte load as single-copy atomic
   (FEAT_LSE2), and cswitch.s no longer names DIT unconditionally.
 - SBSA.h: no __ARM_RANGE_TLBI__. pmap flushes by page, or by ASID past
@@ -35,7 +39,7 @@ Rebase-risk: low (one flag, one define, two assembler blocks, one #if in pmap).
  
  MACHINE_FLAGS_ARM64_VMAPPLE = -DARM64_BOARD_CONFIG_VMAPPLE              -march=armv8.5a+sme2
 -MACHINE_FLAGS_ARM64_SBSA = -DARM64_BOARD_CONFIG_SBSA                    -march=armv8.4-a
-+MACHINE_FLAGS_ARM64_SBSA = -DARM64_BOARD_CONFIG_SBSA                    -march=armv8.2-a+rcpc
++MACHINE_FLAGS_ARM64_SBSA = -DARM64_BOARD_CONFIG_SBSA                    -mcpu=cortex-a76+crypto
  
  
  #
