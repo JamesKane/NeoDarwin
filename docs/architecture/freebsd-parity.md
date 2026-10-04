@@ -71,9 +71,32 @@ Today (2026-10-02, after the ZFS test suite's commands, P3-01), on 15.1-RELEASE'
 | `n/a` | 295 | – |
 | `todo` | 0 | – |
 
-Coverage is 100% (no `todo`). Of the 429 base rows, 102 (23.8%) are built: 68.4% of `bin`, 33.3% of `sbin`, 18.2% of `usr.bin` and 17.4% of `usr.sbin`. P4-21 holds 241 of the 327 unbuilt base rows. The largest groups are 81 FreeBSD programs (`fetch`, `ee`, `mandoc`, `bmake`, `xz`, `zstd`, `kyua`, `certctl`, `makefs`, ...), shell_cmds (25), text_cmds (25), system_cmds (12), file_cmds (9), adv_cmds (7) and Apple's NFS (7). The toolchain (31 rows, P5-10), accounts (13, P4-22), services (7, P4-23) and the ndpkg-backed equivalents (P2-02 to P2-04) make up the rest.
+Coverage is 100% (no `todo`). Of the 429 base rows, 102 (23.8%) are built: 68.4% of `bin`, 33.3% of `sbin`, 18.2% of `usr.bin` and 17.4% of `usr.sbin`. P4-21 holds 210 of the 327 unbuilt base rows (241 until 2026-10-04, when NFS, tracing, quotas, printing and `at` moved to their own items; §2.1). The largest groups are 76 FreeBSD programs (`fetch`, `ee`, `mandoc`, `bmake`, `xz`, `zstd`, `kyua`, `certctl`, `makefs`, ...), shell_cmds (25), text_cmds (25), system_cmds (11), file_cmds (9) and adv_cmds (7). The toolchain (31 rows, P5-10), NFS (15, P4-28), accounts (13, P4-22), services (8, P4-23), printing (7, P4-31), quotas (5, P4-30), tracing (3, P4-29) and the ndpkg-backed equivalents (P2-02 to P2-04) make up the rest.
 
 **Workflow.** Reclassify a row by editing `inventory.tsv`, then run `bazel run //tools/parity:accept`. After a base change installs or removes programs, run `bazel run //tools/parity:update` then `accept`. For a new FreeBSD release, run `bazel run //tools/parity:lock -- CHECKOUT "15.2-RELEASE (tag release/15.2.0)"` on a checkout of the tag (a sparse checkout of `bin sbin usr.bin usr.sbin share/mk` is enough), then `update` (new directories arrive as `todo`), classify them, and `accept`.
+
+### 2.1 P4-21's checkpoints
+
+P4-21 is planned as seven checkpoints, cheapest first. Each one is about one agent's work (around 300K tokens). It ends with `bazel run //tools/parity:update` and `accept`, and with the new programs smoke-tested on QEMU. Two items in the backlog title are already met: `/bin/sh` is shell_cmds' `sh` linked with libedit, and `ed` is part of text_cmds.
+
+| cp | Contents | Rows | Notes |
+|---|---|---:|---|
+| 1 | **The Apple projects already in `base/`.** text_cmds (25, including `md5` and `ed`), shell_cmds (25), patch_cmds (3), file_cmds (8; `gzip` is in cp2), adv_cmds (7), system_cmds' leaf tools (`dmesg`, `reboot`, `shutdown`, `iostat`, `pagesize`, `gcore`, `zic`, `zdump`, `ac`, `accton`, `sa`), misc_cmds (5), basic_cmds (2), and remote_cmds' `logger` and `wall` | ~85 | Each one extends an existing `build.sh`. It can be split into 1a (text, shell, patch) and 1b (the rest) |
+| 2 | **Compression and archives.** libz (moving Apple's zlib-100.120.1 out of `kexts/zfs` into the base), libbz2, liblzma and libzstd; `gzip`, `bzip2`, `xz`, `xzdec`, `lzmainfo`, `zstd`; libarchive's `tar`, `cpio` and `bsdcat`; `unzip` | ~14 | Turns grep's decompression back on (dropping text_cmds patch 0001) and fixes the ZFS suite's `bzcat` failures |
+| 3 | **Interactive essentials.** `less` (3), vim as `vi`, `man` with `mandoc` and `soelim`, `file`, `bc`, `top`, `nc`, `csh` (tcsh), `mail`, `iconv` (3), the ncurses tools, `locale` and `localedef` with locale data | ~20 | The default interactive shell (§6) is decided here |
+| 4 | **FreeBSD leaf utilities** on the FreeBSD source drop at `050683bb8e13` (as for `timeout` and libxo): `nproc`, `uuidgen`, `pwait`, `m4`, `ident`, `ministat`, `xo`, `perror`, `getaddrinfo`, `ts`, `daemon`, `fsync`, `lock`, `asa`, `ee`, `bsdiff`, `bspatch`, `resizewin`, `domainname`, ... | ~30 | Sets up the shared build pattern for FreeBSD programs |
+| 5 | **Heavier FreeBSD programs.** `bmake`, `dtc`, `mkimg`, `makefs`, `iasl` and `acpidb` (from `third_party/acpica`), `fetch` and `certctl` (with OpenSSL), `drill`, `tzsetup`, and the IPv6 tools (`route6d`, `rtadvctl`, `ip6addrctl`, `mld6query`, `rrenumd`, ...) | ~25 | `diskinfo`, `trim` and `recoverdisk` use GEOM and CAM ioctls and need rewriting over IOKit |
+| 6 | **`equivalent` and `new` rows.** Equivalents: `lsof`, `vm_stat`, `ioreg`, `xattr`, `pppd`. New programs: `pciconf` and `acpidump` over the IOKit registry, `mdconfig`, `nvmecontrol`, `efivar` and `efibootmgr` | ~18 | `efivar` and `efibootmgr` need a kernel interface to UEFI runtime services |
+| 7 | **Tests.** `kyua` and ATF, and FreeBSD's `/usr/tests` for every built row, run on QEMU. This is P4-21's exit | – | Needs Lua and SQLite. It may become its own item |
+
+cp1, cp2 and cp4 touch separate directories, so they can run in parallel. They still share one Bazel server.
+
+**Split out of P4-21 (2026-10-04).** These rows need kernel work or daemons, not just command ports, so they belong to their own items:
+- NFS: 15 rows, including `rpcbind`, `rpcinfo`, `autofs` and `gssd` (P4-28).
+- `ktrace`, `kdump` and `truss` → `dtruss`, which needs DTrace (P4-29).
+- Quotas (P4-30).
+- Printing: lpr and `lpd` → CUPS (P4-31).
+- `at`, which goes with cron's `atrun` (P4-23).
 
 ## 3. Administration: FreeBSD front ends on Darwin mechanisms
 
@@ -130,4 +153,5 @@ These tasks are adapted from the FreeBSD Handbook. They run as scripts against a
 | Partitioning tool | port FreeBSD's `gpt`-era tool onto IOStorageFamily, or write a GPT-only `ndpart` | P3-03, which needs a partitioning step in the installer |
 | DHCP client | Apple's open `bootp` and `IPConfiguration` source if it builds without closed dependencies, otherwise FreeBSD's `dhclient`, otherwise `dhcpcd` (BSD-2). IPv6 **decided (P4-24)**: IPConfiguration's DHCPv6 and RDNSS code is bound to its service threads, CoreFoundation and SystemConfiguration's private interfaces, so FreeBSD's `rtsold` (RDNSS, DNSSL) and `resolvconf`, and `net/dhcp6`'s `dhcp6c`, which leaves SLAAC to the kernel as `dhcpcd` wouldn't (`docs/kernel/network.md`, "IPv6 DNS: RDNSS and DHCPv6") | P4-24 |
 | NTP | **decided (P4-24)**: Apple's open `ntp` drop, ntp-139, for its `sntp`; its `ntpd` needs closed libraries (`docs/base/pf-ntp.md`). FreeBSD's `ntpd` if NeoDarwin is to serve time | P4-24 |
-| Default interactive shell | `sh` (FreeBSD's default for users), `tcsh` (FreeBSD's root shell until 14), or `zsh` (Darwin's) | P4-21 |
+| Default interactive shell | `sh` (FreeBSD's default for users), `tcsh` (FreeBSD's root shell until 14), or `zsh` (Darwin's) | P4-21 checkpoint 3 |
+| Obsolete network programs | FreeBSD 15.1 still ships `rwho`/`rwhod`, `rusers`, `rup`, `ruptime`, `rwall`, `bootparamd`/`callbootd`, `enigma`, `msgs`, `biff`, `from`, `tip`, `talk`, `telnet`, `tftp` and `ftp`. Build them in the base as the inventory has them now, or reclassify them as `port` (a ratchet-visible change through `accept`) | P4-21 checkpoint 4 |

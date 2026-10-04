@@ -460,7 +460,7 @@ epics:
     exit: "add, modify and remove a user and a group; log in with a password; su with pam_group"
     doc: docs/architecture/freebsd-parity.md
   - id: P4-23
-    title: "Service administration — service(8) and sysrc(8) front ends over launchd, /etc/rc.conf overrides applied to job plists, cron, periodic, newsyslog, syslogd"
+    title: "Service administration — service(8) and sysrc(8) front ends over launchd, /etc/rc.conf overrides applied to job plists, cron, at and atrun, periodic, newsyslog, syslogd"
     phase: 4
     owner: userland
     status: todo
@@ -498,6 +498,38 @@ epics:
     status: todo
     depends: [P4-22, P4-23, P4-24, P4-25, P3-03, P2-05]
     exit: "the workflow suite in freebsd-parity.md §4 passes end to end in CI"
+    doc: docs/architecture/freebsd-parity.md
+  - id: P4-28
+    title: "NFS — xnu's NFS client and Apple's NFS-339 (mount_nfs, nfsd, rpc.lockd, rpc.statd, showmount, nfsstat), FreeBSD's rpcbind and rpcinfo, autofs, gssd; split from P4-21"
+    phase: 4
+    owner: storage
+    status: todo
+    depends: [P4-21, P4-24]
+    exit: "mount an export from a FreeBSD host with mount_nfs, and export a ZFS dataset (sharenfs) that a FreeBSD host mounts"
+    doc: docs/architecture/freebsd-parity.md
+  - id: P4-29
+    title: "Tracing — DTrace in the kernel (syscall and fbt providers, CTF) and dtrace-413's dtrace and dtruss, the equivalent of ktrace, kdump and truss; split from P4-21"
+    phase: 4
+    owner: kernel-bridge
+    status: todo
+    depends: [P4-21]
+    exit: "dtruss traces a process's system calls on QEMU, and dtrace -l lists the syscall provider's probes"
+    doc: docs/architecture/freebsd-parity.md
+  - id: P4-30
+    title: "Disk quotas — diskdev_cmds' quotacheck, quotaon, edquota, repquota and quota over HFS+ quotas in the kernel; split from P4-21"
+    phase: 4
+    owner: storage
+    status: todo
+    depends: [P4-21]
+    exit: "a user over its HFS+ block quota gets EDQUOT, and repquota reports it"
+    doc: docs/architecture/freebsd-parity.md
+  - id: P4-31
+    title: "Printing — cups-522's cupsd and its BSD commands (lp, lpr, lpq, lprm, lpc) as the lpd equivalent, FreeBSD's lptest; split from P4-21"
+    phase: 4
+    owner: userland
+    status: todo
+    depends: [P4-21, P4-23]
+    exit: "lpr queues a job to a CUPS file or IPP queue on QEMU, and lpq and lprm list and remove it"
     doc: docs/architecture/freebsd-parity.md
   # ---- Phase 5: Self-hosting ----
   - id: P5-10
