@@ -145,7 +145,7 @@ usr.bin/backlight	n/a				no	backlight(9)
 usr.bin/banner	apple	text_cmds-197		P4-21	no	
 usr.bin/basename	apple	shell_cmds-326		P4-21	yes	
 usr.bin/beep	n/a				no	OSS sound
-usr.bin/biff	freebsd	FreeBSD usr.bin/biff		P4-21	no	
+usr.bin/biff	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
 usr.bin/bintrans	apple	text_cmds-197		P4-21	no	
 usr.bin/bluetooth/bthost	n/a				no	FreeBSD's netgraph Bluetooth stack
 usr.bin/bluetooth/btsockstat	n/a				no	FreeBSD's netgraph Bluetooth stack
@@ -229,7 +229,7 @@ usr.bin/ee	freebsd	FreeBSD usr.bin/ee		P4-21	no
 usr.bin/elfcopy	n/a				no	ELF; NeoDarwin binaries are Mach-O
 usr.bin/elfctl	n/a				no	ELF; NeoDarwin binaries are Mach-O
 usr.bin/elfdump	n/a				no	ELF; NeoDarwin binaries are Mach-O
-usr.bin/enigma	freebsd	FreeBSD usr.bin/enigma		P4-21	no	
+usr.bin/enigma	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
 usr.bin/env	apple	shell_cmds-326		P4-21	yes	
 usr.bin/etdump	freebsd	FreeBSD usr.bin/etdump		P4-21	no	
 usr.bin/expand	apple	text_cmds-197		P4-21	no	
@@ -245,10 +245,10 @@ usr.bin/fold	apple	text_cmds-197		P4-21	no
 usr.bin/fortune/fortune	port	games/freebsd-games			no	MK_GAMES
 usr.bin/fortune/strfile	port	games/freebsd-games			no	MK_GAMES
 usr.bin/fortune/unstr	port	games/freebsd-games			no	MK_GAMES
-usr.bin/from	freebsd	FreeBSD usr.bin/from		P4-21	no	
+usr.bin/from	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
 usr.bin/fstat	equivalent	lsof (lsof-76); fuser (diskdev_cmds-751)	usr/sbin/lsof	P4-21	no	
 usr.bin/fsync	freebsd	FreeBSD usr.bin/fsync		P4-21	no	
-usr.bin/ftp	freebsd	FreeBSD usr.bin/ftp		P4-21	no	
+usr.bin/ftp	port	ftp/tnftp			no	FreeBSD builds tnftp as ftp
 usr.bin/gcore	apple	system_cmds-1039		P4-21	no	
 usr.bin/gencat	apple	adv_cmds-237		P4-21	no	
 usr.bin/genl	n/a				no	Netlink
@@ -322,7 +322,7 @@ usr.bin/mkstr	freebsd	FreeBSD usr.bin/mkstr		P5-10	no
 usr.bin/mktemp	apple	shell_cmds-326		P4-21	yes	
 usr.bin/mkuzip	n/a				no	geom_uzip (§5)
 usr.bin/morse	port	games/freebsd-games			no	MK_GAMES
-usr.bin/msgs	freebsd	FreeBSD usr.bin/msgs		P4-21	no	
+usr.bin/msgs	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
 usr.bin/mt	n/a				no	tape via CAM sa(4)
 usr.bin/nc	apple	netcat-56		P4-21	no	
 usr.bin/ncal	apple	misc_cmds-45		P4-21	no	
@@ -396,11 +396,11 @@ usr.bin/rpcgen	freebsd	FreeBSD usr.bin/rpcgen		P5-10	no
 usr.bin/rpcinfo	freebsd	FreeBSD usr.bin/rpcinfo		P4-28	no	macOS's rpcinfo is unpublished
 usr.bin/rs	apple	text_cmds-197		P4-21	no	
 usr.bin/runat	equivalent	xattr (file_cmds-475)	usr/bin/xattr	P4-21	no	named attributes are extended attributes on Darwin
-usr.bin/rup	freebsd	FreeBSD usr.bin/rup		P4-21	no	
-usr.bin/ruptime	freebsd	FreeBSD usr.bin/ruptime		P4-21	no	
-usr.bin/rusers	freebsd	FreeBSD usr.bin/rusers		P4-21	no	
-usr.bin/rwall	freebsd	FreeBSD usr.bin/rwall		P4-21	no	
-usr.bin/rwho	freebsd	FreeBSD usr.bin/rwho		P4-21	no	
+usr.bin/rup	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
+usr.bin/ruptime	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
+usr.bin/rusers	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
+usr.bin/rwall	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
+usr.bin/rwho	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
 usr.bin/script	apple	shell_cmds-326		P4-21	yes	
 usr.bin/sdiff	apple	patch_cmds-72		P4-21	no	
 usr.bin/sed	apple	text_cmds-197		P4-21	yes	
@@ -419,14 +419,14 @@ usr.bin/strings	apple	cctools-1035.1.102		P5-10	no
 usr.bin/su	apple	shell_cmds-326		P4-22	yes	
 usr.bin/systat	equivalent	top (top-144)	usr/bin/top	P4-21	no	systat reads FreeBSD kernel structures
 usr.bin/tail	apple	text_cmds-197		P4-21	yes	
-usr.bin/talk	apple	remote_cmds-306		P4-21	no	
+usr.bin/talk	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from remote_cmds-306
 usr.bin/tar	apple	libarchive-158		P4-21	no	
 usr.bin/tcopy	n/a				no	tape
 usr.bin/tee	apple	shell_cmds-326		P4-21	yes	
-usr.bin/telnet	apple	remote_cmds-306		P4-21	no	
-usr.bin/tftp	apple	remote_cmds-306		P4-21	no	
+usr.bin/telnet	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from remote_cmds-306
+usr.bin/tftp	port	ftp/tftp-hpa			no	a different tftp client; remote_cmds-306 is the fallback
 usr.bin/time	apple	shell_cmds-326		P4-21	no	
-usr.bin/tip/tip	freebsd	FreeBSD usr.bin/tip/tip		P4-21	no	
+usr.bin/tip/tip	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
 usr.bin/top	apple	top-144		P4-21	no	Apple's top: same purpose, different flags
 usr.bin/touch	apple	file_cmds-475		P4-21	yes	
 usr.bin/tr	apple	text_cmds-197		P4-21	yes	
@@ -514,8 +514,8 @@ usr.sbin/bluetooth/rtlbtfw	n/a				no	FreeBSD's netgraph Bluetooth stack
 usr.sbin/bluetooth/sdpcontrol	n/a				no	FreeBSD's netgraph Bluetooth stack
 usr.sbin/bluetooth/sdpd	n/a				no	FreeBSD's netgraph Bluetooth stack
 usr.sbin/boot0cfg	n/a				no	not built for FreeBSD/arm64 (arch=amd64 || arch=i386)
-usr.sbin/bootparamd/bootparamd	freebsd	FreeBSD usr.sbin/bootparamd/bootparamd		P4-21	no	
-usr.sbin/bootparamd/callbootd	freebsd	FreeBSD usr.sbin/bootparamd/callbootd		P4-21	no	
+usr.sbin/bootparamd/bootparamd	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
+usr.sbin/bootparamd/callbootd	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
 usr.sbin/boottrace	n/a				no	boottrace(4)
 usr.sbin/bsdconfig	n/a				no	dialog front end to FreeBSD's rc.conf and pkg; NeoDarwin administers with sysrc, service and ndpkg (§3)
 usr.sbin/bsdinstall	new	the text installer (bsdinstall-shaped)		P7-03	no	
@@ -688,7 +688,7 @@ usr.sbin/rtadvctl	freebsd	FreeBSD usr.sbin/rtadvctl		P4-21	no
 usr.sbin/rtadvd	freebsd	freebsd-src 050683bb8e13		P4-24	yes	network_cmds-726 has no rtadvd sources (base/rtadvd)
 usr.sbin/rtprio	n/a				no	rtprio(2) scheduling classes
 usr.sbin/rtsold	freebsd	freebsd-src 050683bb8e13		P4-24	yes	RDNSS and DNSSL (base/rtsold)
-usr.sbin/rwhod	freebsd	FreeBSD usr.sbin/rwhod		P4-21	no	
+usr.sbin/rwhod	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
 usr.sbin/sa	apple	system_cmds-1039		P4-21	no	
 usr.sbin/sendmail	port	mail/sendmail			no	sendmail is an option in FreeBSD too (MK_SENDMAIL)
 usr.sbin/service	new	NeoDarwin service(8) over launchd		P4-23	no	
