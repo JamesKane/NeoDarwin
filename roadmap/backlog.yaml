@@ -539,6 +539,14 @@ epics:
     depends: [P4-21, P4-23]
     exit: "lpr queues a job to a CUPS file or IPP queue on QEMU, and lpq and lprm list and remove it"
     doc: docs/architecture/freebsd-parity.md
+  - id: P4-32
+    title: "UEFI variables — neoboot keeps the UEFI runtime services (SetVirtualAddressMap), a kernel interface to GetVariable/SetVariable behind IODTNVRAM, and efivar, efibootmgr and efidp (FreeBSD's, over it); split from P4-21 checkpoint 6"
+    phase: 4
+    owner: loader
+    status: todo
+    depends: [P1-11, P4-21]
+    exit: "on the Radxa Dragon Q8B, efivar lists the firmware's variables, nvram reads one, and efibootmgr adds a boot entry that the firmware boots"
+    doc: docs/architecture/freebsd-parity.md
   # ---- Phase 5: Self-hosting ----
   - id: P5-10
     title: "Native toolchain on NeoDarwin — the pinned clang, lld, swiftc and lldb run on NeoDarwin (package from the same build), with the SDK installed in the base"
