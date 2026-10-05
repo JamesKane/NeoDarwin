@@ -6,14 +6,18 @@
 # Repository: https://github.com/freebsd/freebsd-src
 # commit: 050683bb8e136981e4a1f66e845ab05c135630f4
 # Format: shasum -a 256 (hash, two spaces, path). Regenerate with tools/pinned/lock.sh.
+5615551f8ecb49d61b488196b694c877e261f9b28522d422d28d903e23255262  usr.sbin/rtadvctl/rtadvctl.8
+752a51ca0063b1b934c4923834ee9e4546a6be158cd38926485a309090cc22d8  usr.sbin/rtadvctl/rtadvctl.c
 ddaf4f26503b8551bf4a02688bf4de4ef79b295e195f7a046d2696b5380e7a5a  usr.sbin/rtadvd/advcap.c
 2072320cdb03b6225b06a4a88b2fed6fd75672885e10dae38895fdc44dade573  usr.sbin/rtadvd/advcap.h
 d7ae30221adb9241bbdaf2038f8363950f93e004b0d673f0dfc85ab02ae3d08c  usr.sbin/rtadvd/config.c
 a51e2a6390afb7162ea372a7e1f932131c7b4fb68b6c6052277655665e9055e5  usr.sbin/rtadvd/config.h
-3f28b29c7340e0515f8ee286cc5391a3ff2f084a03ccf5c5d21ddabd1444dc18  usr.sbin/rtadvd/control_server.c
-6359484615beb8fc8c7dbc5e990831235c6a84c488c4507915ac7b413c259354  usr.sbin/rtadvd/control_server.h
 6aeabb4897e56ac5ed4fe6d484951263736c450d1b1c38ec9e37164385169ec8  usr.sbin/rtadvd/control.c
 f7f834bd6b64d671ac37797c8b7371a41e65a6e5b79ed279e48b2765040d186d  usr.sbin/rtadvd/control.h
+bffd8a086ba7a30ab8cf40712df267071eb48d6a9c4db2e08c40a69cafa3d5fb  usr.sbin/rtadvd/control_client.c
+16a767ca747339e459473f429e961b89023e6fef5aaae3cbb27c9f4c7720544e  usr.sbin/rtadvd/control_client.h
+3f28b29c7340e0515f8ee286cc5391a3ff2f084a03ccf5c5d21ddabd1444dc18  usr.sbin/rtadvd/control_server.c
+6359484615beb8fc8c7dbc5e990831235c6a84c488c4507915ac7b413c259354  usr.sbin/rtadvd/control_server.h
 703fff11fb05b371c70b44642cf43063af147679669d65432940c51448e90b1b  usr.sbin/rtadvd/if.c
 79ac8c0825fb299879b9efe1a8077f3f552bc484b81da1ae980aa2ae4bb9cc33  usr.sbin/rtadvd/if.h
 ebcfa0ac8c45009949e30d8a5cc78b54b0f3aa9494c73beb2cf06a8f5aec5518  usr.sbin/rtadvd/pathnames.h
@@ -22,7 +26,7 @@ e18fc426f91594a5c773a281b4c6d129dbd1b5f87a428de615505aeaa79de767  usr.sbin/rtadv
 0c7de7ff67b4a621c147b8c3abb117e771301dd92db5e5f3e40df4d30d881666  usr.sbin/rtadvd/rtadvd.c
 a043180978d00a57534460e29e89efe53469d31257077dba43046c35e1367c7c  usr.sbin/rtadvd/rtadvd.conf
 6b141660b3874bac4ef1310e72ffc96d3630186199a93db230a53bb9550002c3  usr.sbin/rtadvd/rtadvd.h
-8692e1fa9b9ce323063f2d18c3739d8572c4e71e2b5f9b5f872c04937fd66b68  usr.sbin/rtadvd/timer_subr.c
-6b8bf2e3f6c1e247746e870e8416589595cde15b25ace4d794fc79df5da091b2  usr.sbin/rtadvd/timer_subr.h
 67c4dd2b49f4829127385c0a9bd457b9479967b3daecb007b693d95c667b722d  usr.sbin/rtadvd/timer.c
 731dbf0cc6ab70c75112d95575ef449af6f30d9f5812723a2ae3f8409d075c54  usr.sbin/rtadvd/timer.h
+8692e1fa9b9ce323063f2d18c3739d8572c4e71e2b5f9b5f872c04937fd66b68  usr.sbin/rtadvd/timer_subr.c
+6b8bf2e3f6c1e247746e870e8416589595cde15b25ace4d794fc79df5da091b2  usr.sbin/rtadvd/timer_subr.h

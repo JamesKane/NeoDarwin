@@ -1,0 +1,25 @@
+--- a/usr.sbin/mtest/mtest.c
++++ b/usr.sbin/mtest/mtest.c
+@@ -875,14 +875,17 @@
+ 			warn("ioctl SIOCGIFFLAGS");
+ 			break;
+ 		}
+-		flags = (ifr.ifr_flags & 0xffff) | (ifr.ifr_flagshigh << 16);
+-		if (f == 0) {
+-			flags &= ~IFF_PPROMISC;
++		/*
++		 * xnu has no IFF_PPROMISC or ifr_flagshigh: IFF_PROMISC is the
++		 * administrative flag, and SIOCSIFFLAGS turns it on and off.
++		 */
++		flags = ifr.ifr_flags & 0xffff;
++		if (f == 0) {
++			flags &= ~IFF_PROMISC;
+ 		} else {
+-			flags |= IFF_PPROMISC;
++			flags |= IFF_PROMISC;
+ 		}
+ 		ifr.ifr_flags = flags & 0xffff;
+-		ifr.ifr_flagshigh = flags >> 16;
+ 		if (ioctl(s, SIOCSIFFLAGS, &ifr) == -1)
+ 			warn("ioctl SIOCGIFFLAGS");
+ 		else

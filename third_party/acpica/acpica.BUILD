@@ -30,3 +30,13 @@ filegroup(
     ) + ["LICENSE"],
     visibility = ["//visibility:public"],
 )
+
+# tools_srcs: what base/freebsd_cmds builds iasl and acpidb from (P4-21
+# checkpoint 5), as FreeBSD's usr.sbin/acpi Makefiles do from its copy of
+# the same release (sys/contrib/dev/acpica, ACPI_CA_VERSION 0x20260408 at
+# freebsd-src 050683bb8e13): the whole source tree.
+filegroup(
+    name = "tools_srcs",
+    srcs = glob(["source/**"]) + ["LICENSE"],
+    visibility = ["//visibility:public"],
+)

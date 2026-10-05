@@ -18,6 +18,15 @@
 #ifndef __uintptr_t
 #define __uintptr_t uintptr_t
 #endif
+// FreeBSD's <sys/_types.h> sbintime_t, for <sys/_callout.h> (makefs).
+typedef int64_t __sbintime_t;
+// FreeBSD's <sys/param.h> power-of-two rounding.
+#ifndef roundup2
+#define roundup2(x, y) (((x) + ((y) - 1)) & (~((__typeof(x))(y) - 1)))
+#endif
+#ifndef rounddown2
+#define rounddown2(x, y) ((x) & (~((__typeof(x))(y) - 1)))
+#endif
 
 // <sys/cdefs.h>
 #ifndef __unreachable

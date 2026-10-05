@@ -1,0 +1,98 @@
+--- a/components/dispatcher/dsfield.c
++++ b/components/dispatcher/dsfield.c
+@@ -157,7 +157,7 @@
+ #include "acnamesp.h"
+ #include "acparser.h"
+ 
+-#ifdef ACPI_EXEC_APP
++#if !defined(ACPI_DB_APP) && defined(ACPI_EXEC_APP)
+ #include "aecommon.h"
+ #endif
+ 
+@@ -438,7 +438,7 @@
+     UINT64                  Position;
+     ACPI_PARSE_OBJECT       *Child;
+ 
+-#ifdef ACPI_EXEC_APP
++#if !defined(ACPI_DB_APP) && defined(ACPI_EXEC_APP)
+     ACPI_OPERAND_OBJECT     *ResultDesc;
+     ACPI_OPERAND_OBJECT     *ObjDesc;
+     char                    *NamePath;
+@@ -578,7 +578,7 @@
+                     {
+                         return_ACPI_STATUS (Status);
+                     }
+-#ifdef ACPI_EXEC_APP
++#if !defined(ACPI_DB_APP) && defined(ACPI_EXEC_APP)
+                     NamePath = AcpiNsGetExternalPathname (Info->FieldNode);
+                     if (ACPI_SUCCESS (AeLookupInitFileEntry (NamePath, &ObjDesc)))
+                     {
+--- a/components/dispatcher/dswexec.c
++++ b/components/dispatcher/dswexec.c
+@@ -158,7 +158,7 @@
+ #include "acinterp.h"
+ #include "acnamesp.h"
+ #include "acdebug.h"
+-#ifdef ACPI_EXEC_APP
++#if !defined(ACPI_DB_APP) && defined(ACPI_EXEC_APP)
+ #include "aecommon.h"
+ #endif
+ 
+@@ -506,7 +506,7 @@
+     UINT32                  OpClass;
+     ACPI_PARSE_OBJECT       *NextOp;
+     ACPI_PARSE_OBJECT       *FirstArg;
+-#ifdef ACPI_EXEC_APP
++#if !defined(ACPI_DB_APP) && defined(ACPI_EXEC_APP)
+     char                    *Namepath;
+     ACPI_OPERAND_OBJECT     *ObjDesc;
+ #endif
+@@ -729,7 +729,7 @@
+                 break;
+             }
+ 
+-#ifdef ACPI_EXEC_APP
++#if !defined(ACPI_DB_APP) && defined(ACPI_EXEC_APP)
+             /*
+              * AcpiExec support for namespace initialization file (initialize
+              * BufferFields in this code.)
+--- a/components/dispatcher/dswload2.c
++++ b/components/dispatcher/dswload2.c
+@@ -157,7 +157,7 @@
+ #include "acinterp.h"
+ #include "acnamesp.h"
+ #include "acevents.h"
+-#ifdef ACPI_EXEC_APP
++#if !defined(ACPI_DB_APP) && defined(ACPI_EXEC_APP)
+ #include "aecommon.h"
+ #endif
+ 
+@@ -534,7 +534,7 @@
+     ACPI_NAMESPACE_NODE     *NewNode;
+     UINT32                  i;
+     UINT8                   RegionSpace;
+-#ifdef ACPI_EXEC_APP
++#if !defined(ACPI_DB_APP) && defined(ACPI_EXEC_APP)
+     ACPI_OPERAND_OBJECT     *ObjDesc;
+     char                    *Namepath;
+ #endif
+@@ -783,7 +783,7 @@
+                 goto Cleanup;
+             }
+ 
+-#ifdef ACPI_EXEC_APP
++#if !defined(ACPI_DB_APP) && defined(ACPI_EXEC_APP)
+             /*
+              * AcpiExec support for namespace initialization file (initialize
+              * Name opcodes in this code.)
+--- a/components/utilities/utuuid.c
++++ b/components/utilities/utuuid.c
+@@ -156,7 +156,7 @@
+         ACPI_MODULE_NAME    ("utuuid")
+ 
+ 
+-#if (defined ACPI_ASL_COMPILER || defined ACPI_EXEC_APP || defined ACPI_HELP_APP)
++#if (defined ACPI_ASL_COMPILER || defined ACPI_DISASSEMBLER || defined ACPI_EXEC_APP || defined ACPI_HELP_APP)
+ /*
+  * UUID support functions.
+  *

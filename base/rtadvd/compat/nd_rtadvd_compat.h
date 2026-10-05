@@ -19,6 +19,10 @@
 #ifndef CLOCK_MONOTONIC_FAST
 #define CLOCK_MONOTONIC_FAST	CLOCK_MONOTONIC
 #endif
+// rtadvctl's timestamps: likewise CLOCK_REALTIME.
+#ifndef CLOCK_REALTIME_FAST
+#define CLOCK_REALTIME_FAST	CLOCK_REALTIME
+#endif
 
 // <poll.h>: an infinite poll(2) timeout (Darwin's defines it only outside
 // POSIX mode).

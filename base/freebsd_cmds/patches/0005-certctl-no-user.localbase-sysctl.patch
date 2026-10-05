@@ -1,0 +1,14 @@
+--- a/usr.sbin/certctl/certctl.c
++++ b/usr.sbin/certctl/certctl.c
+@@ -1002,6 +1002,11 @@
+ 		if ((str = malloc((len = PATH_MAX) + 1)) == NULL)
+ 			err(1, NULL);
+ 		while (sysctlbyname("user.localbase", str, &len, NULL, 0) < 0) {
++			/* xnu has no user.localbase: FreeBSD's default. */
++			if (errno == ENOENT) {
++				len = strlcpy(str, "/usr/local", PATH_MAX + 1);
++				break;
++			}
+ 			if (errno != ENOMEM)
+ 				err(1, "sysctl(user.localbase)");
+ 			if ((str = realloc(str, len + 1)) == NULL)

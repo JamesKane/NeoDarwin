@@ -1321,6 +1321,25 @@ sh_test(
         "echo ff\"\"log | fifolog_writer -z 0 /tmp/fl; fifolog_reader /tmp/fl | grep -c fflog | sed s/^/fl\"\"r-/; " +
         "fsync /tmp/o && echo fs\"\"ync-ok; echo t\"\"s-x | ts \"[%%]\"; domainname nd\"\"x.test; " +
         "domainname | sed s/^/dn-/; man -w m4\\n'",
+        # The heavier FreeBSD programs (cp5): bmake on a two-target Makefile
+        # (and sys.mk from /usr/share/mk), dtc to a blob and back, mkimg's
+        # GPT header, makefs's ffs, cd9660 and msdos images, iasl, fetch of a
+        # file: URL, certctl's trust store, drill's version, ip6addrctl.
+        "--send-after 'man1/m4.1' 'mkdir -p /tmp/bm && cd /tmp/bm && echo \"all: a b ; @echo bm-\"\"all\" > Makefile && " +
+        "echo \"a: ; @echo bm-\"\"a\" >> Makefile && echo \"b: ; @echo bm-\"\"b\" >> Makefile && make && " +
+        "make -V MACHINE_ARCH | sed s/^/ma-/; cd /tmp\\n'",
+        "--send-after 'ma-aarch64' 'echo \"/dts-v1/; / { n { reg = <1 2>; }; };\" > /tmp/t.dts && " +
+        "dtc -O dtb -o /tmp/t.dtb /tmp/t.dts && dtc -I dtb -O dts /tmp/t.dtb | grep reg; echo x > /tmp/p; " +
+        "mkimg -s gpt -p freebsd-ufs:=/tmp/p -o /tmp/g.img && head -c 520 /tmp/g.img | tail -c 8; echo\\n'",
+        "--send-after 'EFI PART' 'mkdir -p /tmp/mf/d && echo mf > /tmp/mf/d/f && makefs -t ffs -s 4m /tmp/mf.ffs /tmp/mf > /dev/null && " +
+        "file -b /tmp/mf.ffs | cut -c1-21; makefs -t cd9660 /tmp/mf.iso /tmp/mf > /dev/null && file -b /tmp/mf.iso | cut -c1-15; " +
+        "makefs -t msdos -s 2m -o fat_type=12 /tmp/mf.fat /tmp/mf > /dev/null && file -b /tmp/mf.fat | grep -c \"FAT (12\" | " +
+        "sed s/^/fat-/\\n'",
+        "--send-after 'fat-1' 'echo \"DefinitionBlock (\\\"\\\", \\\"SSDT\\\", 2, \\\"ND\\\", \\\"T\\\", 1) { Name (NDX, 42) }\" > /tmp/t.asl && " +
+        "iasl /tmp/t.asl | grep Compilation; wc -c < /tmp/t.aml | sed \"s/ //g;s/^/aml-/\"\\n'",
+        "--send-after 'aml-43' 'fetch -q -o /tmp/h file:///etc/hosts && cmp /tmp/h /etc/hosts && echo fe\"\"tch-ok; " +
+        "certctl list | wc -l | sed \"s/ //g;s/^/cc-/\"; drill -v | head -1 | sed \"s/^.*ldns/ld\"\"ns/\"; ip6addrctl show | head -2; " +
+        "man -w make\\n'",
         "$(rootpath //boot/neoboot)",
         "240",
         "'7,8,9'",
@@ -1420,6 +1439,22 @@ sh_test(
         "'[%] ts-x'",
         "'dn-ndx.test'",
         "'/usr/share/man/man1/m4.1'",
+        "'bm-a'",
+        "'bm-b'",
+        "'bm-all'",
+        "'ma-aarch64'",
+        "'reg = <0x1 0x2>;'",
+        "'EFI PART'",
+        "'Unix Fast File system'",
+        "'ISO 9660 CD-ROM'",
+        "'fat-1'",
+        "'Compilation successful'",
+        "'aml-43'",
+        "'fetch-ok'",
+        "'cc-120'",
+        "'ldns version 1.9.2'",
+        "'::1/128'",
+        "'/usr/share/man/man1/make.1'",
     ],
     data = [
         ":sbsa_kc",

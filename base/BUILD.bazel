@@ -665,12 +665,14 @@ base_library(
     sysroot = ":sysroot",
 )
 
-# P4-21 checkpoint 4, FreeBSD's leaf utilities
+# P4-21 checkpoints 4 and 5, FreeBSD's leaf utilities and heavier programs
 # (docs/architecture/freebsd-parity.md §2.1), from the source drop at
 # 050683bb8e13 with a shared compat layer (base/freebsd_cmds/compat).
 base_library(
     name = "freebsd_commands",
-    data = glob(["freebsd_cmds/**"]) + ["commands.sh"],
+    # @acpica: iasl and acpidb (checkpoint 5) build from the ACPICA release
+    # the kernel builds.
+    data = glob(["freebsd_cmds/**"]) + ["commands.sh", "@acpica//:tools_srcs"],
     deps = [
         ":root",
         ":libxo_dylib",
@@ -681,6 +683,9 @@ base_library(
         ":bzip2_commands",
         ":libpam_dylib",
         ":libncurses_dylib",
+        ":bsm_audit",
+        ":libcrypto_dylib",
+        ":libipsec_dylib",
     ],
     man_pages = True,
     page_aliases = [
