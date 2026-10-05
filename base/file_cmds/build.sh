@@ -124,3 +124,9 @@ tool "$B" "$ROOT" "$OUT/usr/bin/gzip" "$B/gzip.rsp" gzip/futimens.c gzip/gzip.c 
 for s in gzexe zdiff zforce zmore znew; do install -m 0755 "gzip/$s" "$OUT/usr/bin/$s"; done
 set -- gzip gunzip gzip gzcat gzip zcat zdiff zcmp zmore zless
 while [ $# -ge 2 ]; do cp "$OUT/usr/bin/$1" "$OUT/usr/bin/$2"; shift 2; done
+
+# xattr (P4-21 checkpoint 6, docs/architecture/freebsd-parity.md §2.1): the
+# C xattr of file_cmds-475, one source with the project's flags; the
+# target sets no INSTALL_PATH, and macOS installs it as /usr/bin/xattr.
+# FreeBSD's runat and extattr rows are its equivalents.
+tool "$B" "$ROOT" "$OUT/usr/bin/xattr" "$B/cflags" xattr/xattr.c "$(vers xattr)"

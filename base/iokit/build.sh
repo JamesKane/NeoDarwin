@@ -35,6 +35,9 @@ xh="$SYSROOT/System/Library/Frameworks/IOKit.framework/Versions/A"
 (cd "$xh/Headers" && tar chf - .) | (cd "$H" && tar xf -); chmod -R u+w "$H"
 (cd "$xh/PrivateHeaders" && tar chf - .) | (cd "$H" && tar xf -); chmod -R u+w "$H"
 cp -f ./*.h "$H/"; chmod -R a+r,u+w "$H"
+ST=""; for d in "$(dirname "$U")"/*/; do [ -f "${d}IOBlockStorageDriver.h" ] && ST="${d%/}"; done
+[ -n "$ST" ] || { echo "iokit/build.sh: no repository next to $U holds IOBlockStorageDriver.h (pass @apple_iostoragefamily//:headers)" >&2; exit 1; }
+mkdir -p "$H/storage"; cp "$ST"/*.h "$H/storage/"; chmod -R a+r,u+w "$H/storage"
 
 # DeviceMIG.sh: the user side of device.defs, for the kernel object calls.
 xcrun mig -arch arm64 -novouchers -DKOBJECT_SERVER -I"$SYSROOT/usr/include" -server /dev/null \

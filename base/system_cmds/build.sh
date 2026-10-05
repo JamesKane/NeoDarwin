@@ -4,7 +4,8 @@
 # (docs/base/libsystem.md): replays system_cmds.xcodeproj's targets with the
 # project's base.xcconfig (gnu99, GCC_SYMBOLS_PRIVATE_EXTERN, its OTHER_CFLAGS).
 #   build.sh OUT SYSTEM_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root, //base:libpam_dylib, //base:bsm_audit,
-#                                                      //base:libutil_dylib)
+#                                                      //base:libutil_dylib, //base:corefoundation_framework,
+#                                                      //base:iokit_framework)
 # OUT receives usr/libexec/getty, usr/bin/login and its PAM policies
 # private/etc/pam.d/{login,login.term}, usr/sbin/sysctl (the
 # target's one source, no frameworks; the SMP boot test reads hw.ncpu with
@@ -16,8 +17,8 @@
 # usr/sbin/pwd_mkdb (below), bin/sync and usr/bin/getconf (the ZFS test
 # suite's), and P4-21's sbin/{dmesg,reboot,halt,shutdown},
 # usr/bin/{pagesize,gcore} and usr/sbin/{ac,accton,sa,zic,zdump} (at the
-# end). Not iostat: it needs IOKit.framework and CoreFoundation, which the
-# base doesn't have yet (docs/architecture/freebsd-parity.md §2.1).
+# end), and cp6's usr/bin/vm_stat and usr/sbin/iostat (iostat against the
+# base's CoreFoundation and IOKit frameworks, docs/base/corefoundation.md).
 # On macOS, login authenticates through PAM and records BSM audit and
 # EndpointSecurity events (USE_PAM, USE_BSM_AUDIT; -lpam -lbsm, weak
 # libEndpointSecuritySystem). NeoDarwin builds it with USE_PAM against
@@ -41,6 +42,13 @@ BSM=""; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/libbsm.0.dylib" ] && BSM="$d"
 [ -n "$BSM" ] || { echo "system_cmds: no DEPROOT holds usr/lib/libbsm.0.dylib (pass //base:bsm_audit)" >&2; exit 1; }
 UTIL=""; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/libutil.dylib" ] && UTIL="$d"; done
 [ -n "$UTIL" ] || { echo "system_cmds: no DEPROOT holds usr/lib/libutil.dylib (pass //base:libutil_dylib)" >&2; exit 1; }
+CFT=""; IOK=""
+for d in "${DEPS[@]}"; do
+	[ -d "$d/usr/local/frameworks/CoreFoundation.framework" ] && CFT="$d"
+	[ -d "$d/usr/local/frameworks/IOKit.framework" ] && IOK="$d"
+done
+[ -n "$CFT" ] && [ -n "$IOK" ] ||
+	{ echo "system_cmds: iostat needs //base:corefoundation_framework and //base:iokit_framework" >&2; exit 1; }
 PROJ="$(cd "$(dirname "$0")" && pwd)"
 B="$(mktemp -d)"; trap 'rm -rf "$B"' EXIT
 S="$(stage_src "$S" "$B/src" "$PROJ/patches")"   # patches/ applied
@@ -139,3 +147,17 @@ tool "$B" "$ROOT" "$OUT/sbin/reboot" "$B/cflags" reboot/reboot.c
 cp "$OUT/sbin/reboot" "$OUT/sbin/halt"
 { cat "$B/cflags"; printf '%s\n' -I"$BSM/usr/local/include"; } > "$B/shutdown.rsp"
 tool "$B" "$ROOT" "$OUT/sbin/shutdown" "$B/shutdown.rsp" shutdown/shutdown.c -- -L"$BSM/usr/lib" -lbsm
+
+# P4-21 checkpoint 6 (docs/architecture/freebsd-parity.md §2.1). vm_stat
+# (INSTALL_PATH /usr/bin): one source, Mach's host_statistics64.
+tool "$B" "$ROOT" "$OUT/usr/bin/vm_stat" "$B/cflags" vm_stat/vm_stat.c
+# iostat (INSTALL_PATH /usr/sbin): its Frameworks phase's IOKit and
+# CoreFoundation, the base's (base/corefoundation, base/iokit), as
+# base/iokittools links ioreg. Drive statistics come from each
+# IOBlockStorageDriver's Statistics property; a machine with no IOMedia
+# shows the CPU and load columns alone.
+{ cat "$B/cflags"; printf '%s\n' -iframework "$IOK/usr/local/frameworks" -iframework "$CFT/usr/local/frameworks"; } \
+	> "$B/iostat.rsp"
+tool "$B" "$ROOT" "$OUT/usr/sbin/iostat" "$B/iostat.rsp" iostat/iostat.c -- \
+	"$CFT/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation" \
+	"$IOK/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit"

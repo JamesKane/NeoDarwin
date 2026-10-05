@@ -1,0 +1,117 @@
+From: NeoDarwin
+Subject: [PATCH] iostat: SIGINT wakes the run loop through a Mach port
+
+iostat watches a kqueue's EVFILT_SIGNAL for SIGINT through a
+CFFileDescriptor run loop source, so ^C ends the current wait at once.
+The base's CoreFoundation (swift-corelibs-foundation) has no
+CFFileDescriptor, so the signal handler sends an empty Mach message to a
+CFMachPort (base/corefoundation/src/nd_cfmachport.c) whose source returns
+CFRunLoopRunInMode in the same way.
+
+--- a/iostat/iostat.c	2026-10-05 14:55:29
++++ b/iostat/iostat.c	2026-10-05 14:55:52
+@@ -130,6 +130,7 @@
+ #include <IOKit/storage/IOBlockStorageDriver.h>
+ #include <IOKit/storage/IOMedia.h>
+ #include <IOKit/IOBSD.h>
++#include <mach/mach.h>
+ #include <mach/mach_host.h>	/* host_statistics */
+ #include <err.h>
+ #include <signal.h>
+@@ -175,7 +176,7 @@
+ /* local function declarations */
+ static void usage(void);
+ static void needreturn(int signo);
+-static void handle_needreturn(CFFileDescriptorRef ref, CFOptionFlags cbopt,
++static void handle_needreturn(CFMachPortRef port, void *msg, CFIndex size,
+     void *info);
+ static void phdr(int signo);
+ static void do_phdr(void);
+@@ -208,42 +209,32 @@
+ 		"\t      [-w wait] [drives]\n");
+ }
+ 
++/*
++ * NeoDarwin: SIGINT wakes the run loop through a Mach port, not a kqueue
++ * under a CFFileDescriptor (the base's CoreFoundation has no
++ * CFFileDescriptor). The signal handler sends an empty message to the
++ * port, as mach_msg is safe in a handler; its run loop source returns
++ * CFRunLoopRunInMode early, as the kqueue's did.
++ */
++static mach_port_t sigint_port = MACH_PORT_NULL;
++
+ static void
+ add_sigint_kqfd(CFRunLoopRef loop)
+ {
+-	CFFileDescriptorContext ctx = {0, loop, NULL, NULL, NULL };
+-	CFFileDescriptorRef ref;
++	CFMachPortRef ref;
+ 	CFRunLoopSourceRef rls;
+-	struct kevent kev;
+-	int kqfd;
+ 
+-	/*
+-	 * We need both a signal handler here, as well as the kqueue that we'll
+-	 * add to the main loop, to achieve the desired effect.  The runloop
+-	 * will block SIGINT until the timeout expires, so the kqueue we setup
+-	 * lets us interrupt the runloop and finish out just one more iteration
+-	 * rather than having to wait it out.  The signal handler has the same
+-	 * effect for the rest of execution, in case we get a SIGINT while we're
+-	 * outside of the runloop -- we don't really need to poll on the kqfd to
+-	 * know that we need to bail out.
+-	 */
++	ref = CFMachPortCreate(NULL, handle_needreturn, NULL, NULL);
++	if (ref == NULL)
++		errx(1, "CFMachPortCreate");
++	sigint_port = CFMachPortGetPort(ref);
++	if (mach_port_insert_right(mach_task_self(), sigint_port, sigint_port,
++	    MACH_MSG_TYPE_MAKE_SEND) != KERN_SUCCESS)
++		errx(1, "mach_port_insert_right");
+ 	signal(SIGINT, needreturn);
+-
+-	kqfd = kqueue();
+-	if (kqfd == -1)
+-		err(1, "kqueue");
+-
+-	EV_SET(&kev, SIGINT, EVFILT_SIGNAL, EV_ADD, 0, 0, NULL);
+-	if (kevent(kqfd, &kev, 1, NULL, 0, NULL) != 0)
+-		err(1, "kevent");
+-
+-	ref = CFFileDescriptorCreate(NULL, kqfd, true, handle_needreturn, &ctx);
+-	rls = CFFileDescriptorCreateRunLoopSource(NULL, ref, 0);
++	rls = CFMachPortCreateRunLoopSource(NULL, ref, 0);
+ 	CFRunLoopAddSource(loop, rls, kCFRunLoopDefaultMode);
+ 	CFRelease(rls);
+-
+-	CFFileDescriptorEnableCallBacks(ref, kCFFileDescriptorReadCallBack);
+-	CFRelease(ref);
+ }
+ 
+ int
+@@ -509,14 +500,23 @@
+ static void
+ needreturn(int signo __unused)
+ {
++	mach_msg_header_t h = { 0 };
++
+ 	return_requested = 1;
++	if (signo != SIGINT || sigint_port == MACH_PORT_NULL)
++		return;
++	h.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0);
++	h.msgh_size = sizeof(h);
++	h.msgh_remote_port = sigint_port;
++	(void)mach_msg(&h, MACH_SEND_MSG | MACH_SEND_TIMEOUT, sizeof(h), 0,
++	    MACH_PORT_NULL, 0, MACH_PORT_NULL);
+ }
+ 
+ static void
+-handle_needreturn(CFFileDescriptorRef ref __unused,
+-    CFOptionFlags cbopt __unused, void *info __unused)
++handle_needreturn(CFMachPortRef port __unused, void *msg __unused,
++    CFIndex size __unused, void *info __unused)
+ {
+-	needreturn(SIGINT);
++	return_requested = 1;
+ }
+ 
+ static void

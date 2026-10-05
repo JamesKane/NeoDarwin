@@ -426,7 +426,7 @@ base_library(
 base_library(
     name = "system_commands",
     data = glob(["system_cmds/**"]) + ["commands.sh"],
-    deps = [":root", ":libpam_dylib", ":bsm_audit", ":libutil_dylib"],
+    deps = [":root", ":libpam_dylib", ":bsm_audit", ":libutil_dylib", ":corefoundation_framework", ":iokit_framework"],
     man_pages = True,
     script = "system_cmds/build.sh",
     srcs = "@apple_system_cmds//:all",
@@ -681,7 +681,7 @@ base_library(
 # IOKitTools on top of it.
 base_library(
     name = "iokit_framework",
-    data = glob(["iokit/**"]) + ["commands.sh"],
+    data = glob(["iokit/**"]) + ["commands.sh", "@apple_iostoragefamily//:headers"],
     deps = [":root", ":corefoundation_framework"],
     script = "iokit/build.sh",
     srcs = "@apple_iokituser//:all",
@@ -695,6 +695,28 @@ base_library(
     man_pages = True,
     script = "iokittools/build.sh",
     srcs = "@apple_iokittools//:all",
+    sysroot = ":sysroot",
+)
+
+# lsof-76 (P4-21 checkpoint 6): /usr/sbin/lsof, the libproc dialect.
+base_library(
+    name = "lsof_command",
+    data = glob(["lsof/**"]) + ["commands.sh"],
+    deps = [":root"],
+    man_pages = True,
+    script = "lsof/build.sh",
+    srcs = "@apple_lsof//:all",
+    sysroot = ":sysroot",
+)
+
+# top-144 (P4-21 checkpoint 6): /usr/bin/top over libproc, Mach and IOKit.
+base_library(
+    name = "top_command",
+    data = glob(["top/**"]) + ["commands.sh"],
+    deps = [":root", ":corefoundation_framework", ":iokit_framework", ":libncurses_dylib", ":libutil_dylib"],
+    man_pages = True,
+    script = "top/build.sh",
+    srcs = "@apple_top//:all",
     sysroot = ":sysroot",
 )
 
@@ -1107,6 +1129,8 @@ base_root(
         ":corefoundation_framework",
         ":iokit_framework",
         ":ioreg_command",
+        ":lsof_command",
+        ":top_command",
     ],
 )
 

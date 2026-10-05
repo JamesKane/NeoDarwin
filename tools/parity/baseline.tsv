@@ -117,7 +117,7 @@ sbin/ping	apple	yes
 sbin/quotacheck	apple	no
 sbin/rcorder	n/a	no
 sbin/reboot	apple	yes
-sbin/recoverdisk	freebsd	no
+sbin/recoverdisk	freebsd	yes
 sbin/resolvconf	freebsd	yes
 sbin/restore	n/a	no
 sbin/route	apple	yes
@@ -245,7 +245,7 @@ usr.bin/fortune/fortune	port	no
 usr.bin/fortune/strfile	port	no
 usr.bin/fortune/unstr	port	no
 usr.bin/from	port	no
-usr.bin/fstat	equivalent	no
+usr.bin/fstat	equivalent	yes
 usr.bin/fsync	freebsd	yes
 usr.bin/ftp	port	no
 usr.bin/gcore	apple	yes
@@ -263,7 +263,7 @@ usr.bin/gzip	apple	yes
 usr.bin/head	apple	yes
 usr.bin/hesinfo	n/a	no
 usr.bin/hexdump	apple	yes
-usr.bin/host	apple	no
+usr.bin/host	freebsd	yes
 usr.bin/iconv	apple	yes
 usr.bin/id	apple	yes
 usr.bin/ident	freebsd	yes
@@ -381,7 +381,7 @@ usr.bin/primes	port	no
 usr.bin/printenv	apple	yes
 usr.bin/printf	apple	yes
 usr.bin/proccontrol	n/a	no
-usr.bin/procstat	equivalent	no
+usr.bin/procstat	equivalent	yes
 usr.bin/protect	n/a	no
 usr.bin/quota	apple	no
 usr.bin/random	port	no
@@ -394,7 +394,7 @@ usr.bin/revoke	freebsd	yes
 usr.bin/rpcgen	freebsd	no
 usr.bin/rpcinfo	freebsd	no
 usr.bin/rs	apple	yes
-usr.bin/runat	equivalent	no
+usr.bin/runat	equivalent	yes
 usr.bin/rup	port	no
 usr.bin/ruptime	port	no
 usr.bin/rusers	port	no
@@ -407,7 +407,7 @@ usr.bin/seq	apple	yes
 usr.bin/showmount	apple	no
 usr.bin/size	n/a	no
 usr.bin/smbutil	n/a	no
-usr.bin/sockstat	equivalent	no
+usr.bin/sockstat	equivalent	yes
 usr.bin/soelim	freebsd	yes
 usr.bin/sort	apple	yes
 usr.bin/split	apple	yes
@@ -416,7 +416,7 @@ usr.bin/stat	apple	yes
 usr.bin/stdbuf	apple	yes
 usr.bin/strings	apple	no
 usr.bin/su	apple	yes
-usr.bin/systat	equivalent	no
+usr.bin/systat	equivalent	yes
 usr.bin/tail	apple	yes
 usr.bin/talk	port	no
 usr.bin/tar	apple	yes
@@ -426,7 +426,7 @@ usr.bin/telnet	port	no
 usr.bin/tftp	port	no
 usr.bin/time	apple	yes
 usr.bin/tip/tip	port	no
-usr.bin/top	apple	no
+usr.bin/top	apple	yes
 usr.bin/touch	apple	yes
 usr.bin/tr	apple	yes
 usr.bin/true	apple	yes
@@ -449,7 +449,7 @@ usr.bin/users	apple	yes
 usr.bin/vacation	port	no
 usr.bin/vi	equivalent	yes
 usr.bin/vis	apple	yes
-usr.bin/vmstat	equivalent	no
+usr.bin/vmstat	equivalent	yes
 usr.bin/vtfontcvt	freebsd	no
 usr.bin/w	apple	yes
 usr.bin/wall	apple	yes
@@ -544,7 +544,7 @@ usr.sbin/daemon	freebsd	yes
 usr.sbin/dconschat	n/a	no
 usr.sbin/devctl	n/a	no
 usr.sbin/devinfo	equivalent	yes
-usr.sbin/diskinfo	freebsd	no
+usr.sbin/diskinfo	freebsd	yes
 usr.sbin/dumpcis	n/a	no
 usr.sbin/editmap	port	no
 usr.sbin/edquota	apple	no
@@ -554,7 +554,7 @@ usr.sbin/efitable	n/a	no
 usr.sbin/efivar	new	no
 usr.sbin/efiwake	n/a	no
 usr.sbin/etcupdate	equivalent	no
-usr.sbin/extattr	equivalent	no
+usr.sbin/extattr	equivalent	yes
 usr.sbin/extattrctl	n/a	no
 usr.sbin/fdcontrol	n/a	no
 usr.sbin/fdformat	n/a	no
@@ -565,7 +565,7 @@ usr.sbin/fifolog/fifolog_reader	freebsd	yes
 usr.sbin/fifolog/fifolog_writer	freebsd	yes
 usr.sbin/flowctl	n/a	no
 usr.sbin/freebsd-update	equivalent	no
-usr.sbin/fstyp	apple	no
+usr.sbin/fstyp	apple	yes
 usr.sbin/ftp-proxy	freebsd	no
 usr.sbin/fwcontrol	n/a	no
 usr.sbin/fwget	n/a	no
@@ -579,7 +579,7 @@ usr.sbin/hyperv/tools/vss	n/a	no
 usr.sbin/i2c	n/a	no
 usr.sbin/ifmcstat	equivalent	yes
 usr.sbin/inetd	equivalent	yes
-usr.sbin/iostat	apple	no
+usr.sbin/iostat	apple	yes
 usr.sbin/iovctl	n/a	no
 usr.sbin/ip6addrctl	freebsd	yes
 usr.sbin/ipfwpcap	n/a	no
@@ -712,7 +712,7 @@ usr.sbin/tcpdump/tcpdump	apple	yes
 usr.sbin/tcpsso	n/a	no
 usr.sbin/traceroute	apple	yes
 usr.sbin/traceroute6	apple	yes
-usr.sbin/trim	freebsd	no
+usr.sbin/trim	freebsd	yes
 usr.sbin/tzsetup	freebsd	no
 usr.sbin/uathload	n/a	no
 usr.sbin/uefisign	freebsd	yes

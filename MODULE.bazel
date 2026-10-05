@@ -800,6 +800,24 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/IOKitUser/archive/refs/tags/IOKitUser-100222.0.4.tar.gz"],
 )
 
+# lsof-76 (lsof 4.91, the macOS 26.0 release; base/lsof, P4-21 checkpoint 6).
+http_archive(
+    name = "apple_lsof",
+    build_file_content = _ALL_FILES,
+    sha256 = "48b46261b6f0d69b705b3a60bf9a0509c9e78e54e4cd348ad38fa7cf8afa428e",
+    strip_prefix = "lsof-lsof-76",
+    urls = ["https://github.com/apple-oss-distributions/lsof/archive/refs/tags/lsof-76.tar.gz"],
+)
+
+# top-144 (the macOS 26.0 release; base/top, P4-21 checkpoint 6).
+http_archive(
+    name = "apple_top",
+    build_file_content = _ALL_FILES,
+    sha256 = "a22c61bbe24cec598fa9ceb2d1f0c21191f28641aa32e11764a253535d076499",
+    strip_prefix = "top-top-144",
+    urls = ["https://github.com/apple-oss-distributions/top/archive/refs/tags/top-144.tar.gz"],
+)
+
 http_archive(
     name = "apple_iokittools",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",

@@ -48,3 +48,14 @@ tool "$B" "$ROOT" "$OUT/sbin/mount" "$B/cflags" mount.tproj/mount_tmpfs.c edt_fs
 tool "$B" "$ROOT" "$OUT/sbin/umount" "$B/cflags" edt_fstab/edt_fstab.c umount.tproj/umount.c "$(vers umount)" \
 	-- "$B/libdisk.a"
 tool "$B" "$ROOT" "$OUT/sbin/fsck" "$B/cflags" edt_fstab/edt_fstab.c fsck.tproj/fsck.c "$(vers fsck)"
+
+# fstyp and its helpers (P4-21 checkpoint 6, docs/architecture/freebsd-parity.md
+# §2.1): the fstyp, fstyp_msdos, fstyp_ntfs and fstyp_udf targets, one
+# source each, INSTALL_PATH /sbin; their pages are fstyp.tproj's. fstyp runs
+# each fstyp_* it finds in /bin, /sbin, /usr/bin, /usr/sbin and
+# /usr/local/{bin,sbin} on the device and prints the type of the first
+# that matches.
+write_rsp "$B/fstyp.rsp" "${base[@]}"
+for t in fstyp fstyp_msdos fstyp_ntfs fstyp_udf; do
+	tool "$B" "$ROOT" "$OUT/sbin/$t" "$B/fstyp.rsp" "fstyp.tproj/$t.c" "$(vers "$t")"
+done

@@ -80,6 +80,7 @@ _SYSTEM_MODES = {
     "usr/bin/login": "4555",
     "usr/bin/passwd": "4555",
     "usr/bin/su": "4755",
+    "usr/bin/top": "4555",
     "usr/sbin/traceroute": "4555",
     "usr/sbin/traceroute6": "4555",
 }

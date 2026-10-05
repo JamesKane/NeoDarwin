@@ -1,0 +1,341 @@
+From: NeoDarwin
+Subject: [PATCH] diskinfo, trim, recoverdisk: xnu's disk ioctls
+
+FreeBSD's disk tools ask GEOM with the DIOCG* ioctls. xnu's disks answer
+the DKIOC* ioctls of <sys/disk.h> (IOMediaBSDClient, and the md ramdisk
+driver), so the calls go through compat/nd_disk.c: the media and sector
+sizes from DKIOCGETBLOCKSIZE and DKIOCGETBLOCKCOUNT, the stripe size from
+DKIOCGETPHYSICALBLOCKSIZE, DIOCGDELETE as DKIOCUNMAP, GEOM::candelete as
+DKIOCGETFEATURES' DK_FEATURE_UNMAP, DIOCGFLUSH as DKIOCSYNCHRONIZE and
+DIOCGPHYSPATH as DKIOCGETFIRMWAREPATH. The command lines are FreeBSD's.
+GEOM's descr, ident, attachment, rotation rate and zone attributes and the
+firmware geometry have no xnu counterpart: diskinfo -v leaves them out
+(the rotation rate is Unknown), and diskinfo -s (the serial number) fails
+with an error that says so. diskinfo -i and -S need aio_waitcomplete(2),
+which xnu doesn't have, and fail the same way. recoverdisk already builds
+without the ioctls; it now uses them.
+
+--- a/usr.sbin/diskinfo/diskinfo.c	2026-10-05 14:59:29
++++ b/usr.sbin/diskinfo/diskinfo.c	2026-10-05 15:00:10
+@@ -43,14 +43,29 @@
+ #include <libutil.h>
+ #include <paths.h>
+ #include <err.h>
+-#include <geom/geom_disk.h>
+ #include <sysexits.h>
+ #include <sys/aio.h>
+ #include <sys/disk.h>
+ #include <sys/param.h>
+ #include <sys/stat.h>
+ #include <sys/time.h>
++#include "nd_disk.h"
+ 
++/*
++ * NeoDarwin: xnu has no GEOM. The sizes come from its DKIOC ioctls
++ * (compat/nd_disk.c); GEOM's descr, ident, attachment, rotation-rate and
++ * zone attributes and the firmware geometry have no counterpart, and
++ * there is no aio_waitcomplete(2) for -i and -S.
++ */
++#define	DISK_IDENT_SIZE	256
++
++static ssize_t
++aio_waitcomplete(struct aiocb **iocbp __unused, struct timespec *timeout __unused)
++{
++	errno = ENOSYS;
++	return (-1);
++}
++
+ #define	NAIO	128
+ #define	MAXTX	(8*1024*1024)
+ #define	MEGATX	(1024*1024)
+@@ -86,7 +101,6 @@
+ 	char tstr[BUFSIZ], ident[DISK_IDENT_SIZE], physpath[MAXPATHLEN];
+ 	char zone_desc[64];
+ 	char rrate[64];
+-	struct diocgattr_arg arg;
+ 	off_t	mediasize, stripesize, stripeoffset;
+ 	u_int	sectorsize, fwsectors, fwheads, zoned = 0, isreg;
+ 	uint32_t zone_mode;
+@@ -139,6 +153,14 @@
+ 		usage();
+ 	}
+ 
++	if (opt_i || opt_S || opt_s) {
++		warnx("-%c is not supported on Darwin (%s)",
++		    opt_s ? 's' : opt_i ? 'i' : 'S',
++		    opt_s ? "no disk serial number ioctl" :
++		    "no aio_waitcomplete(2)");
++		exit(1);
++	}
++
+ 	if (opt_S && !opt_w) {
+ 		warnx("-S require also -w");
+ 		usage();
+@@ -179,7 +201,7 @@
+ 				printf("%s\t", argv[i]);
+ 			}
+ 			if (opt_p) {
+-				if (ioctl(fd, DIOCGPHYSPATH, physpath) == 0) {
++				if (nd_diocgphyspath(fd, physpath, sizeof(physpath)) == 0) {
+ 					printf("%s\n", physpath);
+ 				} else {
+ 					warnx("Failed to determine physpath for: %s", argv[i]);
+@@ -187,40 +209,31 @@
+ 				goto out;
+ 			}
+ 			if (opt_s) {
+-				if (ioctl(fd, DIOCGIDENT, ident) == 0) {
++				if (0) {
+ 					printf("%s\n", ident);
+ 				} else {
+ 					warnx("Failed to determine serial number for: %s", argv[i]);
+ 				}
+ 				goto out;
+ 			}
+-			error = ioctl(fd, DIOCGMEDIASIZE, &mediasize);
++			error = nd_diocgmediasize(fd, &mediasize);
+ 			if (error) {
+-				warnx("%s: ioctl(DIOCGMEDIASIZE) failed, probably not a disk.", argv[i]);
++				warnx("%s: ioctl(DKIOCGETBLOCKCOUNT) failed, probably not a disk.", argv[i]);
+ 				exitval = 1;
+ 				goto out;
+ 			}
+-			error = ioctl(fd, DIOCGSECTORSIZE, &sectorsize);
++			error = nd_diocgsectorsize(fd, &sectorsize);
+ 			if (error) {
+-				warnx("%s: ioctl(DIOCGSECTORSIZE) failed, probably not a disk.", argv[i]);
++				warnx("%s: ioctl(DKIOCGETBLOCKSIZE) failed, probably not a disk.", argv[i]);
+ 				exitval = 1;
+ 				goto out;
+ 			}
+-			error = ioctl(fd, DIOCGFWSECTORS, &fwsectors);
++			fwsectors = 0;
++			fwheads = 0;
++			error = nd_diocgstripesize(fd, &stripesize);
+ 			if (error)
+-				fwsectors = 0;
+-			error = ioctl(fd, DIOCGFWHEADS, &fwheads);
+-			if (error)
+-				fwheads = 0;
+-			error = ioctl(fd, DIOCGSTRIPESIZE, &stripesize);
+-			if (error)
+ 				stripesize = 0;
+-			error = ioctl(fd, DIOCGSTRIPEOFFSET, &stripeoffset);
+-			if (error)
+-				stripeoffset = 0;
+-			error = zonecheck(fd, &zone_mode, zone_desc, sizeof(zone_desc));
+-			if (error == 0)
+-				zoned = 1;
++			stripeoffset = 0;
+ 		}
+ 		if (!opt_v) {
+ 			printf("%s", argv[i]);
+@@ -252,17 +265,7 @@
+ 				printf("\t%-12u\t# Heads according to firmware.\n", fwheads);
+ 				printf("\t%-12u\t# Sectors according to firmware.\n", fwsectors);
+ 			} 
+-			strlcpy(arg.name, "GEOM::descr", sizeof(arg.name));
+-			arg.len = sizeof(arg.value.str);
+-			if (ioctl(fd, DIOCGATTR, &arg) == 0)
+-				printf("\t%-12s\t# Disk descr.\n", arg.value.str);
+-			if (ioctl(fd, DIOCGIDENT, ident) == 0)
+-				printf("\t%-12s\t# Disk ident.\n", ident);
+-			strlcpy(arg.name, "GEOM::attachment", sizeof(arg.name));
+-			arg.len = sizeof(arg.value.str);
+-			if (ioctl(fd, DIOCGATTR, &arg) == 0)
+-				printf("\t%-12s\t# Attachment\n", arg.value.str);
+-			if (ioctl(fd, DIOCGPHYSPATH, physpath) == 0)
++			if (nd_diocgphyspath(fd, physpath, sizeof(physpath)) == 0)
+ 				printf("\t%-12s\t# Physical path\n", physpath);
+ 			printf("\t%-12s\t# TRIM/UNMAP support\n",
+ 			    candelete(fd) ? "Yes" : "No");
+@@ -290,34 +293,15 @@
+ static bool
+ candelete(int fd)
+ {
+-	struct diocgattr_arg arg;
+-
+-	strlcpy(arg.name, "GEOM::candelete", sizeof(arg.name));
+-	arg.len = sizeof(arg.value.i);
+-	if (ioctl(fd, DIOCGATTR, &arg) == 0)
+-		return (arg.value.i != 0);
+-	else
+-		return (false);
++	/* GEOM::candelete: DKIOCGETFEATURES' DK_FEATURE_UNMAP. */
++	return (nd_candelete(fd));
+ }
+ 
+ static void
+-rotationrate(int fd, char *rate, size_t buflen)
++rotationrate(int fd __unused, char *rate, size_t buflen)
+ {
+-	struct diocgattr_arg arg;
+-	int ret;
+-
+-	strlcpy(arg.name, "GEOM::rotation_rate", sizeof(arg.name));
+-	arg.len = sizeof(arg.value.u16);
+-
+-	ret = ioctl(fd, DIOCGATTR, &arg);
+-	if (ret < 0 || arg.value.u16 == DISK_RR_UNKNOWN)
+-		snprintf(rate, buflen, "Unknown");
+-	else if (arg.value.u16 == DISK_RR_NON_ROTATING)
+-		snprintf(rate, buflen, "%d", 0);
+-	else if (arg.value.u16 >= DISK_RR_MIN && arg.value.u16 <= DISK_RR_MAX)
+-		snprintf(rate, buflen, "%d", arg.value.u16);
+-	else
+-		snprintf(rate, buflen, "Invalid");
++	/* GEOM::rotation_rate: xnu's disk ioctls don't report it. */
++	snprintf(rate, buflen, "Unknown");
+ }
+ 
+ static void
+@@ -708,7 +692,7 @@
+ 				if (isreg)
+ 					error = fsync(fd);
+ 				else
+-					error = ioctl(fd, DIOCGFLUSH);
++					error = nd_diocgflush(fd);	/* DKIOCSYNCHRONIZE */
+ 				if (error < 0) {
+ 					if (errno == ENOTSUP)
+ 						nowritecache = 1;
+@@ -723,37 +707,9 @@
+ }
+ 
+ static int
+-zonecheck(int fd, uint32_t *zone_mode, char *zone_str, size_t zone_str_len)
++zonecheck(int fd __unused, uint32_t *zone_mode __unused, char *zone_str __unused,
++    size_t zone_str_len __unused)
+ {
+-	struct disk_zone_args zone_args;
+-	int error;
+-
+-	bzero(&zone_args, sizeof(zone_args));
+-
+-	zone_args.zone_cmd = DISK_ZONE_GET_PARAMS;
+-	error = ioctl(fd, DIOCZONECMD, &zone_args);
+-
+-	if (error == 0) {
+-		*zone_mode = zone_args.zone_params.disk_params.zone_mode;
+-
+-		switch (*zone_mode) {
+-		case DISK_ZONE_MODE_NONE:
+-			snprintf(zone_str, zone_str_len, "Not_Zoned");
+-			break;
+-		case DISK_ZONE_MODE_HOST_AWARE:
+-			snprintf(zone_str, zone_str_len, "Host_Aware");
+-			break;
+-		case DISK_ZONE_MODE_DRIVE_MANAGED:
+-			snprintf(zone_str, zone_str_len, "Drive_Managed");
+-			break;
+-		case DISK_ZONE_MODE_HOST_MANAGED:
+-			snprintf(zone_str, zone_str_len, "Host_Managed");
+-			break;
+-		default:
+-			snprintf(zone_str, zone_str_len, "Unknown_zone_mode_%u",
+-			    *zone_mode);
+-			break;
+-		}
+-	}
+-	return (error);
++	/* DIOCZONECMD: xnu has no zoned-device interface. */
++	return (-1);
+ }
+--- a/usr.sbin/trim/trim.c	2026-10-05 14:59:29
++++ b/usr.sbin/trim/trim.c	2026-10-05 14:59:37
+@@ -45,6 +45,7 @@
+ #include <unistd.h>
+ 
+ #include <sys/cdefs.h>
++#include "nd_disk.h"
+ static bool	candelete(int fd);
+ static off_t	getsize(const char *path);
+ static int	opendev(const char *path, int flags);
+@@ -140,14 +141,8 @@
+ static bool
+ candelete(int fd)
+ {
+-	struct diocgattr_arg arg;
+-
+-	strlcpy(arg.name, "GEOM::candelete", sizeof(arg.name));
+-	arg.len = sizeof(arg.value.i);
+-	if (ioctl(fd, DIOCGATTR, &arg) == 0)
+-		return (arg.value.i != 0);
+-	else
+-		return (false);
++	/* NeoDarwin: GEOM::candelete is DKIOCGETFEATURES' DK_FEATURE_UNMAP. */
++	return (nd_candelete(fd));
+ }
+ 
+ static int
+@@ -194,9 +189,9 @@
+ 			"(not regular, directory nor special device): %s",
+ 			path);
+ 
+-	if (ioctl(fd, DIOCGMEDIASIZE, &mediasize) < 0)
++	if (nd_diocgmediasize(fd, &mediasize) < 0)
+ 		err(EX_UNAVAILABLE,
+-			"ioctl(DIOCGMEDIASIZE) failed, probably not a disk: "
++			"ioctl(DKIOCGETBLOCKCOUNT) failed, probably not a disk: "
+ 			"%s", path);
+ 
+ 	close(fd);
+@@ -223,12 +218,12 @@
+ 	arg[0] = offset;
+ 	arg[1] = length;
+ 
+-	error = ioctl(fd, DIOCGDELETE, arg);
++	error = nd_diocgdelete(fd, arg);	/* DKIOCUNMAP */
+ 	if (error < 0) {
+ 		if (errno == EOPNOTSUPP && verbose && !candelete(fd))
+ 			warnx("%s: TRIM/UNMAP not supported by driver", path);
+ 		else
+-			warn("ioctl(DIOCGDELETE) failed: %s", path);
++			warn("ioctl(DKIOCUNMAP) failed: %s", path);
+ 	}
+ 	close(fd);
+ 	return (error);
+--- a/sbin/recoverdisk/recoverdisk.c	2026-10-05 14:59:29
++++ b/sbin/recoverdisk/recoverdisk.c	2026-10-05 15:00:24
+@@ -29,6 +29,15 @@
+ #include <unistd.h>
+ 
+ /*
++ * NeoDarwin: the sizes come from xnu's DKIOC ioctls (compat/nd_disk.c);
++ * there is no firmware geometry (DIOCGFWSECTORS, DIOCGFWHEADS).
++ */
++#include "nd_disk.h"
++#define	DIOCGMEDIASIZE
++#define	DIOCGSECTORSIZE
++#define	DIOCGSTRIPESIZE
++
++/*
+  * This is a compromise between speed and wasted effort
+  */
+ #define COMPROMISE_SIZE		(128<<10)
+@@ -539,7 +548,7 @@
+ 	if (S_ISBLK(sb.st_mode) || S_ISCHR(sb.st_mode)) {
+ #ifdef DIOCGMEDIASIZE
+ 		off_t mediasize;
+-		error = ioctl(read_fd, DIOCGMEDIASIZE, &mediasize);
++		error = nd_diocgmediasize(read_fd, &mediasize);
+ 		if (error == 0 && mediasize > 0) {
+ 			total_size = mediasize;
+ 			printf("# Got total_size from DIOCGMEDIASIZE: %ju\n",
+@@ -568,7 +577,7 @@
+ 
+ #ifdef DIOCGSECTORSIZE
+ 	if (small_read == 0) {
+-		error = ioctl(read_fd, DIOCGSECTORSIZE, &sectorsize);
++		error = nd_diocgsectorsize(read_fd, &sectorsize);
+ 		if (error >= 0 && sectorsize > 0) {
+ 			small_read = sectorsize;
+ 			printf("# Got small_read from DIOCGSECTORSIZE: %ju\n",
+@@ -599,7 +608,7 @@
+ 
+ #ifdef DIOCGSTRIPESIZE
+ 	if (medium_read == 0) {
+-		error = ioctl(read_fd, DIOCGSTRIPESIZE, &stripesize);
++		error = nd_diocgstripesize(read_fd, &stripesize);
+ 		if (error < 0 || stripesize <= 0) {
+ 			// nope
+ 		} else if ((uint64_t)stripesize < small_read) {

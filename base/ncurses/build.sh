@@ -21,7 +21,8 @@
 # NeoDarwin passes the tic_static built from these sources instead.
 # The commands: clear, infocmp, tic (with captoinfo and infotocap), toe,
 # tput, tset (with reset) and tabs in usr/bin (P4-21 checkpoint 3).
-# Not built: libform, libmenu and libpanel (nothing in the base links them).
+# libpanel (P4-21 checkpoint 6: top links it). Not built: libform and libmenu
+# (nothing in the base links them).
 source "$(dirname "$0")/../../tools/base/common.sh"
 source "$(dirname "$0")/../commands.sh"
 OUT="$(abspath "$1")"; N="$(abspath "$2")"; SYSROOT="$(abspath "$3")"; shift 3
@@ -102,16 +103,23 @@ mkdir -p "$OUT/usr/lib"
 xcrun ld -arch arm64 -platform_version macos 26.0 26.0 -dylib -dead_strip -adhoc_codesign \
 	-install_name /usr/lib/libncurses.5.4.dylib -current_version 5.4 -compatibility_version 5.4 \
 	-syslibroot "$ROOT" "$B"/obj/*.o -lSystem -o "$OUT/usr/lib/libncurses.5.4.dylib"
-# link_libs.sh (install): libform, libmenu and libpanel aren't built.
+# libpanel: the libpanel target's 15 sources with libraries.xcconfig's
+# settings (PRODUCT_NAME panel.5.4, version 5.4), linking libncurses.
+compile "$B/obj_panel" "$B/cflags" "$NC"/panel/{p_above,p_below,p_bottom,p_delete,p_hidden,p_hide,p_move,p_new,p_replace,p_show,p_top,p_update,p_user,p_win,panel}.c
+xcrun ld -arch arm64 -platform_version macos 26.0 26.0 -dylib -dead_strip -adhoc_codesign \
+	-install_name /usr/lib/libpanel.5.4.dylib -current_version 5.4 -compatibility_version 5.4 \
+	-syslibroot "$ROOT" "$B"/obj_panel/*.o "$OUT/usr/lib/libncurses.5.4.dylib" -lSystem -o "$OUT/usr/lib/libpanel.5.4.dylib"
+# link_libs.sh (install): libform and libmenu aren't built.
 for l in libncurses.dylib libncurses.5.dylib libcurses.dylib libtermcap.dylib; do
 	ln -sf libncurses.5.4.dylib "$OUT/usr/lib/$l"
 done
+ln -sf libpanel.5.4.dylib "$OUT/usr/lib/libpanel.dylib"
 
 # install_headers.sh (macosx: usr/include), build-only here as the base's
 # other headers are; the ncurses.h link.
 H="$OUT/usr/local/include"; mkdir -p "$H"
 cp "$NC/include/tic.h" "$NC/include/ncurses_dll.h" "$NC/include/unctrl.h" "$NC/include/nc_tparm.h" \
-	"$D/term.h" "$NC/include/termcap.h" "$D/curses.h" "$NC/include/term_entry.h" "$H/"
+	"$D/term.h" "$NC/include/termcap.h" "$D/curses.h" "$NC/include/term_entry.h" "$NC/panel/panel.h" "$H/"
 ln -sf curses.h "$H/ncurses.h"
 
 # run_tic.sh through the tic_static target, built for the build machine (its

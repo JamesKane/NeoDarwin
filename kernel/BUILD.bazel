@@ -1237,6 +1237,10 @@ sh_test(
         "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
         "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
         "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
+        # A blank 16 MB virtio disk for cp6's disk tools and iostat's
+        # IOBlockStorageDriver statistics.
+        "--drive disk0=16M",
+        "--device virtio-blk-pci,drive=disk0",
         "--until-lines",
         "--absent 'setlocale: Bad'",
         "--send-after 'login: ' 'root\\n'",
@@ -1351,6 +1355,22 @@ sh_test(
         "ioreg -r -c IOResources -d 1 | grep -c \"Type1. = Yes\" | sed s/^/fs\"\"c-/; " +
         "ioreg -p IODeviceTree -d 2 | grep -c \"o device-.ree\" | sed s/^/dt\"\"-/; " +
         "ioreg -a -d 1 | head -8 | grep -c \"<key>IOObjectClass\" | sed s/^/a\"\"x-/; man -w ioreg\\n'",
+        # cp6: vm_stat's header; an xattr written and read back; lsof on
+        # this shell's working directory; host's usage (no DNS server
+        # here); top's logging mode; iostat's drive columns, which come
+        # from the IOKit registry. Then the disk tools on the blank 16 MB
+        # disk (found by its size): diskinfo's sizes, trim -f (DKIOCUNMAP),
+        # makefs's FAT image written to it and recognized by fstyp (its
+        # fstyp_msdos helper), recoverdisk sizing and reading it, and diskinfo -s,
+        # which xnu can't answer.
+        "--send-after 'man8/ioreg.8' 'vm_stat | head -1; touch /tmp/xa; xattr -w nd.k xv-\"\"al /tmp/xa; " +
+        "xattr -p nd.k /tmp/xa; lsof -a -d cwd -p $$$$ | grep -c /tmp | sed s/^/ls\"\"of-/; " +
+        "host 2>&1 | grep -c \"query SOA\" | sed s/^/ho\"\"st-/; top -l 1 | head -1; iostat -c 1 | sed -n 2p\\n'",
+        "--send-after 'KB/t' 'D=$$(for d in /dev/rdisk[0-9]; do [ \"$$(diskinfo $$d | cut -f3)\" = 16777216 ] && " +
+        "echo $$d; done | head -1); diskinfo $$D | cut -f2-4 | tr \"[:blank:]\" \" \" | sed s/^/di-/; trim -f -l 1m $$D; " +
+        "dd if=/tmp/mf.fat of=$$D bs=64k 2>/dev/null; fstyp $$D | sed s/^/ft-/; " +
+        "recoverdisk $$D 2>&1 | grep -m1 total_size; " +
+        "diskinfo -s $$D 2>&1 | grep -c \"not supported on Darwin\" | sed s/^/ds-/\\n'",
         "$(rootpath //boot/neoboot)",
         "240",
         "'7,8,9'",
@@ -1473,6 +1493,17 @@ sh_test(
         "'dt-1'",
         "'ax-1'",
         "'/usr/share/man/man8/ioreg.8'",
+        "'Mach Virtual Memory Statistics'",
+        "'xv-al'",
+        "'lsof-1'",
+        "'host-1'",
+        "'Processes:'",
+        "'KB/t'",
+        "'di-512 16777216 32768'",
+        "'offset 0 length 1048576'",
+        "'ft-msdos'",
+        "'total_size from DIOCGMEDIASIZE: 16777216'",
+        "'ds-1'",
     ],
     data = [
         ":sbsa_kc",

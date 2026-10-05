@@ -175,11 +175,28 @@ prog usr/bin/fetch "-include sys/ioctl.h -DIPPORT_MAX=65535 -DINFTIM=-1 -DINET6 
 # path is the Makefile's (/etc/unbound/root.key; there is no unbound here,
 # so -S/-k need a key file named on the command line).
 LD=contrib/ldns
-prog usr/bin/drill "-DOPENSSL_API_COMPAT=0x10100000L -DLDNS_TRUST_ANCHOR_FILE=\\\"/etc/unbound/root.key\\\" -I$LD -I$LD/ldns $OSSL" \
-	$LD/{buffer,dane,dname,dnssec,dnssec_sign,dnssec_verify,dnssec_zone,duration,edns,error,higher,host2str,host2wire,keys,net,packet,parse,radix,rbtree,rdata,resolver,rr,rr_functions,sha1,sha2,str2host,tsig,update,util,wire2host,zone}.c \
-	$LD/compat/b64_{ntop,pton}.c $LD/drill/{drill,drill_util,error,root,work,chasetrace,dnssec,securetrace}.c -- $(ossl) -lssl -lcrypto
+LDNS_CFLAGS="-DOPENSSL_API_COMPAT=0x10100000L -DLDNS_TRUST_ANCHOR_FILE=\\\"/etc/unbound/root.key\\\" -I$LD -I$LD/ldns $OSSL"
+LDNS_SRCS=($LD/{buffer,dane,dname,dnssec,dnssec_sign,dnssec_verify,dnssec_zone,duration,edns,error,higher,host2str,host2wire,keys,net,packet,parse,radix,rbtree,rdata,resolver,rr,rr_functions,sha1,sha2,str2host,tsig,update,util,wire2host,zone}.c
+	$LD/compat/b64_{ntop,pton}.c)
+prog usr/bin/drill "$LDNS_CFLAGS" "${LDNS_SRCS[@]}" \
+	$LD/drill/{drill,drill_util,error,root,work,chasetrace,dnssec,securetrace}.c -- $(ossl) -lssl -lcrypto
+# host (cp6, user decision 2026-10-05): FreeBSD's, contrib/ldns-host's
+# ldns-host.c over the same ldns (usr.bin/host's Makefile: -I contrib/ldns,
+# LIBADD ldns), in place of Apple's BIND host (bind9-65). Its page is
+# ldns-host.1 with "ldns-" taken out, as the Makefile makes host.1.
+prog usr/bin/host "$LDNS_CFLAGS" contrib/ldns-host/ldns-host.c "${LDNS_SRCS[@]}" -- $(ossl) -lssl -lcrypto
+mkdir -p "$OUT/usr/share/man/man1"
+sed -e 's/ldns-//gI' < contrib/ldns-host/ldns-host.1 > "$OUT/usr/share/man/man1/host.1"
 
 # --- usr.sbin ---
+# diskinfo and trim (LIBADD util) and sbin/recoverdisk (LDFLAGS -lm, which
+# libSystem holds) over xnu's disk ioctls: compat/nd_disk.c and
+# patches/0006 (DKIOC* in place of GEOM's DIOCG*; P4-21 checkpoint 6).
+# diskinfo aligns its buffer to PAGE_SIZE, <mach/vm_param.h>'s vm_page_size.
+DK="-isystem $UTIL/usr/local/include"
+prog usr/sbin/diskinfo "$DK -include mach/vm_param.h" usr.sbin/diskinfo/diskinfo.c "$C/nd_disk.c" -- $(lib "$UTIL") -lutil
+prog usr/sbin/trim "$DK" usr.sbin/trim/trim.c "$C/nd_disk.c" -- $(lib "$UTIL") -lutil
+prog sbin/recoverdisk "" sbin/recoverdisk/recoverdisk.c "$C/nd_disk.c"
 prog usr/sbin/daemon "-isystem $UTIL/usr/local/include" usr.sbin/daemon/daemon.c -- $(lib "$UTIL") -lutil
 prog usr/sbin/wake "" usr.sbin/wake/wake.c
 # setaudit: LIBADD bsm (OpenBSM, base/openbsm).
