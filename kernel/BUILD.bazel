@@ -1220,7 +1220,9 @@ sh_test(
 # through less, soelim; tput and infocmp on vt100; iconv from UTF-8 to
 # Latin-1; nc -z to an nc -l on loopback; tcsh and csh -c; mail reading a
 # one-message mailbox; locale -a and charmap in en_US.UTF-8 and C.UTF-8,
-# and cal without a setlocale warning in en_US.UTF-8. Each expected
+# and cal without a setlocale warning in en_US.UTF-8. Man pages: man -w,
+# man ls, apropos and whatis. vi (vis): its version line, an edit written
+# without a keyboard, and its Lua runtime loading LPeg and a lexer. Each expected
 # line is output the typed text can't contain ("" splits the words that
 # would match).
 sh_test(
@@ -1282,6 +1284,20 @@ sh_test(
         "--send-after 'bo-dy' 'locale -a | grep _US | sed s/^/la-/; LC_ALL=en_US.UTF-8 locale charmap | sed s/^/cm-/; " +
         "LC_ALL=C.UTF-8 locale charmap | sed s/^/cc-/; LANG=en_US.UTF-8 cal 1 2026 2>&1 | grep -c setlocale | " +
         "sed s/^/sl-/\\n'",
+        # Man pages for every project (P4-21): man -w, man through mandoc to
+        # cat, and apropos and whatis on the whatis file built with the image.
+        "--send-after 'sl-0' 'man -w ls; MANPAGER=cat man ls | head -1; apropos gzip | grep -c Lempel | " +
+        "sed s/^/ap-/; whatis ls | sed s/^/wi-/\\n'",
+        # vi is vis (user decision 2026-10-05): its version line, then an
+        # edit with no one at the keyboard: x/old/ c/new/ on the file, w in a
+        # second window on the same file (vis shares the text) and qall in a
+        # third. A visrc.lua in XDG_CONFIG_HOME, which requires
+        # /usr/share/vis/vis.lua, writes /tmp/vl if LPeg and the C lexer load.
+        "--send-after 'wi-ls(1)' 'vi -v; mkdir -p /tmp/vc/vis; echo \"require([[vis]]) " +
+        "vis.events.subscribe(vis.events.INIT, function() local f = io.open([[/tmp/vl]], [[w]]) " +
+        "f:write(vis.lexers.load([[ansi_c]]) and [[lexer-]]..[[ok]] or [[no]]) f:close() end)\" " +
+        "> /tmp/vc/vis/visrc.lua; echo vi-old > /tmp/vf; TERM=vt100 XDG_CONFIG_HOME=/tmp/vc " +
+        "vi \"+x/old/ c/new/\" /tmp/vf +w /tmp/vf +qall /tmp/vf; tr a-z A-Z < /tmp/vf; cat /tmp/vl; echo\\n'",
         "$(rootpath //boot/neoboot)",
         "240",
         "'7,8,9'",
@@ -1355,6 +1371,13 @@ sh_test(
         "'cm-UTF-8'",
         "'cc-UTF-8'",
         "'sl-0'",
+        "'/usr/share/man/man1/ls.1'",
+        "'LS(1)'",
+        "'ap-1'",
+        "'wi-ls(1) - list directory contents'",
+        "'vis 0.9 +curses +lua +lpeg'",
+        "'VI-NEW'",
+        "'lexer-ok'",
     ],
     data = [
         ":sbsa_kc",

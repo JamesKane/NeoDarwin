@@ -150,3 +150,25 @@ prog tabs "$P/tabs.c"
 ln -sf tset "$OUT/usr/bin/reset"
 ln -sf tic "$OUT/usr/bin/captoinfo"
 ln -sf tic "$OUT/usr/bin/infotocap"
+
+# The commands' pages, as install_man_misc.sh installs ncurses/man (the
+# library's section 3 pages aren't installed: the headers are build-only):
+# fix_man.sed's substitutions for edit_man.sh's, each page in man<section>
+# under its own name (tic.1m in man1), and terminfo.5 from MKterminfo.sh.
+# Apple skips tabs.1; tabs is built here, so its page is installed too.
+# reset, captoinfo and infotocap get their pages' names (manlinks.sed).
+# fix_man.sed predates tabs and tset's own pages: the names it leaves (and
+# the second of a name on one line, its substitutions not being global)
+# are filled in the same way.
+MD="$OUT/usr/share/man"; mkdir -p "$MD/man1" "$MD/man5"
+FIX=(-f "$N/xcodescripts/fix_man.sed" -e 's,@TERMINFO_DIRS@,/usr/share/terminfo,g')
+for t in captoinfo clear infocmp infotocap reset tabs tic toe tput tset; do
+	FIX+=(-e "s,@$(printf '%s' "$t" | tr a-z A-Z)@,$t,g")
+done
+for m in clear.1 infocmp.1m tic.1m captoinfo.1m infotocap.1m toe.1m tput.1 tset.1 tabs.1; do
+	sed "${FIX[@]}" < "$NC/man/$m" > "$MD/man1/$m"
+done
+cp "$MD/man1/tset.1" "$MD/man1/reset.1"
+(cd "$NC/man" && sh MKterminfo.sh terminfo.head ../include/Caps terminfo.tail) | sed "${FIX[@]}" > "$MD/man5/terminfo.5"
+! grep -l '@[A-Z_]*@' "$MD"/man1/* "$MD/man5/terminfo.5" || { echo "ncurses: pages keep placeholders" >&2; exit 1; }
+chmod 0444 "$MD"/man1/* "$MD/man5/terminfo.5"

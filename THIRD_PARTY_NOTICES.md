@@ -58,6 +58,10 @@ NeoDarwin's own code is under the BSD 2-Clause licence (`LICENSE`). NeoDarwin al
 | XZ Utils | xz 5.4.7 (upstream release, `base/upstream.lock`) | public domain (liblzma and the `xz`, `xzdec` and `lzmainfo` programs, `COPYING`); its GPL scripts and LGPL `getopt_long` aren't built | `liblzma.5.dylib`, `xz` and its names, `xzdec`, `lzmainfo` |
 | libarchive | libarchive-158 (libarchive 3.7.4) | BSD-2-Clause (Tim Kientzle and others, per file; `libarchive/COPYING`) | `libarchive.2.dylib`, `bsdtar` (`tar`), `cpio`, `bsdcat` |
 | Zstandard | zstd 1.5.7 (upstream release, `base/upstream.lock`) | BSD-3-Clause (`LICENSE`; zstd is dual-licensed BSD-3-Clause or GPL-2.0, and NeoDarwin takes the BSD terms) | `libzstd.1.dylib`, `zstd` and its names |
+| vis | vis 0.9 (github.com/martanne/vis release tag, `base/upstream.lock`) | ISC (Marc André Tanner and contributors, `LICENSE`); its lexers (from Scintillua) are MIT | `/usr/bin/vi`, `vis-menu`, `vis-digraph`, `vis-clipboard`, `vis-complete`, `vis-open`, and its Lua runtime in `/usr/share/vis` |
+| libtermkey | libtermkey 0.22 (upstream release, `base/upstream.lock`) | MIT (Paul Evans, `LICENSE`) | linked statically into `/usr/bin/vi` (vis) |
+| Lua | Lua 5.4.9 (upstream release, `base/upstream.lock`) | MIT (Lua.org, PUC-Rio; notice in `lua.h` and `doc/readme.html`) | linked statically into `/usr/bin/vi` (vis); not installed as a library or a `lua` command |
+| LPeg | LPeg 1.1.0 (upstream release, `base/upstream.lock`) | MIT (Lua.org, PUC-Rio; `lpeg.html`) | linked statically into `/usr/bin/vi` (vis), for its lexers |
 | Info-ZIP UnZip | zip-29 (UnZip 6.0) | the Info-ZIP licence (BSD-style, `unzip60/LICENSE`) | `unzip`, `zipinfo`, `funzip`, `unzipsfx`, `zipgrep` |
 | TF-A, EDK2, edk2-platforms | TF-A v2.15.0 (with upstream fix 5c33fafc for `qemu_sbsa`), edk2-stable202608, edk2-platforms 061beb4c (SbsaQemu) | BSD-3-Clause, BSD-2-Clause-Patent | test firmware for QEMU `virt,secure=on` and `sbsa-ref` only (`third_party/qemu_firmware`); not part of NeoDarwin images |
 

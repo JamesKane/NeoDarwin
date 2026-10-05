@@ -79,12 +79,24 @@ def _library_impl(ctx):
     out = ctx.actions.declare_directory(ctx.label.name)
     sysroot = ctx.files.sysroot[0]
     deps = [d.files.to_list()[0] for d in ctx.attr.deps]
+    args = [out.path, _root(ctx.attr.srcs), sysroot.path] + [d.path for d in deps]
+    executable = ctx.file.script
+    tools = ctx.files._tools
+    if ctx.attr.man_pages:
+        # tools/base/pages.sh runs the script, then installs the source
+        # tree's pages for the programs it installed.
+        pre = []
+        for a in ctx.attr.page_aliases:
+            pre += ["-a", a]
+        args = pre + ["--", ctx.file.script.path] + args
+        executable = ctx.file._pages
+        tools = tools + [ctx.file.script]
     ctx.actions.run(
-        executable = ctx.file.script,
-        arguments = [out.path, _root(ctx.attr.srcs), sysroot.path] + [d.path for d in deps],
+        executable = executable,
+        arguments = args,
         inputs = ctx.files.srcs + ctx.files.data + [sysroot] + deps,
         outputs = [out],
-        tools = ctx.files._tools,
+        tools = tools,
         mnemonic = "BaseLibrary",
         progress_message = "Building %{label}",
         execution_requirements = _XCODE_REQS,
@@ -101,6 +113,9 @@ base_library = rule(
         "sysroot": attr.label(mandatory = True, doc = "The base_sysroot."),
         "deps": attr.label_list(doc = "base_library targets whose install trees this one links."),
         "data": attr.label_list(allow_files = True, doc = "The script's own files: source lists, patches, NeoDarwin sources."),
+        "man_pages": attr.bool(doc = "Also install the source tree's manual pages for the programs the script installed (tools/base/pages.sh)."),
+        "page_aliases": attr.string_list(doc = "PROGRAM=PAGE: the page of a program whose page has another name (cpio=bsdcpio)."),
+        "_pages": attr.label(default = "//tools/base:pages.sh", allow_single_file = True),
         "_tools": attr.label(default = "//tools/base:scripts"),
     },
 )

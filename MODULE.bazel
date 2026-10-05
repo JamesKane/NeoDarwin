@@ -376,6 +376,43 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/mail_cmds/archive/refs/tags/mail_cmds-41.tar.gz"],
 )
 
+# vis as vi (user decision 2026-10-05, base/vis): Marc Andre Tanner's vis
+# and the libraries it links statically, upstream release tarballs pinned by
+# hash (docs/architecture/freebsd-parity.md §6). The vis build script finds
+# the other three next to @martanne_vis in external/.
+
+http_archive(
+    name = "martanne_vis",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "bd37ffba5535e665c1e883c25ba5f4e3307569b6d392c60f3c7d5dedd2efcfca",
+    strip_prefix = "vis-0.9",
+    urls = ["https://github.com/martanne/vis/archive/refs/tags/v0.9.tar.gz"],
+)
+
+http_archive(
+    name = "leonerd_libtermkey",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "6945bd3c4aaa83da83d80a045c5563da4edd7d0374c62c0d35aec09eb3014600",
+    strip_prefix = "libtermkey-0.22",
+    urls = ["https://www.leonerd.org.uk/code/libtermkey/libtermkey-0.22.tar.gz"],
+)
+
+http_archive(
+    name = "puc_rio_lua",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "2335b6c582a52654f94612bf10d2f4672805d05329aa6568b1d8cd9e5c6fb8e6",
+    strip_prefix = "lua-5.4.9",
+    urls = ["https://www.lua.org/ftp/lua-5.4.9.tar.gz"],
+)
+
+http_archive(
+    name = "puc_rio_lpeg",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "4b155d67d2246c1ffa7ad7bc466c1ea899bbc40fef0257cc9c03cecbaed4352a",
+    strip_prefix = "lpeg-1.1.0",
+    urls = ["https://www.inf.puc-rio.br/~roberto/lpeg/lpeg-1.1.0.tar.gz"],
+)
+
 
 http_archive(
     name = "apple_diskdev_cmds",

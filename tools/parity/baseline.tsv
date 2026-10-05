@@ -447,7 +447,7 @@ usr.bin/usbhidaction	n/a	no
 usr.bin/usbhidctl	n/a	no
 usr.bin/users	apple	yes
 usr.bin/vacation	port	no
-usr.bin/vi	apple	no
+usr.bin/vi	equivalent	yes
 usr.bin/vis	apple	yes
 usr.bin/vmstat	equivalent	no
 usr.bin/vtfontcvt	freebsd	no

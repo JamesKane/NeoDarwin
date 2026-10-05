@@ -37,3 +37,32 @@ find "$out" -type f -name '*.dylib' | while IFS= read -r f; do
 	rm "$f"; ln -s "$(basename "$id")" "$f"
 done
 chmod -R a+rX,u+w "$out"
+# The whatis database apropos(1) and whatis(1) search (man-62's man.sh greps
+# usr/share/man/whatis): mandoc's makewhatis indexes the pages, then its
+# apropos lists every entry as "name(section) - description". Both are the
+# root's own mandoc, run on the build machine: NeoDarwin's userland binaries
+# link only libSystem and libz there, which macOS has. A page installed under
+# several names is a copy each time (gunzip.1, zcat.1 for gzip.1); makewhatis
+# runs on a tree of hard links where identical pages of a section share one
+# file, so it makes one entry of them with every name, as it does for
+# FreeBSD's MLINKS. mandoc.db itself isn't kept; man-62 doesn't read it.
+if [ -x "$out/usr/bin/makewhatis" ] && [ -d "$out/usr/share/man" ]; then
+	tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+	ln -s "$(cd "$out" && pwd)/usr/bin/mandoc" "$tmp/apropos"
+	for sect in "$out"/usr/share/man/man*/; do
+		s="$(basename "$sect")"; mkdir -p "$tmp/man/$s"
+		(cd "$sect" && find . -maxdepth 1 -type f | sed 's|^\./||' | LC_ALL=C sort) | while IFS= read -r f; do
+			sum="$(cksum < "$sect/$f" | tr -c '0-9\n' _)"
+			if [ -e "$tmp/sums/$s/$sum" ]; then
+				ln "$tmp/man/$s/$(cat "$tmp/sums/$s/$sum")" "$tmp/man/$s/$f"
+			else
+				mkdir -p "$tmp/sums/$s"; printf '%s' "$f" > "$tmp/sums/$s/$sum"
+				cp "$sect/$f" "$tmp/man/$s/$f"
+			fi
+		done
+	done
+	"$out/usr/bin/makewhatis" "$tmp/man"
+	"$tmp/apropos" -M "$tmp/man" 'Nm~.' | LC_ALL=C sort -u > "$tmp/whatis"
+	[ -s "$tmp/whatis" ] || { echo "stage_root.sh: makewhatis indexed no pages" >&2; exit 1; }
+	install -m 0444 "$tmp/whatis" "$out/usr/share/man/whatis"
+fi

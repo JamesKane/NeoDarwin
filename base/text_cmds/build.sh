@@ -112,3 +112,8 @@ tool "$B" "$ROOT" "$OUT/sbin/md5" "$B/md5.rsp" md5/md5.c "$(vers md5)" -- -L"$MD
 for l in md5sum sha1 sha1sum sha224 sha224sum sha256 sha256sum sha384 sha384sum sha512 sha512sum; do
 	cp "$OUT/sbin/md5" "$OUT/sbin/$l"
 done
+
+# sort's page is sort.1.in: FreeBSD's usr.bin/sort Makefile comments out the
+# %%THREADS%% and %%NLS%% lines for a build without either, as this one is.
+mkdir -p "$OUT/usr/share/man/man1"
+sed -e 's/%%THREADS%%/.\\"/g' -e 's/%%NLS%%/.\\"/g' "$T/sort/sort.1.in" > "$OUT/usr/share/man/man1/sort.1"

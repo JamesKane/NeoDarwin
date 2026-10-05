@@ -448,7 +448,7 @@ usr.bin/usbhidaction	n/a				no	usbhid(4); HID is a dext (P3-07)
 usr.bin/usbhidctl	n/a				no	usbhid(4); HID is a dext (P3-07)
 usr.bin/users	apple	shell_cmds-326		P4-21	yes	
 usr.bin/vacation	port	mail/sendmail			no	sendmail is an option in FreeBSD too (MK_SENDMAIL)
-usr.bin/vi	apple	vim-163		P4-21	no	vim as vi, ex and view, not nvi. Unbuilt: left after P4-21 checkpoint 3 (freebsd-parity.md §2.1)
+usr.bin/vi	equivalent	vis-0.9 (martanne/vis), user decision 2026-10-05	usr/bin/vi	P4-21	yes	vis, not nvi or vim, as /usr/bin/vi (base/vis; /usr/bin/vis stays BSD's vis(1)). Not POSIX vi: no ex mode, sam-style structural regular expressions, so FreeBSD's vi tests don't apply
 usr.bin/vis	apple	text_cmds-197		P4-21	yes	
 usr.bin/vmstat	equivalent	vm_stat (system_cmds-1039)	usr/bin/vm_stat	P4-21	no	
 usr.bin/vtfontcvt	freebsd	FreeBSD usr.bin/vtfontcvt		P4-26	no	if the console takes vt(4)'s font format
