@@ -1224,7 +1224,9 @@ sh_test(
 # man ls, apropos and whatis. vi (vis): its version line, an edit written
 # without a keyboard, and its Lua runtime loading LPeg and a lexer. Each expected
 # line is output the typed text can't contain ("" splits the words that
-# would match).
+# would match). FreeBSD's leaf utilities (cp4): nproc, uuidgen, m4,
+# perror, ident, ministat, xo, getaddrinfo, daemon and pwait, nmtree,
+# bsdiff and bspatch, fifolog, fsync, ts, domainname.
 sh_test(
     name = "sbsa_base_commands_test",
     size = "medium",
@@ -1298,6 +1300,27 @@ sh_test(
         "f:write(vis.lexers.load([[ansi_c]]) and [[lexer-]]..[[ok]] or [[no]]) f:close() end)\" " +
         "> /tmp/vc/vis/visrc.lua; echo vi-old > /tmp/vf; TERM=vt100 XDG_CONFIG_HOME=/tmp/vc " +
         "vi \"+x/old/ c/new/\" /tmp/vf +w /tmp/vf +qall /tmp/vf; tr a-z A-Z < /tmp/vf; cat /tmp/vl; echo\\n'",
+        # FreeBSD's leaf utilities (cp4): nproc (one CPU), uuidgen's length
+        # and -r's version digit, m4 with eval, perror; ident on a $Id$
+        # line, ministat, xo; getaddrinfo, daemon with a pidfile and pwait -v
+        # on its child; an nmtree spec checked, then a change caught; bsdiff
+        # and bspatch, fifolog, fsync, ts, domainname, man -w m4.
+        "--send-after 'lexer-ok' 'nproc | sed s/^/n\"\"p-/; nproc --all | sed s/^/na\"\"ll-/; " +
+        "uuidgen | wc -c | sed \"s/ //g;s/^/u\"\"g-/\"; uuidgen -r | cut -c15 | sed s/^/v\"\"4-/; " +
+        "echo \"define(N,4)define(M,eval(N*N))m4-M\" | m4; perror 2 | sed s/^/pe\"\"rr-/\\n'",
+        "--send-after 'perr-No such' 'echo \\$$Id: id\"\"t-x \\$$ > /tmp/id; ident /tmp/id; jot 4 > /tmp/ms; " +
+        "ministat -n /tmp/ms | tail -1; xo --text \"x\"\"o-{:w}\" ok; echo\\n'",
+        "--send-after 'xo-ok' 'getaddrinfo localhost; daemon -f -p /tmp/dp sleep 2; sleep 1; " +
+        "pwait -v $$(cat /tmp/dp)\\n'",
+        "--send-after 'exited with status 0.' 'mkdir -p /tmp/mt/a && echo m > /tmp/mt/a/f && " +
+        "nmtree -c -K sha256digest -p /tmp/mt > /tmp/mt.spec && nmtree -p /tmp/mt -f /tmp/mt.spec && " +
+        "echo mt\"\"-ok; echo x >> /tmp/mt/a/f; nmtree -p /tmp/mt -f /tmp/mt.spec | grep -c sha256 | " +
+        "sed s/^/mt\"\"ch-/\\n'",
+        "--send-after 'mtch-' 'jot 2000 > /tmp/o; sed s/1000/ten/ /tmp/o > /tmp/n; bsdiff /tmp/o /tmp/n /tmp/bp && " +
+        "bspatch /tmp/o /tmp/n2 /tmp/bp && cmp /tmp/n /tmp/n2 && echo bsd\"\"iff-ok; fifolog_create -s 1m /tmp/fl && " +
+        "echo ff\"\"log | fifolog_writer -z 0 /tmp/fl; fifolog_reader /tmp/fl | grep -c fflog | sed s/^/fl\"\"r-/; " +
+        "fsync /tmp/o && echo fs\"\"ync-ok; echo t\"\"s-x | ts \"[%%]\"; domainname nd\"\"x.test; " +
+        "domainname | sed s/^/dn-/; man -w m4\\n'",
         "$(rootpath //boot/neoboot)",
         "240",
         "'7,8,9'",
@@ -1378,6 +1401,25 @@ sh_test(
         "'vis 0.9 +curses +lua +lpeg'",
         "'VI-NEW'",
         "'lexer-ok'",
+        "'np-1'",
+        "'nall-1'",
+        "'ug-37'",
+        "'v4-4'",
+        "'m4-16'",
+        "'perr-No such file or directory'",
+        "'$$Id: idt-x $$'",
+        "'1.2909944'",
+        "'xo-ok'",
+        "'inet tcp 127.0.0.1'",
+        "'exited with status 0.'",
+        "'mt-ok'",
+        "'mtch-1'",
+        "'bsdiff-ok'",
+        "'flr-1'",
+        "'fsync-ok'",
+        "'[%] ts-x'",
+        "'dn-ndx.test'",
+        "'/usr/share/man/man1/m4.1'",
     ],
     data = [
         ":sbsa_kc",

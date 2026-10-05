@@ -1,0 +1,44 @@
+--- a/bin/pwait/pwait.c
++++ b/bin/pwait/pwait.c
+@@ -171,8 +171,13 @@
+ 	ndone = nev = nleft = 0;
+ 	mypid = getpid();
+ 	notes = rflag ? NOTE_REAP : NOTE_EXIT;
++	/*
++	 * xnu reports the exit status in the event's data only when asked
++	 * (NOTE_EXITSTATUS), and only to a process that may signal the
++	 * target; for another user's process -v says "terminated".
++	 */
+ 	if (verbose)
+-		notes |= NOTE_EXIT;
++		notes |= NOTE_EXIT | NOTE_EXITSTATUS;
+ 	for (n = 0; n < argc; n++) {
+ 		s = argv[n];
+ 		/* Undocumented Solaris compat */
+@@ -199,7 +204,14 @@
+ 			continue;
+ 		}
+ 		EV_SET(e + nleft, pid, EVFILT_PROC, EV_ADD, notes, 0, NULL);
+-		if (kevent(kq, e + nleft, 1, NULL, 0, NULL) == -1) {
++		i = kevent(kq, e + nleft, 1, NULL, 0, NULL);
++		if (i == -1 && errno == EACCES &&
++		    (notes & NOTE_EXITSTATUS) != 0) {
++			EV_SET(e + nleft, pid, EVFILT_PROC, EV_ADD,
++			    notes & ~NOTE_EXITSTATUS, 0, NULL);
++			i = kevent(kq, e + nleft, 1, NULL, 0, NULL);
++		}
++		if (i == -1) {
+ 			if (errno != ESRCH)
+ 				err(EX_OSERR, "kevent()");
+ 			warn("%ld", pid);
+@@ -266,7 +278,9 @@
+ 			pid = e[i].ident;
+ 			if ((e[i].fflags & NOTE_EXIT) && verbose) {
+ 				status = e[i].data;
+-				if (WIFEXITED(status)) {
++				if ((e[i].fflags & NOTE_EXITSTATUS) == 0) {
++					printf("%ld: terminated.\n", pid);
++				} else if (WIFEXITED(status)) {
+ 					printf("%ld: exited with status %d.\n",
+ 					    pid, WEXITSTATUS(status));
+ 				} else if (WIFSIGNALED(status)) {

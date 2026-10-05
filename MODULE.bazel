@@ -891,6 +891,15 @@ pinned_files(
     url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
 )
 
+# FreeBSD's leaf utilities (base/freebsd_cmds, P4-21 checkpoint 4): nproc,
+# uuidgen, m4, mtree (nmtree), daemon and the others macOS doesn't publish.
+pinned_files(
+    name = "freebsd_cmds",
+    build_file = "//base:freebsd_cmds/freebsd.BUILD",
+    lockfile = "//base:freebsd_cmds/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
 # FreeBSD's CLDR-derived locale sources (base/locales) for /usr/share/locale:
 # macOS 26's release set publishes no locale data.
 pinned_files(

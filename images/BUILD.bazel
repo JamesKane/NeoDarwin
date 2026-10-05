@@ -76,6 +76,7 @@ _SYSTEM_MODES = {
     "usr/bin/chfn": "4555",
     "usr/bin/chpass": "4555",
     "usr/bin/chsh": "4555",
+    "usr/bin/lock": "4555",
     "usr/bin/login": "4555",
     "usr/bin/passwd": "4555",
     "usr/bin/su": "4755",

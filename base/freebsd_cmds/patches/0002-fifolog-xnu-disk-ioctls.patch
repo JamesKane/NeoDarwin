@@ -1,0 +1,65 @@
+--- a/usr.sbin/fifolog/lib/fifolog_int.c
++++ b/usr.sbin/fifolog/lib/fifolog_int.c
+@@ -63,10 +63,14 @@
+ 	if (f->fd < 0)
+ 		return ("Cannot open");
+ 
+-	/* Determine initial record size guesstimate */
+-	i = ioctl(f->fd, DIOCGSECTORSIZE, &f->recsize);
++	/*
++	 * Determine initial record size guesstimate.  xnu's disk ioctls are
++	 * DKIOCGETBLOCKSIZE and DKIOCGETBLOCKCOUNT; the media size is their
++	 * product.
++	 */
++	i = ioctl(f->fd, DKIOCGETBLOCKSIZE, &f->recsize);
+ 	if (i != 0 && errno != ENOTTY)
+-		return ("ioctl(DIOCGSECTORSIZE) failed");
++		return ("ioctl(DKIOCGETBLOCKSIZE) failed");
+ 
+ 	if (i != 0) {
+ 		i = fstat(f->fd, &st);
+@@ -78,9 +82,13 @@
+ 	} else if (f->recsize < 64) {
+ 		return ("Disk device sectorsize smaller than 64");
+ 	} else {
+-		i = ioctl(f->fd, DIOCGMEDIASIZE, &f->logsize);
++		uint64_t nblocks;
++
++		i = ioctl(f->fd, DKIOCGETBLOCKCOUNT, &nblocks);
+ 		if (i < 0 && errno != ENOTTY)
+-			return ("ioctl(DIOCGMEDIASIZE) failed");
++			return ("ioctl(DKIOCGETBLOCKCOUNT) failed");
++		if (i == 0)
++			f->logsize = (off_t)(nblocks * f->recsize);
+ 	}
+ 
+ 	/* Allocate a record buffer */
+--- a/usr.sbin/fifolog/lib/fifolog_create.c
++++ b/usr.sbin/fifolog/lib/fifolog_create.c
+@@ -79,14 +79,23 @@
+ 		return ("Wrong file type");
+ 	}
+ 
+-	/* For raw disk with larger sectors: use 1 sector */
+-	i = ioctl(fd, DIOCGSECTORSIZE, &uu);
++	/*
++	 * For raw disk with larger sectors: use 1 sector.  xnu's disk ioctls
++	 * are DKIOCGETBLOCKSIZE and DKIOCGETBLOCKCOUNT.
++	 */
++	i = ioctl(fd, DKIOCGETBLOCKSIZE, &uu);
+ 	u = uu;
+ 	if (i == 0 && (u > recsize || (recsize % u) != 0))
+ 		recsize = u;
+ 
+ 	/* If no configured size, or too large for disk, use device size */
+-	i = ioctl(fd, DIOCGMEDIASIZE, &ms);
++	{
++		uint64_t nblocks;
++
++		i = ioctl(fd, DKIOCGETBLOCKCOUNT, &nblocks);
++		if (i == 0)
++			ms = (off_t)(nblocks * uu);
++	}
+ 	if (i == 0 && (size == 0 || size > ms))
+ 		size = ms;
+ 

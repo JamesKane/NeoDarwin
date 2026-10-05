@@ -665,6 +665,34 @@ base_library(
     sysroot = ":sysroot",
 )
 
+# P4-21 checkpoint 4, FreeBSD's leaf utilities
+# (docs/architecture/freebsd-parity.md §2.1), from the source drop at
+# 050683bb8e13 with a shared compat layer (base/freebsd_cmds/compat).
+base_library(
+    name = "freebsd_commands",
+    data = glob(["freebsd_cmds/**"]) + ["commands.sh"],
+    deps = [
+        ":root",
+        ":libxo_dylib",
+        ":libutil_dylib",
+        ":libsbuf_dylib",
+        ":libmd_dylib",
+        ":libz_dylib",
+        ":bzip2_commands",
+        ":libpam_dylib",
+        ":libncurses_dylib",
+    ],
+    man_pages = True,
+    page_aliases = [
+        "fifolog_create=fifolog",
+        "fifolog_reader=fifolog",
+        "fifolog_writer=fifolog",
+    ],
+    script = "freebsd_cmds/build.sh",
+    srcs = "@freebsd_cmds//:all",
+    sysroot = ":sysroot",
+)
+
 # The ZFS test suite's commands from projects of their own
 # (docs/architecture/filesystems.md §7): awk-40, patch_cmds-72's cmp and
 # diff, and FreeBSD's timeout (macOS 26 has none).
@@ -1037,6 +1065,7 @@ base_root(
         ":mail_commands",
         ":locale_data",
         ":vis_editor",
+        ":freebsd_commands",
     ],
 )
 
@@ -1163,6 +1192,8 @@ lang_audit_test(
         "libsbuf/compat/*.h",
         "libarchive/compat/*.h",
         "libarchive/compat/*.c",
+        "freebsd_cmds/compat/**/*.h",
+        "freebsd_cmds/compat/*.c",
     ]),
 )
 

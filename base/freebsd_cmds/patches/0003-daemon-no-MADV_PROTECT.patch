@@ -1,0 +1,17 @@
+--- a/usr.sbin/daemon/daemon.c
++++ b/usr.sbin/daemon/daemon.c
+@@ -433,11 +433,10 @@
+ 	int pipe_fd[2];
+ 
+ 	/*
+-	 * Try to protect against pageout kill. Ignore the
+-	 * error, madvise(2) will fail only if a process does
+-	 * not have superuser privileges.
++	 * FreeBSD protects the supervisor against pageout kill here
++	 * (madvise(2)'s MADV_PROTECT).  xnu has no such advice: its
++	 * equivalent is memorystatus's jetsam priority, which launchd sets.
+ 	 */
+-	(void)madvise(NULL, 0, MADV_PROTECT);
+ 
+ 	if (pipe(pipe_fd)) {
+ 		err(1, "pipe");
