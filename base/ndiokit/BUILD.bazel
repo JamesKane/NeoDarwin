@@ -1,0 +1,28 @@
+load("//rules:cc.bzl", "lang_audit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# NDIOKit: the C shim between NeoDarwin's Swift administration tools
+# (base/pciconf, base/acpidump) and the base's CoreFoundation and IOKit
+# frameworks. Embedded Swift can't import those frameworks' headers, so the
+# calls the tools make are wrapped in plain C types (nd_iokit.h).
+filegroup(
+    name = "hdrs",
+    srcs = [
+        "NDIOKit/module.modulemap",
+        "NDIOKit/nd_iokit.h",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = ["src/nd_iokit.c"],
+)
+
+lang_audit_test(
+    name = "ndiokit_lang_audit",
+    srcs = [
+        "NDIOKit/nd_iokit.h",
+        "src/nd_iokit.c",
+    ],
+)

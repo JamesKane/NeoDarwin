@@ -1379,6 +1379,17 @@ sh_test(
         "dd if=/tmp/mf.fat of=$$D bs=64k 2>/dev/null; fstyp $$D | sed s/^/ft-/; " +
         "recoverdisk $$D 2>&1 | grep -m1 total_size; " +
         "diskinfo -s $$D 2>&1 | grep -c \"not supported on Darwin\" | sed s/^/ds-/\\n'",
+        # cp6b: pciconf over the registry's IOPCIDevice nubs: every function
+        # listed, the virtio disks among them by their IDs, -v's class names,
+        # -a by driver name, the refusal of a config-space read, and the pages of pciconf
+        # and acpidump (acpidump itself waits for the kernel's "ACPI Tables":
+        # //kernel:sbsa_acpidump_test).
+        "--send-after 'ds-1' 'pciconf -l; pciconf -l | grep -c class= | sed s/^/pc\"\"i-/; " +
+        "pciconf -l | grep -c \"vendor=0x1af4 device=0x1001\" | sed s/^/vi\"\"o-/; " +
+        "pciconf -lv | grep -c \"class      = mass storage\" | sed s/^/pv\"\"-/; " +
+        "pciconf -a $$(pciconf -l | grep -m1 \" vendor=0x1af4\" | cut -d@ -f1); " +
+        "pciconf -r pci0:0:0:0 0 2>&1 | grep -c \"not supported on NeoDarwin\" | sed s/^/pr\"\"-/; " +
+        "man -w pciconf acpidump\\n'",
         "$(rootpath //boot/neoboot)",
         "240",
         "'7,8,9'",
@@ -1512,6 +1523,61 @@ sh_test(
         "'ft-msdos'",
         "'total_size from DIOCGMEDIASIZE: 16777216'",
         "'ds-1'",
+        # The host bridge, virtio-net, and the virtio ESP and blank disk
+        # (both virtio-blk, transitional 1af4:1001).
+        "'pci-4'",
+        "'vio-2'",
+        "'pv-2'",
+        "'NeoDarwinVirtioNet0: attached'",
+        "'pr-1'",
+        "'man8/pciconf.8'",
+        "'man8/acpidump.8'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:session_root",
+        "//images:session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# acpidump (P4-21 checkpoint 6b, base/acpidump) against the ACPI platform's
+# "ACPI Tables" (docs/kernel/acpi.md): -t's RSDP line and table headers,
+# -T MCFG's allocation, -o's DSDT and -d's disassembly through iasl.
+# //base/acpidump:acpidump_host_test covers the same options against a
+# captured copy of these tables on the build machine.
+sh_test(
+    name = "sbsa_acpidump_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'acpidump -t; acpidump -t | grep -c \": Length=\" | sed s/^/ac\"\"t-/; " +
+        "acpidump -t 2>&1 | grep -c corrupt | sed s/^/co\"\"rrupt-/\\n'",
+        "--send-after 'root@localhost ~ # ' 'acpidump -T MCFG | grep Segment | sed \"s/.*=/mc\"\"fg-/\"; " +
+        "acpidump -o /tmp/d.aml && head -c 4 /tmp/d.aml | sed s/^/a\"\"o-/; echo; " +
+        "acpidump -d 2>/dev/null | grep -m1 -o DefinitionBlock | sed s/^/di\"\"s-/\\n'",
+        "$(rootpath //boot/neoboot)",
+        "180",
+        "'hfs: mounted NeoDarwin on device'",
+        "'RSD PTR: OEM=BOCHS, ACPI_Rev=2.0x (2)'",
+        "'  XSDT: Length='",
+        "'  FACP: Length='",
+        "'  DSDT: Length='",
+        # QEMU virt's tables, each a header: the XSDT, the FACP and DSDT,
+        # and the other seven (APIC, DBG2, GTDT, IORT, MCFG, PPTT, SPCR).
+        "'act-10'",
+        "'corrupt-0'",
+        "'mcfg-0x0000'",
+        "'ao-DSDT'",
+        "'dis-DefinitionBlock'",
     ],
     data = [
         ":sbsa_kc",

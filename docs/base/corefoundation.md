@@ -110,4 +110,4 @@ Notifications and `IOServiceOpen` haven't been exercised yet.
 
 ## 5. Next (6b, part 2)
 
-`iostat`, `top`, `pciconf` and `acpidump`, and the CF smoke test on QEMU. The notes are in `docs/architecture/freebsd-parity.md` §2.1, "Left for the next agent".
+`iostat` and `top` (part 2) and `pciconf` and `acpidump` (part 3, Swift: `swift_embedded_executable`'s `frameworks` and the NDIOKit shim, `base/ndiokit`) are done. The CF smoke test on QEMU is left; the notes are in `docs/architecture/freebsd-parity.md` §2.1.

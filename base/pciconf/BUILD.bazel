@@ -1,0 +1,20 @@
+load("//rules:darwin_executable.bzl", "swift_embedded_executable")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["pciconf.8"])
+
+# /usr/sbin/pciconf (P4-21 checkpoint 6b, docs/architecture/freebsd-parity.md
+# §2.1): FreeBSD's PCI listing over the I/O Registry's IOPCIDevice nubs, in
+# Embedded Swift over CoreFoundation and IOKit through the NDIOKit shim.
+swift_embedded_executable(
+    name = "pciconf",
+    srcs = glob(["Sources/*.swift"]),
+    c_srcs = ["//base/ndiokit:srcs"],
+    frameworks = [
+        "//base:corefoundation_framework",
+        "//base:iokit_framework",
+    ],
+    hdrs = ["//base/ndiokit:hdrs"],
+    root = "//base:root",
+)

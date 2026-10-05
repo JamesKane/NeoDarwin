@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Build a dynamically linked arm64 Darwin executable from Embedded Swift
 # (language policy T3) against a NeoDarwin root.
-#   build.sh TOOLCHAIN OUT MODULE INCLUDE_DIRS(colon-separated) ROOT -- SWIFT_SRCS... -- C_SRCS...
+#   build.sh TOOLCHAIN OUT MODULE INCLUDE_DIRS(colon-separated) ROOT FRAMEWORK_TREES(colon-separated) \
+#       -- SWIFT_SRCS... -- C_SRCS...
 # Swift and C compile for arm64-apple-macos against the host SDK's headers,
 # the Darwin userland ABI NeoDarwin keeps. Xcode's ld links them against
 # ROOT's libSystem (-syslibroot ROOT: usr/lib/libSystem.dylib and the
@@ -13,8 +14,18 @@
 # normalisation) take their tables from the Embedded stdlib's
 # libswiftUnicodeDataTables.a, linked only as far as they're used. ld signs
 # the result ad hoc.
+# FRAMEWORK_TREES are base_library install trees holding frameworks
+# (//base:corefoundation_framework, //base:iokit_framework): the C sources
+# compile against their build-only headers (usr/local/frameworks, with
+# -iframework, ahead of the SDK's), and the executable links each
+# System/Library/Frameworks/NAME.framework/Versions/A/NAME, whose install
+# name is the framework's path in the root. Swift doesn't import a
+# framework's headers: CoreFoundation's pull in Dispatch, whose Swift name
+# mappings warn in Embedded mode, and IOKitLib's CF-returning calls import
+# as Unmanaged<AnyObject>, which Embedded Swift can't hold. A program's C
+# shim wraps the calls it makes in plain C types (base/pciconf).
 set -euo pipefail
-tc="$1"; out="$2"; module="$3"; incs="$4"; root="$5"; shift 5
+tc="$1"; out="$2"; module="$3"; incs="$4"; root="$5"; fwtrees="$6"; shift 6
 [ "$1" = "--" ] && shift
 swift=(); while [ $# -gt 0 ] && [ "$1" != "--" ]; do swift+=("$1"); shift; done
 [ "${1:-}" = "--" ] && shift
@@ -28,15 +39,25 @@ cpu=cortex-a76
 sdk="$(xcrun --sdk macosx --show-sdk-path)"
 bin="$tc/usr/bin"; work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 iflags=(); IFS=: read -ra dirs <<< "$incs"; for d in "${dirs[@]}"; do [ -n "$d" ] && iflags+=(-I "$d"); done
+fwflags=(); fwlibs=(); IFS=: read -ra trees <<< "$fwtrees"
+for t in ${trees[@]+"${trees[@]}"}; do
+	[ -n "$t" ] || continue
+	fwflags+=(-iframework "$t/usr/local/frameworks")
+	for fw in "$t"/System/Library/Frameworks/*.framework; do
+		name="$(basename "$fw" .framework)"
+		[ -f "$fw/Versions/A/$name" ] || { echo "build.sh: $fw has no Versions/A/$name" >&2; exit 1; }
+		fwlibs+=("$fw/Versions/A/$name")
+	done
+done
 "$bin/swiftc" -target "$target" -target-cpu "$cpu" -sdk "$sdk" -enable-experimental-feature Embedded -wmo -parse-as-library \
 	-Osize -swift-version 6 -warnings-as-errors "${iflags[@]}" -module-name "$module" \
 	-c "${swift[@]}" -o "$work/swift.o"
 objs=("$work/swift.o"); i=0
 for c in ${csrcs[@]+"${csrcs[@]}"}; do
 	"$bin/clang" --target="$target" -mcpu="$cpu" -isysroot "$sdk" -std=c23 -Os -Wall -Wextra -Werror "${iflags[@]}" \
-		-c "$c" -o "$work/c$i.o"
+		${fwflags[@]+"${fwflags[@]}"} -c "$c" -o "$work/c$i.o"
 	objs+=("$work/c$i.o"); i=$((i + 1))
 done
 xcrun ld -arch arm64 -platform_version macos 26.0 26.0 -dynamic -dead_strip -adhoc_codesign \
-	-syslibroot "$root" -lSystem -e _main -o "$out" "${objs[@]}" \
+	-syslibroot "$root" -lSystem -e _main -o "$out" "${objs[@]}" ${fwlibs[@]+"${fwlibs[@]}"} \
 	"$tc/usr/lib/swift/embedded/arm64-apple-macos/libswiftUnicodeDataTables.a"

@@ -1,0 +1,190 @@
+.\" Copyright (c) 1997
+.\"	Stefan Esser <se@FreeBSD.org>. All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\"
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+.\" ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+.\" IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+.\" ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+.\" FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+.\" DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+.\" OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+.\" HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+.\" LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+.\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+.\" SUCH DAMAGE.
+.\"
+.\" Adapted for NeoDarwin's pciconf, which reads the I/O Registry, 2026.
+.\"
+.Dd October 5, 2026
+.Dt PCICONF 8
+.Os
+.Sh NAME
+.Nm pciconf
+.Nd diagnostic utility for the PCI bus
+.Sh SYNOPSIS
+.Nm
+.Fl l Oo Fl v Oc Oo Fl C Ar class Oc Op Ar device
+.Nm
+.Fl a Ar device
+.Sh DESCRIPTION
+The
+.Nm
+utility lists the PCI functions the kernel has found.
+FreeBSD's
+.Nm
+reads them from
+.Pa /dev/pci ;
+NeoDarwin's reads the I/O Registry, where IOPCIFamily publishes an
+.Li IOPCIDevice
+for each function with its identification registers as properties
+.Po
+.Li vendor-id ,
+.Li device-id ,
+.Li revision-id ,
+.Li class-code ,
+.Li subsystem-vendor-id ,
+.Li subsystem-id
+and
+.Li reg
+.Pc .
+.Pp
+A
+.Ar device
+can be identified either by a device name if the device is
+attached to a driver or by a selector.
+Selectors identify a PCI device by its address
+and can take one of the following forms:
+.Pp
+.Bl -bullet -offset indent -compact
+.It
+.Li pci Ns Va domain Ns \&: Ns Va bus Ns \&: Ns Va device Ns \&: \
+Ns Va function Ns
+.It
+.Li pci Ns Va bus Ns \&: Ns Va device Ns \&: Ns Va function Ns
+.It
+.Li pci Ns Va bus Ns \&: Ns Va device Ns
+.El
+.Pp
+In the case of an abridged form, omitted selector components are assumed to be 0.
+An optional leading device name followed by @ and an optional final colon
+will be ignored; this is so that the first column in the output of
+.Nm
+.Fl l
+can be used without modification.
+All numbers are base 10.
+.Ss List Mode
+With the
+.Fl l
+option,
+.Nm
+lists PCI devices in the following format:
+.Bd -literal
+none0@pci0:0:0:0:	class=0x060000 rev=0x00 hdr=0x00 vendor=0x1b36 \e
+device=0x0008 subvendor=0x1af4 subdevice=0x1100
+NeoDarwinVirtioNet0@pci0:0:1:0:	class=0x020000 rev=0x00 hdr=0x00 \e
+vendor=0x1af4 device=0x1000 subvendor=0x1af4 subdevice=0x0001
+NeoDarwinVirtioBlock0@pci0:0:2:0:	class=0x010000 rev=0x00 hdr=0x00 \e
+vendor=0x1af4 device=0x1001 subvendor=0x1af4 subdevice=0x0002
+.Ed
+.Pp
+The first column gives the driver name, unit number, and selector.
+The driver name is the class of the I/O Registry entry attached to the
+function's
+.Li IOPCIDevice
+in the service plane, and the unit counts the functions that class drives,
+in the order they are listed.
+If there is no driver attached to the
+.Tn PCI
+device in question, the driver name will be
+.Dq none .
+Unit numbers for detached devices start at zero and are incremented for
+each detached device that is encountered.
+The domain is the PCI segment of the host bridge above the function.
+The second column is the class code, with the class byte printed as two
+hex digits, followed by the sub-class and the interface bytes.
+The third column prints the device's revision.
+The fourth column describes the header type: 0 for standard devices,
+1 for
+.Tn PCI
+to
+.Tn PCI
+bridges, and 2 for
+.Tn PCI
+to
+.Tn CardBus
+bridges, with the most significant bit set for a
+.Em multi-function
+device.
+IOPCIFamily doesn't publish the header type register, so
+.Nm
+derives it from the class code and from the other functions present.
+.Pp
+The sixth and seventh columns contain the vendor ID and the device ID of the
+device.
+The eighth and ninth columns contain the subvendor and subdevice IDs;
+they are 0 when the device has none.
+.Pp
+If the
+.Fl v
+option is specified, the class and subclass are printed by name on the
+lines that follow.
+FreeBSD also prints the vendor and device names from the
+.Pa pci_vendors
+database, which NeoDarwin doesn't install, so they aren't printed.
+.Pp
+If the
+.Fl C
+option is specified, only devices whose class, by the name
+.Fl v
+prints, matches
+.Ar class
+are listed.
+If a
+.Ar device
+is given, only that device is listed.
+.Ss Attached Mode
+With the
+.Fl a
+option,
+.Nm
+prints whether a driver is attached to
+.Ar device ,
+and exits with status 2 if none is.
+.Ss Not supported on NeoDarwin
+The options that read or write configuration space or a BAR
+.Pq Fl r , w , b , c , e , B , V , D , R , W
+need a user client that IOPCIFamily doesn't have on NeoDarwin, and fail
+with a message saying so.
+The device tree,
+.Fl t ,
+is
+.Xr ioreg 8 Ns 's:
+.Dl ioreg -c IOPCIDevice
+.Sh EXIT STATUS
+.Ex -std
+With
+.Fl a ,
+the status is 2 when no driver is attached.
+.Sh SEE ALSO
+.Xr ioreg 8
+.Sh HISTORY
+The
+.Nm
+utility appeared first in
+.Fx 2.2 .
+NeoDarwin's, over the I/O Registry, is new.
+.Sh AUTHORS
+.An Stefan Esser
+wrote FreeBSD's
+.Nm
+and its manual page.

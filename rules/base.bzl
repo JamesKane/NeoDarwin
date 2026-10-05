@@ -143,3 +143,33 @@ base_root = rule(
         "_script": attr.label(default = "//tools/base:stage_root.sh", allow_single_file = True),
     },
 )
+
+def _install_tree_impl(ctx):
+    out = ctx.actions.declare_directory(ctx.label.name)
+    cmds = ["set -eu"]
+    inputs = []
+    for target, path in ctx.attr.files.items():
+        f = target.files.to_list()
+        if len(f) != 1:
+            fail("%s: %s must be a single file" % (ctx.label, target.label))
+        inputs.append(f[0])
+        mode = "0444" if path.startswith("usr/share/") else "0555"
+        cmds.append("install -d \"%s/$(dirname %s)\" && install -m %s \"%s\" \"%s/%s\"" %
+                    (out.path, path, mode, f[0].path, out.path, path))
+    ctx.actions.run_shell(
+        command = "\n".join(cmds),
+        inputs = inputs,
+        outputs = [out],
+        mnemonic = "BaseInstallTree",
+        progress_message = "Staging %{label}",
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+base_install_tree = rule(
+    implementation = _install_tree_impl,
+    doc = "An install tree of single files at their install paths, for base_root: programs built by other " +
+          "rules (swift_embedded_executable) and their pages. Files under usr/share are 0444, the rest 0555.",
+    attrs = {
+        "files": attr.label_keyed_string_dict(allow_files = True, mandatory = True, doc = "File -> install path."),
+    },
+)

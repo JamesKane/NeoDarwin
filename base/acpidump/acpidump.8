@@ -1,0 +1,166 @@
+.\" ACPI (ACPI Package)
+.\"
+.\" Copyright (c) 1999 Doug Rabson <dfr@FreeBSD.org>
+.\" Copyright (c) 2000 Mitsuru IWASAKI <iwasaki@FreeBSD.org>
+.\" Copyright (c) 2000 Yasuo YOKOYAMA <yokoyama@jp.FreeBSD.org>
+.\" Copyright (c) 2000 Hiroki Sato <hrs@FreeBSD.org>
+.\" All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+.\" ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+.\" IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+.\" ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+.\" FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+.\" DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+.\" OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+.\" HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+.\" LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+.\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+.\" SUCH DAMAGE.
+.\" Adapted for NeoDarwin's acpidump, which reads the I/O Registry, 2026.
+.\"
+.Dd October 5, 2026
+.Dt ACPIDUMP 8
+.Os
+.Sh NAME
+.Nm acpidump
+.Nd dump ACPI tables and ASL
+.Sh SYNOPSIS
+.Nm
+.Op Fl d
+.Op Fl f Ar dsdt_input
+.Op Fl h
+.Op Fl o Ar dsdt_output
+.Op Fl s
+.Op Fl t
+.Op Fl T Ar table_name
+.Op Fl v
+.Sh DESCRIPTION
+The
+.Nm
+utility prints the machine's ACPI tables and can dump the DSDT to a file.
+In addition,
+.Nm
+can call
+.Xr iasl 8
+to disassemble AML
+(ACPI Machine Language)
+found in these tables and dump them as ASL
+(ACPI Source Language)
+to stdout.
+.Pp
+FreeBSD's
+.Nm
+reads the tables from physical memory through
+.Pa /dev/mem ,
+which NeoDarwin doesn't have.
+NeoDarwin's ACPI platform publishes them in the I/O Registry instead, as the
+.Qq ACPI Tables
+property: a dictionary from each table's signature to the whole table.
+A signature seen again gets a suffix, so SSDTs are
+.Qq SSDT ,
+.Qq SSDT-1 ,
+and so on; the RSDP and the XSDT are there too.
+.Nm
+finds the property by searching the service plane from its root, as
+.Dl ioreg -rd1 -k \(dqACPI Tables\(dq
+does.
+.Pp
+If any Secondary System Description Table
+(SSDT)
+entries exist, they will also be included in the output file and disassembly.
+.Pp
+When invoked with the
+.Fl t
+flag, the
+.Nm
+utility prints the RSDP, the XSDT with its entries, and the common header
+of every other table: Signature, Length, Revision, Checksum, OEMID,
+OEM Table ID, OEM Revision, Creator ID and Creator Revision, in FreeBSD's
+format.
+The MCFG's allocations (base address, segment group and bus range) are
+also printed.
+FreeBSD decodes the bodies of further tables (FADT, MADT, SPCR and others);
+NeoDarwin's
+.Nm
+doesn't yet.
+As in FreeBSD, the FACS and the DSDT are printed after the FADT.
+The registry doesn't keep the XSDT's order, so the FADT comes first and the
+other tables follow in order of signature.
+.Sh OPTIONS
+The following options are supported by
+.Nm :
+.Bl -tag -width indent
+.It Fl d
+Concatenate the DSDT and the SSDTs into a single image, disassemble it into
+ASL with
+.Pa /usr/sbin/iasl Fl d ,
+and print the results to stdout.
+.It Fl f Ar dsdt_input
+Load the DSDT from the specified file instead of the I/O Registry, for
+.Fl d .
+.It Fl h
+Display usage and exit.
+.It Fl o Ar dsdt_output
+Store the DSDT, with the SSDTs' bodies appended and its checksum redone,
+in the specified file.
+.It Fl s
+Like
+.Fl d ,
+but disassemble the DSDT and each SSDT separately.
+.It Fl t
+Print the tables as described above.
+.It Fl T Ar table_name
+Print only the tables with the four-character signature
+.Ar table_name .
+.It Fl v
+Enable verbose messages.
+.El
+.Sh FILES
+.Bl -tag -width /usr/sbin/iasl
+.It Pa /usr/sbin/iasl
+The ACPICA compiler and disassembler,
+.Fl d
+and
+.Fl s .
+.El
+.Sh EXIT STATUS
+.Ex -std
+.Sh EXAMPLES
+Print the tables:
+.Pp
+.Dl # acpidump -t
+.Pp
+Disassemble the DSDT and SSDTs:
+.Pp
+.Dl # acpidump -d > my.asl
+.Pp
+Save the DSDT to a file:
+.Pp
+.Dl # acpidump -o my.dsdt
+.Sh SEE ALSO
+.Xr iasl 8 ,
+.Xr ioreg 8
+.Sh HISTORY
+The
+.Nm
+utility appeared in
+.Fx 5.0 .
+NeoDarwin's, over the I/O Registry, is new.
+.Sh AUTHORS
+.An Doug Rabson Aq Mt dfr@FreeBSD.org ,
+.An Mitsuru IWASAKI Aq Mt iwasaki@FreeBSD.org ,
+.An Yasuo YOKOYAMA Aq Mt yokoyama@jp.FreeBSD.org ,
+.An Hiroki Sato Aq Mt hrs@FreeBSD.org
+wrote FreeBSD's
+.Nm
+and its manual page.

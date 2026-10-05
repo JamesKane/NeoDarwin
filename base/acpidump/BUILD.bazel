@@ -1,0 +1,40 @@
+load("//rules:darwin_executable.bzl", "swift_embedded_executable")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["acpidump.8"])
+
+# /usr/sbin/acpidump (P4-21 checkpoint 6b, docs/architecture/freebsd-parity.md
+# §2.1): FreeBSD's ACPI table dumper over the ACPI platform's "ACPI Tables", in
+# Embedded Swift over CoreFoundation and IOKit through the NDIOKit shim.
+swift_embedded_executable(
+    name = "acpidump",
+    srcs = glob(["Sources/*.swift"]),
+    c_srcs = ["//base/ndiokit:srcs"],
+    frameworks = [
+        "//base:corefoundation_framework",
+        "//base:iokit_framework",
+    ],
+    hdrs = ["//base/ndiokit:hdrs"],
+    root = "//base:root",
+)
+
+# acpidump on the build machine, against the host's CoreFoundation and IOKit,
+# with QEMU's tables (a neoboot capture) through its -X test seam: -t, -T
+# and -o (base/acpidump/host_test.sh). //kernel:sbsa_acpidump_test runs it
+# on QEMU against the kernel's "ACPI Tables".
+sh_test(
+    name = "acpidump_host_test",
+    size = "small",
+    srcs = ["host_test.sh"],
+    args = [
+        "$(rootpath :acpidump)",
+        "$(rootpath //boot/neoboot:testdata/qemu-virt-smp1.acpidump)",
+    ],
+    data = [
+        ":acpidump",
+        "//boot/neoboot:testdata/qemu-virt-smp1.acpidump",
+    ],
+    tags = ["requires-darwin", "no-remote"],
+)

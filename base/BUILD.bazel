@@ -1,6 +1,6 @@
 # The userland base built from Apple source: docs/base/libsystem.md.
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
-load("//rules:base.bzl", "base_library", "base_root", "base_sysroot")
+load("//rules:base.bzl", "base_install_tree", "base_library", "base_root", "base_sysroot")
 load("//rules:cc.bzl", "lang_audit_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -720,6 +720,19 @@ base_library(
     sysroot = ":sysroot",
 )
 
+# P4-21 checkpoint 6b: NeoDarwin's own pciconf and acpidump, Embedded Swift
+# over CoreFoundation and IOKit (base/pciconf, base/acpidump, base/ndiokit),
+# with their pages.
+base_install_tree(
+    name = "iokit_admin_tools",
+    files = {
+        "//base/acpidump": "usr/sbin/acpidump",
+        "//base/acpidump:acpidump.8": "usr/share/man/man8/acpidump.8",
+        "//base/pciconf": "usr/sbin/pciconf",
+        "//base/pciconf:pciconf.8": "usr/share/man/man8/pciconf.8",
+    },
+)
+
 # P4-21 checkpoints 4 and 5, FreeBSD's leaf utilities and heavier programs
 # (docs/architecture/freebsd-parity.md §2.1), from the source drop at
 # 050683bb8e13 with a shared compat layer (base/freebsd_cmds/compat).
@@ -1131,6 +1144,7 @@ base_root(
         ":ioreg_command",
         ":lsof_command",
         ":top_command",
+        ":iokit_admin_tools",
     ],
 )
 

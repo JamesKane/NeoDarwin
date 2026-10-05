@@ -478,7 +478,7 @@ usr.sbin/ac	apple	system_cmds-1039		P4-21	yes
 usr.sbin/accton	apple	system_cmds-1039		P4-21	yes	
 usr.sbin/acpi/acpiconf	equivalent	pmset (PowerManagement-1846.0.25.0.1)	usr/bin/pmset	P7-02	no	
 usr.sbin/acpi/acpidb	freebsd	FreeBSD usr.sbin/acpi/acpidb		P4-21	yes	ACPICA debugger over table files
-usr.sbin/acpi/acpidump	new	ACPI tables from the IOACPIPlatformDevice registry (as tools/dtdump on the host)		P4-21	no	unbuilt: the kernel publishes only the tables' signatures (acpi-tables) and their physical range (/chosen/memory-map ACPITables); userland can't read them without a kernel interface (§2.1)
+usr.sbin/acpi/acpidump	new	ACPI tables from the I/O Registry's "ACPI Tables" (base/acpidump)		P4-21	yes	Embedded Swift over CoreFoundation and IOKit (NDIOKit shim); -t headers and MCFG, -T, -o, -d/-s through iasl (§2.1)
 usr.sbin/acpi/iasl	freebsd	FreeBSD usr.sbin/acpi/iasl		P4-21	yes	ACPICA compiler
 usr.sbin/adduser	freebsd	FreeBSD usr.sbin/adduser		P4-22	no	
 usr.sbin/apm	n/a				no	not built for FreeBSD/arm64 (arch=amd64 && MK_APM || arch=i386 && MK_APM)
@@ -645,7 +645,7 @@ usr.sbin/ntp/ntptime	port	net/ntp			no	Apple's ntpd needs closed libraries; the 
 usr.sbin/ntp/sntp	apple	ntp-139		P4-24	yes	sntp only (docs/base/pf-ntp.md)
 usr.sbin/nvram	n/a				no	powerpc Open Firmware NVRAM (UEFI variables: efivar)
 usr.sbin/ofwdump	n/a				no	Open Firmware
-usr.sbin/pciconf	new	pciconf-compatible listing over the IOKit registry (§3)		P4-21	no	unbuilt: a first-party tool, Swift by the language policy (T1); swift_embedded_executable doesn't link CoreFoundation and IOKit yet (§2.1, cp6b resume notes)
+usr.sbin/pciconf	new	pciconf-compatible listing over the IOKit registry (§3, base/pciconf)		P4-21	yes	Embedded Swift over CoreFoundation and IOKit (NDIOKit shim); -l, -lv (class names only), -C, -a; config-space options refused: IOPCIFamily has no user client
 usr.sbin/periodic	freebsd	FreeBSD usr.sbin/periodic		P4-23	no	
 usr.sbin/pkg	equivalent	ndpkg (docs/architecture/packaging.md)	usr/sbin/ndpkg	P2-04	no	
 usr.sbin/pmc	n/a				no	hwpmc(4); xnu has kpc

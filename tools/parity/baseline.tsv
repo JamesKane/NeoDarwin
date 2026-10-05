@@ -477,7 +477,7 @@ usr.sbin/ac	apple	yes
 usr.sbin/accton	apple	yes
 usr.sbin/acpi/acpiconf	equivalent	no
 usr.sbin/acpi/acpidb	freebsd	yes
-usr.sbin/acpi/acpidump	new	no
+usr.sbin/acpi/acpidump	new	yes
 usr.sbin/acpi/iasl	freebsd	yes
 usr.sbin/adduser	freebsd	no
 usr.sbin/apm	n/a	no
@@ -644,7 +644,7 @@ usr.sbin/ntp/ntptime	port	no
 usr.sbin/ntp/sntp	apple	yes
 usr.sbin/nvram	n/a	no
 usr.sbin/ofwdump	n/a	no
-usr.sbin/pciconf	new	no
+usr.sbin/pciconf	new	yes
 usr.sbin/periodic	freebsd	no
 usr.sbin/pkg	equivalent	no
 usr.sbin/pmc	n/a	no
