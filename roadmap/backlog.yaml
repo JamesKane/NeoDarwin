@@ -427,7 +427,7 @@ epics:
     exit: "an encrypted var unlocks at boot from a prompt on the console; an encrypted home unlocks with zfs load-key"
     doc: docs/architecture/filesystems.md
   - id: P3-11
-    title: "zfs.kext follow-ups after P3-01 — zvols and ZFSDataset proxies on IOStorageFamily, GPT labels on whole disks, .zfs/snapshot mounts, the kext in the default collection with a limited personality, the test suite's \"to investigate\" failures"
+    title: "zfs.kext follow-ups after P3-01 — zvols and ZFSDataset proxies on IOStorageFamily, GPT labels on whole disks with gpart (a FreeBSD-compatible subset over IOStorageFamily), .zfs/snapshot mounts, the kext in the default collection with a limited personality, the test suite's \"to investigate\" failures"
     phase: 3
     owner: storage
     status: todo
@@ -455,7 +455,7 @@ epics:
     title: "Base userland completion — the remaining Apple command projects (file_cmds, text_cmds, shell_cmds, system_cmds, adv_cmds, misc_cmds, diskdev_cmds, patch_cmds, network_cmds), FreeBSD sources where Apple is closed, a line-editing sh, vi, less, mandoc"
     phase: 4
     owner: userland
-    status: todo
+    status: doing
     depends: [P4-20, P1-08]
     exit: "every inventory row marked base is built and installed, and passes its program's tests from the FreeBSD test suite where one exists"
     doc: docs/architecture/freebsd-parity.md

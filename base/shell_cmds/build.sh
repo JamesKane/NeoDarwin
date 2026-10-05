@@ -5,11 +5,16 @@
 # printf, uname, date and hostname targets (project settings: gnu99,
 # __FBSDID=__RCSID, DEAD_CODE_STRIPPING; INSTALL_PATH /usr/bin unless the
 # target says /bin), and install-files.sh's [ link.
-#   build.sh OUT SHELL_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root, //base:libedit_dylib)
+#   build.sh OUT SHELL_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root, //base:libedit_dylib,
+#            //base:libsbuf_dylib, //base:libutil_dylib, //base:libxo_dylib, //base:libresolv_dylib)
 # OUT receives bin/sh, bin/{echo,test,[,pwd,kill,sleep,date,hostname,expr}
 # and usr/bin/{env,id,groups,whoami,printf,uname,basename,dirname,true,
 # false,seq,mktemp,which,tee,xargs,find,hexdump,od,script} and
-# usr/libexec/path_helper.
+# usr/libexec/path_helper, and the project's other targets (P4-21, at the
+# end): bin/realpath, usr/sbin/chroot, the locate programs and scripts with
+# their launchd job and /etc/locate.rc, alias and its builtin names, and
+# usr/bin/{apply,getopt,jot,killall,lastcomm,lockf,logname,nice,nohup,
+# printenv,renice,stdbuf,time,users,w,uptime,what,whereis,who,yes}.
 # The sh target is FreeBSD's ash, which Apple installs as /usr/local/bin/ash
 # (sh.xcconfig) and links with libedit (OTHER_LDFLAGS -ledit); its /bin/sh
 # is closed. NeoDarwin installs ash as /bin/sh, built as sh.xcconfig builds
@@ -21,6 +26,12 @@ DEPS=(); for d in "$@"; do DEPS+=("$(abspath "$d")"); done
 ROOT="$(find_root "${DEPS[@]}")"
 LE=""; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/libedit.3.dylib" ] && LE="$d"; done
 [ -n "$LE" ] || { echo "shell_cmds: no DEPROOT holds usr/lib/libedit.3.dylib (pass //base:libedit_dylib)" >&2; exit 1; }
+lib_root() {   # lib_root DYLIB: the DEPROOT holding usr/lib/DYLIB
+	local d; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/$1" ] && { printf '%s' "$d"; return 0; }; done
+	echo "shell_cmds: no DEPROOT holds usr/lib/$1" >&2; return 1
+}
+SBUF="$(lib_root libsbuf.dylib)"; UTIL="$(lib_root libutil.dylib)"; XO="$(lib_root libxo.dylib)"
+RESOLV="$(lib_root libresolv.9.dylib)"
 PROJ="$(cd "$(dirname "$0")" && pwd)"
 B="$(mktemp -d)"; trap 'rm -rf "$B"' EXIT
 S="$(stage_src "$S" "$B/src" "$PROJ/patches")"   # patches/ applied
@@ -92,3 +103,52 @@ tool "$B" "$ROOT" "$OUT/usr/bin/hexdump" "$B/cflags" hexdump/conv.c hexdump/disp
 	hexdump/hexsyntax.c hexdump/odsyntax.c hexdump/parse.c "$(vers hexdump)"
 # install-files.sh: od is a hard link to hexdump (a copy here).
 cp "$OUT/usr/bin/hexdump" "$OUT/usr/bin/od"
+
+# The project's other targets (P4-21). One source each, INSTALL_PATH
+# /usr/bin unless the target says otherwise; their warning settings change
+# no interface. lockf and stdbuf are newer targets with Xcode's template
+# settings (gnu11 and gnu17), which change nothing here either.
+for t in getopt jot killall lastcomm lockf logname nice nohup printenv renice stdbuf time what whereis yes; do
+	tool "$B" "$ROOT" "$OUT/usr/bin/$t" "$B/cflags" "$t/$t.c" "$(vers "$t")"
+done
+tool "$B" "$ROOT" "$OUT/bin/realpath" "$B/cflags" realpath/realpath.c "$(vers realpath)"
+tool "$B" "$ROOT" "$OUT/usr/sbin/chroot" "$B/cflags" chroot/chroot.c "$(vers chroot)"
+# who: its GCC_PREPROCESSOR_DEFINITIONS add _UTMPX_COMPAT and SUPPORT_UTMPX.
+write_rsp "$B/who.rsp" "${base[@]}" -D__FBSDID=__RCSID -D_UTMPX_COMPAT -DSUPPORT_UTMPX
+tool "$B" "$ROOT" "$OUT/usr/bin/who" "$B/who.rsp" who/who.c "$(vers who)"
+# users is C++ (users.cc; the project's gnu++17), linked with libc++, whose
+# headers come from the sysroot ahead of the C ones.
+write_rsp "$B/users.rsp" "${TARGET_FLAGS[@]}" -Os -std=gnu++17 -fno-common -D__FBSDID=__RCSID -nostdinc++ \
+	-isystem "$SYSROOT/usr/include/c++/v1" $(cmd_sysroot_flags "$SYSROOT")
+compile "$B/obj/users_cc" "$B/users.rsp" users/users.cc
+tool "$B" "$ROOT" "$OUT/usr/bin/users" "$B/cflags" "$(vers users)" -- "$B"/obj/users_cc/*.o -lc++
+# apply and w: libsbuf (base/libsbuf: FreeBSD's sbuf under macOS's usbuf_
+# names, declared by <usbuf.h>). w adds HAVE_KVM=0 and HAVE_UTMPX=1, and
+# links libutil, libxo and, on macOS, libresolv; install-files.sh links
+# uptime to it (a copy here).
+write_rsp "$B/apply.rsp" "${base[@]}" -D__FBSDID=__RCSID -I"$SBUF/usr/local/include"
+tool "$B" "$ROOT" "$OUT/usr/bin/apply" "$B/apply.rsp" apply/apply.c "$(vers apply)" -- -L"$SBUF/usr/lib" -lsbuf
+write_rsp "$B/w.rsp" "${base[@]}" -D__FBSDID=__RCSID -DHAVE_KVM=0 -DHAVE_UTMPX=1 -I"$SBUF/usr/local/include" \
+	-I"$UTIL/usr/local/include" -I"$XO/usr/local/include"
+tool "$B" "$ROOT" "$OUT/usr/bin/w" "$B/w.rsp" w/w.c w/proc_compare.c w/pr_time.c w/fmt.c "$(vers w)" -- \
+	-L"$SBUF/usr/lib" -lsbuf -L"$UTIL/usr/lib" -lutil -L"$XO/usr/lib" -lxo -L"$RESOLV/usr/lib" -lresolv
+cp "$OUT/usr/bin/w" "$OUT/usr/bin/uptime"
+# locate (with locate.bigram and locate.code, INSTALL_PATH /usr/libexec),
+# its launchd job (Disabled, as on macOS) and /etc/locate.rc (copy
+# phases), and install-files.sh's updatedb scripts.
+tool "$B" "$ROOT" "$OUT/usr/bin/locate" "$B/cflags" locate/locate/locate.c locate/locate/util.c "$(vers locate)"
+# The helpers include locate/locate's headers; their version symbols take
+# the product name as an identifier (locate_bigram), as Xcode's do.
+write_rsp "$B/locate.rsp" "${base[@]}" -D__FBSDID=__RCSID -iquote locate/locate
+tool "$B" "$ROOT" "$OUT/usr/libexec/locate.bigram" "$B/locate.rsp" locate/bigram/locate.bigram.c "$(vers locate_bigram)"
+tool "$B" "$ROOT" "$OUT/usr/libexec/locate.code" "$B/locate.rsp" locate/code/locate.code.c "$(vers locate_code)"
+install -m 0755 locate/locate/updatedb.sh "$OUT/usr/libexec/locate.updatedb"
+install -m 0755 locate/locate/concatdb.sh "$OUT/usr/libexec/locate.concatdb"
+install -m 0755 locate/locate/mklocatedb.sh "$OUT/usr/libexec/locate.mklocatedb"
+mkdir -p "$OUT/System/Library/LaunchDaemons" "$OUT/private/etc"
+install -m 0644 locate/locate/com.apple.locate.plist "$OUT/System/Library/LaunchDaemons/"
+install -m 0644 locate/locate/locate.rc "$OUT/private/etc/"
+# install-files.sh: alias is alias/generic.sh, and each name in
+# builtins.txt is a link to it (copies here).
+install -m 0755 alias/generic.sh "$OUT/usr/bin/alias"
+while read -r b; do [ -n "$b" ] && cp "$OUT/usr/bin/alias" "$OUT/usr/bin/$b"; done < xcodescripts/builtins.txt

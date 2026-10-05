@@ -1201,6 +1201,68 @@ sh_test(
     tags = ["manual", "kernel", "qemu"],
 )
 
+# The base's command-line programs (P4-21, docs/architecture/freebsd-parity.md
+# §2.1): a sample of each project's, run as root on //images:session_root.
+# text_cmds: jot's, rev's, base64's, md5's and sha256's output, and ed
+# editing a file; patch_cmds: patch applying diff -u's output, diff3 and
+# sdiff; shell_cmds: apply, yes, realpath, uptime (w), getopt, a locate
+# database built by locate.mklocatedb and searched, and time; file_cmds:
+# pathchk, ipcs. Each expected
+# line is output the typed text can't contain ("" splits the words that
+# would match).
+sh_test(
+    name = "sbsa_base_commands_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' 'jot -s, 3 7; echo abc-rev | rev; echo hi | base64; md5 -s x; sha256 -q -s x\\n'",
+        "--send-after '2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881' " +
+        "'echo ndx > /tmp/e; (echo s/x/xxx/; echo w; echo q) | ed -s /tmp/e; cat /tmp/e\\n'",
+        "--send-after 'ndxxx' 'echo patch > /tmp/p1; echo old >> /tmp/p1; echo patch > /tmp/p2; echo new >> /tmp/p2; " +
+        "diff -u /tmp/p1 /tmp/p2 > /tmp/d; patch -s /tmp/p1 < /tmp/d; paste -sd= /tmp/p1; " +
+        "diff3 /tmp/p1 /tmp/p2 /tmp/p2 && echo diff3-o\"\"k; sdiff -s /tmp/p1 /tmp/p2 && echo sdiff-o\"\"k\\n'",
+        "--send-after 'sdiff-ok' 'apply \"echo ap-%1\" q r; yes yy | head -2 | paste -sd. -; realpath /etc; uptime; " +
+        "getopt ab: -a -b x; printf /zz/loc%s fnd > /tmp/l; echo >> /tmp/l; " +
+        "/usr/libexec/locate.mklocatedb < /tmp/l > /tmp/db; locate -d /tmp/db fnd; /usr/bin/time true; " +
+        "pathchk -p /ok/path && echo pathchk-o\"\"k; ipcs | head -1\\n'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'7,8,9'",
+        "'ver-cba'",
+        "'aGkK'",
+        "'9dd4e461268c8034f5c8564e155c67a6'",
+        "'2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881'",
+        "'ndxxx'",
+        "'patch=new'",
+        "'diff3-ok'",
+        "'sdiff-ok'",
+        "'ap-q'",
+        "'ap-r'",
+        "'yy.yy'",
+        "'/private/etc'",
+        "'load averages:'",
+        "' -a -b x --'",
+        "'/zz/locfnd'",
+        "' real '",
+        "'pathchk-ok'",
+        "'IPC status from'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:session_root",
+        "//images:session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
 # PAM (docs/base/session.md, "PAM"): login and su authenticate through
 # OpenPAM, its modules dlopened under code-signing enforcement. On
 # //images:pam_session_root (test accounts test, in group admin, and guest,

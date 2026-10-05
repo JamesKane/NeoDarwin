@@ -1,0 +1,11 @@
+# FreeBSD's lib/libsbuf (sys/kern/subr_sbuf.c and subr_prf.c, sys/sys/sbuf.h and ctype.h), which
+# base/libsbuf/build.sh builds as /usr/lib/libsbuf.dylib for apply(1) and
+# w(1). macOS ships libsbuf (usbuf_*) but Apple publishes no source.
+# Fetched unmodified by //rules:pinned_files.bzl.
+# Repository: https://github.com/freebsd/freebsd-src
+# commit: 050683bb8e136981e4a1f66e845ab05c135630f4
+# Format: shasum -a 256 (hash, two spaces, path). Regenerate with tools/pinned/lock.sh.
+561350b1265fbd6db5aeab6725d610a7769b00e586641caaba9974e4b191535c  sys/kern/subr_prf.c
+55b1e6085d19c2a604db214b61121c7b4904a7938f63d85cb2d7b831ab7f2033  sys/kern/subr_sbuf.c
+b10ebe406c5a5d322597c995066078de06be155b89e3b7b1798d9470c19b05ad  sys/sys/ctype.h
+28d6df518c83783093e20d613740d0d2c8758014bca522f293d6ff5de01f4c19  sys/sys/sbuf.h

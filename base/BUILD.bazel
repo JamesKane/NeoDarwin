@@ -328,10 +328,30 @@ base_library(
     sysroot = ":sysroot",
 )
 
+# FreeBSD's libmd and libsbuf (base/libmd, base/libsbuf), which macOS ships
+# unpublished: md5's digests, and apply's and w's sbuf(9).
+base_library(
+    name = "libmd_dylib",
+    data = glob(["libmd/**"]) + ["commands.sh", "//kernel/neodarwin/crypto:compat_headers"],
+    deps = [":root"],
+    script = "libmd/build.sh",
+    srcs = "@freebsd_libmd//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libsbuf_dylib",
+    data = glob(["libsbuf/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "libsbuf/build.sh",
+    srcs = "@freebsd_libsbuf//:all",
+    sysroot = ":sysroot",
+)
+
 base_library(
     name = "shell_commands",
     data = glob(["shell_cmds/**"]) + ["commands.sh"],
-    deps = [":root", ":libedit_dylib"],
+    deps = [":root", ":libedit_dylib", ":libsbuf_dylib", ":libutil_dylib", ":libxo_dylib", ":libresolv_dylib"],
     script = "shell_cmds/build.sh",
     srcs = "@apple_shell_cmds//:all",
     sysroot = ":sysroot",
@@ -395,7 +415,7 @@ base_library(
 base_library(
     name = "file_commands",
     data = glob(["file_cmds/**"]) + ["commands.sh"],
-    deps = [":root", ":libutil_dylib", ":libxo_dylib"],
+    deps = [":root", ":libutil_dylib", ":libxo_dylib", ":libmd_dylib"],
     script = "file_cmds/build.sh",
     srcs = "@apple_file_cmds//:all",
     sysroot = ":sysroot",
@@ -404,7 +424,7 @@ base_library(
 base_library(
     name = "text_commands",
     data = glob(["text_cmds/**"]) + ["commands.sh"],
-    deps = [":root", ":libxo_dylib", ":libutil_dylib"],
+    deps = [":root", ":libxo_dylib", ":libutil_dylib", ":libncurses_dylib", ":libmd_dylib"],
     script = "text_cmds/build.sh",
     srcs = "@apple_text_cmds//:all",
     sysroot = ":sysroot",
@@ -413,7 +433,7 @@ base_library(
 base_library(
     name = "adv_commands",
     data = glob(["adv_cmds/**"]) + ["commands.sh"],
-    deps = [":root"],
+    deps = [":root", ":libxo_dylib"],
     script = "adv_cmds/build.sh",
     srcs = "@apple_adv_cmds//:all",
     sysroot = ":sysroot",
@@ -713,6 +733,8 @@ base_root(
         ":root",
         ":libutil_dylib",
         ":libxo_dylib",
+        ":libmd_dylib",
+        ":libsbuf_dylib",
         ":shell_commands",
         ":system_commands",
         ":libpam_dylib",
@@ -801,6 +823,8 @@ base_root(
     ("libdyld", ":dyld_images", "usr/lib/system/libdyld.dylib", "dyld/exports.txt"),
     ("libutil", ":libutil_dylib", "usr/lib/libutil.dylib", "libutil/exports.txt"),
     ("libxo", ":libxo_dylib", "usr/lib/libxo.dylib", "libxo/exports.txt"),
+    ("libmd", ":libmd_dylib", "usr/lib/libmd.dylib", "libmd/exports.txt"),
+    ("libsbuf", ":libsbuf_dylib", "usr/lib/libsbuf.dylib", "libsbuf/exports.txt"),
     ("libxpc", ":libxpc", "usr/lib/system/libxpc.dylib", "launchd/exports.txt"),
     ("libncurses", ":libncurses_dylib", "usr/lib/libncurses.5.4.dylib", "ncurses/exports.txt"),
     ("libpam", ":libpam_dylib", "usr/lib/libpam.2.dylib", "openpam/exports/libpam.2.txt"),
@@ -861,5 +885,7 @@ lang_audit_test(
         "adv_cmds/compat/**/*.h",
         "adv_cmds/compat/*.c",
         "system_cmds/compat/**/*.h",
+        "libmd/compat/*.h",
+        "libsbuf/compat/*.h",
     ]),
 )

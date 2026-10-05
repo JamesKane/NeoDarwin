@@ -5,8 +5,8 @@
 # diff targets (gnu11, INSTALL_PATH /usr/bin; cmp's OTHER_LDFLAGS -lutil,
 # diff's HEADER_SEARCH_PATHS $(SRCROOT)/diff).
 #   build.sh OUT PATCH_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root, //base:libutil)
-# OUT receives usr/bin/{cmp,diff}. patch, diff3, diffstat and sdiff are
-# left for later.
+# OUT receives usr/bin/{cmp,diff,diff3,patch,sdiff} (diff3, patch and sdiff
+# for P4-21). diffstat, which FreeBSD's base doesn't have, is left out.
 source "$(dirname "$0")/../../tools/base/common.sh"
 source "$(dirname "$0")/../commands.sh"
 OUT="$(abspath "$1")"; P="$(abspath "$2")"; SYSROOT="$(abspath "$3")"; shift 3
@@ -30,3 +30,13 @@ tool "$B" "$ROOT" "$OUT/usr/bin/diff" "$B/diff.rsp" diff/diff.c diff/diff_atomiz
 	diff/diff_myers.c diff/diff_output.c diff/diff_output_edscript.c diff/diff_output_plain.c \
 	diff/diff_output_unidiff.c diff/diff_patience.c diff/diffdir.c diff/diffreg.c diff/diffreg_new.c diff/pr.c \
 	diff/recallocarray.c diff/xmalloc.c "$(vers diff)"
+
+# patch, diff3 and sdiff: INSTALL_PATH /usr/bin, gnu11, no libraries. diff3
+# and sdiff are newer targets with Xcode's template settings, whose
+# MACOSX_DEPLOYMENT_TARGETs (12.0, 13.0) are older than the release's and
+# change nothing here.
+write_rsp "$B/cflags" "${base[@]}"
+tool "$B" "$ROOT" "$OUT/usr/bin/patch" "$B/cflags" patch/patch.c patch/pch.c patch/inp.c patch/util.c \
+	patch/backupfile.c patch/vcs.c patch/mkpath.c "$(vers patch)"
+tool "$B" "$ROOT" "$OUT/usr/bin/diff3" "$B/cflags" diff3/diff3.c diff3/xmalloc.c "$(vers diff3)"
+tool "$B" "$ROOT" "$OUT/usr/bin/sdiff" "$B/cflags" sdiff/edit.c sdiff/sdiff.c "$(vers sdiff)"

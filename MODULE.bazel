@@ -631,6 +631,23 @@ pinned_files(
     url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
 )
 
+# FreeBSD's lib/libmd and lib/libsbuf (base/libmd, base/libsbuf): macOS
+# ships libmd (md5's digests) and libsbuf (apply's and w's) but Apple
+# doesn't publish them.
+pinned_files(
+    name = "freebsd_libmd",
+    build_file = "//base:libmd/freebsd.BUILD",
+    lockfile = "//base:libmd/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
+pinned_files(
+    name = "freebsd_libsbuf",
+    build_file = "//base:libsbuf/freebsd.BUILD",
+    lockfile = "//base:libsbuf/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
 # FreeBSD's sbin/dhclient, NeoDarwin's DHCP client (base/dhclient): Apple's,
 # bootp's IPConfiguration, is a configd plugin.
 pinned_files(

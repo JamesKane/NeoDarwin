@@ -1,0 +1,23 @@
+# FreeBSD's lib/libmd (the MD5, SHA-1, SHA-224/256 and SHA-384/512 digests
+# and their End/File/Data helpers), which base/libmd/build.sh builds as
+# /usr/lib/libmd.dylib for md5(1). macOS ships libmd but Apple publishes no
+# source. Fetched unmodified by //rules:pinned_files.bzl.
+# Repository: https://github.com/freebsd/freebsd-src
+# commit: 050683bb8e136981e4a1f66e845ab05c135630f4
+# Format: shasum -a 256 (hash, two spaces, path). Regenerate with tools/pinned/lock.sh.
+996dc6002389c1c7ccc84f8f0ae3b91d6a09cb326c8c144683f3e683930613b5  lib/libmd/md5.h
+dd640bc6271d7d18498d2f9aa540c56b9cdbb725b981ef8a9f0d2cbc8ee3943d  lib/libmd/mdXhl.c
+6e41403c5c68e6d4abbecffeb9fdeee1f40f6449c23cf87ffb469188fb1eb37a  lib/libmd/sha_locl.h
+f6806d2af6ede7684d0fc4003a5a880b2f5c5ad9e7317a1d727bb9fa372a974b  lib/libmd/sha.h
+e7052bf8d478fe9d3eb6613908842391ed5b6ac1703b6a8c450476c54b91a5f1  lib/libmd/sha1c.c
+13446b7f461ff69b6b77d87df414c91ac47290dc49cc8cae91a900a774738216  sys/crypto/md5c.c
+9f9fa89d056addadd23576d915c1c3a99bf72b64f6e00f259addc669fbcd3d80  sys/crypto/sha2/sha224.h
+10f3fd28a59056ad4701c58570d55cd4de4dcebfbaa490c154b7005f8e16dabe  sys/crypto/sha2/sha256.h
+9b252700a607753fc42b6a360c1dc248a521ad6b9fc5d6b1e51c51a4958bfffb  sys/crypto/sha2/sha256c_impl.h
+9eed9976f45476f7dd0dd452861416ff1f45b2a7035909171dc6fef836ba9b61  sys/crypto/sha2/sha256c.c
+481a07d350028e6df89d3feff7791dc0f69b0765994c05b819fbdfaf5f260364  sys/crypto/sha2/sha384.h
+b9cb2c524bae008bcdc6121d83340d62d93f1d8430dc5d993752aad025ae949b  sys/crypto/sha2/sha512.h
+91e6cefeecc56cbdd395edc3fc01bdd5de702d350d8a52978d3e23905224d9e7  sys/crypto/sha2/sha512c_impl.h
+5b123884021e86244b9eb99f81f1b6ea80a1a536e51420aa570ebd424895aaac  sys/crypto/sha2/sha512c.c
+0b5e37349d210dfab3e8aea25ef1a74c0d8bd68af248550819cd2f816f2b7d13  sys/crypto/sha2/sha512t.h
+f00c8b4a9f3c6c80cffe6a8e41fda8985218034429082f981a0d0435ec47c9d6  sys/sys/md5.h
