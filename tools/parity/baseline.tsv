@@ -57,7 +57,7 @@ sbin/devd	equivalent	yes
 sbin/devfs	n/a	no
 sbin/devmatch	n/a	no
 sbin/dhclient	freebsd	yes
-sbin/dmesg	apple	no
+sbin/dmesg	apple	yes
 sbin/dump	n/a	no
 sbin/dumpfs	n/a	no
 sbin/dumpon	n/a	no
@@ -116,7 +116,7 @@ sbin/pflowctl	n/a	no
 sbin/ping	apple	yes
 sbin/quotacheck	apple	no
 sbin/rcorder	n/a	no
-sbin/reboot	apple	no
+sbin/reboot	apple	yes
 sbin/recoverdisk	freebsd	no
 sbin/resolvconf	freebsd	yes
 sbin/restore	n/a	no
@@ -125,7 +125,7 @@ sbin/routed	freebsd	no
 sbin/rtsol	freebsd	yes
 sbin/savecore	n/a	no
 sbin/setkey	apple	no
-sbin/shutdown	apple	no
+sbin/shutdown	apple	yes
 sbin/swapon	n/a	no
 sbin/sysctl	apple	yes
 sbin/tunefs	n/a	no
@@ -160,7 +160,7 @@ usr.bin/bzip2recover	apple	no
 usr.bin/c89	freebsd	no
 usr.bin/c99	freebsd	no
 usr.bin/caesar	port	no
-usr.bin/calendar	apple	no
+usr.bin/calendar	apple	yes
 usr.bin/cap_mkdb	apple	no
 usr.bin/chat	apple	no
 usr.bin/chpass	apple	yes
@@ -248,7 +248,7 @@ usr.bin/from	port	no
 usr.bin/fstat	equivalent	no
 usr.bin/fsync	freebsd	no
 usr.bin/ftp	port	no
-usr.bin/gcore	apple	no
+usr.bin/gcore	apple	yes
 usr.bin/gencat	apple	yes
 usr.bin/genl	n/a	no
 usr.bin/getaddrinfo	freebsd	no
@@ -283,7 +283,7 @@ usr.bin/last	apple	yes
 usr.bin/lastcomm	apple	yes
 usr.bin/ldd	equivalent	no
 usr.bin/ldd32	n/a	no
-usr.bin/leave	apple	no
+usr.bin/leave	apple	yes
 usr.bin/less	apple	no
 usr.bin/lessecho	apple	no
 usr.bin/lesskey	apple	no
@@ -296,7 +296,7 @@ usr.bin/locate/code	apple	yes
 usr.bin/locate/locate	apple	yes
 usr.bin/lock	freebsd	no
 usr.bin/lockf	apple	yes
-usr.bin/logger	apple	no
+usr.bin/logger	apple	yes
 usr.bin/login	apple	yes
 usr.bin/logins	freebsd	no
 usr.bin/logname	apple	yes
@@ -309,7 +309,7 @@ usr.bin/mail	apple	no
 usr.bin/man	apple	no
 usr.bin/mandoc	freebsd	no
 usr.bin/mdo	n/a	no
-usr.bin/mesg	apple	no
+usr.bin/mesg	apple	yes
 usr.bin/mididump	n/a	no
 usr.bin/ministat	freebsd	no
 usr.bin/mkcsmapper	apple	no
@@ -324,7 +324,7 @@ usr.bin/morse	port	no
 usr.bin/msgs	port	no
 usr.bin/mt	n/a	no
 usr.bin/nc	apple	no
-usr.bin/ncal	apple	no
+usr.bin/ncal	apple	yes
 usr.bin/ncurses	apple	no
 usr.bin/netstat	apple	yes
 usr.bin/newgrp	apple	no
@@ -367,7 +367,7 @@ usr.bin/ofed/librdmacm/rping	n/a	no
 usr.bin/ofed/librdmacm/ucmatose	n/a	no
 usr.bin/ofed/librdmacm/udaddy	n/a	no
 usr.bin/ofed/opensm	n/a	no
-usr.bin/pagesize	apple	no
+usr.bin/pagesize	apple	yes
 usr.bin/passwd	apple	yes
 usr.bin/paste	apple	yes
 usr.bin/patch	apple	yes
@@ -433,14 +433,14 @@ usr.bin/true	apple	yes
 usr.bin/truncate	apple	yes
 usr.bin/truss	equivalent	no
 usr.bin/ts	freebsd	no
-usr.bin/tsort	apple	no
+usr.bin/tsort	apple	yes
 usr.bin/tty	apple	yes
 usr.bin/ul	apple	yes
 usr.bin/uname	apple	yes
 usr.bin/unexpand	apple	yes
 usr.bin/unifdef	freebsd	no
 usr.bin/uniq	apple	yes
-usr.bin/units	apple	no
+usr.bin/units	apple	yes
 usr.bin/unvis	apple	yes
 usr.bin/unzip	apple	no
 usr.bin/usbhidaction	n/a	no
@@ -452,7 +452,7 @@ usr.bin/vis	apple	yes
 usr.bin/vmstat	equivalent	no
 usr.bin/vtfontcvt	freebsd	no
 usr.bin/w	apple	yes
-usr.bin/wall	apple	no
+usr.bin/wall	apple	yes
 usr.bin/wc	apple	yes
 usr.bin/wg	port	no
 usr.bin/what	apple	yes
@@ -460,7 +460,7 @@ usr.bin/whereis	apple	yes
 usr.bin/which	apple	yes
 usr.bin/who	apple	yes
 usr.bin/whois	apple	yes
-usr.bin/write	apple	no
+usr.bin/write	apple	yes
 usr.bin/xargs	apple	yes
 usr.bin/xinstall	apple	yes
 usr.bin/xo	freebsd	no
@@ -473,8 +473,8 @@ usr.bin/ypcat	n/a	no
 usr.bin/ypmatch	n/a	no
 usr.bin/ypwhich	n/a	no
 usr.bin/zstd	freebsd	no
-usr.sbin/ac	apple	no
-usr.sbin/accton	apple	no
+usr.sbin/ac	apple	yes
+usr.sbin/accton	apple	yes
 usr.sbin/acpi/acpiconf	equivalent	no
 usr.sbin/acpi/acpidb	freebsd	no
 usr.sbin/acpi/acpidump	new	no
@@ -688,7 +688,7 @@ usr.sbin/rtadvd	freebsd	yes
 usr.sbin/rtprio	n/a	no
 usr.sbin/rtsold	freebsd	yes
 usr.sbin/rwhod	port	no
-usr.sbin/sa	apple	no
+usr.sbin/sa	apple	yes
 usr.sbin/sendmail	port	no
 usr.sbin/service	new	no
 usr.sbin/services_mkdb	n/a	no
@@ -750,7 +750,7 @@ usr.sbin/yppoll	n/a	no
 usr.sbin/yppush	n/a	no
 usr.sbin/ypserv	n/a	no
 usr.sbin/ypset	n/a	no
-usr.sbin/zdump	apple	no
-usr.sbin/zic	apple	no
+usr.sbin/zdump	apple	yes
+usr.sbin/zic	apple	yes
 usr.sbin/zonectl	n/a	no
 usr.sbin/zzz	n/a	no

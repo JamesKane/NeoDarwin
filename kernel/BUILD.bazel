@@ -1207,7 +1207,11 @@ sh_test(
 # editing a file; patch_cmds: patch applying diff -u's output, diff3 and
 # sdiff; shell_cmds: apply, yes, realpath, uptime (w), getopt, a locate
 # database built by locate.mklocatedb and searched, and time; file_cmds:
-# pathchk, ipcs. Each expected
+# pathchk, ipcs; misc_cmds: cal, tsort, units, ncal -e, calendar on a
+# one-line file; system_cmds: pagesize, dmesg (the kernel's message buffer),
+# zdump, zic, shutdown -s (refused: no IOPMLib, patch 0006); basic_cmds:
+# mesg, write to the console; remote_cmds: logger, wall. cal and ncal warn
+# "setlocale" until the locale data (cp3). Each expected
 # line is output the typed text can't contain ("" splits the words that
 # would match).
 sh_test(
@@ -1232,6 +1236,12 @@ sh_test(
         "getopt ab: -a -b x; printf /zz/loc%s fnd > /tmp/l; echo >> /tmp/l; " +
         "/usr/libexec/locate.mklocatedb < /tmp/l > /tmp/db; locate -d /tmp/db fnd; /usr/bin/time true; " +
         "pathchk -p /ok/path && echo pathchk-o\"\"k; ipcs | head -1\\n'",
+        "--send-after 'IPC status from' 'cal 1 2026; echo \"a b\" | tsort | paste -sd- -; units -t \"1 mile\" ft; " +
+        "ncal -e 2026; pagesize; mesg\\n'",
+        "--send-after 'is y' 'dmesg | grep -q \"kprintf initialized\" && echo dmesg-o\"\"k; " +
+        "zdump UTC | sed \"s/ .* / <> /\"; zic --version; logger lg-x && echo logger-o\"\"k; echo wall-\"\"x | wall; " +
+        "echo wr-\"\"x | write root console; printf \"01/01\\tcy\"\"-x\" > /tmp/c; echo >> /tmp/c; " +
+        "calendar -f /tmp/c -t 01.01.2026; shutdown -s now\\n'",
         "$(rootpath //boot/neoboot)",
         "240",
         "'7,8,9'",
@@ -1253,6 +1263,22 @@ sh_test(
         "' real '",
         "'pathchk-ok'",
         "'IPC status from'",
+        "'January 2026'",
+        "'a-b'",
+        "'5280'",
+        "'April  5 2026'",
+        "'16384'",
+        "'is y'",
+        "'dmesg-ok'",
+        "'UTC <> UTC'",
+        "'zic (tzcode)'",
+        "'logger-ok'",
+        "'Broadcast Message from root@localhost'",
+        "'wall-x'",
+        "'Message from root@localhost on console'",
+        "'wr-x'",
+        "'cy-x'",
+        "'sleep is not supported'",
     ],
     data = [
         ":sbsa_kc",

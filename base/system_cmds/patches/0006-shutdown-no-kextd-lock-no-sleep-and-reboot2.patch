@@ -1,0 +1,107 @@
+From: NeoDarwin
+Subject: [PATCH] shutdown: no kextd lock, no -s; launchd-842's reboot2()
+
+As reboot (patch 0005): NeoDarwin has no kextd, so shutdown doesn't ask
+for the kext manager's reboot lock (ND_KEXTD 0), and launchd-842 has
+reboot2() where newer launchd has reboot3(). shutdown -s puts the machine
+to sleep through IOKit's power-management library (IOPMLib), which
+NeoDarwin doesn't have yet; -s now fails at once with "sleep is not
+supported" instead of after the countdown. FreeBSD's shutdown has no -s.
+
+--- a/shutdown/shutdown.c
++++ b/shutdown/shutdown.c
+@@ -61,9 +61,16 @@
+ #include <vproc.h>
+ #include <vproc_priv.h>
+ 
++/*
++ * NeoDarwin has no kextd (no kext manager reboot lock) and no IOKit
++ * power-management userland (IOPMLib), so no -s.
++ */
++#define ND_KEXTD 0
++#if ND_KEXTD
+ #include "kextmanager.h"
+ #include <IOKit/kext/kextmanager_types.h>
+ #include <IOKit/pwr_mgt/IOPMLib.h>
++#endif
+ #include <mach/mach_port.h>		// allocate
+ #include <mach/mach.h>			// task_self, etc
+ #include <servers/bootstrap.h>	// bootstrap
+@@ -130,8 +137,10 @@
+ static void usage(const char *);
+ #ifdef __APPLE__
+ static int audit_shutdown(int);
++#if ND_KEXTD
+ static int reserve_reboot(void);
+ #endif
++#endif
+ 
+ extern const char **environ;
+ 
+@@ -217,6 +226,9 @@
+ 			break;
+ #ifdef __APPLE__
+ 		case 's':
++#if !ND_KEXTD
++			errx(1, "-s: sleep is not supported");
++#endif
+ 			dosleep = 1;
+ 			break;
+ 		case 'u':
+@@ -460,11 +472,13 @@
+ #ifndef __APPLE__
+ 	char *empty_environ[] = { NULL };
+ #else
++#if ND_KEXTD
+ 	if ((errno = reserve_reboot())) {
+ 		warn("couldn't lock for reboot");
+ 		finish(0);
+ 	}
+ #endif
++#endif
+ 
+ #ifdef __APPLE__
+ 	syslog(LOG_NOTICE, "%s by %s: %s",
+@@ -507,6 +521,7 @@
+ 	(void)printf("\nkill -HUP 1\n");
+ #else
+ #ifdef __APPLE__
++#if ND_KEXTD
+ 	if (dosleep) {
+ 		io_connect_t fb;
+ 		fb = IOPMFindPowerManagement(MACH_PORT_NULL);
+@@ -515,7 +530,9 @@
+ 			if (err != kIOReturnSuccess)
+ 				fprintf(stderr, "shutdown: sleep failed (0x%08x)\n", err);
+ 		}
+-	} else {
++	} else
++#endif
++	{
+ 		struct utmpx utx;
+ 		int howto = 0;
+ 
+@@ -528,7 +545,8 @@
+ 		if (nosync) howto |= RB_NOSYNC;
+ 
+ 		// launchd(8) handles reboot.  This call returns NULL on success.
+-		if (reboot3(howto)) {
++		// NeoDarwin: launchd-842's reboot2(), which predates reboot3().
++		if (reboot2(howto)) {
+ 			syslog(LOG_ERR, "shutdown: launchd reboot failed.");
+ 		}
+ 	}
+@@ -803,6 +821,7 @@
+ }
+ 
+ 
++#if ND_KEXTD
+ static bool
+ kextdDisabled(void)
+ {
+@@ -877,4 +896,5 @@
+ 
+     return rval;
+ }
++#endif /* ND_KEXTD */
+ #endif /* __APPLE__ */

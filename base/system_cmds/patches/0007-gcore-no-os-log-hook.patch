@@ -1,0 +1,44 @@
+From: NeoDarwin
+Subject: [PATCH] gcore: no os_log hook
+
+Unless -q is given, gcore installs an os_log hook (os_log_set_hook(), in
+libsystem_trace's private interface) that prints its log messages on
+standard output and errors on standard error. NeoDarwin's libsystem_trace
+is a stand-in without hooks, which already writes every os_log message to
+standard error, so the hook is dropped. -q no longer silences them.
+
+--- a/gcore/main.c
++++ b/gcore/main.c
+@@ -601,28 +601,10 @@
+      * The disposition of os_log*() messages depends on
+      * the "quiet" flag.
+      */
+-    if (!opt->quiet) {
+-        static os_log_hook_t chain = NULL;
+-        chain = os_log_set_hook(OS_LOG_TYPE_DEFAULT,
+-            ^(os_log_type_t type, os_log_message_t msg) {
+-            if (chain) {
+-                chain(type, msg);
+-            }
+-            char *message = os_log_copy_message_string(msg);
+-            switch (type) {
+-                case OS_LOG_TYPE_DEBUG:
+-                case OS_LOG_TYPE_INFO:
+-                case OS_LOG_TYPE_DEFAULT:
+-                    printf("%s\n", message);
+-                    break;
+-                case OS_LOG_TYPE_ERROR:
+-                case OS_LOG_TYPE_FAULT:
+-                    fprintf(stderr, "%s: %s\n", pgm, message);
+-                    break;
+-            }
+-            free(message);
+-        });
+-    }
++    /*
++     * NeoDarwin: libsystem_trace is a stand-in without os_log_set_hook();
++     * it writes every os_log message to standard error itself.
++     */
+ 
+     if (optind < argc-1) {
+         Usage("too many arguments");

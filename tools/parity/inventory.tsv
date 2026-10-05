@@ -58,7 +58,7 @@ sbin/devd	equivalent	launchd jobs triggered by IOKit matching	sbin/launchd	P4-23
 sbin/devfs	n/a				no	devfs rules; xnu's devfs has none
 sbin/devmatch	n/a				no	IOKit matches drivers in the kernel
 sbin/dhclient	freebsd	freebsd-src 050683bb8e13		P4-24	yes	DHCP client (base/dhclient)
-sbin/dmesg	apple	system_cmds-1039		P4-21	no	
+sbin/dmesg	apple	system_cmds-1039		P4-21	yes	
 sbin/dump	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
 sbin/dumpfs	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
 sbin/dumpon	n/a				no	dump-device crash dumps; xnu dumps over kdp (kdumpd) or to a core file
@@ -117,7 +117,7 @@ sbin/pflowctl	n/a				no	pflow(4); xnu's pf has none
 sbin/ping	apple	network_cmds-726		P4-24	yes	
 sbin/quotacheck	apple	diskdev_cmds-751		P4-30	no	
 sbin/rcorder	n/a				no	rc.d scripts are not run; launchd orders jobs (§3)
-sbin/reboot	apple	system_cmds-1039		P4-21	no	
+sbin/reboot	apple	system_cmds-1039		P4-21	yes	
 sbin/recoverdisk	freebsd	FreeBSD sbin/recoverdisk		P4-21	no	
 sbin/resolvconf	freebsd	freebsd-src 050683bb8e13		P4-24	yes	openresolv (base/resolvconf)
 sbin/restore	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
@@ -126,7 +126,7 @@ sbin/routed	freebsd	FreeBSD sbin/routed		P4-21	no	RIP
 sbin/rtsol	freebsd	freebsd-src 050683bb8e13		P4-24	yes	built from usr.sbin/rtsold, replacing network_cmds-726 rtsol (base/rtsold)
 sbin/savecore	n/a				no	dump-device crash dumps; xnu dumps over kdp (kdumpd) or to a core file
 sbin/setkey	apple	ipsec-1125		P4-24	no	ipsec-tools setkey
-sbin/shutdown	apple	system_cmds-1039		P4-21	no	
+sbin/shutdown	apple	system_cmds-1039		P4-21	yes	
 sbin/swapon	n/a				no	xnu manages its own swap files; no swap devices
 sbin/sysctl	apple	system_cmds-1039		P4-21	yes	
 sbin/tunefs	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
@@ -161,7 +161,7 @@ usr.bin/bzip2recover	apple	bzip2-47		P4-21	no
 usr.bin/c89	freebsd	FreeBSD usr.bin/c89		P5-10	no	
 usr.bin/c99	freebsd	FreeBSD usr.bin/c99		P5-10	no	
 usr.bin/caesar	port	games/freebsd-games			no	MK_GAMES
-usr.bin/calendar	apple	misc_cmds-45		P4-21	no	
+usr.bin/calendar	apple	misc_cmds-45		P4-21	yes	
 usr.bin/cap_mkdb	apple	adv_cmds-237		P4-22	no	
 usr.bin/chat	apple	ppp-1020.1.1		P4-21	no	
 usr.bin/chpass	apple	system_cmds-1039		P4-22	yes	
@@ -249,7 +249,7 @@ usr.bin/from	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P
 usr.bin/fstat	equivalent	lsof (lsof-76); fuser (diskdev_cmds-751)	usr/sbin/lsof	P4-21	no	
 usr.bin/fsync	freebsd	FreeBSD usr.bin/fsync		P4-21	no	
 usr.bin/ftp	port	ftp/tnftp			no	FreeBSD builds tnftp as ftp
-usr.bin/gcore	apple	system_cmds-1039		P4-21	no	
+usr.bin/gcore	apple	system_cmds-1039		P4-21	yes	core dumps fail on NeoDarwin so far: dyld_process_create_for_task() returns 0xeb000005
 usr.bin/gencat	apple	adv_cmds-237		P4-21	yes	
 usr.bin/genl	n/a				no	Netlink
 usr.bin/getaddrinfo	freebsd	FreeBSD usr.bin/getaddrinfo		P4-21	no	
@@ -284,7 +284,7 @@ usr.bin/last	apple	adv_cmds-237		P4-21	yes
 usr.bin/lastcomm	apple	shell_cmds-326		P4-21	yes	
 usr.bin/ldd	equivalent	otool -L (cctools-1035.1.102)	usr/bin/otool	P5-10	no	Mach-O, not ELF
 usr.bin/ldd32	n/a				no	32-bit compatibility (lib32); arm64 NeoDarwin has none
-usr.bin/leave	apple	misc_cmds-45		P4-21	no	
+usr.bin/leave	apple	misc_cmds-45		P4-21	yes	
 usr.bin/less	apple	less-50		P4-21	no	
 usr.bin/lessecho	apple	less-50		P4-21	no	
 usr.bin/lesskey	apple	less-50		P4-21	no	
@@ -297,7 +297,7 @@ usr.bin/locate/code	apple	shell_cmds-326		P4-21	yes
 usr.bin/locate/locate	apple	shell_cmds-326		P4-21	yes	
 usr.bin/lock	freebsd	FreeBSD usr.bin/lock		P4-21	no	
 usr.bin/lockf	apple	shell_cmds-326		P4-21	yes	
-usr.bin/logger	apple	remote_cmds-306		P4-21	no	
+usr.bin/logger	apple	remote_cmds-306		P4-21	yes	
 usr.bin/login	apple	system_cmds-1039		P4-22	yes	
 usr.bin/logins	freebsd	FreeBSD usr.bin/logins		P4-22	no	
 usr.bin/logname	apple	shell_cmds-326		P4-21	yes	
@@ -310,7 +310,7 @@ usr.bin/mail	apple	mail_cmds-41		P4-21	no
 usr.bin/man	apple	man-62		P4-21	no	
 usr.bin/mandoc	freebsd	FreeBSD usr.bin/mandoc		P4-21	no	mandoc (contrib/mandoc); Apple's mandoc is unpublished
 usr.bin/mdo	n/a				no	mac_do(4)
-usr.bin/mesg	apple	basic_cmds-70		P4-21	no	
+usr.bin/mesg	apple	basic_cmds-70		P4-21	yes	
 usr.bin/mididump	n/a				no	OSS MIDI
 usr.bin/ministat	freebsd	FreeBSD usr.bin/ministat		P4-21	no	
 usr.bin/mkcsmapper	apple	libiconv-113		P4-21	no	
@@ -325,7 +325,7 @@ usr.bin/morse	port	games/freebsd-games			no	MK_GAMES
 usr.bin/msgs	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
 usr.bin/mt	n/a				no	tape via CAM sa(4)
 usr.bin/nc	apple	netcat-56		P4-21	no	
-usr.bin/ncal	apple	misc_cmds-45		P4-21	no	
+usr.bin/ncal	apple	misc_cmds-45		P4-21	yes	
 usr.bin/ncurses	apple	ncurses-79		P4-21	no	tic, toe, tput, tset, clear, infocmp, tabs
 usr.bin/netstat	apple	network_cmds-726		P4-24	yes	
 usr.bin/newgrp	apple	system_cmds-1039		P4-22	no	
@@ -368,7 +368,7 @@ usr.bin/ofed/librdmacm/rping	n/a				no	InfiniBand (OFED)
 usr.bin/ofed/librdmacm/ucmatose	n/a				no	InfiniBand (OFED)
 usr.bin/ofed/librdmacm/udaddy	n/a				no	InfiniBand (OFED)
 usr.bin/ofed/opensm	n/a				no	InfiniBand (OFED)
-usr.bin/pagesize	apple	system_cmds-1039		P4-21	no	
+usr.bin/pagesize	apple	system_cmds-1039		P4-21	yes	
 usr.bin/passwd	apple	system_cmds-1039		P4-22	yes	
 usr.bin/paste	apple	text_cmds-197		P4-21	yes	
 usr.bin/patch	apple	patch_cmds-72		P4-21	yes	
@@ -434,14 +434,14 @@ usr.bin/true	apple	shell_cmds-326		P4-21	yes
 usr.bin/truncate	apple	file_cmds-475		P4-21	yes	
 usr.bin/truss	equivalent	dtruss (dtrace-413)	usr/bin/dtruss	P4-29	no	
 usr.bin/ts	freebsd	FreeBSD usr.bin/ts		P4-21	no	
-usr.bin/tsort	apple	misc_cmds-45		P4-21	no	
+usr.bin/tsort	apple	misc_cmds-45		P4-21	yes	
 usr.bin/tty	apple	adv_cmds-237		P4-21	yes	
 usr.bin/ul	apple	text_cmds-197		P4-21	yes	
 usr.bin/uname	apple	shell_cmds-326		P4-21	yes	
 usr.bin/unexpand	apple	text_cmds-197		P4-21	yes	
 usr.bin/unifdef	freebsd	FreeBSD usr.bin/unifdef		P5-10	no	
 usr.bin/uniq	apple	text_cmds-197		P4-21	yes	
-usr.bin/units	apple	misc_cmds-45		P4-21	no	
+usr.bin/units	apple	misc_cmds-45		P4-21	yes	
 usr.bin/unvis	apple	text_cmds-197		P4-21	yes	
 usr.bin/unzip	apple	zip-29		P4-21	no	
 usr.bin/usbhidaction	n/a				no	usbhid(4); HID is a dext (P3-07)
@@ -453,7 +453,7 @@ usr.bin/vis	apple	text_cmds-197		P4-21	yes
 usr.bin/vmstat	equivalent	vm_stat (system_cmds-1039)	usr/bin/vm_stat	P4-21	no	
 usr.bin/vtfontcvt	freebsd	FreeBSD usr.bin/vtfontcvt		P4-26	no	if the console takes vt(4)'s font format
 usr.bin/w	apple	shell_cmds-326		P4-21	yes	
-usr.bin/wall	apple	remote_cmds-306		P4-21	no	
+usr.bin/wall	apple	remote_cmds-306		P4-21	yes	
 usr.bin/wc	apple	text_cmds-197		P4-21	yes	
 usr.bin/wg	port	net/wireguard-tools			no	FreeBSD's if_wg is in the kernel; wireguard-go runs over utun
 usr.bin/what	apple	shell_cmds-326		P4-21	yes	
@@ -461,7 +461,7 @@ usr.bin/whereis	apple	shell_cmds-326		P4-21	yes
 usr.bin/which	apple	shell_cmds-326		P4-21	yes	
 usr.bin/who	apple	shell_cmds-326		P4-21	yes	
 usr.bin/whois	apple	adv_cmds-237		P4-21	yes	
-usr.bin/write	apple	basic_cmds-70		P4-21	no	
+usr.bin/write	apple	basic_cmds-70		P4-21	yes	
 usr.bin/xargs	apple	shell_cmds-326		P4-21	yes	
 usr.bin/xinstall	apple	file_cmds-475		P4-21	yes	
 usr.bin/xo	freebsd	FreeBSD usr.bin/xo		P4-21	no	
@@ -474,8 +474,8 @@ usr.bin/ypcat	n/a				no	NIS: accounts are the flat files (P4-22)
 usr.bin/ypmatch	n/a				no	NIS: accounts are the flat files (P4-22)
 usr.bin/ypwhich	n/a				no	NIS: accounts are the flat files (P4-22)
 usr.bin/zstd	freebsd	FreeBSD usr.bin/zstd		P4-21	no	
-usr.sbin/ac	apple	system_cmds-1039		P4-21	no	
-usr.sbin/accton	apple	system_cmds-1039		P4-21	no	
+usr.sbin/ac	apple	system_cmds-1039		P4-21	yes	
+usr.sbin/accton	apple	system_cmds-1039		P4-21	yes	
 usr.sbin/acpi/acpiconf	equivalent	pmset (PowerManagement-1846.0.25.0.1)	usr/bin/pmset	P7-02	no	
 usr.sbin/acpi/acpidb	freebsd	FreeBSD usr.sbin/acpi/acpidb		P4-21	no	ACPICA debugger over table files
 usr.sbin/acpi/acpidump	new	ACPI tables from the IOACPIPlatformDevice registry (as tools/dtdump on the host)		P4-21	no	
@@ -580,7 +580,7 @@ usr.sbin/hyperv/tools/vss	n/a				no	Hyper-V guest
 usr.sbin/i2c	n/a				no	FreeBSD bus drivers (gpio, iicbus, spibus, pwm, smbus)
 usr.sbin/ifmcstat	equivalent	netstat -g (network_cmds-726)	usr/sbin/netstat	P4-24	yes	
 usr.sbin/inetd	equivalent	launchd sockets with launchproxy	usr/libexec/launchproxy	P1-08	yes	
-usr.sbin/iostat	apple	system_cmds-1039		P4-21	no	
+usr.sbin/iostat	apple	system_cmds-1039		P4-21	no	needs IOKit.framework and CoreFoundation (IOKitUser); waits for an IOKit userland (cp6)
 usr.sbin/iovctl	n/a				no	PCI SR-IOV
 usr.sbin/ip6addrctl	freebsd	FreeBSD usr.sbin/ip6addrctl		P4-21	no	
 usr.sbin/ipfwpcap	n/a				no	ipfw divert (§5)
@@ -689,7 +689,7 @@ usr.sbin/rtadvd	freebsd	freebsd-src 050683bb8e13		P4-24	yes	network_cmds-726 has
 usr.sbin/rtprio	n/a				no	rtprio(2) scheduling classes
 usr.sbin/rtsold	freebsd	freebsd-src 050683bb8e13		P4-24	yes	RDNSS and DNSSL (base/rtsold)
 usr.sbin/rwhod	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
-usr.sbin/sa	apple	system_cmds-1039		P4-21	no	
+usr.sbin/sa	apple	system_cmds-1039		P4-21	yes	
 usr.sbin/sendmail	port	mail/sendmail			no	sendmail is an option in FreeBSD too (MK_SENDMAIL)
 usr.sbin/service	new	NeoDarwin service(8) over launchd		P4-23	no	
 usr.sbin/services_mkdb	n/a				no	Libinfo reads /etc/services directly
@@ -751,7 +751,7 @@ usr.sbin/yppoll	n/a				no	NIS: accounts are the flat files (P4-22)
 usr.sbin/yppush	n/a				no	NIS: accounts are the flat files (P4-22)
 usr.sbin/ypserv	n/a				no	NIS: accounts are the flat files (P4-22)
 usr.sbin/ypset	n/a				no	NIS: accounts are the flat files (P4-22)
-usr.sbin/zdump	apple	system_cmds-1039		P4-21	no	
-usr.sbin/zic	apple	system_cmds-1039		P4-21	no	
+usr.sbin/zdump	apple	system_cmds-1039		P4-21	yes	
+usr.sbin/zic	apple	system_cmds-1039		P4-21	yes	
 usr.sbin/zonectl	n/a				no	SMR zones via CAM
 usr.sbin/zzz	n/a				no	not built for FreeBSD/arm64 (arch=amd64 || arch=i386)

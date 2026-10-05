@@ -59,11 +59,11 @@ A program's key name is the installed name that matches its directory (`vi`, not
 
 **Coverage.** `bazel build //tools/parity:coverage` writes `coverage.md`: counts by status and directory, how much of the base is built, and the unbuilt rows grouped by roadmap item and source. That last part is P4-21's work list. `ci/parity.sh` runs the checks, builds the report and copies it to `$PARITY_OUT` (and to the job summary on GitHub and Forgejo Actions). The workflow that publishes it as an artifact waits for the CI runners (P0-05). Coverage is every status except `todo`, as a share of all rows. The 1.0 gate is **no `todo` rows**, and every `apple`, `freebsd`, `new` and `equivalent` row built, installed and passing the FreeBSD test suite's tests for that program where they exist (`/usr/tests`, Kyua).
 
-Today (2026-10-04, after P4-21 checkpoint 1's text_cmds, shell_cmds, patch_cmds, file_cmds and adv_cmds rows), on 15.1-RELEASE's 752 rows:
+Today (2026-10-04, after P4-21 checkpoint 1), on 15.1-RELEASE's 752 rows:
 
 | Status | Rows | Built |
 |---|---:|---:|
-| `apple` | 246 | 154 |
+| `apple` | 246 | 173 |
 | `freebsd` | 107 | 6 |
 | `new` | 16 | 0 |
 | `equivalent` | 43 | 9 |
@@ -71,7 +71,7 @@ Today (2026-10-04, after P4-21 checkpoint 1's text_cmds, shell_cmds, patch_cmds,
 | `n/a` | 295 | – |
 | `todo` | 0 | – |
 
-Coverage is 100% (no `todo`). Of the 412 base rows, 169 (41.0%) are built: 78.9% of `bin`, 38.5% of `sbin`, 47.0% of `usr.bin` and 18.6% of `usr.sbin`. P4-21 holds 126 of the 243 unbuilt base rows (193 before checkpoint 1; 241 of 327 until 2026-10-04, when NFS, tracing, quotas, printing and `at` moved to their own items and the obsolete network programs became ports; §2.1). The largest groups are 62 FreeBSD programs (`fetch`, `ee`, `mandoc`, `bmake`, `xz`, `zstd`, `kyua`, `certctl`, `makefs`, ...), system_cmds (11) and misc_cmds (5). The toolchain (31 rows, P5-10), NFS (15, P4-28), accounts (13, P4-22), services (8, P4-23), printing (7, P4-31), quotas (5, P4-30), tracing (3, P4-29) and the ndpkg-backed equivalents (P2-02 to P2-04) make up the rest.
+Coverage is 100% (no `todo`). Of the 412 base rows, 188 (45.6%) are built: 78.9% of `bin`, 46.2% of `sbin`, 52.1% of `usr.bin` and 22.9% of `usr.sbin`. P4-21 holds 107 of the 224 unbuilt base rows (193 before checkpoint 1; 241 of 327 until 2026-10-04, when NFS, tracing, quotas, printing and `at` moved to their own items and the obsolete network programs became ports; §2.1). The largest groups are 63 FreeBSD programs (`fetch`, `ee`, `mandoc`, `bmake`, `xz`, `zstd`, `kyua`, `certctl`, `makefs`, ...), then less, libarchive and libiconv (3 each). The toolchain (31 rows, P5-10), NFS (15, P4-28), accounts (13, P4-22), services (8, P4-23), printing (7, P4-31), quotas (5, P4-30), tracing (3, P4-29) and the ndpkg-backed equivalents (P2-02 to P2-04) make up the rest.
 
 **Workflow.** Reclassify a row by editing `inventory.tsv`, then run `bazel run //tools/parity:accept`. After a base change installs or removes programs, run `bazel run //tools/parity:update` then `accept`. For a new FreeBSD release, run `bazel run //tools/parity:lock -- CHECKOUT "15.2-RELEASE (tag release/15.2.0)"` on a checkout of the tag (a sparse checkout of `bin sbin usr.bin usr.sbin share/mk` is enough), then `update` (new directories arrive as `todo`), classify them, and `accept`.
 
@@ -81,7 +81,7 @@ P4-21 is planned as seven checkpoints, cheapest first. Each one is about one age
 
 | cp | Contents | Rows | Notes |
 |---|---|---:|---|
-| 1 (doing) | **The Apple projects already in `base/`.** text_cmds (25, including `md5` and `ed`), shell_cmds (25), patch_cmds (3), file_cmds (8; `gzip` is in cp2), adv_cmds (7), system_cmds' leaf tools (`dmesg`, `reboot`, `shutdown`, `iostat`, `pagesize`, `gcore`, `zic`, `zdump`, `ac`, `accton`, `sa`), misc_cmds (5), basic_cmds (2), and remote_cmds' `logger` and `wall` | ~85 | Each one extends an existing `build.sh`. It can be split into 1a (text, shell, patch) and 1b (the rest) |
+| 1 (done, but `iostat`) | **The Apple projects already in `base/`.** text_cmds (25, including `md5` and `ed`), shell_cmds (25), patch_cmds (3), file_cmds (8; `gzip` is in cp2), adv_cmds (7), system_cmds' leaf tools (`dmesg`, `reboot`, `shutdown`, `iostat`, `pagesize`, `gcore`, `zic`, `zdump`, `ac`, `accton`, `sa`), misc_cmds (5), basic_cmds (2), and remote_cmds' `logger` and `wall` | ~85 | Each one extends an existing `build.sh`. It can be split into 1a (text, shell, patch) and 1b (the rest) |
 | 2 | **Compression and archives.** libz (moving Apple's zlib-100.120.1 out of `kexts/zfs` into the base), libbz2, liblzma and libzstd; `gzip`, `bzip2`, `xz`, `xzdec`, `lzmainfo`, `zstd`; libarchive's `tar`, `cpio` and `bsdcat`; `unzip` | ~14 | Turns grep's decompression back on (dropping text_cmds patch 0001) and fixes the ZFS suite's `bzcat` failures |
 | 3 | **Interactive essentials.** `less` (3), vim as `vi`, `man` with `mandoc` and `soelim`, `file`, `bc`, `top`, `nc`, `csh` (tcsh), `mail`, `iconv` (3), the ncurses tools, `locale` and `localedef` with locale data | ~20 | `zsh` is the default interactive shell (§6) |
 | 4 | **FreeBSD leaf utilities** on the FreeBSD source drop at `050683bb8e13` (as for `timeout` and libxo): `nmtree`, `nproc`, `uuidgen`, `pwait`, `m4`, `ident`, `ministat`, `xo`, `perror`, `getaddrinfo`, `ts`, `daemon`, `fsync`, `lock`, `asa`, `ee`, `bsdiff`, `bspatch`, `resizewin`, `domainname`, ... | ~30 | Sets up the shared build pattern for FreeBSD programs. The obsolete network programs are ports, not base (§6) |
@@ -91,11 +91,18 @@ P4-21 is planned as seven checkpoints, cheapest first. Each one is about one age
 
 **cp1 progress (2026-10-04).** Part 1a is done: text_cmds' 25 rows (with `md5` and its `sha*` names, `ed`, `bintrans` and its `base64`/`uuencode` names), shell_cmds' 25 (with `locate`'s helpers and updatedb scripts, `alias` and its builtin names, `w` and `uptime`, `chroot`), and patch_cmds' `patch`, `diff3` and `sdiff`. Two libraries macOS ships but Apple doesn't publish came in from FreeBSD at `050683bb8e13`, as libxo did: `base/libmd` (`/usr/lib/libmd.dylib`, MD5 and SHA-1/2 with their End/File/Data helpers, for `md5` and `install`) and `base/libsbuf` (`/usr/lib/libsbuf.dylib`, FreeBSD's sbuf under macOS's `usbuf_` names, for `apply` and `w`). Of part 1b, file_cmds (`chflags`, `pax`, `mknod`, `ipcrm`, `ipcs`, `pathchk`, `install`) and adv_cmds (`finger`, `gencat`, `last`, `lsvfs`, `whois`, `locale`, `localedef`) are built. `locale` and `localedef` are built without locale data: `/usr/share/locale` stays with cp3. `//kernel:sbsa_base_commands_test` (manual, qemu) runs a sample on `session_root`.
 
-*Left for cp1, with next steps:*
-- `nmtree` is `freebsd` (user, 2026-10-04), built in cp4: Apple's `mtree` needs CoreFoundation, CommonCrypto and APFS's private `<apfs/apfs_fsctl.h>`.
-- system_cmds (`base/system_cmds/build.sh`): `dmesg`, `pagesize` (a script: the aggregate target installs `pagesize/pagesize.sh`), `ac`, `accton`, `sa` (`AHZV1=64`), `zic` and `zdump` (`-include tzconfig.h`, `-I zic`), `gcore` (System.framework and Kernel.framework PrivateHeaders, libutil) look buildable as they are. `reboot` and `shutdown` include `kextmanager.defs` (MIG, to kextd) and IOKit's `kextmanager_types.h`; `shutdown` also links libbsm and `IOPMLib.h`; `iostat` links IOKit and CoreFoundation. Check whether IOKitUser's headers are enough, or whether these wait for an IOKit userland (cp6).
-- misc_cmds-45 (`calendar`, `leave`, `ncal` with `cal`, `tsort`, `units`): a new `http_archive` in MODULE.bazel, a line in `base/upstream.lock`, `base/misc_cmds/build.sh` and a `base_library` added to `system_root`. Likewise basic_cmds-70 (`mesg`, `write`) and remote_cmds-306 (`logger`, `wall` only).
-- Then extend `sbsa_base_commands_test` (`dmesg | head`, `cal`, `echo b a | tsort`), `bazel run //tools/parity:update` and `accept`, and update §2's numbers.
+Part 1b is done too (2026-10-04): system_cmds' `dmesg`, `reboot` (with `halt`), `shutdown`, `pagesize`, `gcore`, `zic`, `zdump`, `ac`, `accton` and `sa`; misc_cmds-45's `calendar`, `leave`, `ncal` (with `cal`), `tsort` and `units` (with `/usr/share/misc/units.lib`); basic_cmds-70's `mesg` and `write`; and remote_cmds-306's `logger` and `wall`. The three projects are new pins (`base/misc_cmds`, `base/basic_cmds`, `base/remote_cmds`). The smoke test runs `cal`, `tsort`, `units`, `ncal -e`, `calendar`, `pagesize`, `dmesg`, `zdump`, `zic`, `shutdown -s`, `mesg`, `write`, `logger` and `wall`. Patches:
+- system_cmds 0005 and 0006: NeoDarwin has no kextd, so `reboot` and `shutdown` skip the kext manager's reboot lock (`kextmanager.defs`, MIG), as the embedded platforms' builds do; they call launchd-842's `reboot2()` where newer launchd has `reboot3()`. `shutdown -s` (sleep, through IOKit's IOPMLib) fails at once with "sleep is not supported". Neither needs IOKit or CoreFoundation now. Neither has been run on QEMU, since it would end the test.
+- system_cmds 0007: `gcore` drops its `os_log_set_hook()` hook. The libsystem_trace stand-in has no hooks and already writes every message to standard error; it gains `_os_log_impl()`, which plain `os_log()` calls. `compat/responsibility.h` stands in for libquarantine's responsibility SPI: each process is its own responsible process. gcore is built with C11 for its `static_assert`. It doesn't dump yet: `dyld_process_create_for_task()` fails with `0xeb000005` (the row's `note`).
+- misc_cmds 0001: `leave.c` includes `<sys/types.h>` for `u_int`, which macOS 26's headers no longer reach through its other includes.
+
+`cal` and `ncal` warn `setlocale: Bad file descriptor` until the locale data arrives (cp3). The image rule sets modes but not groups, so `write` isn't setgid `tty` as on macOS: it reaches only terminals open to everyone.
+
+`lsvfs` doesn't hang on QEMU, it is slow: it asks for every type number below `vfs.generic.maxtypenum`. The kernel's mockfs (MOCKFS, kernel patch 0011) registers the FourCC type number `'mock'` (0x6D6F636B), so the maximum is 1,836,016,492, and after hfs `lsvfs` makes that many `sysctl` calls, each failing with ENOTSUP. macOS release kernels don't build mockfs. The fix is on the kernel side, so `lsvfs` stays out of the smoke test.
+
+`nmtree` is `freebsd` (user, 2026-10-04), built in cp4: Apple's `mtree` needs CoreFoundation, CommonCrypto and APFS's private `<apfs/apfs_fsctl.h>`.
+
+*Left for cp1:* `iostat`. It reads drive statistics from the IOKit registry (IOBlockStorageDriver) with IOKit.framework and CoreFoundation. NeoDarwin's base has neither (the sysroot's IOKit.framework is xnu's headers alone), so it waits for an IOKit userland (IOKitUser and CoreFoundation, with cp6's `ioreg`). Its row stays `apple`, unbuilt, with a `note`.
 
 cp1, cp2 and cp4 touch separate directories, so they can run in parallel. They still share one Bazel server.
 

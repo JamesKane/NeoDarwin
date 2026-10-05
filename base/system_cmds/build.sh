@@ -3,7 +3,8 @@
 # getty, login, sysctl, passwd, chpass and pwd_mkdb from system_cmds-1039
 # (docs/base/libsystem.md): replays system_cmds.xcodeproj's targets with the
 # project's base.xcconfig (gnu99, GCC_SYMBOLS_PRIVATE_EXTERN, its OTHER_CFLAGS).
-#   build.sh OUT SYSTEM_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root, //base:libpam_dylib, //base:bsm_audit)
+#   build.sh OUT SYSTEM_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root, //base:libpam_dylib, //base:bsm_audit,
+#                                                      //base:libutil_dylib)
 # OUT receives usr/libexec/getty, usr/bin/login and its PAM policies
 # private/etc/pam.d/{login,login.term}, usr/sbin/sysctl (the
 # target's one source, no frameworks; the SMP boot test reads hw.ncpu with
@@ -12,8 +13,11 @@
 # console). generate_plist.sh adds Disabled = true on macOS, where
 # loginwindow owns the console; NeoDarwin installs it as the embedded
 # platforms do, enabled. Also usr/bin/{passwd,chpass,chfn,chsh} and
-# usr/sbin/pwd_mkdb (below), and bin/sync and usr/bin/getconf (the ZFS test
-# suite's, at the end).
+# usr/sbin/pwd_mkdb (below), bin/sync and usr/bin/getconf (the ZFS test
+# suite's), and P4-21's sbin/{dmesg,reboot,halt,shutdown},
+# usr/bin/{pagesize,gcore} and usr/sbin/{ac,accton,sa,zic,zdump} (at the
+# end). Not iostat: it needs IOKit.framework and CoreFoundation, which the
+# base doesn't have yet (docs/architecture/freebsd-parity.md §2.1).
 # On macOS, login authenticates through PAM and records BSM audit and
 # EndpointSecurity events (USE_PAM, USE_BSM_AUDIT; -lpam -lbsm, weak
 # libEndpointSecuritySystem). NeoDarwin builds it with USE_PAM against
@@ -35,6 +39,8 @@ PAM=""; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/libpam.2.dylib" ] && PAM="$d"
 [ -n "$PAM" ] || { echo "system_cmds: no DEPROOT holds usr/lib/libpam.2.dylib (pass //base:libpam_dylib)" >&2; exit 1; }
 BSM=""; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/libbsm.0.dylib" ] && BSM="$d"; done
 [ -n "$BSM" ] || { echo "system_cmds: no DEPROOT holds usr/lib/libbsm.0.dylib (pass //base:bsm_audit)" >&2; exit 1; }
+UTIL=""; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/libutil.dylib" ] && UTIL="$d"; done
+[ -n "$UTIL" ] || { echo "system_cmds: no DEPROOT holds usr/lib/libutil.dylib (pass //base:libutil_dylib)" >&2; exit 1; }
 PROJ="$(cd "$(dirname "$0")" && pwd)"
 B="$(mktemp -d)"; trap 'rm -rf "$B"' EXIT
 S="$(stage_src "$S" "$B/src" "$PROJ/patches")"   # patches/ applied
@@ -94,3 +100,42 @@ done
 { cat "$B/cflags"; printf '%s\n' -DAPPLE_GETCONF_UNDERSCORE -iquote "$S/getconf"; } > "$B/getconf.rsp"
 tool "$B" "$ROOT" "$OUT/usr/bin/getconf" "$B/getconf.rsp" getconf/getconf.c "$G/confstr.c" "$G/limits.c" \
 	"$G/pathconf.c" "$G/progenv.c" "$G/sysconf.c" "$G/unsigned_limits.c"
+
+# P4-21's leaf tools (docs/architecture/freebsd-parity.md §2.1), each its
+# target's sources with base.xcconfig's flags and the target's settings.
+# dmesg, ac, accton: one source each (INSTALL_PATH /sbin, /usr/sbin).
+tool "$B" "$ROOT" "$OUT/sbin/dmesg" "$B/cflags" dmesg/dmesg.c
+tool "$B" "$ROOT" "$OUT/usr/sbin/ac" "$B/cflags" ac/ac.c
+tool "$B" "$ROOT" "$OUT/usr/sbin/accton" "$B/cflags" accton/accton.c
+# sa: GCC_PREPROCESSOR_DEFINITIONS AHZV1=64.
+{ cat "$B/cflags"; printf '%s\n' -DAHZV1=64; } > "$B/sa.rsp"
+tool "$B" "$ROOT" "$OUT/usr/sbin/sa" "$B/sa.rsp" sa/db.c sa/main.c sa/pdb.c sa/usrdb.c
+# zic and zdump: OTHER_CFLAGS -include tzconfig.h, HEADER_SEARCH_PATHS zic/.
+{ cat "$B/cflags"; printf '%s\n' -I"$S/zic" -include tzconfig.h; } > "$B/tz.rsp"
+tool "$B" "$ROOT" "$OUT/usr/sbin/zic" "$B/tz.rsp" zic/zic.c
+tool "$B" "$ROOT" "$OUT/usr/sbin/zdump" "$B/tz.rsp" zdump/zdump.c
+# pagesize: an aggregate target whose script phase installs pagesize.sh as
+# /usr/bin/pagesize.
+install -m 0755 pagesize/pagesize.sh "$OUT/usr/bin/pagesize"
+# gcore: SYSTEM_HEADER_SEARCH_PATHS System.framework's PrivateHeaders,
+# FRAMEWORK_SEARCH_PATHS Kernel.framework's PrivateHeaders; links libutil.
+# C11, not base.xcconfig's gnu99: notes.c uses static_assert, which the
+# headers define from C11 on. Patch 0007 drops its os_log hook;
+# compat/responsibility.h stands in for libquarantine's responsibility SPI
+# (closed): each process is its own responsible process.
+{ cat "$B/cflags"; printf '%s\n' -iframework "$SYSROOT/System/Library/Frameworks/Kernel.framework/PrivateHeaders" \
+	-isystem "$SYSROOT/System/Library/Frameworks/System.framework/PrivateHeaders" -I"$UTIL/usr/local/include" \
+	-I"$PROJ/compat" -std=gnu11; } > "$B/gcore.rsp"
+tool "$B" "$ROOT" "$OUT/usr/bin/gcore" "$B/gcore.rsp" gcore/notes.c gcore/vanilla.c gcore/utils.c gcore/corefile.c \
+	gcore/vm.c gcore/main.c gcore/sparse.c gcore/threads.c -- -L"$UTIL/usr/lib" -lutil
+
+# reboot and shutdown (INSTALL_PATH /sbin). Patches 0005 and 0006 drop
+# kextmanager.defs (kextd's reboot lock: NeoDarwin has no kextd) and
+# shutdown -s (IOPMLib), and call launchd-842's reboot2() for reboot3();
+# with them neither needs IOKit or CoreFoundation. halt is reboot under
+# another name (the halt target's hard link, a copy here). shutdown links
+# libbsm (AUE_shutdown).
+tool "$B" "$ROOT" "$OUT/sbin/reboot" "$B/cflags" reboot/reboot.c
+cp "$OUT/sbin/reboot" "$OUT/sbin/halt"
+{ cat "$B/cflags"; printf '%s\n' -I"$BSM/usr/local/include"; } > "$B/shutdown.rsp"
+tool "$B" "$ROOT" "$OUT/sbin/shutdown" "$B/shutdown.rsp" shutdown/shutdown.c -- -L"$BSM/usr/lib" -lbsm

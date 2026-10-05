@@ -360,7 +360,7 @@ base_library(
 base_library(
     name = "system_commands",
     data = glob(["system_cmds/**"]) + ["commands.sh"],
-    deps = [":root", ":libpam_dylib", ":bsm_audit"],
+    deps = [":root", ":libpam_dylib", ":bsm_audit", ":libutil_dylib"],
     script = "system_cmds/build.sh",
     srcs = "@apple_system_cmds//:all",
     sysroot = ":sysroot",
@@ -436,6 +436,35 @@ base_library(
     deps = [":root", ":libxo_dylib"],
     script = "adv_cmds/build.sh",
     srcs = "@apple_adv_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+# P4-21's misc_cmds, basic_cmds and remote_cmds (logger and wall)
+# (docs/architecture/freebsd-parity.md §2.1).
+base_library(
+    name = "misc_commands",
+    data = glob(["misc_cmds/**"]) + ["commands.sh"],
+    deps = [":root", ":libutil_dylib", ":libedit_dylib", ":libncurses_dylib"],
+    script = "misc_cmds/build.sh",
+    srcs = "@apple_misc_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "basic_commands",
+    data = glob(["basic_cmds/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "basic_cmds/build.sh",
+    srcs = "@apple_basic_cmds//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "remote_commands",
+    data = glob(["remote_cmds/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "remote_cmds/build.sh",
+    srcs = "@apple_remote_cmds//:all",
     sysroot = ":sysroot",
 )
 
@@ -744,6 +773,9 @@ base_root(
         ":file_commands",
         ":text_commands",
         ":adv_commands",
+        ":misc_commands",
+        ":basic_commands",
+        ":remote_commands",
         ":diskdev_commands",
         ":hfs_commands",
         ":etc_files",

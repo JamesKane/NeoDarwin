@@ -9,8 +9,9 @@
 //  - log objects: _os_log_default (OS_LOG_DEFAULT) and os_log_create();
 //    os_log_type_enabled() reports info and debug messages as off and the
 //    other types as on, os_log's defaults;
-//  - the os_log() calls, _os_log_{debug,error,fault}_impl(), and the log
-//    "pack" (a captured os_log() call, os_log_pack_send_and_compose()). Both
+//  - the os_log() calls, _os_log_impl() and _os_log_{debug,error,fault}_impl(),
+//    and the log "pack" (a captured os_log() call,
+//    os_log_pack_send_and_compose()). Both
 //    carry their arguments in the buffer __builtin_os_log_format() encodes,
 //    whose layout clang defines (clang/include/clang/AST/OSLog.h); the
 //    stand-in decodes it and formats the message as os_log would;
@@ -416,6 +417,13 @@ nd_log(os_log_t log, os_log_type_t type, const char *format, const uint8_t *buf,
 	char msg[ND_LINE];
 	nd_compose(msg, sizeof(msg), format, buf, size);
 	nd_emit(log, msg);
+}
+
+void
+_os_log_impl(void *dso, os_log_t log, os_log_type_t type, const char *format, uint8_t *buf, uint32_t size)
+{
+	(void)dso;
+	nd_log(log, type, format, buf, size);
 }
 
 void

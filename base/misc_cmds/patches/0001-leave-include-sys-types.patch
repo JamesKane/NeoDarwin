@@ -1,0 +1,18 @@
+From: NeoDarwin
+Subject: [PATCH] leave: include <sys/types.h> for u_int
+
+leave.c uses u_int, which it gets from <sys/types.h> through another
+header. With macOS 26's headers (the SDK's and the sysroot's alike) none
+of its includes reaches <sys/types.h>, so it fails to compile; include it.
+
+--- a/leave/leave.c
++++ b/leave/leave.c
+@@ -43,6 +43,8 @@
+ #include <sys/cdefs.h>
+ __FBSDID("$FreeBSD$");
+ 
++#include <sys/types.h>
++
+ #include <err.h>
+ #include <ctype.h>
+ #include <locale.h>

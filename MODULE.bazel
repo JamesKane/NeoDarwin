@@ -234,6 +234,34 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/patch_cmds/archive/refs/tags/patch_cmds-72.tar.gz"],
 )
 
+# P4-21's misc_cmds (calendar, leave, ncal and cal, tsort, units),
+# basic_cmds (mesg, write) and remote_cmds (logger and wall only; talk,
+# telnet and tftp are ports): base/misc_cmds, base/basic_cmds,
+# base/remote_cmds.
+http_archive(
+    name = "apple_misc_cmds",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "13bd44ff5a84ce33ef3445f06b24b020c1042225cc4af93df5f4a1acd438ae4e",
+    strip_prefix = "misc_cmds-misc_cmds-45",
+    urls = ["https://github.com/apple-oss-distributions/misc_cmds/archive/refs/tags/misc_cmds-45.tar.gz"],
+)
+
+http_archive(
+    name = "apple_basic_cmds",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "67c317119b1d147dff89394c562f2c4521618fb77184a38b4f49922ce0a15afa",
+    strip_prefix = "basic_cmds-basic_cmds-70",
+    urls = ["https://github.com/apple-oss-distributions/basic_cmds/archive/refs/tags/basic_cmds-70.tar.gz"],
+)
+
+http_archive(
+    name = "apple_remote_cmds",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "7f014f7eebb115460ea782e6bcade6d16effa56da17ee30f00012af07bc96c36",
+    strip_prefix = "remote_cmds-remote_cmds-306",
+    urls = ["https://github.com/apple-oss-distributions/remote_cmds/archive/refs/tags/remote_cmds-306.tar.gz"],
+)
+
 http_archive(
     name = "apple_diskdev_cmds",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
