@@ -1,0 +1,113 @@
+From: NeoDarwin
+Subject: [PATCH] CoreFoundation: the pure C CF on Darwin
+
+swift-corelibs-foundation builds CoreFoundation for Swift Foundation
+(DEPLOYMENT_RUNTIME_SWIFT); its pure C configuration, with Apple's
+CFRuntimeBase layout that clang's CFSTR constants use, had bit-rotted
+on Darwin. DEPLOYMENT_RUNTIME_SWIFT defaults to 0 in the installed
+headers; CFInternal.h always includes ForSwiftFoundationOnly.h (the
+thread types every configuration uses); CFRuntime.c names the allocator
+type ID by its current name; OS_LOG_SUBSYSTEM_RUNTIME_ISSUES (a private
+libsystem_trace name) gets its value; the legacy stream thread names
+itself with pthread_setname_np, as _CFThreadSetName (Swift only) would;
+CFTargetConditionals.h defines the non-Darwin TARGET_OS_* names Darwin's
+TargetConditionals.h lacks (docs/base/corefoundation.md).
+
+diff --git a/Sources/CoreFoundation/CFStream.c b/Sources/CoreFoundation/CFStream.c
+index 9079192..4c8f90c 100644
+--- a/Sources/CoreFoundation/CFStream.c
++++ b/Sources/CoreFoundation/CFStream.c
+@@ -1701,7 +1701,11 @@ static void _perform(void* info)
+ 
+ static void* _legacyStreamRunLoop_workThread(void* arg)
+ {
++#if DEPLOYMENT_RUNTIME_SWIFT
+     _CFThreadSetName(pthread_self(), "com.apple.CFStream.LegacyThread");
++#else
++    pthread_setname_np("com.apple.CFStream.LegacyThread");
++#endif
+     sLegacyRL = CFRunLoopGetCurrent();
+ 
+ #if defined(LOG_STREAM)
+diff --git a/Sources/CoreFoundation/CFUtilities.c b/Sources/CoreFoundation/CFUtilities.c
+index eed25f1..8b545d3 100644
+--- a/Sources/CoreFoundation/CFUtilities.c
++++ b/Sources/CoreFoundation/CFUtilities.c
+@@ -113,6 +113,10 @@ CF_PRIVATE os_log_t _CFMethodSignatureROMLog(void) {
+     return logger;
+ }
+ 
++#ifndef OS_LOG_SUBSYSTEM_RUNTIME_ISSUES
++#define OS_LOG_SUBSYSTEM_RUNTIME_ISSUES "com.apple.runtime-issues"
++#endif
++
+ CF_PRIVATE os_log_t _CFRuntimeIssuesLog(void) {
+     static os_log_t logger;
+     static dispatch_once_t onceToken;
+diff --git a/Sources/CoreFoundation/include/CFAvailability.h b/Sources/CoreFoundation/include/CFAvailability.h
+index c74e8cb..b01196e 100644
+--- a/Sources/CoreFoundation/include/CFAvailability.h
++++ b/Sources/CoreFoundation/include/CFAvailability.h
+@@ -8,7 +8,7 @@
+ */
+ 
+ #ifndef DEPLOYMENT_RUNTIME_SWIFT
+-#define DEPLOYMENT_RUNTIME_SWIFT 1
++#define DEPLOYMENT_RUNTIME_SWIFT 0
+ #endif
+ 
+ #if !defined(__COREFOUNDATION_CFAVAILABILITY__)
+diff --git a/Sources/CoreFoundation/include/CFTargetConditionals.h b/Sources/CoreFoundation/include/CFTargetConditionals.h
+index ed36cd6..2f04151 100644
+--- a/Sources/CoreFoundation/include/CFTargetConditionals.h
++++ b/Sources/CoreFoundation/include/CFTargetConditionals.h
+@@ -282,3 +282,21 @@
+ 
+ #endif // __has_include
+ 
++
++// The platforms swift-corelibs-foundation adds, which Darwin's
++// TargetConditionals.h does not define (clang warns on undefined TARGET_OS_*).
++#ifndef TARGET_OS_LINUX
++#define TARGET_OS_LINUX 0
++#endif
++#ifndef TARGET_OS_BSD
++#define TARGET_OS_BSD 0
++#endif
++#ifndef TARGET_OS_ANDROID
++#define TARGET_OS_ANDROID 0
++#endif
++#ifndef TARGET_OS_CYGWIN
++#define TARGET_OS_CYGWIN 0
++#endif
++#ifndef TARGET_OS_WASI
++#define TARGET_OS_WASI 0
++#endif
+diff --git a/Sources/CoreFoundation/internalInclude/CFInternal.h b/Sources/CoreFoundation/internalInclude/CFInternal.h
+index a348793..f2a9fe6 100644
+--- a/Sources/CoreFoundation/internalInclude/CFInternal.h
++++ b/Sources/CoreFoundation/internalInclude/CFInternal.h
+@@ -163,10 +163,8 @@ typedef struct os_log_s *os_log_t;
+ #endif
+ 
+ #include "ForFoundationOnly.h"
+-#if DEPLOYMENT_RUNTIME_SWIFT
+ #include "ForSwiftFoundationOnly.h"
+ #include "CFString.h"
+-#endif
+ 
+ CF_EXPORT const char *_CFProcessName(void);
+ CF_PRIVATE CFStringRef _CFProcessNameString(void);
+diff --git a/Sources/CoreFoundation/internalInclude/CoreFoundation_Prefix.h b/Sources/CoreFoundation/internalInclude/CoreFoundation_Prefix.h
+index 40a0d02..af6dc10 100644
+--- a/Sources/CoreFoundation/internalInclude/CoreFoundation_Prefix.h
++++ b/Sources/CoreFoundation/internalInclude/CoreFoundation_Prefix.h
+@@ -8,7 +8,7 @@
+ */
+ 
+ #ifndef DEPLOYMENT_RUNTIME_SWIFT
+-#define DEPLOYMENT_RUNTIME_SWIFT 1
++#define DEPLOYMENT_RUNTIME_SWIFT 0
+ #endif
+ 
+ #ifndef __COREFOUNDATION_PREFIX_H__

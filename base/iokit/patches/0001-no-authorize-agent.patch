@@ -1,0 +1,49 @@
+From: NeoDarwin
+Subject: [PATCH] IOKitLib: no IOServiceAuthorizeAgent
+
+IOServiceAuthorize and IOServiceOpenAsFileDescriptor ask
+IOServiceAuthorizeAgent over XPC. NeoDarwin has no such agent, and its
+libxpc stand-in no connections (docs/base/corefoundation.md). With
+ND_NO_AUTHORIZE_AGENT (base/iokit/build.sh), the two give the answers
+they give when the agent can't be reached.
+
+diff --git a/IOKitLib.c b/IOKitLib.c
+index 2e03b1a..38c110b 100644
+--- a/IOKitLib.c
++++ b/IOKitLib.c
+@@ -1495,6 +1495,7 @@ IOServiceRequestProbe(
+     return( io_service_request_probe( service, options ));
+ }
+ 
++#if !ND_NO_AUTHORIZE_AGENT
+ kern_return_t
+ IOServiceAuthorize(
+ 	io_service_t	service,
+@@ -1666,6 +1667,27 @@ IOServiceOpenAsFileDescriptor(
+ 
+     return fd;
+ }
++#else
++// NeoDarwin has no IOServiceAuthorizeAgent (and its libxpc stand-in no
++// connections): no service is authorized or opened through it. These are
++// the answers the functions above give when the agent can't be reached.
++kern_return_t
++IOServiceAuthorize(
++	io_service_t	service __unused,
++	uint32_t	options __unused )
++{
++    return kIOReturnUnsupported;
++}
++
++int
++IOServiceOpenAsFileDescriptor(
++	io_service_t	service __unused,
++	int		oflag __unused )
++{
++    errno = ENOTSUP;
++    return -1;
++}
++#endif
+ 
+ kern_return_t
+ _IOServiceGetAuthorizationID(

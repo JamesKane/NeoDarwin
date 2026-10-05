@@ -780,6 +780,34 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/zlib/archive/refs/tags/zlib-100.120.1.tar.gz"],
 )
 
+# P4-21 checkpoint 6b (docs/base/corefoundation.md): CoreFoundation from
+# swift-corelibs-foundation (Apache-2.0 with the Runtime Library Exception;
+# macOS 26's release set doesn't publish CF), the pure C CF without ICU;
+# IOKitLib from IOKitUser and ioreg from IOKitTools, both in macOS 26's set.
+http_archive(
+    name = "swift_corelibs_foundation",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "4d54f115ca4f24f77117c97e64760f6379bb45745a5c79d52a2877fe84c6ad5c",
+    strip_prefix = "swift-corelibs-foundation-swift-6.4.0-RELEASE",
+    urls = ["https://github.com/swiftlang/swift-corelibs-foundation/archive/refs/tags/swift-6.4.0-RELEASE.tar.gz"],
+)
+
+http_archive(
+    name = "apple_iokituser",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "c284f0ad09f2f94220b6160fc70077e5a649bfd3ce5f03d92c58523f03ab7681",
+    strip_prefix = "IOKitUser-IOKitUser-100222.0.4",
+    urls = ["https://github.com/apple-oss-distributions/IOKitUser/archive/refs/tags/IOKitUser-100222.0.4.tar.gz"],
+)
+
+http_archive(
+    name = "apple_iokittools",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "9cd1747f03c9209ceb47105bfce7cf8e87f58a7e9264cb2b8cfd6a9bbbb7bb44",
+    strip_prefix = "IOKitTools-IOKitTools-125",
+    urls = ["https://github.com/apple-oss-distributions/IOKitTools/archive/refs/tags/IOKitTools-125.tar.gz"],
+)
+
 # xnu's corecrypto subset and headers, for ndcrypto's host tests: the same
 # archive as apple_xnu (the repository cache serves it once), with its own
 # BUILD file so the kernel's inputs are untouched.

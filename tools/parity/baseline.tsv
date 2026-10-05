@@ -162,7 +162,7 @@ usr.bin/c99	freebsd	no
 usr.bin/caesar	port	no
 usr.bin/calendar	apple	yes
 usr.bin/cap_mkdb	apple	no
-usr.bin/chat	apple	no
+usr.bin/chat	port	no
 usr.bin/chpass	apple	yes
 usr.bin/cksum	apple	yes
 usr.bin/clang/bugpoint	n/a	no
@@ -518,9 +518,9 @@ usr.sbin/bootparamd/callbootd	port	no
 usr.sbin/boottrace	n/a	no
 usr.sbin/bsdconfig	n/a	no
 usr.sbin/bsdinstall	new	no
-usr.sbin/bsnmpd/bsnmpd	equivalent	no
+usr.sbin/bsnmpd/bsnmpd	port	no
 usr.sbin/bsnmpd/gensnmptree	n/a	no
-usr.sbin/bsnmpd/tools/bsnmptools	equivalent	no
+usr.sbin/bsnmpd/tools/bsnmptools	port	no
 usr.sbin/btxld	n/a	no
 usr.sbin/camdd	n/a	no
 usr.sbin/cdcontrol	n/a	no
@@ -543,7 +543,7 @@ usr.sbin/cxgbetool	n/a	no
 usr.sbin/daemon	freebsd	yes
 usr.sbin/dconschat	n/a	no
 usr.sbin/devctl	n/a	no
-usr.sbin/devinfo	equivalent	no
+usr.sbin/devinfo	equivalent	yes
 usr.sbin/diskinfo	freebsd	no
 usr.sbin/dumpcis	n/a	no
 usr.sbin/editmap	port	no
@@ -657,8 +657,8 @@ usr.sbin/pnfsdsfile	n/a	no
 usr.sbin/pnfsdskill	n/a	no
 usr.sbin/pnpinfo	n/a	no
 usr.sbin/powerd	n/a	no
-usr.sbin/ppp	equivalent	no
-usr.sbin/pppctl	equivalent	no
+usr.sbin/ppp	port	no
+usr.sbin/pppctl	port	no
 usr.sbin/praliases	port	no
 usr.sbin/praudit	apple	yes
 usr.sbin/prometheus_sysctl_exporter	port	no

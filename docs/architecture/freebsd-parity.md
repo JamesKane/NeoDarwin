@@ -59,19 +59,19 @@ A program's key name is the installed name that matches its directory (`vi`, not
 
 **Coverage.** `bazel build //tools/parity:coverage` writes `coverage.md`: counts by status and directory, how much of the base is built, and the unbuilt rows grouped by roadmap item and source. That last part is P4-21's work list. `ci/parity.sh` runs the checks, builds the report and copies it to `$PARITY_OUT` (and to the job summary on GitHub and Forgejo Actions). The workflow that publishes it as an artifact waits for the CI runners (P0-05). Coverage is every status except `todo`, as a share of all rows. The 1.0 gate is **no `todo` rows**, and every `apple`, `freebsd`, `new` and `equivalent` row built, installed and passing the FreeBSD test suite's tests for that program where they exist (`/usr/tests`, Kyua).
 
-Today (2026-10-05, after P4-21 checkpoint 5's heavier FreeBSD programs), on 15.1-RELEASE's 752 rows:
+Today (2026-10-05, after P4-21 checkpoint 6b part 1: CoreFoundation, IOKitLib and `ioreg`), on 15.1-RELEASE's 752 rows:
 
 | Status | Rows | Built |
 |---|---:|---:|
-| `apple` | 245 | 193 |
+| `apple` | 244 | 193 |
 | `freebsd` | 101 | 56 |
 | `new` | 16 | 0 |
-| `equivalent` | 46 | 12 |
-| `port` | 49 | – |
+| `equivalent` | 42 | 13 |
+| `port` | 54 | – |
 | `n/a` | 295 | – |
 | `todo` | 0 | – |
 
-Coverage is 100% (no `todo`). Of the 408 base rows, 261 (64.0%) are built: 97.4% of `bin`, 47.4% of `sbin`, 73.7% of `usr.bin` and 40.0% of `usr.sbin`. P4-21 holds 29 of the 147 unbuilt base rows (36 before cp5's leftovers were placed, 2026-10-05: `getfacl` and `setfacl` equivalent, four ports, `mailwrapper` to P4-23; 54 before checkpoint 5, 80 before checkpoint 4, 81 before vis, 96 before checkpoint 3, 107 before checkpoint 2, 193 before checkpoint 1; 241 of 327 until 2026-10-04, when NFS, tracing, quotas, printing and `at` moved to their own items and the obsolete network programs became ports; §2.1). They are cp6's 12 equivalents and 6 new programs, 6 FreeBSD programs (`diskinfo`, `trim`, `recoverdisk`, `efidp` for cp6, `kyua` for cp7, `tzsetup`), and 5 Apple ones (`iostat` and `top`, IOKit). The toolchain (31 rows, P5-10), NFS (15, P4-28), accounts (13, P4-22), services (9, P4-23, with `mailwrapper`), printing (7, P4-31), quotas (5, P4-30), tracing (3, P4-29) and the ndpkg-backed equivalents (P2-02 to P2-04) make up the rest.
+Coverage is 100% (no `todo`). Of the 403 base rows, 262 (65.0%) are built: 97.4% of `bin`, 47.4% of `sbin`, 74.1% of `usr.bin` and 42.3% of `usr.sbin`. P4-21 holds 20 of the 141 unbuilt base rows (28 before ppp, `chat` and SNMP became ports and the UEFI variables moved to P4-32, 2026-10-05; 29 before cp6b's `ioreg`; 36 before cp5's leftovers were placed, 2026-10-05: `getfacl` and `setfacl` equivalent, four ports, `mailwrapper` to P4-23; 54 before checkpoint 5, 80 before checkpoint 4, 81 before vis, 96 before checkpoint 3, 107 before checkpoint 2, 193 before checkpoint 1; 241 of 327 until 2026-10-04, when NFS, tracing, quotas, printing and `at` moved to their own items and the obsolete network programs became ports; §2.1). They are 7 equivalents (`lsof`, `vm_stat`, `xattr`, `top`: 6a and 6b), 4 new programs (`pciconf`, `acpidump`, `mdconfig`, `nvmecontrol`: 6b and 6c), 4 Apple ones (`top`, `iostat`, `fstyp`, `host`), and 5 FreeBSD ones (`diskinfo`, `trim`, `recoverdisk` for 6a, `kyua` for cp7, `tzsetup`). The toolchain (31 rows, P5-10), NFS (15, P4-28), accounts (13, P4-22), services (9, P4-23, with `mailwrapper`), printing (7, P4-31), quotas (5, P4-30), tracing (3, P4-29) and the ndpkg-backed equivalents (P2-02 to P2-04) make up the rest.
 
 **Workflow.** Reclassify a row by editing `inventory.tsv`, then run `bazel run //tools/parity:accept`. After a base change installs or removes programs, run `bazel run //tools/parity:update` then `accept`. For a new FreeBSD release, run `bazel run //tools/parity:lock -- CHECKOUT "15.2-RELEASE (tag release/15.2.0)"` on a checkout of the tag (a sparse checkout of `bin sbin usr.bin usr.sbin share/mk` is enough), then `update` (new directories arrive as `todo`), classify them, and `accept`.
 
@@ -86,7 +86,7 @@ P4-21 is planned as seven checkpoints, cheapest first. Each one is about one age
 | 3 (done, but `top`) | **Interactive essentials.** `less` (3), vis as `vi` (§6), `man` with `mandoc` and `soelim`, `file`, `bc`, `top`, `nc`, `csh` (tcsh), `mail`, `iconv` (3), the ncurses tools, `locale` and `localedef` with locale data | ~20 | `zsh` is the default interactive shell (§6) |
 | 4 (leaf rows done; §2.1's cp4 notes) | **FreeBSD leaf utilities** on the FreeBSD source drop at `050683bb8e13` (as for `timeout` and libxo): `nmtree`, `nproc`, `uuidgen`, `pwait`, `m4`, `ident`, `ministat`, `xo`, `perror`, `getaddrinfo`, `ts`, `daemon`, `fsync`, `lock`, `asa`, `ee`, `bsdiff`, `bspatch`, `resizewin`, `domainname`, ... | ~30 | Sets up the shared build pattern for FreeBSD programs. The obsolete network programs are ports, not base (§6) |
 | 5 (done, but the rows in §2.1's cp5 notes) | **Heavier FreeBSD programs.** `bmake`, `dtc`, `mkimg`, `makefs`, `iasl` and `acpidb` (from `third_party/acpica`), `fetch` and `certctl` (with OpenSSL), `drill`, `tzsetup`, and the IPv6 and multicast tools (`route6d`, `rtadvctl`, `ip6addrctl`, `mld6query`, `rrenumd`, `mtest`, ...) | ~25 | `diskinfo`, `trim` and `recoverdisk` use GEOM and CAM ioctls and need rewriting over IOKit |
-| 6 | **`equivalent` and `new` rows.** Equivalents: `lsof`, `vm_stat`, `ioreg`, `xattr`, `pppd`. New programs: `pciconf` and `acpidump` over the IOKit registry, `mdconfig`, `nvmecontrol`, `efivar` and `efibootmgr` | ~18 | `efivar` and `efibootmgr` need a kernel interface to UEFI runtime services |
+| 6 | **`equivalent` and `new` rows.** Equivalents: `lsof`, `vm_stat`, `ioreg`, `xattr`. New programs: `pciconf` and `acpidump` over the IOKit registry, `mdconfig`, `nvmecontrol`. Plus `top`, `iostat`, `fstyp`, `host`, and the DKIOC rewrites of `diskinfo`, `trim` and `recoverdisk` | ~20 | 6a, 6b and 6c below. `pppd` and SNMP are ports and the UEFI variables are P4-32 (2026-10-05) |
 | 7 | **Tests.** `kyua` and ATF, and FreeBSD's `/usr/tests` for every built row, run on QEMU. This is P4-21's exit | – | Needs Lua and SQLite. It may become its own item |
 
 **cp1 progress (2026-10-04).** Part 1a is done: text_cmds' 25 rows (with `md5` and its `sha*` names, `ed`, `bintrans` and its `base64`/`uuencode` names), shell_cmds' 25 (with `locate`'s helpers and updatedb scripts, `alias` and its builtin names, `w` and `uptime`, `chroot`), and patch_cmds' `patch`, `diff3` and `sdiff`. Two libraries macOS ships but Apple doesn't publish came in from FreeBSD at `050683bb8e13`, as libxo did: `base/libmd` (`/usr/lib/libmd.dylib`, MD5 and SHA-1/2 with their End/File/Data helpers, for `md5` and `install`) and `base/libsbuf` (`/usr/lib/libsbuf.dylib`, FreeBSD's sbuf under macOS's `usbuf_` names, for `apply` and `w`). Of part 1b, file_cmds (`chflags`, `pax`, `mknod`, `ipcrm`, `ipcs`, `pathchk`, `install`) and adv_cmds (`finger`, `gencat`, `last`, `lsvfs`, `whois`, `locale`, `localedef`) are built. `locale` and `localedef` are built without locale data: `/usr/share/locale` stays with cp3. `//kernel:sbsa_base_commands_test` (manual, qemu) runs a sample on `session_root`.
@@ -174,6 +174,21 @@ Patches (`base/freebsd_cmds/patches`): 0001, `pwait -v` asks xnu for the exit st
 - `mailwrapper` goes with the MTA decision, in P4-23.
 - `diskinfo`, `trim`, `recoverdisk` and `efidp` stay in P4-21 for cp6 (Darwin's DKIOC ioctls and IOKit; `efidp` with `efivar` and `efibootmgr`). `kyua` stays for cp7.
 - `tzsetup` stays in P4-21, for later: it needs bsddialog and `/usr/share/zoneinfo`, which the image doesn't install yet.
+
+**Checkpoint 6, the plan (2026-10-05).** Three parts:
+- **6a, no IOKit:** `vm_stat`, `lsof`, `xattr`, `fstyp`, the DKIOC rewrites of `diskinfo`, `trim` and `recoverdisk`, and `host` through FreeBSD's ldns.
+- **6b, CoreFoundation and IOKitLib,** then `ioreg`, `iostat`, `top`, `pciconf` and `acpidump`. macOS 26's release set publishes IOKitUser (IOKitLib), IOKitTools (`ioreg`), top and system_cmds' `iostat`, and all of them need CoreFoundation, which it doesn't publish. The base's CoreFoundation is swift-corelibs-foundation's (user decision, 2026-10-05), the pure C CF that open-source Foundation is built on, without ICU (`docs/base/corefoundation.md`).
+- **6c, kernel interfaces:** `nvmecontrol` (a user client in the NVMe kext) and `mdconfig` (run-time md attach and detach).
+- *Decided (user, 2026-10-05):* `ppp`, `pppctl` and `chat` are ports (`net/ppp`, a NeoDarwin recipe from ppp-1020's `pppd` and `chat`; FreeBSD's user ppp needs tun(4), and xnu has utun). `bsnmpd` and `bsnmptools` are ports (`net-mgmt/net-snmp`). `efivar`, `efibootmgr` and `efidp` move to P4-32, UEFI variables, after the Q8B's first boot.
+
+**Checkpoint 6b, part 1 (2026-10-05).** `CoreFoundation.framework` (swift-corelibs-foundation swift-6.4.0-RELEASE, 1,592 exports, 1,501 of them in the macOS 27 SDK's list), `IOKit.framework` (IOKitLib's core from IOKitUser-100222.0.4, 138 exports, all in Apple's list) and `/usr/sbin/ioreg` (IOKitTools-125) with its page; `devinfo` (equivalent) is built. `//kernel:sbsa_base_commands_test` runs `ioreg -l` (every entry's properties, none missing), a class search, a property value under IOResources, the device tree plane and `ioreg -a` (CF's XML writer); `//base:corefoundation_host_test` runs a property list round trip against the framework on the build machine. The ISA audit covers 414 files with no new findings. The session root grows from 181,088,256 to 183,535,616 bytes (+2.3 MB: CF 1.7 MB, IOKit 128 KB, ioreg 64 KB).
+
+*Left for the next agent (6b, part 2):*
+- `iostat` (system_cmds-1039, pinned): add it to `base/system_cmds/build.sh` with `-iframework` the CF and IOKit trees (`base/iokittools/build.sh` shows the flags and the link) and those two targets in `system_commands`' deps. QEMU's SBSA machine in the smoke test has no IOMedia (`ioreg -c IOMedia` is empty), so test it with `iostat -c 1` (the CPU columns) or give the test a disk.
+- `top` (top-144): libtop's IOKit disk statistics and CF dictionaries now build; it also links libpanel: check that the base's ncurses builds it.
+- `pciconf` and `acpidump`: FreeBSD's tools over the IOKit registry (`IOPCIDevice` properties, the `ACPI_TABLES` property of the platform expert, or `/dev` nodes if the kernel has them).
+- The CF smoke test on QEMU (`base/corefoundation/cftest.c`, which the host test runs) needs a target that installs it into a test image; `ioreg -a` covers CF's XML writer on QEMU meanwhile.
+- `CFMachPort` is NeoDarwin's (`base/corefoundation/src/nd_cfmachport.c`); IOKitLib's `IONotificationPortGetRunLoopSource` uses it, and nothing on QEMU has exercised a notification yet.
 
 **Split out of P4-21 (2026-10-04).** These rows need kernel work or daemons, not just command ports, so they belong to their own items:
 - NFS: 15 rows, including `rpcbind`, `rpcinfo`, `autofs` and `gssd` (P4-28).

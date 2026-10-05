@@ -1,0 +1,29 @@
+From: NeoDarwin
+Subject: [PATCH] CoreFoundation: no sysdir (CF_NO_SYSDIR)
+
+CFSystemDirectories on Darwin calls sysdir, which is in
+libsystem_coreservices, unpublished. With CF_NO_SYSDIR the search path
+enumeration finds no directories (docs/base/corefoundation.md).
+
+diff --git a/Sources/CoreFoundation/CFSystemDirectories.c b/Sources/CoreFoundation/CFSystemDirectories.c
+index 90d517b..8160f30 100644
+--- a/Sources/CoreFoundation/CFSystemDirectories.c
++++ b/Sources/CoreFoundation/CFSystemDirectories.c
+@@ -26,7 +26,17 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <pwd.h>
++#if __has_include(<sysdir.h>) && !CF_NO_SYSDIR
+ #include <sysdir.h>
++#else
++// sysdir lives in libsystem_coreservices, which Apple doesn't publish:
++// without it, no search path has a directory.
++typedef unsigned int sysdir_search_path_enumeration_state;
++typedef unsigned long sysdir_search_path_directory_t;
++typedef unsigned long sysdir_search_path_domain_mask_t;
++static sysdir_search_path_enumeration_state sysdir_start_search_path_enumeration(sysdir_search_path_directory_t dir, sysdir_search_path_domain_mask_t mask) { return 0; }
++static sysdir_search_path_enumeration_state sysdir_get_next_search_path_enumeration(sysdir_search_path_enumeration_state state, char *path) { return 0; }
++#endif
+ 
+ // For now, CFSystemDirectories SPIs are exactly equivalent to (or at least a subset of) sysdir's. NSSearchPath* APIs in Foundation are not a subset of sysdir, so don't attempt to push that functionality down here without accommodating the differences.
+ #define CFSearchPathToSysdir(dir) ((sysdir_search_path_directory_t)dir)

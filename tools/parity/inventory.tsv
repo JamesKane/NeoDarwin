@@ -163,7 +163,7 @@ usr.bin/c99	freebsd	FreeBSD usr.bin/c99		P5-10	no
 usr.bin/caesar	port	games/freebsd-games			no	MK_GAMES
 usr.bin/calendar	apple	misc_cmds-45		P4-21	yes	
 usr.bin/cap_mkdb	apple	adv_cmds-237		P4-22	no	
-usr.bin/chat	apple	ppp-1020.1.1		P4-21	no	
+usr.bin/chat	port	net/ppp			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from ppp-1020.1.1's pppd and chat (FreeBSD's user ppp needs tun(4), and xnu has utun) (user decision 2026-10-05)
 usr.bin/chpass	apple	system_cmds-1039		P4-22	yes	
 usr.bin/cksum	apple	file_cmds-475		P4-21	yes	
 usr.bin/clang/bugpoint	n/a				no	not built for FreeBSD/arm64 by default (MK_CLANG_EXTRAS)
@@ -519,9 +519,9 @@ usr.sbin/bootparamd/callbootd	port	net/freebsd-legacy			no	no FreeBSD port; a Ne
 usr.sbin/boottrace	n/a				no	boottrace(4)
 usr.sbin/bsdconfig	n/a				no	dialog front end to FreeBSD's rc.conf and pkg; NeoDarwin administers with sysrc, service and ndpkg (§3)
 usr.sbin/bsdinstall	new	the text installer (bsdinstall-shaped)		P7-03	no	
-usr.sbin/bsnmpd/bsnmpd	equivalent	snmpd (net_snmp-1723)	usr/sbin/snmpd	P4-21	no	bsnmpd's modules read FreeBSD sysctls
+usr.sbin/bsnmpd/bsnmpd	port	net-mgmt/net-snmp			no	snmpd from net-snmp, as a port: bsnmpd's modules read FreeBSD sysctls (user decision 2026-10-05)
 usr.sbin/bsnmpd/gensnmptree	n/a				no	bsnmpd's module generator
-usr.sbin/bsnmpd/tools/bsnmptools	equivalent	snmpget and friends (net_snmp-1723)	usr/bin/snmpget	P4-21	no	
+usr.sbin/bsnmpd/tools/bsnmptools	port	net-mgmt/net-snmp			no	snmpget and friends from net-snmp, as a port (user decision 2026-10-05)
 usr.sbin/btxld	n/a				no	not built for FreeBSD/arm64 (arch=amd64 && MK_TOOLCHAIN || arch=i386 && MK_TOOLCHAIN)
 usr.sbin/camdd	n/a				no	CAM
 usr.sbin/cdcontrol	n/a				no	CAM CD devices
@@ -544,15 +544,15 @@ usr.sbin/cxgbetool	n/a				no	FreeBSD driver control
 usr.sbin/daemon	freebsd	FreeBSD usr.sbin/daemon		P4-21	yes	
 usr.sbin/dconschat	n/a				no	FireWire dcons
 usr.sbin/devctl	n/a				no	newbus device control; IOKit (ioreg)
-usr.sbin/devinfo	equivalent	ioreg (IOKitTools-125)	usr/sbin/ioreg	P4-21	no	
+usr.sbin/devinfo	equivalent	ioreg (IOKitTools-125)	usr/sbin/ioreg	P4-21	yes	
 usr.sbin/diskinfo	freebsd	FreeBSD usr.sbin/diskinfo		P4-21	no	GEOM/CAM ioctls; over Darwin's DKIOC ioctls and IOKit (cp6)
 usr.sbin/dumpcis	n/a				no	PC Card
 usr.sbin/editmap	port	mail/sendmail			no	sendmail is an option in FreeBSD too (MK_SENDMAIL)
 usr.sbin/edquota	apple	diskdev_cmds-751		P4-30	no	
-usr.sbin/efibootmgr	new	UEFI boot variables over a kernel runtime-services interface		P4-21	no	
-usr.sbin/efidp	freebsd	FreeBSD usr.sbin/efidp		P4-21	no	device-path parsing from libefivar, which goes with efivar and efibootmgr (cp6)
+usr.sbin/efibootmgr	new	UEFI boot variables over a kernel runtime-services interface		P4-32	no	
+usr.sbin/efidp	freebsd	FreeBSD usr.sbin/efidp		P4-32	no	device-path parsing from libefivar, which goes with efivar and efibootmgr (cp6)
 usr.sbin/efitable	n/a				no	efirt(4) table access
-usr.sbin/efivar	new	UEFI variables over a kernel runtime-services interface		P4-21	no	
+usr.sbin/efivar	new	UEFI variables over a kernel runtime-services interface		P4-32	no	
 usr.sbin/efiwake	n/a				no	efirt(4) wake time
 usr.sbin/etcupdate	equivalent	ndpkg system upgrade	usr/sbin/ndpkg	P2-03	no	
 usr.sbin/extattr	equivalent	xattr (file_cmds-475)	usr/bin/xattr	P4-21	no	
@@ -658,8 +658,8 @@ usr.sbin/pnfsdsfile	n/a				no	FreeBSD's NFSv4 and pNFS; NFS is Apple's (NFS-339)
 usr.sbin/pnfsdskill	n/a				no	FreeBSD's NFSv4 and pNFS; NFS is Apple's (NFS-339)
 usr.sbin/pnpinfo	n/a				no	not built for FreeBSD/arm64 (arch=i386)
 usr.sbin/powerd	n/a				no	cpufreq(4); CPU power is the kernel's (P7-02)
-usr.sbin/ppp	equivalent	pppd (ppp-1020.1.1)	usr/sbin/pppd	P4-21	no	user ppp needs tun(4); xnu has utun
-usr.sbin/pppctl	equivalent	pppd (ppp-1020.1.1)	usr/sbin/pppd	P4-21	no	
+usr.sbin/ppp	port	net/ppp			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from ppp-1020.1.1's pppd and chat (FreeBSD's user ppp needs tun(4), and xnu has utun) (user decision 2026-10-05)
+usr.sbin/pppctl	port	net/ppp			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from ppp-1020.1.1's pppd and chat (FreeBSD's user ppp needs tun(4), and xnu has utun) (user decision 2026-10-05)
 usr.sbin/praliases	port	mail/sendmail			no	sendmail is an option in FreeBSD too (MK_SENDMAIL)
 usr.sbin/praudit	apple	OpenBSM-21		P4-21	yes	OpenBSM, as on FreeBSD
 usr.sbin/prometheus_sysctl_exporter	port	sysutils/prometheus_sysctl_exporter			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source; walks FreeBSD's sysctl metadata (user decision 2026-10-05)

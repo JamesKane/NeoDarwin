@@ -83,3 +83,6 @@ libcrypt             freebsd-src 050683bb8e13      lib/libcrypt, secure/lib/libc
 pfctl                openbsd/src fd47049c620b      sbin/pfctl (OpenBSD 4.3), sys/net/pf_ruleset.c, etc/pf.os; pinned per file in base/pfctl/openbsd.lock (Apple publishes no pfctl; xnu's pf is OpenBSD's of early 2008)
 ntp                  ntp-139                       sha256:ec5ddb29e33b667c535d8ca2f616927772682d817f25205db80071b4e7b32ac7  (ntp 4.2.8p10; sntp only; the last ntp Apple published, macOS 10.15; outside the release set)
 openzfs              zfs-macOS-2.4.1p1             pinned in kexts/zfs/upstream.lock (zpool, zfs and their libraries; github.com/openzfsonosx/openzfs-fork a4c1b11ab900, OpenZFS 2.4.1 with the macOS OS layer; CDDL-1.0)
+corefoundation       swift-6.4.0-RELEASE           sha256:4d54f115ca4f24f77117c97e64760f6379bb45745a5c79d52a2877fe84c6ad5c  (github.com/swiftlang/swift-corelibs-foundation tag tarball; Sources/CoreFoundation only, pure C, no ICU; Apache-2.0 with the Runtime Library Exception; macOS 26's set publishes no CoreFoundation; outside the release set)
+IOKitUser            IOKitUser-100222.0.4          sha256:c284f0ad09f2f94220b6160fc70077e5a649bfd3ce5f03d92c58523f03ab7681  (IOKitLib's core only: IOKit.framework)
+IOKitTools           IOKitTools-125                sha256:9cd1747f03c9209ceb47105bfce7cf8e87f58a7e9264cb2b8cfd6a9bbbb7bb44  (ioreg)

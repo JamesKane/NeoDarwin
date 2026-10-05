@@ -1,0 +1,376 @@
+From: NeoDarwin
+Subject: [PATCH] CoreFoundation: build without ICU (CF_NO_ICU)
+
+The user's call (docs/base/corefoundation.md): no ICU, whose data is
+about 30 MB. With CF_NO_ICU, the locale, calendar, formatter, regular
+expression and transform sources are left out (base/corefoundation/
+build.sh) and the files that stay lose their ICU calls: CFString's
+grapheme clusters use CF's own Grapheme_Extend bitmap (no
+Extended_Pictographic, Prepend or SpacingMark: emoji ZWJ sequences are
+not one cluster), localized number formatting falls back to the C
+locale's, CFStringUtilities compares without collation (its non-ICU
+path), CFTimeZone answers from its TZif periods and has no localized
+names, CFBundle matches localizations by name, CFICUConverters.h makes
+every ICU converter absent, and CFRuntime's class table leaves out the
+types it doesn't build. base/corefoundation/src/nd_cflocale.c is the
+CFLocale that remains: an identifier.
+
+diff --git a/Sources/CoreFoundation/CFBundle_Locale.c b/Sources/CoreFoundation/CFBundle_Locale.c
+index dc78774..8e521da 100644
+--- a/Sources/CoreFoundation/CFBundle_Locale.c
++++ b/Sources/CoreFoundation/CFBundle_Locale.c
+@@ -17,7 +17,9 @@
+ #if __HAS_APPLE_ICU__
+ #include <_foundation_unicode/ualoc.h>
+ #endif
++#if !CF_NO_ICU
+ #include <_foundation_unicode/uloc.h>
++#endif
+ #include <ctype.h>
+ 
+ static CFStringRef _CFBundleCopyLanguageFoundInLocalizations(CFArrayRef localizations, CFStringRef language);
+@@ -776,8 +778,8 @@ static CFMutableArrayRef _CFBundleCreateMutableArrayOfFallbackLanguages(CFArrayR
+     if (availableStringsBuffer && preferredStringsBuffer) {
+         // proceed to call ICU API
+         const char *localizationsToUse[512];
+-        UErrorCode status = U_ZERO_ERROR;
+ #if __HAS_APPLE_ICU__
++        UErrorCode status = U_ZERO_ERROR;
+         int32_t numberOfResults = ualoc_localizationsToUse((const char * const *)preferredCStrings, preferredCount,
+                                                            (const char * const *)availableCStrings, availableCount,
+                                                            localizationsToUse, 512,
+diff --git a/Sources/CoreFoundation/CFCharacterSet.c b/Sources/CoreFoundation/CFCharacterSet.c
+index 3c818e3..74cb1f2 100644
+--- a/Sources/CoreFoundation/CFCharacterSet.c
++++ b/Sources/CoreFoundation/CFCharacterSet.c
+@@ -20,8 +20,13 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include "CFPriv.h"
++#if !CF_NO_ICU
+ #include <_foundation_unicode/uchar.h>
+ #include <_foundation_unicode/uset.h>
++#else
++#define UCHAR_MIN_VALUE 0
++#define UCHAR_MAX_VALUE 0x10ffff
++#endif
+ 
+ #define BITSPERBYTE	8	/* (CHAR_BIT * sizeof(unsigned char)) */
+ #define LOG_BPB		3
+diff --git a/Sources/CoreFoundation/CFRuntime.c b/Sources/CoreFoundation/CFRuntime.c
+index 5a5ee09..f68317e 100644
+--- a/Sources/CoreFoundation/CFRuntime.c
++++ b/Sources/CoreFoundation/CFRuntime.c
+@@ -211,10 +211,12 @@ _CFClassTables __CFRuntimeClassTables __attribute__((aligned)) = {
+     [_kCFRuntimeIDCFTree] = &__CFTreeClass,
+     [_kCFRuntimeIDCFError] = &__CFErrorClass,
+     [_kCFRuntimeIDCFLocale] = &__CFLocaleClass,
++#if !CF_NO_ICU
+     [_kCFRuntimeIDCFDateFormatter] = &__CFDateFormatterClass,
+     [_kCFRuntimeIDCFNumberFormatter] = &__CFNumberFormatterClass,
+     [_kCFRuntimeIDCFCalendar] = &__CFCalendarClass,
+     [_kCFRuntimeIDCFDateIntervalFormatter] = &__CFDateIntervalFormatterClass,
++#endif
+     [_kCFRuntimeIDCFDate] = &__CFDateClass,
+     [_kCFRuntimeIDCFTimeZone] = &__CFTimeZoneClass,
+     [_kCFRuntimeIDCFKeyedArchiverUID] = &__CFKeyedArchiverUIDClass,
+@@ -255,9 +257,11 @@ _CFClassTables __CFRuntimeClassTables __attribute__((aligned)) = {
+ 
+     
+     [_kCFRuntimeIDCFURLComponents] = &__CFURLComponentsClass,
++#if !CF_NO_ICU
+     [_kCFRuntimeIDCFDateComponents] = &__CFDateComponentsClass,
+     [_kCFRuntimeIDCFRelativeDateTimeFormatter] = &__CFRelativeDateTimeFormatterClass,
+     [_kCFRuntimeIDCFListFormatter] = &__CFListFormatterClass,
++#endif
+     },
+     .objCClassTable = {0}
+ };
+@@ -1716,7 +1720,7 @@ static void _CFRelease(CFTypeRef CF_RELEASES_ARGUMENT cf) {
+             allocator = CFGetAllocator(cf);
+             usesSystemDefaultAllocator = _CFAllocatorIsSystemDefault(allocator);
+ 
+-            if (__kCFAllocatorTypeID_CONST != __CFGenericTypeID_inline(cf)) {
++            if (_kCFRuntimeIDCFAllocator != __CFGenericTypeID_inline(cf)) {
+                 allocatorToRelease = (CFAllocatorRef _Nonnull)__CFGetAllocator(cf);
+             }
+ 	}
+diff --git a/Sources/CoreFoundation/CFString.c b/Sources/CoreFoundation/CFString.c
+index a49dad4..6fa0cf1 100644
+--- a/Sources/CoreFoundation/CFString.c
++++ b/Sources/CoreFoundation/CFString.c
+@@ -27,7 +27,9 @@
+ #include "CFString_Internal.h"
+ #include "CFRuntime_Internal.h"
+ #include <assert.h>
++#if !CF_NO_ICU
+ #include <_foundation_unicode/uchar.h>
++#endif
+ #if TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_BSD || TARGET_OS_WASI
+ #include "CFConstantKeys.h"
+ #include "CFStringLocalizedFormattingInternal.h"
+@@ -3711,11 +3713,23 @@ static inline bool __CFStringIsValidExtendCharacterForPictographicSequence(UTF32
+     //   Grapheme_Extend = Yes, or
+     //   Emoji_Modifier=Yes in emoji-data.txt
+     //
++#if CF_NO_ICU
++    // CF's own Grapheme_Extend bitmap; the Emoji_Modifier characters are
++    // the five skin-tone modifiers.
++    return CFUniCharIsMemberOf(character, kCFUniCharGraphemeExtendCharacterSet) || (character >= 0x1F3FB && character <= 0x1F3FF);
++#else
+     return u_hasBinaryProperty(character, UCHAR_GRAPHEME_EXTEND) || u_hasBinaryProperty(character, UCHAR_EMOJI_MODIFIER);
++#endif
+ }
+ 
+ static inline bool __CFStringIsValidExtendedPictographicCharacterForPictographicSequence(UTF32Char character) {
++#if CF_NO_ICU
++    // Without ICU's Extended_Pictographic property, no emoji ZWJ sequence
++    // is joined into one cluster.
++    return false;
++#else
+     return u_hasBinaryProperty(character, UCHAR_EXTENDED_PICTOGRAPHIC);
++#endif
+ }
+ 
+ static inline bool __CFStringIsValidPrecoreCharacterForPictographicSequence(UTF32Char character) {
+@@ -3724,7 +3738,11 @@ static inline bool __CFStringIsValidPrecoreCharacterForPictographicSequence(UTF3
+     //   precore := Prepend
+     //
+     // We can look up the grapheme cluster break class and use it directly.
++#if CF_NO_ICU
++    bool isValid = false; // no Grapheme_Cluster_Break property without ICU
++#else
+     bool isValid = (UGraphemeClusterBreak)u_getIntPropertyValue(character, UCHAR_GRAPHEME_CLUSTER_BREAK) == U_GCB_PREPEND;
++#endif
+     return isValid;
+ }
+ 
+@@ -3734,7 +3752,11 @@ static inline bool __CFStringIsValidPostcoreCharacterForPictographicSequence(UTF
+     //   postcore := [Extend ZWJ SpacingMark]
+     //
+     // We already have an expression to match Extend characters (and ZWJ is trivial); we can look up the grapheme cluster break class and use it directly to determine spacing mark characters.
++#if CF_NO_ICU
++    bool isValid = character == ZERO_WIDTH_JOINER || __CFStringIsValidExtendCharacterForPictographicSequence(character);
++#else
+     bool isValid = character == ZERO_WIDTH_JOINER || __CFStringIsValidExtendCharacterForPictographicSequence(character) || (UGraphemeClusterBreak)u_getIntPropertyValue(character, UCHAR_GRAPHEME_CLUSTER_BREAK) == U_GCB_SPACING_MARK;
++#endif
+     return isValid;
+ }
+     
+@@ -6292,6 +6314,11 @@ enum {
+ /* Only come in here if spec->type is CFFormatLongType or CFFormatDoubleType. Pass in 0 for width or precision if not specified. Returns false if couldn't do the format (with the assumption the caller falls back to unlocalized).
+ */
+ static Boolean __CFStringFormatLocalizedNumber(CFMutableStringRef output, CFLocaleRef locale, const CFPrintValue *values, const CFFormatSpec *spec, SInt32 width, SInt32 precision, Boolean hasPrecision) {
++#if CF_NO_ICU
++    // Without ICU's number formatters, numbers are formatted as in the C
++    // locale, the caller's fallback.
++    return false;
++#endif
+     static CFLock_t formatterLock = CFLockInit;
+     // These formatters are recached if the locale argument is different
+     static CFNumberFormatterRef decimalFormatter = NULL;
+diff --git a/Sources/CoreFoundation/CFStringUtilities.c b/Sources/CoreFoundation/CFStringUtilities.c
+index dbc3726..b0e5c87 100644
+--- a/Sources/CoreFoundation/CFStringUtilities.c
++++ b/Sources/CoreFoundation/CFStringUtilities.c
+@@ -18,7 +18,7 @@
+ #include "CFString_Internal.h"
+ #include <limits.h>
+ #include <stdlib.h>
+-#if TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI
++#if (TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI) && !CF_NO_ICU
+ #include <_foundation_unicode/ucol.h>
+ #include <_foundation_unicode/ucoleitr.h>
+ #endif
+@@ -111,7 +111,7 @@ CFStringEncoding CFStringConvertIANACharSetNameToEncoding(CFStringRef charsetNam
+ 
+     encoding = __CFStringEncodingGetFromCanonicalName(name);
+ 
+-#if TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI
++#if (TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI) && !CF_NO_ICU
+     if (kCFStringEncodingInvalidId == encoding) encoding = __CFStringEncodingGetFromICUName(name);
+ #endif
+     
+@@ -262,7 +262,7 @@ CFStringEncoding CFStringGetMostCompatibleMacStringEncoding(CFStringEncoding enc
+ 
+ #define kCFStringCompareAllocationIncrement (128)
+ 
+-#if TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI
++#if (TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI) && !CF_NO_ICU
+ 
+ // -------------------------------------------------------------------------------------------------
+ //	CompareSpecials - ignore case & diacritic differences
+@@ -425,7 +425,7 @@ static UCollator *__CFStringCopyDefaultCollator(CFLocaleRef compareLocale) {
+     return collator;
+ }
+ 
+-#if TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI
++#if (TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI) && !CF_NO_ICU
+ static void __collatorFinalize(UCollator *collator) {
+     CFLocaleRef locale = _CFGetTSD(__CFTSDKeyCollatorLocale);
+     _CFSetTSD(__CFTSDKeyCollatorUCollator, NULL, NULL);
+@@ -578,7 +578,7 @@ CF_PRIVATE CFComparisonResult _CFCompareStringsWithLocale(CFStringInlineBuffer *
+     CFRange range1 = str1Range;
+     CFRange range2 = str2Range;
+     SInt32 order;
+-#if TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI
++#if (TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI) && !CF_NO_ICU
+     Boolean isEqual;
+     bool forcedOrdering = ((options & kCFCompareForcedOrdering) ? true : false);
+ 
+@@ -611,7 +611,7 @@ CF_PRIVATE CFComparisonResult _CFCompareStringsWithLocale(CFStringInlineBuffer *
+ 	range2.location = __extendLocationBackward(range2.location - 1, str2, nonBaseBMP, punctBMP);
+     }
+ 
+-#if TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI
++#if (TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI) && !CF_NO_ICU
+     // First we try to use the last one used on this thread, if the locale is the same,
+     // otherwise we try to check out a default one, or then we create one.
+     UCollator *threadCollator = _CFGetTSD(__CFTSDKeyCollatorUCollator);
+@@ -633,7 +633,7 @@ CF_PRIVATE CFComparisonResult _CFCompareStringsWithLocale(CFStringInlineBuffer *
+ 	range1.length = (str1Range.location + str1Range.length) - range1.location;
+ 	range2.length = (str2Range.location + str2Range.length) - range2.location;
+ 
+-#if TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI
++#if (TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI) && !CF_NO_ICU
+         if ((NULL != collator) && (__CompareTextDefault(collator, options, characters1, range1.length, characters2, range2.length, &isEqual, &order) == 0 /* noErr */)) {
+             compResult = ((isEqual && !forcedOrdering) ? kCFCompareEqualTo : ((order < 0) ? kCFCompareLessThan : kCFCompareGreaterThan));
+         } else
+@@ -709,7 +709,7 @@ CF_PRIVATE CFComparisonResult _CFCompareStringsWithLocale(CFStringInlineBuffer *
+                 }
+             }
+ 
+-#if TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI
++#if (TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI) && !CF_NO_ICU
+             if ((NULL != collator) && (__CompareTextDefault(collator, options, characters1, range1.length, characters2, range2.length, &isEqual, &order) ==  0 /* noErr */)) {
+                 if (isEqual) {
+                     if (forcedOrdering && (kCFCompareEqualTo == compResult) && (0 != order)) compResult = ((order < 0) ? kCFCompareLessThan : kCFCompareGreaterThan);
+@@ -753,7 +753,7 @@ CF_PRIVATE CFComparisonResult _CFCompareStringsWithLocale(CFStringInlineBuffer *
+         if (buffer2Len > 0) CFAllocatorDeallocate(kCFAllocatorSystemDefault, buffer2);
+     }
+ 
+-#if TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI
++#if (TARGET_OS_MAC || TARGET_OS_WIN32 || TARGET_OS_LINUX || TARGET_OS_WASI) && !CF_NO_ICU
+     if (collator == threadCollator) {
+ 	// do nothing, already cached
+     } else {
+diff --git a/Sources/CoreFoundation/CFTimeZone.c b/Sources/CoreFoundation/CFTimeZone.c
+index 931664b..06ad522 100644
+--- a/Sources/CoreFoundation/CFTimeZone.c
++++ b/Sources/CoreFoundation/CFTimeZone.c
+@@ -21,9 +21,11 @@
+ #include <fcntl.h>
+ #include <stdlib.h>
+ #include <string.h>
++#if !CF_NO_ICU
+ #include <_foundation_unicode/ucal.h>
+ #include <_foundation_unicode/udat.h>
+ #include <_foundation_unicode/ustring.h>
++#endif
+ #include "CFDateFormatter.h"
+ #if TARGET_OS_MAC || TARGET_OS_LINUX || TARGET_OS_BSD || TARGET_OS_WASI
+ #include <dirent.h>
+@@ -983,6 +985,7 @@ void CFTimeZoneSetAbbreviationDictionary(CFDictionaryRef dict) {
+     __CFTimeZoneUnlockGlobal();
+ }
+ 
++#if !CF_NO_ICU
+ CF_INLINE const UChar *STRING_to_UTF16(CFStringRef S) { // UTF16String
+     CFIndex length = CFStringGetLength((CFStringRef)S);
+     UChar *buffer = (UChar *)malloc((length + 1) * sizeof(UChar));
+@@ -994,6 +997,7 @@ CF_INLINE const UChar *STRING_to_UTF16(CFStringRef S) { // UTF16String
+ CF_INLINE void FREE_STRING_to_UTF16(const UChar *buf) {
+     free((void *)buf);
+ }
++#endif
+ 
+ static int32_t __tryParseGMTName(CFStringRef name) {
+     CFIndex len = CFStringGetLength(name);
+@@ -1040,6 +1044,10 @@ static int32_t __tryParseGMTName(CFStringRef name) {
+ static Boolean __nameStringOK(CFStringRef name) {
+     int32_t offset = __tryParseGMTName(name);
+     if (-1 != offset) return true;
++#if CF_NO_ICU
++    // Without ICU, a named zone is valid if its TZif data loads.
++    return true;
++#else
+     const UChar *ustr = STRING_to_UTF16(name);
+     int32_t len = u_strlen(ustr);
+     UErrorCode status = U_ZERO_ERROR;
+@@ -1054,6 +1062,7 @@ static Boolean __nameStringOK(CFStringRef name) {
+         return false;
+     }
+     return true;
++#endif
+ }
+ 
+ static Boolean __CFTimeZoneInitFixed(CFTimeZoneRef result, int32_t seconds, CFStringRef name, int isDST) {
+@@ -1545,7 +1554,9 @@ CFTimeInterval CFTimeZoneGetSecondsFromGMT(CFTimeZoneRef tz, CFAbsoluteTime at)
+     return __CFTZPeriodGMTOffset(&(tz->_periods[idx]));
+ }
+ 
++#if !CF_NO_ICU
+ extern UCalendar *__CFCalendarCreateUCalendar(CFStringRef calendarID, CFStringRef localeID, CFTimeZoneRef tz);
++#endif
+ 
+ CFStringRef CFTimeZoneCopyAbbreviation(CFTimeZoneRef tz, CFAbsoluteTime at) {
+     CFStringRef result;
+@@ -1639,6 +1650,10 @@ CFAbsoluteTime CFTimeZoneGetNextDaylightSavingTimeTransition(CFTimeZoneRef tz, C
+ CFStringRef CFTimeZoneCopyLocalizedName(CFTimeZoneRef tz, CFTimeZoneNameStyle style, CFLocaleRef locale) {
+     CF_OBJC_FUNCDISPATCHV(CFTimeZoneGetTypeID(), CFStringRef, (NSTimeZone *)tz, localizedName:(NSTimeZoneNameStyle)style locale:(NSLocale *)locale);
+     __CFGenericValidateType(tz, CFTimeZoneGetTypeID());
++#if CF_NO_ICU
++    // Localized names come from ICU's data, which this build leaves out.
++    return NULL;
++#else
+     __CFGenericValidateType(locale, CFLocaleGetTypeID());
+ 
+     if (style == kCFTimeZoneNameStyleGeneric || style == kCFTimeZoneNameStyleShortGeneric) {
+@@ -1674,6 +1689,7 @@ CFStringRef CFTimeZoneCopyLocalizedName(CFTimeZoneRef tz, CFTimeZoneNameStyle st
+         return CFStringCreateWithCharacters(CFGetAllocator(tz), (const UniChar *)ubuffer, cnt);
+     }
+     return NULL;
++#endif
+ }
+ 
+ static CFDictionaryRef __CFTimeZoneCopyCompatibilityDictionary(void) {
+@@ -1690,7 +1706,11 @@ static CFDictionaryRef __CFTimeZoneCopyCompatibilityDictionary(void) {
+ }
+ 
+ CF_CROSS_PLATFORM_EXPORT CFStringRef __CFTimeZoneCopyDataVersionString(void) {
++#if CF_NO_ICU
++    return CFRetain(CFSTR(""));
++#else
+     UErrorCode err = U_ZERO_ERROR;
+     const char *cstr = ucal_getTZDataVersion(&err);
+     return (U_SUCCESS(err)) ? CFStringCreateWithCString(kCFAllocatorSystemDefault, cstr, kCFStringEncodingUTF8) : CFRetain(CFSTR(""));
++#endif
+ }
+diff --git a/Sources/CoreFoundation/internalInclude/CFICUConverters.h b/Sources/CoreFoundation/internalInclude/CFICUConverters.h
+index a9f6639..e41de09 100644
+--- a/Sources/CoreFoundation/internalInclude/CFICUConverters.h
++++ b/Sources/CoreFoundation/internalInclude/CFICUConverters.h
+@@ -12,6 +12,16 @@
+ 
+ #include "CFString.h"
+ 
++#if CF_NO_ICU
++// Without ICU, only CF's built-in converters exist: no encoding has an ICU name.
++CF_INLINE const char *__CFStringEncodingGetICUName(CFStringEncoding encoding) { return NULL; }
++CF_INLINE CFStringEncoding __CFStringEncodingGetFromICUName(const char *icuName) { return kCFStringEncodingInvalidId; }
++CF_INLINE CFIndex __CFStringEncodingICUToBytes(const char *icuName, uint32_t flags, const UniChar *characters, CFIndex numChars, CFIndex *usedCharLen, uint8_t *bytes, CFIndex maxByteLen, CFIndex *usedByteLen) { return 0; }
++CF_INLINE CFIndex __CFStringEncodingICUToUnicode(const char *icuName, uint32_t flags, const uint8_t *bytes, CFIndex numBytes, CFIndex *usedByteLen, UniChar *characters, CFIndex maxCharLen, CFIndex *usedCharLen) { return 0; }
++CF_INLINE CFIndex __CFStringEncodingICUCharLength(const char *icuName, uint32_t flags, const uint8_t *bytes, CFIndex numBytes) { return 0; }
++CF_INLINE CFIndex __CFStringEncodingICUByteLength(const char *icuName, uint32_t flags, const UniChar *characters, CFIndex numChars) { return 0; }
++CF_INLINE CFStringEncoding *__CFStringEncodingCreateICUEncodings(CFAllocatorRef allocator, CFIndex *numberOfIndex) { if (numberOfIndex) *numberOfIndex = 0; return NULL; }
++#else
+ CF_PRIVATE const char *__CFStringEncodingGetICUName(CFStringEncoding encoding);
+ 
+ CF_PRIVATE CFStringEncoding __CFStringEncodingGetFromICUName(const char *icuName);
+@@ -24,5 +34,6 @@ CF_PRIVATE CFIndex __CFStringEncodingICUByteLength(const char *icuName, uint32_t
+ 
+ // The caller is responsible for freeing the memory (use CFAllocatorDeallocate)
+ CF_PRIVATE CFStringEncoding *__CFStringEncodingCreateICUEncodings(CFAllocatorRef allocator, CFIndex *numberOfIndex);
++#endif
+ 
+ 

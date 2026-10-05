@@ -1340,6 +1340,17 @@ sh_test(
         "--send-after 'aml-43' 'fetch -q -o /tmp/h file:///etc/hosts && cmp /tmp/h /etc/hosts && echo fe\"\"tch-ok; " +
         "certctl list | wc -l | sed \"s/ //g;s/^/cc-/\"; drill -v | head -1 | sed \"s/^.*ldns/ld\"\"ns/\"; ip6addrctl show | head -2; " +
         "man -w make\\n'",
+        # CoreFoundation and IOKitLib (cp6b) through ioreg: every entry's
+        # properties (IORegistryEntryCreateCFProperties) with none missing,
+        # the platform expert's three lines, a matching-dictionary search
+        # by class (no IOMedia on this machine: an empty answer, status 0),
+        # a property value under IOResources, the device tree plane, and
+        # the XML property list CF writes for -a; ioreg's page.
+        "--send-after 'man1/make.1' 'ioreg -l | grep -c IOPlatformExpert | sed s/^/p\"\"e-/; " +
+        "ioreg -l | grep -c \"t obtain\" | sed s/^/ce\"\"rr-/; ioreg -c IOMedia > /dev/null; echo m\"\"d-rc-$$?; " +
+        "ioreg -r -c IOResources -d 1 | grep -c \"Type1. = Yes\" | sed s/^/fs\"\"c-/; " +
+        "ioreg -p IODeviceTree -d 2 | grep -c \"o device-.ree\" | sed s/^/dt\"\"-/; " +
+        "ioreg -a -d 1 | head -8 | grep -c \"<key>IOObjectClass\" | sed s/^/a\"\"x-/; man -w ioreg\\n'",
         "$(rootpath //boot/neoboot)",
         "240",
         "'7,8,9'",
@@ -1455,6 +1466,13 @@ sh_test(
         "'ldns version 1.9.2'",
         "'::1/128'",
         "'/usr/share/man/man1/make.1'",
+        "'pe-3'",
+        "'cerr-0'",
+        "'md-rc-0'",
+        "'fsc-1'",
+        "'dt-1'",
+        "'ax-1'",
+        "'/usr/share/man/man8/ioreg.8'",
     ],
     data = [
         ":sbsa_kc",

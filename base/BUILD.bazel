@@ -665,6 +665,39 @@ base_library(
     sysroot = ":sysroot",
 )
 
+# P4-21 checkpoint 6b (docs/base/corefoundation.md): CoreFoundation.framework
+# from swift-corelibs-foundation, the pure C CF without ICU, the base's first
+# framework.
+base_library(
+    name = "corefoundation_framework",
+    data = glob(["corefoundation/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "corefoundation/build.sh",
+    srcs = "@swift_corelibs_foundation//:all",
+    sysroot = ":sysroot",
+)
+
+# IOKit.framework, IOKitLib's core from IOKitUser, and ioreg from
+# IOKitTools on top of it.
+base_library(
+    name = "iokit_framework",
+    data = glob(["iokit/**"]) + ["commands.sh"],
+    deps = [":root", ":corefoundation_framework"],
+    script = "iokit/build.sh",
+    srcs = "@apple_iokituser//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "ioreg_command",
+    data = glob(["iokittools/**"]) + ["commands.sh"],
+    deps = [":root", ":corefoundation_framework", ":iokit_framework", ":libncurses_dylib"],
+    man_pages = True,
+    script = "iokittools/build.sh",
+    srcs = "@apple_iokittools//:all",
+    sysroot = ":sysroot",
+)
+
 # P4-21 checkpoints 4 and 5, FreeBSD's leaf utilities and heavier programs
 # (docs/architecture/freebsd-parity.md §2.1), from the source drop at
 # 050683bb8e13 with a shared compat layer (base/freebsd_cmds/compat).
@@ -1071,6 +1104,9 @@ base_root(
         ":locale_data",
         ":vis_editor",
         ":freebsd_commands",
+        ":corefoundation_framework",
+        ":iokit_framework",
+        ":ioreg_command",
     ],
 )
 
@@ -1148,7 +1184,37 @@ base_root(
     ("libunwind", ":llvm_runtimes", "usr/lib/system/libunwind.dylib", "llvm/exports/libunwind.txt"),
     ("libc++abi", ":llvm_runtimes", "usr/lib/libc++abi.dylib", "llvm/exports/libc++abi.txt"),
     ("libc++.1", ":llvm_runtimes", "usr/lib/libc++.1.dylib", "llvm/exports/libc++.1.txt"),
+    (
+        "CoreFoundation",
+        ":corefoundation_framework",
+        "System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+        "corefoundation/exports.txt",
+    ),
+    (
+        "IOKit",
+        ":iokit_framework",
+        "System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
+        "iokit/exports.txt",
+    ),
 ]]
+
+# CoreFoundation on the build machine (base/corefoundation/host_test.sh):
+# its binary, renamed, runs base/corefoundation/cftest.c, a property list
+# round trip, under macOS's libSystem.
+sh_test(
+    name = "corefoundation_host_test",
+    size = "small",
+    srcs = ["corefoundation/host_test.sh"],
+    args = [
+        "$(rootpath :corefoundation_framework)",
+        "$(rootpath corefoundation/cftest.c)",
+    ],
+    data = [
+        "corefoundation/cftest.c",
+        ":corefoundation_framework",
+    ],
+    tags = ["requires-darwin", "no-remote"],
+)
 
 sh_test(
     name = "libmacho_exports_test",
@@ -1174,6 +1240,9 @@ lang_audit_test(
         "llvm/src/nd_typed_new_delete.cpp",
         "pfctl/src/nd_pfctl_noaltq.c",
     ] + glob([
+        "corefoundation/cftest.c",
+        "corefoundation/src/*.c",
+        "iokit/src/*.c",
         "dyld/src/*.c",
         "launchd/include/*.h",
         "launchd/src/*.c",

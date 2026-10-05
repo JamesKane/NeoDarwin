@@ -36,6 +36,14 @@ find "$out" -type f -name '*.dylib' | while IFS= read -r f; do
 	cmp -s "$f" "$out$id" || continue
 	rm "$f"; ln -s "$(basename "$id")" "$f"
 done
+# A framework's links, which a tree artifact doesn't keep: Versions/Current
+# to its one version, and the binary at the top to Current's.
+for fw in "$out"/System/Library/Frameworks/*.framework; do
+	[ -d "$fw/Versions/A" ] || continue
+	name="$(basename "$fw" .framework)"
+	ln -sfn A "$fw/Versions/Current"
+	ln -sfn "Versions/Current/$name" "$fw/$name"
+done
 chmod -R a+rX,u+w "$out"
 # The whatis database apropos(1) and whatis(1) search (man-62's man.sh greps
 # usr/share/man/whatis): mandoc's makewhatis indexes the pages, then its
