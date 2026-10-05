@@ -1,0 +1,44 @@
+From: NeoDarwin
+Subject: [PATCH] vfs: mockfs's type number is 24 on SBSA, not 'mock'
+
+mockfs (patch 0011) registers vfc_typenum FT_MOCKFS, 0x6D6F636B ('mock'),
+and vfs_init sets maxvfstypenum one past the highest built-in type. lsvfs
+(adv_cmds) and getvfsbyname() sysctl every number below vfs.generic.
+maxtypenum, so on NeoDarwin lsvfs listed devfs, nullfs and hfs and then
+spent about 1.8 billion ENOTSUP sysctls looking like a hang (P4-21
+checkpoint 1). statfs's f_type, a short, truncated it as well. No shipping
+Apple config builds mockfs, so nothing there sees the large number.
+
+Under GENERIC_ARM64_PLATFORM, mockfs takes 24, the number after bindfs,
+and dynamically added file systems (vfs_fsadd: hfs, zfs) start at 25.
+
+Rebase-risk: low
+---
+diff --git a/bsd/vfs/vfs_conf.c b/bsd/vfs/vfs_conf.c
+--- a/bsd/vfs/vfs_conf.c
++++ b/bsd/vfs/vfs_conf.c
+@@ -109,10 +109,24 @@
+ 	FT_ROUTEFS = 21,
+ 	FT_NULLFS = 22,
+ 	FT_BINDFS = 23,
++#if MOCKFS && defined(GENERIC_ARM64_PLATFORM)
++	/*
++	 * NeoDarwin: the next number, not 'mock'. vfs_init sets maxvfstypenum
++	 * past the highest built-in type, and lsvfs(1) and getvfsbyname(3)
++	 * walk every number below it (1.8 billion sysctls); statfs's f_type is
++	 * a short, which 'mock' doesn't fit.
++	 */
++	FT_MOCKFS = 24
++#else
+ 	FT_MOCKFS  = 0x6D6F636B
++#endif
+ };
+ 
++#if MOCKFS && defined(GENERIC_ARM64_PLATFORM)
++int fstypenumstart = FT_MOCKFS + 1;
++#else
+ int fstypenumstart = FT_BINDFS + 1;
++#endif
+ /*
+  * Set up the filesystem operations for vnodes.
+  */
