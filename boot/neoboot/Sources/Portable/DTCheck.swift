@@ -226,6 +226,11 @@ enum DTCheck {
             } else {
                 r.violation("no /chosen/memory-map")
             }
+            // machine.c panics on a scale that isn't a u32; 0 would zero every timeout.
+            if let mt = chosen.child(named: "machine-timeouts"), mt.property("global-scale") != nil,
+               (mt.u32("global-scale") ?? 0) == 0 {
+                r.violation("/chosen/machine-timeouts global-scale is not a non-zero u32")
+            }
         } else {
             r.violation("no /chosen (arm_init.c panics)")
         }

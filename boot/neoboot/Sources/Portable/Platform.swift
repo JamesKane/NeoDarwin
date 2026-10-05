@@ -237,6 +237,12 @@ enum Platform {
             w.property("TrustCache", f.trustCacheBase, f.trustCacheSize)
         }
         w.end()
+        if emulated(a) {
+            w.begin()  // /chosen/machine-timeouts: machine.c machine_timeout_init_with_suffix
+            w.property("name", string: "machine-timeouts")
+            w.property("global-scale", u32: emulatorTimeoutScale)
+            w.end()
+        }
         w.end()
 
         w.begin()  // /defaults: pe_serial.c panics without the node
@@ -340,6 +346,25 @@ enum Platform {
             v.storeBytes(of: UInt8(48 + index % 10), toByteOffset: 2 + digits, as: UInt8.self)
             v.storeBytes(of: 0, toByteOffset: 3 + digits, as: UInt8.self)
         }
+    }
+
+    /// /chosen/machine-timeouts global-scale on an emulator. XNU's machine
+    /// timeouts (the lock timeouts, the ticket lock's half of "lock",
+    /// "lock-panic", the debugger's "debug-ack") are real time since
+    /// kernel patch 0038, and a TCG vCPU holding the scheduler's pset lock
+    /// can be descheduled on a loaded host for longer than the ticket
+    /// lock's 0.125 s: a ZFS suite shard panicked "Ticket spinlock timeout"
+    /// with about forty QEMU tests running beside it (2026-10-04). Eight
+    /// times gives a ticket lock 1 s. A boot-arg ml-timeout-global-scale
+    /// still overrides it; boards keep XNU's values.
+    static let emulatorTimeoutScale: UInt32 = 8
+
+    /// QEMU: virt's tables carry OEM ID "BOCHS ", and sbsa-ref's (EDK2
+    /// SbsaQemu) OEM ID "LINARO" with OEM table ID "SBSAQEMU".
+    static func emulated(_ a: ACPIFacts) -> Bool {
+        let bochs = a.oemID == (0x42, 0x4f, 0x43, 0x48, 0x53, 0x20)  // "BOCHS "
+        let sbsaQemu = a.oemTableID == 0x554d_4551_4153_4253  // "SBSAQEMU", little-endian
+        return bochs || sbsaQemu
     }
 
     /// `model`: "OEMID,OEM Table ID" from the FADT (else the XSDT), each

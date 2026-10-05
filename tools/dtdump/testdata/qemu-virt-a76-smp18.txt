@@ -24,7 +24,7 @@ acpi: SPCR: interface type 0x3 at 0x9000000
 gic: GICD_CTLR 0x40 (DS=1): timer on Group 0
 psci: conduit HVC, as the FADT says
 acpi: relocated copy: 8784 bytes at 0x42000000
-device tree: 10096 bytes
+device tree: 10200 bytes
 /
     compatible = "NeoDarwin,sbsa"
     model = "BOCHS,BXPC"
@@ -44,6 +44,8 @@ device tree: 10096 bytes
     AAPL,phandle = <0x2>
 /chosen/memory-map
     ACPITables = <0x42000000 0x2250> (u64)
+/chosen/machine-timeouts
+    global-scale = <0x8>
 /defaults
     serial-device = <0x3>
 /cpus
@@ -257,4 +259,4 @@ device tree: 10096 bytes
     compatible = "arm,pl011"
     reg = <0x1000000 0x1000> (u64)
     AAPL,phandle = <0x3>
-dtdump: DT-ABI v1: ok (28 nodes)
+dtdump: DT-ABI v1: ok (29 nodes)

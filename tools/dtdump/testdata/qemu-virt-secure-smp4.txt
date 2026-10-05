@@ -10,7 +10,7 @@ acpi: SPCR: interface type 0x3 at 0x9000000
 gic: GICD_CTLR 0x12 (DS=0): timer on Group 1
 psci: conduit SMC: the FADT reports none, but the CPU implements EL3 (its firmware, e.g. TF-A)
 acpi: relocated copy: 6960 bytes at 0x42000000
-device tree: 4160 bytes
+device tree: 4264 bytes
 /
     compatible = "NeoDarwin,sbsa"
     model = "BOCHS,BXPC"
@@ -30,6 +30,8 @@ device tree: 4160 bytes
     AAPL,phandle = <0x2>
 /chosen/memory-map
     ACPITables = <0x42000000 0x1b30> (u64)
+/chosen/machine-timeouts
+    global-scale = <0x8>
 /defaults
     serial-device = <0x3>
 /cpus
@@ -103,4 +105,4 @@ device tree: 4160 bytes
     compatible = "arm,pl011"
     reg = <0x1000000 0x1000> (u64)
     AAPL,phandle = <0x3>
-dtdump: DT-ABI v1: ok (14 nodes)
+dtdump: DT-ABI v1: ok (15 nodes)
