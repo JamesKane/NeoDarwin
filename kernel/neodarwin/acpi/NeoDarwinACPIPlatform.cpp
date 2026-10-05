@@ -183,6 +183,7 @@ NeoDarwinACPIPlatform::start(IOService *provider)
 	}
 	setProperty("ACPICA version", ACPI_CA_VERSION, 32);
 	setProperty("acpi-tables", signatures);
+	publishTables();
 
 	attachToParent(getRegistryRoot(), gIOACPIPlane);
 	hostBridges = OSArray::withCapacity(1);
@@ -210,6 +211,130 @@ NeoDarwinACPIPlatform::start(IOService *provider)
 
 // ------------------------------------------------------------------------
 // Tables
+
+// A physical table copied whole into an OSData: the RSDP (whose length is
+// its own field from revision 2, 20 bytes before), the XSDT and the FACS.
+// neoboot leaves the FACS where the firmware put it (dt-abi.md), which may
+// be outside DRAM and so mapped as device memory: the copy is a byte at a
+// time. NULL if it can't be mapped or its length is implausible.
+static void
+acpi_copy_bytes(void *dst, const void *src, size_t n)
+{
+	const volatile UInt8 *s = (const volatile UInt8 *)src;
+	UInt8 *d = (UInt8 *)dst;
+	for (size_t i = 0; i < n; i++) {
+		d[i] = s[i];
+	}
+}
+
+static OSData *
+acpi_copy_physical(ACPI_PHYSICAL_ADDRESS addr, bool rsdp)
+{
+	if (addr == 0) {
+		return NULL;
+	}
+	// The length is at offset 20 in an RSDP (revision 2 on), 4 in the rest.
+	ACPI_SIZE head = rsdp ? sizeof(ACPI_TABLE_RSDP) : sizeof(ACPI_TABLE_HEADER);
+	ACPI_SIZE minimum = rsdp ? sizeof(ACPI_RSDP_COMMON) : sizeof(ACPI_TABLE_HEADER);
+	UInt8 h[sizeof(ACPI_TABLE_RSDP)];
+	void *p = AcpiOsMapMemory(addr, head);
+	if (p == NULL) {
+		return NULL;
+	}
+	acpi_copy_bytes(h, p, head);
+	AcpiOsUnmapMemory(p, head);
+	UInt32 length;
+	if (rsdp) {
+		const ACPI_TABLE_RSDP *r = (const ACPI_TABLE_RSDP *)h;
+		length = r->Revision >= 2 ? r->Length : (UInt32)sizeof(ACPI_RSDP_COMMON);
+	} else {
+		length = ((const ACPI_TABLE_HEADER *)h)->Length;
+	}
+	if (length < minimum || length > 16 * 1024 * 1024) {
+		return NULL;
+	}
+	OSData *data = OSData::withCapacity(length);
+	if (data == NULL || !data->appendBytes(NULL, length)) {
+		OSSafeReleaseNULL(data);
+		return NULL;
+	}
+	p = AcpiOsMapMemory(addr, length);
+	if (p == NULL) {
+		data->release();
+		return NULL;
+	}
+	acpi_copy_bytes((void *)data->getBytesNoCopy(), p, length);
+	AcpiOsUnmapMemory(p, length);
+	return data;
+}
+
+// Adds a table under its signature, or SIGN-1, SIGN-2, ... for later ones
+// with the same signature (AppleACPIPlatformExpert's names).
+static void
+acpi_add_table(OSDictionary *dict, const char *signature, OSData *data)
+{
+	if (data == NULL) {
+		return;
+	}
+	char key[24] = "";
+	memcpy(key, signature, ACPI_NAMESEG_SIZE);    // not NUL-terminated in a header
+	for (UInt32 n = 1; dict->getObject(key) != NULL; n++) {
+		snprintf(key, sizeof(key), "%.4s-%u", signature, n);
+	}
+	dict->setObject(key, data);
+	data->release();
+}
+
+// "ACPI Tables" (docs/kernel/acpi.md): every table, header included, as the
+// firmware gave it (in neoboot's copy), for acpidump. ACPICA's list has the
+// XSDT's tables and the DSDT; it never installs a FACS (acnd.h:
+// ACPI_REDUCED_HARDWARE). The RSDP, the XSDT and a FACS the FADT names are
+// read directly.
+void
+NeoDarwinACPIPlatform::publishTables(void)
+{
+	OSDictionary *dict = OSDictionary::withCapacity(tableCount + 3);
+	if (dict == NULL) {
+		return;
+	}
+	ACPI_PHYSICAL_ADDRESS rsdpAddr = nd_acpi_rsdp();
+	OSData *rsdp = acpi_copy_physical(rsdpAddr, true);
+	if (rsdp != NULL) {
+		const ACPI_TABLE_RSDP *r = (const ACPI_TABLE_RSDP *)rsdp->getBytesNoCopy();
+		bool x = r->Revision >= 2 && r->XsdtPhysicalAddress != 0;
+		acpi_add_table(dict, x ? ACPI_SIG_XSDT : ACPI_SIG_RSDT,
+		    acpi_copy_physical(x ? r->XsdtPhysicalAddress : r->RsdtPhysicalAddress, false));
+		acpi_add_table(dict, "RSDP", rsdp);
+	}
+
+	ACPI_TABLE_HEADER *header;
+	ACPI_STATUS status;
+	for (UInt32 i = 0; (status = AcpiGetTableByIndex(i, &header)) != AE_BAD_PARAMETER; i++) {
+		if (ACPI_FAILURE(status)) {
+			continue;
+		}
+		// A FACS has its signature and length where a header has them.
+		acpi_add_table(dict, header->Signature, OSData::withBytes(header, header->Length));
+		AcpiPutTable(header);
+	}
+
+	if (dict->getObject(ACPI_SIG_FACS) == NULL &&
+	    AcpiGetTable((char *)ACPI_SIG_FADT, 1, &header) == AE_OK) {
+		const ACPI_TABLE_FADT *fadt = (const ACPI_TABLE_FADT *)header;
+		ACPI_PHYSICAL_ADDRESS facs = 0;
+		if (header->Length >= ACPI_FADT_OFFSET(XFacs) + sizeof(fadt->XFacs)) {
+			facs = fadt->XFacs;
+		}
+		if (facs == 0) {
+			facs = fadt->Facs;
+		}
+		AcpiPutTable(header);
+		acpi_add_table(dict, ACPI_SIG_FACS, acpi_copy_physical(facs, false));
+	}
+
+	setProperty("ACPI Tables", dict);
+	dict->release();
+}
 
 const OSData *
 NeoDarwinACPIPlatform::getTableData(const char *signature, UInt32 instance)

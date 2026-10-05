@@ -85,6 +85,16 @@ A host bridge's producer descriptors are windows, not registers. Elsewhere the p
 
 Class name, method names and signatures are those of Apple's Intel-era header in Kernel.framework, so source written against it compiles. It is a subset, written from the published interface: `evaluateObject` and `evaluateInteger` (32- and 64-bit, by name or `OSSymbol`; arguments and results convert `OSNumber`/`OSBoolean` ↔ Integer, `OSString` ↔ String, `OSData` ↔ Buffer, `OSArray` ↔ Package, and a reference inside a package, such as a `_PRT` entry's link device, becomes its path as an `OSString`), `validateObject`, `getACPITableData` (a copy of the table, owned by the platform), `getDeviceHandle`, `getDeviceStatus`, `getDeviceType`/`setDeviceType`, and `acquireGlobalLock`/`releaseGlobalLock`, which succeed at once with a token of 0: hardware-reduced ACPI has no global lock, so nothing can contend for it. Power management, fixed events, GPEs, address-space handlers and the I/O-port helpers are not declared. The vtable is NeoDarwin's, so binary Intel kexts don't load. `gIOACPIPlane` and the `_HID`/`_UID`/`_ADR`/`_STA` key symbols are defined. On a host bridge (a nub with `_PRT`) it also answers the platform functions IOPCIFamily sends to route legacy interrupts, "ResolvePCIInterrupt" and "SetDeviceInterrupts" (checkpoint 2, `pci.md`), which Apple's closed ACPI platform answered on Intel.
 
+### `ACPI Tables`: the tables for userland
+
+The ACPI platform service (`NeoDarwinACPIPlatform`, in the service plane under the platform expert driver, beside `NeoDarwinGICv3` and `NeoDarwinPSCI`: `IOService:/<platform expert device>/NeoDarwinPlatformExpert/NeoDarwinACPIPlatform`, beside its `acpi-tables` string of signatures) carries `ACPI Tables`, an OSDictionary of every table as an OSData, header included, byte for byte as the firmware gave it in neoboot's copy (`/chosen/memory-map` `ACPITables`, `dt-abi.md`; neoboot has rewritten the pointers between tables and redone the checksums, nothing else). This is the property Apple's x86 `AppleACPIPlatformExpert` publishes, and what `acpidump` reads (there is no `/dev/mem`), through `IORegistryEntryCreateCFProperty`; nothing can set it (`setProperties` is IOService's, which refuses).
+
+- Keys are the 4-character signatures (`FACP`, `APIC`, `DSDT`, `GTDT`, `SPCR`, `MCFG`, `IORT`, ...). A signature seen again gets `-1`, `-2`, ... (`SSDT`, `SSDT-1`, `SSDT-2`), in ACPICA's table order.
+- The tables come from ACPICA's table manager (`AcpiGetTableByIndex`): the XSDT's tables and the FADT's DSDT. The RSDP (36 bytes from revision 2, else 20) and the XSDT (or an RSDT, under that key, if the RSDP has no XSDT) are copied directly, under `RSDP` and `XSDT`. ACPICA never installs a FACS (`ACPI_REDUCED_HARDWARE`), so one the FADT names (`X_FIRMWARE_CTRL`, else `FIRMWARE_CTRL`) is copied directly, byte by byte since neoboot leaves it in the firmware's memory; QEMU's FADT names none.
+- It is set in `start` once ACPICA is up, before the namespace walk, so it is there by the time the platform registers.
+
+`//kernel:sbsa_session_boot_test` lists the keys with `ioreg -rd1 -k "ACPI Tables" -w0` (on `virt`: `APIC`, `DBG2`, `DSDT`, `FACP`, `GTDT`, `IORT`, `MCFG`, `PPTT`, `RSDP`, `SPCR`, `XSDT`) and checks that the `RSDP` data starts with `RSD PTR `.
+
 ## The boot log
 
 ```

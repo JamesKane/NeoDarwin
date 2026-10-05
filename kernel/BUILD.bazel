@@ -1130,6 +1130,11 @@ sh_test(
         "--send-after 'root@localhost ~ # ' 'uname -sm; ls /usr/libexec; tty; launchctl list\\n'",
         "--send-after 'root@localhost ~ # ' 'echo shell=$${(U)ZSH_NAME}-$$ZSH_VERSION\\n'",
         "--send-after 'root@localhost ~ # ' 'zmodload zsh/datetime && strftime %Y $$EPOCHSECONDS | read y && echo datetime-$$(( y > 2024 ))\\n'",
+        # The ACPI platform's "ACPI Tables" (docs/kernel/acpi.md), which
+        # acpidump reads: its keys, and the RSDP's signature in its data.
+        "--send-after 'root@localhost ~ # ' 'ioreg -rd1 -k \"ACPI Tables\" -w0 | grep -oE \"[A-Z0-9]{4}(-[0-9]+)?.=<\" | " +
+        "sed \"s/.=<//\" | sort | paste -sd, - | sed s/^/a\"\"t-/; " +
+        "ioreg -rd1 -k \"ACPI Tables\" -w0 | grep -c \"RSDP.=<5253442050545220\" | sed s/^/rs\"\"dp-/\\n'",
         "$(rootpath //boot/neoboot)",
         "180",
         "'hfs: mounted NeoDarwin on device'",
@@ -1140,6 +1145,9 @@ sh_test(
         # zsh 5.9 is root's shell; loading a module dlopens its bundle.
         "'shell=ZSH-5.9'",
         "'datetime-1'",
+        "'rsdp-1'",
+        # QEMU virt's tables (P1-09's nine, the DSDT included), RSDP and XSDT.
+        "'at-APIC,DBG2,DSDT,FACP,GTDT,IORT,MCFG,PPTT,RSDP,SPCR,XSDT'",
     ],
     data = [
         ":sbsa_kc",

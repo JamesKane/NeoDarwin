@@ -51,6 +51,7 @@ public:
 
 private:
 	bool initACPICA(void);
+	void publishTables(void);
 	void registerECAM(void);
 	void publishDevices(void);
 	void addResources(IOACPIPlatformDevice *nub, void *handle, bool bridge, char *summary, size_t summarySize);
