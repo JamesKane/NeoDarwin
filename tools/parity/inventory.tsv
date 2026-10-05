@@ -9,7 +9,7 @@ bin/chio	n/a				no	SCSI media changers (CAM)
 bin/chmod	apple	file_cmds-475		P4-21	yes	
 bin/cp	apple	file_cmds-475		P4-21	yes	
 bin/cpuset	n/a				no	cpuset(2); xnu has affinity tags only
-bin/csh	apple	tcsh-75		P4-21	no	
+bin/csh	apple	tcsh-75		P4-21	yes	
 bin/date	apple	shell_cmds-326		P4-21	yes	
 bin/dd	apple	file_cmds-475		P4-21	yes	
 bin/df	apple	file_cmds-475		P4-21	yes	
@@ -236,7 +236,7 @@ usr.bin/expand	apple	text_cmds-197		P4-21	yes
 usr.bin/factor	port	games/freebsd-games			no	MK_GAMES
 usr.bin/false	apple	shell_cmds-326		P4-21	yes	
 usr.bin/fetch	freebsd	FreeBSD usr.bin/fetch		P4-21	no	
-usr.bin/file	apple	file-104		P4-21	no	
+usr.bin/file	apple	file-104		P4-21	yes	
 usr.bin/file2c	freebsd	FreeBSD usr.bin/file2c		P5-10	no	
 usr.bin/find	apple	shell_cmds-326		P4-21	yes	
 usr.bin/finger	apple	adv_cmds-237		P4-21	yes	
@@ -256,7 +256,7 @@ usr.bin/getaddrinfo	freebsd	FreeBSD usr.bin/getaddrinfo		P4-21	no
 usr.bin/getconf	apple	system_cmds-1039		P4-21	yes	
 usr.bin/getent	freebsd	FreeBSD usr.bin/getent		P4-22	no	
 usr.bin/getopt	apple	shell_cmds-326		P4-21	yes	
-usr.bin/gh-bc	apple	bc-35		P4-21	no	
+usr.bin/gh-bc	apple	bc-35		P4-21	yes	
 usr.bin/gprof	n/a				no	ELF gmon profiling; Darwin profiles with dtrace
 usr.bin/grdc	port	games/freebsd-games			no	MK_GAMES
 usr.bin/grep	apple	text_cmds-197		P4-21	yes	
@@ -265,7 +265,7 @@ usr.bin/head	apple	text_cmds-197		P4-21	yes
 usr.bin/hesinfo	n/a				no	not built for FreeBSD/arm64 (MK_HESIOD)
 usr.bin/hexdump	apple	shell_cmds-326		P4-21	yes	
 usr.bin/host	apple	bind9-65		P4-21	no	BIND's host; FreeBSD's is ldns's
-usr.bin/iconv	apple	libiconv-113		P4-21	no	
+usr.bin/iconv	apple	libiconv-113		P4-21	yes	
 usr.bin/id	apple	shell_cmds-326		P4-22	yes	
 usr.bin/ident	freebsd	FreeBSD usr.bin/ident		P4-21	no	
 usr.bin/indent	freebsd	FreeBSD usr.bin/indent		P5-10	no	
@@ -285,9 +285,9 @@ usr.bin/lastcomm	apple	shell_cmds-326		P4-21	yes
 usr.bin/ldd	equivalent	otool -L (cctools-1035.1.102)	usr/bin/otool	P5-10	no	Mach-O, not ELF
 usr.bin/ldd32	n/a				no	32-bit compatibility (lib32); arm64 NeoDarwin has none
 usr.bin/leave	apple	misc_cmds-45		P4-21	yes	
-usr.bin/less	apple	less-50		P4-21	no	
-usr.bin/lessecho	apple	less-50		P4-21	no	
-usr.bin/lesskey	apple	less-50		P4-21	no	
+usr.bin/less	apple	less-50		P4-21	yes	
+usr.bin/lessecho	apple	less-50		P4-21	yes	
+usr.bin/lesskey	apple	less-50		P4-21	yes	
 usr.bin/lex	freebsd	FreeBSD usr.bin/lex		P5-10	no	
 usr.bin/limits	freebsd	FreeBSD usr.bin/limits		P4-22	no	
 usr.bin/locale	apple	adv_cmds-237		P4-21	yes	
@@ -306,16 +306,16 @@ usr.bin/lorder	freebsd	FreeBSD usr.bin/lorder		P5-10	no
 usr.bin/lsvfs	apple	adv_cmds-237		P4-21	yes	
 usr.bin/lzmainfo	freebsd	xz-5.4.7 (upstream)		P4-21	yes	XZ Utils 5.4, as macOS's liblzma
 usr.bin/m4	freebsd	FreeBSD usr.bin/m4		P4-21	no	
-usr.bin/mail	apple	mail_cmds-41		P4-21	no	
-usr.bin/man	apple	man-62		P4-21	no	
-usr.bin/mandoc	freebsd	FreeBSD usr.bin/mandoc		P4-21	no	mandoc (contrib/mandoc); Apple's mandoc is unpublished
+usr.bin/mail	apple	mail_cmds-41		P4-21	yes	
+usr.bin/man	apple	man-62		P4-21	yes	
+usr.bin/mandoc	freebsd	FreeBSD usr.bin/mandoc		P4-21	yes	mandoc (contrib/mandoc); Apple's mandoc is unpublished
 usr.bin/mdo	n/a				no	mac_do(4)
 usr.bin/mesg	apple	basic_cmds-70		P4-21	yes	
 usr.bin/mididump	n/a				no	OSS MIDI
 usr.bin/ministat	freebsd	FreeBSD usr.bin/ministat		P4-21	no	
-usr.bin/mkcsmapper	apple	libiconv-113		P4-21	no	
+usr.bin/mkcsmapper	apple	libiconv-113		P4-21	yes	
 usr.bin/mkdep	freebsd	FreeBSD usr.bin/mkdep		P5-10	no	
-usr.bin/mkesdb	apple	libiconv-113		P4-21	no	
+usr.bin/mkesdb	apple	libiconv-113		P4-21	yes	
 usr.bin/mkfifo	apple	file_cmds-475		P4-21	yes	
 usr.bin/mkimg	freebsd	FreeBSD usr.bin/mkimg		P4-21	no	
 usr.bin/mkstr	freebsd	FreeBSD usr.bin/mkstr		P5-10	no	
@@ -324,9 +324,9 @@ usr.bin/mkuzip	n/a				no	geom_uzip (§5)
 usr.bin/morse	port	games/freebsd-games			no	MK_GAMES
 usr.bin/msgs	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
 usr.bin/mt	n/a				no	tape via CAM sa(4)
-usr.bin/nc	apple	netcat-56		P4-21	no	
+usr.bin/nc	apple	netcat-56		P4-21	yes	
 usr.bin/ncal	apple	misc_cmds-45		P4-21	yes	
-usr.bin/ncurses	apple	ncurses-79		P4-21	no	tic, toe, tput, tset, clear, infocmp, tabs
+usr.bin/ncurses	apple	ncurses-79		P4-21	yes	tic, toe, tput, tset, clear, infocmp, tabs
 usr.bin/netstat	apple	network_cmds-726		P4-24	yes	
 usr.bin/newgrp	apple	system_cmds-1039		P4-22	no	
 usr.bin/nfsstat	apple	NFS-339		P4-28	no	
@@ -409,7 +409,7 @@ usr.bin/showmount	apple	NFS-339		P4-28	no
 usr.bin/size	n/a				no	not built for FreeBSD/arm64 (!MK_LLVM_BINUTILS && MK_TOOLCHAIN)
 usr.bin/smbutil	n/a				no	not built for FreeBSD/arm64 (amd64, i386, powerpc)
 usr.bin/sockstat	equivalent	lsof -i (lsof-76)	usr/sbin/lsof	P4-21	no	
-usr.bin/soelim	freebsd	FreeBSD usr.bin/soelim		P4-21	no	
+usr.bin/soelim	freebsd	FreeBSD usr.bin/soelim		P4-21	yes	
 usr.bin/sort	apple	text_cmds-197		P4-21	yes	
 usr.bin/split	apple	text_cmds-197		P4-21	yes	
 usr.bin/ssh-copy-id	freebsd	FreeBSD usr.bin/ssh-copy-id		P4-25	no	
@@ -427,7 +427,7 @@ usr.bin/telnet	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe 
 usr.bin/tftp	port	ftp/tftp-hpa			no	a different tftp client; remote_cmds-306 is the fallback
 usr.bin/time	apple	shell_cmds-326		P4-21	yes	
 usr.bin/tip/tip	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from FreeBSD 15.1 base source
-usr.bin/top	apple	top-144		P4-21	no	Apple's top: same purpose, different flags
+usr.bin/top	apple	top-144		P4-21	no	Apple's top: same purpose, different flags. Unbuilt: libtop reads disk statistics with IOKitLib and keeps its tables in CoreFoundation dictionaries, and top links libpanel; waits for an IOKit userland, as iostat (cp6)
 usr.bin/touch	apple	file_cmds-475		P4-21	yes	
 usr.bin/tr	apple	text_cmds-197		P4-21	yes	
 usr.bin/true	apple	shell_cmds-326		P4-21	yes	
@@ -448,7 +448,7 @@ usr.bin/usbhidaction	n/a				no	usbhid(4); HID is a dext (P3-07)
 usr.bin/usbhidctl	n/a				no	usbhid(4); HID is a dext (P3-07)
 usr.bin/users	apple	shell_cmds-326		P4-21	yes	
 usr.bin/vacation	port	mail/sendmail			no	sendmail is an option in FreeBSD too (MK_SENDMAIL)
-usr.bin/vi	apple	vim-163		P4-21	no	vim as vi, ex and view, not nvi
+usr.bin/vi	apple	vim-163		P4-21	no	vim as vi, ex and view, not nvi. Unbuilt: left after P4-21 checkpoint 3 (freebsd-parity.md §2.1)
 usr.bin/vis	apple	text_cmds-197		P4-21	yes	
 usr.bin/vmstat	equivalent	vm_stat (system_cmds-1039)	usr/bin/vm_stat	P4-21	no	
 usr.bin/vtfontcvt	freebsd	FreeBSD usr.bin/vtfontcvt		P4-26	no	if the console takes vt(4)'s font format

@@ -527,6 +527,100 @@ base_library(
     sysroot = ":sysroot",
 )
 
+# P4-21 checkpoint 3, the interactive essentials
+# (docs/architecture/freebsd-parity.md §2.1): less, man (man-62's man.sh)
+# with FreeBSD's mandoc and soelim, file, bc, nc, libiconv with iconv,
+# tcsh as csh, and mail. The ncurses commands are libncurses_dylib's.
+base_library(
+    name = "less_commands",
+    data = glob(["less/**"]) + ["commands.sh"],
+    deps = [":root", ":libncurses_dylib"],
+    script = "less/build.sh",
+    srcs = "@apple_less//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "man_command",
+    data = glob(["man/**"]),
+    script = "man/build.sh",
+    srcs = "@apple_man//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "mandoc_commands",
+    data = glob(["mandoc/**"]) + ["commands.sh"],
+    deps = [":root", ":libz_dylib"],
+    script = "mandoc/build.sh",
+    srcs = "@freebsd_mandoc//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "file_command",
+    data = glob(["file/**"]) + ["commands.sh"],
+    deps = [":root", ":libz_dylib", ":bzip2_commands", ":xz_commands"],
+    script = "file/build.sh",
+    srcs = "@apple_file//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "bc_commands",
+    data = glob(["bc/**"]) + ["commands.sh"],
+    deps = [":root", ":libedit_dylib"],
+    script = "bc/build.sh",
+    srcs = "@apple_bc//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "netcat_command",
+    data = glob(["netcat/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "netcat/build.sh",
+    srcs = "@apple_netcat//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libiconv_dylib",
+    data = glob(["libiconv/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "libiconv/build.sh",
+    srcs = "@apple_libiconv//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "tcsh_shell",
+    data = glob(["tcsh/**"]) + ["commands.sh"],
+    deps = [":root", ":libncurses_dylib"],
+    script = "tcsh/build.sh",
+    srcs = "@apple_tcsh//:all",
+    sysroot = ":sysroot",
+)
+
+# /usr/share/locale (C.UTF-8, en_US.UTF-8), compiled from FreeBSD's sources
+# by adv_cmds' localedef built for the build machine (base/locales/build.sh).
+base_library(
+    name = "locale_data",
+    data = glob(["locales/**"]) + ["@apple_adv_cmds//:all"],
+    script = "locales/build.sh",
+    srcs = "@freebsd_locales//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "mail_commands",
+    data = glob(["mail_cmds/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "mail_cmds/build.sh",
+    srcs = "@apple_mail_cmds//:all",
+    sysroot = ":sysroot",
+)
+
 # The ZFS test suite's commands from projects of their own
 # (docs/architecture/filesystems.md §7): awk-40, patch_cmds-72's cmp and
 # diff, and FreeBSD's timeout (macOS 26 has none).
@@ -867,6 +961,16 @@ base_root(
         ":awk_command",
         ":patch_commands",
         ":timeout_command",
+        ":less_commands",
+        ":man_command",
+        ":mandoc_commands",
+        ":file_command",
+        ":bc_commands",
+        ":netcat_command",
+        ":libiconv_dylib",
+        ":tcsh_shell",
+        ":mail_commands",
+        ":locale_data",
     ],
 )
 
@@ -927,6 +1031,8 @@ base_root(
     ("liblzma", ":xz_commands", "usr/lib/liblzma.5.dylib", "xz/exports.txt"),
     ("libarchive", ":libarchive_commands", "usr/lib/libarchive.2.dylib", "libarchive/exports.txt"),
     ("libzstd", ":zstd_commands", "usr/lib/libzstd.1.dylib", "zstd/exports.txt"),
+    ("libiconv", ":libiconv_dylib", "usr/lib/libiconv.2.dylib", "libiconv/exports/libiconv.2.txt"),
+    ("libcharset", ":libiconv_dylib", "usr/lib/libcharset.1.dylib", "libiconv/exports/libcharset.1.txt"),
     ("libxpc", ":libxpc", "usr/lib/system/libxpc.dylib", "launchd/exports.txt"),
     ("libncurses", ":libncurses_dylib", "usr/lib/libncurses.5.4.dylib", "ncurses/exports.txt"),
     ("libpam", ":libpam_dylib", "usr/lib/libpam.2.dylib", "openpam/exports/libpam.2.txt"),

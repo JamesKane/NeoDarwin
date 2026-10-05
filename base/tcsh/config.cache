@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# NeoDarwin's answers to tcsh's configure (base/tcsh/build.sh), which runs
+# cross-compiling as base/zsh's does. The one check that would run a test
+# program is AC_FUNC_STRCOLL; Libc's strcoll() works (setpgrp is answered
+# by configure.ac itself when cross-compiling).
+ac_cv_func_strcoll_works=${ac_cv_func_strcoll_works=yes}

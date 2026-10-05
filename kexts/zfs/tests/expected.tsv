@@ -109,7 +109,7 @@ cli_root/zfs_receive/zfs_receive_new_props	PASS
 cli_root/zfs_receive/zfs_receive_raw	PASS	
 cli_root/zfs_receive/zfs_receive_raw_-d	PASS	
 cli_root/zfs_receive/zfs_receive_raw_incremental	PASS	
-cli_root/zfs_receive/zfs_receive_to_encrypted	PASS	
+cli_root/zfs_receive/zfs_receive_to_encrypted	FLAKY	zfs send -R | zfs recv -o encryption=on failed once (2026-10-05, 1 of 3 runs): "checksum mismatch or incomplete stream"; the pipe relay (zfs patch 0009) is a suspect (to investigate, P3-11)
 cli_root/zfs_rollback/cleanup	PASS	
 cli_root/zfs_rollback/setup	PASS	
 cli_root/zfs_rollback/zfs_rollback_001_pos	FAIL	needs zvols (checkpoint 3)

@@ -1215,8 +1215,12 @@ sh_test(
 # archives (cp2): gzip, bzip2, xz, xzdec and zstd round trips and lzmainfo;
 # tar cf/tf, czf/xzf and bsdcat; cpio -o, -it and -id; zgrep, bzgrep and
 # grep --xz; unzip -l and -p on a zip made on the host (base64 in the typed
-# line). cal and ncal warn
-# "setlocale" until the locale data (cp3). Each expected
+# line). The interactive essentials (cp3): bc and dc, file on a Mach-O,
+# less -F and lessecho; man -w, man formatting with mandoc and paging
+# through less, soelim; tput and infocmp on vt100; iconv from UTF-8 to
+# Latin-1; nc -z to an nc -l on loopback; tcsh and csh -c; mail reading a
+# one-message mailbox; locale -a and charmap in en_US.UTF-8 and C.UTF-8,
+# and cal without a setlocale warning in en_US.UTF-8. Each expected
 # line is output the typed text can't contain ("" splits the words that
 # would match).
 sh_test(
@@ -1230,6 +1234,7 @@ sh_test(
         "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
         "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
         "--until-lines",
+        "--absent 'setlocale: Bad'",
         "--send-after 'login: ' 'root\\n'",
         "--send-after 'root@localhost ~ # ' 'jot -s, 3 7; echo abc-rev | rev; echo hi | base64; md5 -s x; sha256 -q -s x\\n'",
         "--send-after '2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881' " +
@@ -1263,6 +1268,20 @@ sh_test(
         # lsvfs walks every type number below vfs.generic.maxtypenum: before
         # kernel patch 0044, mockfs's 'mock' made that 1.8 billion sysctls.
         "--send-after 'unzip-content-ok' 'lsvfs > /tmp/v && echo lsvfs-d\"\"one-$$(grep -c . /tmp/v)\\n'",
+        # The interactive essentials (cp3).
+        "--send-after 'lsvfs-done-' 'echo \"2^20\" | bc; echo \"12345 6789 * p\" | dc; file /bin/ls; " +
+        "echo ls-\"\"ok | less -FX; lessecho le-\"\"echo\\n'",
+        "--send-after 'le-echo' 'man -w less; man mandoc | head -1; echo .so /tmp/s2 > /tmp/s1; " +
+        "echo so-\"\"inc > /tmp/s2; soelim /tmp/s1\\n'",
+        "--send-after 'so-inc' 'tput -T vt100 cols | sed \"s/^/cols-/\"; infocmp -1 vt100 | grep -m1 cols; " +
+        "printf \"x\\303\\251y\" | iconv -f UTF-8 -t ISO-8859-1 | od -An -tx1\\n'",
+        "--send-after '78  e9  79' 'nc -l 127.0.0.1 9999 > /dev/null & sleep 1; nc -z 127.0.0.1 9999 && echo nc-\"\"ok; " +
+        "kill %1 2>/dev/null; tcsh -c \"repeat 2 echo tc-\"\"rep\"; csh -c \"if (1 == 1) echo cs-\"\"if\"\\n'",
+        "--send-after 'cs-if' 'echo From a@b Thu Jan 11 00:00:00 2026 > /tmp/mb; echo Subject: ml-x >> /tmp/mb; " +
+        "echo >> /tmp/mb; echo bo-\"\"dy >> /tmp/mb; echo p | mail -n -f /tmp/mb\\n'",
+        "--send-after 'bo-dy' 'locale -a | grep _US | sed s/^/la-/; LC_ALL=en_US.UTF-8 locale charmap | sed s/^/cm-/; " +
+        "LC_ALL=C.UTF-8 locale charmap | sed s/^/cc-/; LANG=en_US.UTF-8 cal 1 2026 2>&1 | grep -c setlocale | " +
+        "sed s/^/sl-/\\n'",
         "$(rootpath //boot/neoboot)",
         "240",
         "'7,8,9'",
@@ -1317,6 +1336,25 @@ sh_test(
         "'uz-member.txt'",
         "'unzip-content-ok'",
         "'lsvfs-done-'",
+        "'1048576'",
+        "'83810205'",
+        "'Mach-O 64-bit executable arm64'",
+        "'ls-ok'",
+        "'le-echo'",
+        "'/usr/share/man/man1/less.1'",
+        "'MANDOC(1)'",
+        "'so-inc'",
+        "'cols-80'",
+        "'cols#80'",
+        "'78  e9  79'",
+        "'nc-ok'",
+        "'tc-rep'",
+        "'cs-if'",
+        "'bo-dy'",
+        "'la-en_US.UTF-8'",
+        "'cm-UTF-8'",
+        "'cc-UTF-8'",
+        "'sl-0'",
     ],
     data = [
         ":sbsa_kc",

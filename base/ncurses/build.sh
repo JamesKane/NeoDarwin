@@ -19,8 +19,9 @@
 # builds for the build machine (native_execs.sh); they are compiled here with
 # the host SDK. run_tic.sh defaults TIC_PATH to the build host's /usr/bin/tic;
 # NeoDarwin passes the tic_static built from these sources instead.
-# Not built: libform, libmenu, libpanel and the tic/infocmp/tput/tset/clear/
-# toe commands (nothing in the base links or runs them yet).
+# The commands: clear, infocmp, tic (with captoinfo and infotocap), toe,
+# tput, tset (with reset) and tabs in usr/bin (P4-21 checkpoint 3).
+# Not built: libform, libmenu and libpanel (nothing in the base links them).
 source "$(dirname "$0")/../../tools/base/common.sh"
 source "$(dirname "$0")/../commands.sh"
 OUT="$(abspath "$1")"; N="$(abspath "$2")"; SYSROOT="$(abspath "$3")"; shift 3
@@ -129,3 +130,23 @@ mkdir -p "$OUT/usr/share"
 for t in 76/vt100 78/xterm 78/xterm-256color 64/dumb; do
 	[ -f "$OUT/usr/share/terminfo/$t" ] || { echo "ncurses: terminfo lacks $t" >&2; exit 1; }
 done
+
+# The commands (P4-21 checkpoint 3): the clear, infocmp, tic, toe, tput and
+# tset targets (executables.xcconfig: /usr/bin, gnu99, the project's search
+# paths and no definitions), linking libncurses, and fix_bin.sh's links (reset, captoinfo,
+# infotocap). tabs (progs/tabs.c, FreeBSD's usr.bin/ncurses builds it) has
+# no target in Apple's project and is built the same way.
+write_rsp "$B/progs.rsp" "${TCPP[@]}" -std=gnu99 -Os -fno-common "${INC[@]}"
+P="$NC/progs"
+prog() { local t="$1"; shift; write_vers "$D/${t}_vers.c" "$t" ncurses 79 __
+	tool "$B" "$ROOT" "$OUT/usr/bin/$t" "$B/progs.rsp" "$@" "$D/${t}_vers.c" -- -L"$OUT/usr/lib" -lncurses; }
+prog clear "$P/clear.c"
+prog infocmp "$P/infocmp.c" "$P/dump_entry.c"
+prog tput "$P/transform.c" "$P/tput.c" "$P/tparm_type.c"
+prog tset "$P/transform.c" "$P/tset.c"
+prog toe "$P/toe.c"
+prog tic "$P/tic.c" "$P/transform.c" "$P/tparm_type.c" "$P/dump_entry.c"
+prog tabs "$P/tabs.c"
+ln -sf tset "$OUT/usr/bin/reset"
+ln -sf tic "$OUT/usr/bin/captoinfo"
+ln -sf tic "$OUT/usr/bin/infotocap"

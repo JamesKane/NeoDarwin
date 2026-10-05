@@ -308,6 +308,75 @@ http_archive(
     urls = ["https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz"],
 )
 
+# P4-21 checkpoint 3, the interactive essentials (base/less, base/man,
+# base/file, base/bc, base/netcat, base/libiconv, base/tcsh,
+# base/mail_cmds): Apple's projects from macOS 26's release set; mandoc and
+# soelim from FreeBSD (freebsd_mandoc below; macOS's mandoc is unpublished).
+http_archive(
+    name = "apple_less",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "ae4a5ddcd9e005ba51485aacdbf0912e353f977f8ef1cd2877afd9c23c10fb7b",
+    strip_prefix = "less-less-50",
+    urls = ["https://github.com/apple-oss-distributions/less/archive/refs/tags/less-50.tar.gz"],
+)
+
+http_archive(
+    name = "apple_man",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "63568cab7bbf7de401e8aab4ae1ea9d80f26c11c2217fccb3afabfda01f23218",
+    strip_prefix = "man-man-62",
+    urls = ["https://github.com/apple-oss-distributions/man/archive/refs/tags/man-62.tar.gz"],
+)
+
+http_archive(
+    name = "apple_file",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "aace18b91d8927191dab4dd4513fc27d18d17d6635b6d07c7f53a4e1916c29ca",
+    strip_prefix = "file-file-104",
+    urls = ["https://github.com/apple-oss-distributions/file/archive/refs/tags/file-104.tar.gz"],
+)
+
+http_archive(
+    name = "apple_bc",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "f9297f188fdfded6859ed11e6e8e2cdaf4c902f316fb645fa801292f5840453e",
+    strip_prefix = "bc-bc-35",
+    urls = ["https://github.com/apple-oss-distributions/bc/archive/refs/tags/bc-35.tar.gz"],
+)
+
+http_archive(
+    name = "apple_netcat",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "ce62d60631352b802828fa5150c8e20a57e3ede165837b25412c0143665671fa",
+    strip_prefix = "netcat-netcat-56",
+    urls = ["https://github.com/apple-oss-distributions/netcat/archive/refs/tags/netcat-56.tar.gz"],
+)
+
+http_archive(
+    name = "apple_libiconv",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "455053e227806f24877548525193f469060c12a3e552b4598ef7d40abc068178",
+    strip_prefix = "libiconv-libiconv-113",
+    urls = ["https://github.com/apple-oss-distributions/libiconv/archive/refs/tags/libiconv-113.tar.gz"],
+)
+
+http_archive(
+    name = "apple_tcsh",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "879f9d1991248dce5d2c2cffa4e99ce09433fd3598cc87f51f8b600930aea8f8",
+    strip_prefix = "tcsh-tcsh-75",
+    urls = ["https://github.com/apple-oss-distributions/tcsh/archive/refs/tags/tcsh-75.tar.gz"],
+)
+
+http_archive(
+    name = "apple_mail_cmds",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "8dfd2b77791576c637010b9464ee5dbf5b54082ac89ac07a8547eca6920e54fb",
+    strip_prefix = "mail_cmds-mail_cmds-41",
+    urls = ["https://github.com/apple-oss-distributions/mail_cmds/archive/refs/tags/mail_cmds-41.tar.gz"],
+)
+
+
 http_archive(
     name = "apple_diskdev_cmds",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
@@ -773,6 +842,24 @@ pinned_files(
     name = "freebsd_timeout",
     build_file = "//base:timeout/freebsd.BUILD",
     lockfile = "//base:timeout/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
+# FreeBSD's mandoc and soelim (base/mandoc) for man-62's man(1): macOS
+# ships mandoc without publishing it.
+pinned_files(
+    name = "freebsd_mandoc",
+    build_file = "//base:mandoc/freebsd.BUILD",
+    lockfile = "//base:mandoc/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
+# FreeBSD's CLDR-derived locale sources (base/locales) for /usr/share/locale:
+# macOS 26's release set publishes no locale data.
+pinned_files(
+    name = "freebsd_locales",
+    build_file = "//base:locales/freebsd.BUILD",
+    lockfile = "//base:locales/freebsd.lock",
     url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
 )
 

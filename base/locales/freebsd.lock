@@ -1,0 +1,21 @@
+# FreeBSD's locale sources (CLDR-generated, tools/tools/locale) for C.UTF-8
+# and en_US.UTF-8, which base/locales/build.sh compiles with adv_cmds-237's
+# localedef into /usr/share/locale. macOS 26's release set publishes no
+# locale data. Fetched unmodified by //rules:pinned_files.bzl.
+# Repository: https://github.com/freebsd/freebsd-src
+# commit: 050683bb8e136981e4a1f66e845ab05c135630f4
+# Format: shasum -a 256 (hash, two spaces, path). Regenerate with tools/pinned/lock.sh.
+04d49d0dba71109b1008cb45b62d7d4c480f01fbb408991cf275ec9f55291d3c  share/colldef_unicode/en_US.UTF-8.src
+872adfdc1c39e25aa79f05cf90b0aae3fde1b9bbd4c5bb9bc6432a5dbcc58566  share/colldef_unicode/Makefile
+05ac1ae63b125576b5c414616497ff1910f79c82aee47a0c28aab124b14134ab  share/ctypedef/C.UTF-8.src
+fec0a5f54b75a8ff92715ed177a2baac8e7e86ca4031157f2041e4f0be7f9935  share/ctypedef/Makefile
+321acc94421860a4f80a107b7b496149d021e40a964ac735476fc24d67f6f55f  share/monetdef_unicode/en_US.UTF-8.src
+28a80ffceda625949867933b4d1e599da64a12e6c0cdf416cf6c98cb7f1d9497  share/monetdef_unicode/Makefile
+5d790d0e84cfade8dca9b5027427f72607b4885be413ff015875f7ea6a5223d1  share/msgdef_unicode/en_US.UTF-8.src
+dc2d635fd7a5d813094e1ec379e2b19b412f2403be5696c1165785b5a7166b33  share/msgdef_unicode/Makefile
+53e9c52c64aeaff4533f752b4ac4faec89efb9665d1e959316ba909afff8fc82  share/numericdef_unicode/en_US.UTF-8.src
+47cb96f73b0d86108ec26eaf8cddeca91ccc05b9abe7eecea0f7feb0b3d74104  share/numericdef_unicode/Makefile
+000d6eba7e00a42ffac3f108da7c67e3803840a4f0f681805535ba34fcd80dbb  share/timedef/en_US.UTF-8.src
+0c612d8ee55e87d48907786e1aa0a9aaf1452555a3fea9a8e18384876cc0b033  share/timedef/Makefile
+575ef6aa96078cc878d9a8892cec8548d5fa6a7cf63b4c6698d76e198570c1c8  tools/tools/locale/etc/final-maps/map.UTF-8
+6f8c174ca6eb36611a126b1cab6ffe32c31fab0b82e80a54da2ff4535e46d415  tools/tools/locale/etc/final-maps/widths.txt

@@ -37,6 +37,16 @@ xz                   v5.4.7                        sha256:8db6664c48ca07908b92ba
 libarchive           libarchive-158                sha256:e653bed893dd8d1f08000d7485897e7b0e562d029282bbe9559a2b2ca4679e06  (libarchive 3.7.4, libarchive.2.dylib; bsdtar, cpio, bsdcat)
 zip                  zip-29                        sha256:47f06c8605d58b559bb98e27cb00529aedf9b2df68db47a6ca54c80e1e291148  (Info-ZIP UnZip 6.0 only: unzip, funzip, unzipsfx, zipinfo, zipgrep)
 zstd                 v1.5.7                        sha256:eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3  (github.com/facebook/zstd release tarball; libzstd.1.dylib, zstd: FreeBSD's sys/contrib/zstd is 1.5.7 at freebsd-src 050683bb8e13; macOS has no zstd; outside the release set)
+less                 less-50                       sha256:ae4a5ddcd9e005ba51485aacdbf0912e353f977f8ef1cd2877afd9c23c10fb7b  (less 661: less, more, lessecho, lesskey)
+man                  man-62                        sha256:63568cab7bbf7de401e8aab4ae1ea9d80f26c11c2217fccb3afabfda01f23218  (FreeBSD's man.sh with Apple's changes: man, manpath, apropos, whatis)
+mandoc               freebsd-src 050683bb8e13      contrib/mandoc, usr.bin/soelim; pinned per file in base/mandoc/freebsd.lock (macOS ships mandoc unpublished)
+locales              freebsd-src 050683bb8e13      share/ctypedef, colldef_unicode, timedef, *def_unicode, tools/tools/locale final-maps (C.UTF-8, en_US.UTF-8); pinned per file in base/locales/freebsd.lock (macOS 26's release set has no locale data)
+file                 file-104                      sha256:aace18b91d8927191dab4dd4513fc27d18d17d6635b6d07c7f53a4e1916c29ca  (file 5.41 and its magic database)
+bc                   bc-35                         sha256:f9297f188fdfded6859ed11e6e8e2cdaf4c902f316fb645fa801292f5840453e  (Gavin Howard's bc, as FreeBSD's gh-bc: bc, dc)
+netcat               netcat-56                     sha256:ce62d60631352b802828fa5150c8e20a57e3ede165837b25412c0143665671fa  (OpenBSD nc with Apple's options)
+libiconv             libiconv-113                  sha256:455053e227806f24877548525193f469060c12a3e552b4598ef7d40abc068178  (Citrus iconv: libiconv.2.dylib, libcharset.1.dylib, /usr/lib/i18n, iconv, mkcsmapper, mkesdb)
+tcsh                 tcsh-75                       sha256:879f9d1991248dce5d2c2cffa4e99ce09433fd3598cc87f51f8b600930aea8f8  (tcsh 6.21: tcsh, csh)
+mail_cmds            mail_cmds-41                  sha256:8dfd2b77791576c637010b9464ee5dbf5b54082ac89ac07a8547eca6920e54fb  (mail, mailx)
 libutil              libutil-73                    sha256:dfb7a334e716768079c46bf9ae0846e6231eb6e4481dbad9981ac666f112d61e
 files                files-968                     sha256:86ca6ad735f4731f0ed49fe1a8e393834a9bbef143995883ee96fa8834887b35
 libxo                freebsd-src 050683bb8e13      contrib/libxo (1.6.0); pinned per file in base/libxo/freebsd.lock (Apple publishes no libxo)
