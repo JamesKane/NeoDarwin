@@ -1165,3 +1165,23 @@ lang_audit_test(
         "libarchive/compat/*.c",
     ]),
 )
+
+# Every arm64 Mach-O the base installs against the userland baseline:
+# Armv8.2 with RCpc, dot product, crypto and FP16 (TARGET_CPU cortex-a76 in
+# tools/base/common.sh, the kernel's //kernel:sbsa_isa_audit features).
+# QEMU's neoverse-n2 runs apple-m1 code, so only this catches it before the
+# Radxa Dragon Q8B does. isa_audit.txt lists the reviewed exceptions.
+sh_test(
+    name = "base_isa_audit",
+    size = "medium",
+    srcs = ["//tools/base:isa_audit.sh"],
+    args = [
+        "+v8.2a,+rcpc,+dotprod,+aes,+sha2,+fullfp16",
+        "$(rootpath isa_audit.txt)",
+        "$(rootpath :system_root)",
+    ],
+    data = [
+        "isa_audit.txt",
+        ":system_root",
+    ],
+)

@@ -30,7 +30,7 @@ BUILD="$(sh ./config.guess)"
 cp "$PROJ/config.cache" "$B/config.cache"
 export CC="xcrun clang" INSTALL="/usr/bin/install -c"
 export CPPFLAGS="-I$NC/usr/local/include $(cmd_sysroot_flags "$SYSROOT" | tr '\n' ' ') -idirafter $SDK/usr/include"
-export CFLAGS="-arch arm64 -mmacosx-version-min=26.0 -isysroot $ROOT -Os -Wno-error=int-conversion -D_PATH_TCSHELL=\\\"/bin/tcsh\\\" -DDARWIN -fstack-protector-all"
+export CFLAGS="-arch arm64 -mcpu=$TARGET_CPU -mmacosx-version-min=26.0 -isysroot $ROOT -Os -Wno-error=int-conversion -D_PATH_TCSHELL=\\\"/bin/tcsh\\\" -DDARWIN -fstack-protector-all"
 export LDFLAGS="-arch arm64 -mmacosx-version-min=26.0 -isysroot $ROOT -L$NC/usr/lib"
 ./configure --build="$BUILD" --host=aarch64-apple-darwin25.0.0 --cache-file="$B/config.cache" \
 	--prefix=/usr --bindir=/bin --mandir=/usr/share/man --sysconfdir=/private/etc ac_cv_func_sbrk=no \

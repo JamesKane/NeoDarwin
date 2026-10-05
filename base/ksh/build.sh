@@ -43,7 +43,7 @@ K="$(stage_src "$K" "$B/src" "$PROJ/patches")"   # patches/ (none yet) applied
 CLANG="$(xcrun -f clang)"
 cat > "$B/cc" <<CC
 #!/bin/sh
-exec "$CLANG" -arch arm64 -mmacosx-version-min=26.0 -isysroot "$ROOT" \\
+exec "$CLANG" -arch arm64 -mcpu=$TARGET_CPU -mmacosx-version-min=26.0 -isysroot "$ROOT" \\
 	$(cmd_sysroot_flags "$SYSROOT" | tr '\n' ' ') -idirafter "$SDK/usr/include" \\
 	-Wl,-adhoc_codesign "\$@"
 CC

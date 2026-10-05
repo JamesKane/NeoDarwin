@@ -11,7 +11,13 @@ JOBS="$(/usr/sbin/sysctl -n hw.ncpu)"
 # makes -Wint-conversion an error by default; these sources compile with it as
 # the warning Apple's toolchain for this release gives (Libsyscall's xcconfig
 # turns it off outright).
-TARGET_FLAGS=(-arch arm64 -mmacosx-version-min=26.0 -isysroot "$SDK" -Wno-error=int-conversion)
+# CPU: the userland baseline, as for the kernel (docs/kernel/arm64-sbsa-bringup.md
+# §2.1.8) and tools/static_macho: Armv8.2 with RCpc, dot product, crypto and
+# FP16, which the Radxa Dragon Q8B's Cortex-X1C/A78C implement. Without it
+# clang targets apple-m1 for arm64-apple-macos (Armv8.5 and Apple's extras),
+# which QEMU's neoverse-n2 runs and the board would fault on.
+TARGET_CPU=cortex-a76
+TARGET_FLAGS=(-arch arm64 -mcpu="$TARGET_CPU" -mmacosx-version-min=26.0 -isysroot "$SDK" -Wno-error=int-conversion)
 
 # sysroot_flags SYSROOT: the staged headers ahead of the SDK's, in the order of
 # Apple's builds: System.framework's PrivateHeaders (xnu's private variants of

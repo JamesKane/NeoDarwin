@@ -52,7 +52,7 @@ cd "$O"
 export SOURCE_DATE_EPOCH=1790640000   # 29 Sep 2026, OpenSSL 3.5.9's release date
 export CC="xcrun clang"
 export CPPFLAGS="$(cmd_sysroot_flags ../sysroot | tr '\n' ' ') -idirafter $SDK/usr/include"
-export CFLAGS="-O3 -Wall -mmacosx-version-min=26.0 -isysroot ../root"
+export CFLAGS="-O3 -Wall -mcpu=$TARGET_CPU -mmacosx-version-min=26.0 -isysroot ../root"
 export LDFLAGS="-mmacosx-version-min=26.0 -isysroot ../root -Wl,-adhoc_codesign"
 OPTIONS=(--prefix=/usr --libdir=lib --openssldir=/private/etc/ssl --release shared no-tests no-docs
 	no-aria no-idea no-mdc2 no-sm2 no-sm3 no-sm4 enable-ec_nistp_64_gcc_128 no-padlockeng

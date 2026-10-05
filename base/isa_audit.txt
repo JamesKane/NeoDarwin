@@ -1,0 +1,57 @@
+# Reviewed findings of //base:base_isa_audit (tools/base/isa_audit.sh): PATH<TAB>FUNCTION<TAB>MNEMONIC,
+# instructions outside the Armv8.2 userland baseline that can't run on a core without them.
+# OpenSSL (libcrypto, legacy.dylib): the __armv8_*_probe functions and the SVE, SHA3 (EOR3, Keccak),
+#   SHA-512 and SM routines, which OpenSSL calls only when OPENSSL_armcap says the core has them.
+#   On Darwin armcap comes from hw.optional.*, which XNU derives from ID_AA64ISAR0/1_EL1
+#   (commpage.c commpage_init_arm_optional_features_isar0), so the Q8B gets the v8.2 paths.
+# libsystem_kernel _os_cpu_in_cksum_mbuf: data, the ASCII panic string "...: out of data\n" in __text.
+# libunwind stepWithDwarf: stg, untagging MTE-tagged stack frames, run only for CIEs with the
+#   MTE augmentation, which nothing on NeoDarwin is compiled with.
+usr/lib/libcrypto.3.dylib	__armv8_eor3_probe	eor3.16b
+usr/lib/libcrypto.3.dylib	__armv8_sha512_probe	sha512su0.2d
+usr/lib/libcrypto.3.dylib	__armv8_sm3_probe	sm3partw1.4s
+usr/lib/libcrypto.3.dylib	__armv8_sm4_probe	sm4e.4s
+usr/lib/libcrypto.3.dylib	__armv8_sve_probe	eor
+usr/lib/libcrypto.3.dylib	__armv8_sve2_probe	xar
+usr/lib/libcrypto.3.dylib	_aes_v8_ctr32_encrypt_blocks_unroll12_eor3	eor3.16b
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	add
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	addvl
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	cntw
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	eor
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	incw
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	index
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	ld1w
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	lsl
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	lsr
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	mov
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	orr
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	ptrues
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	revh
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	st1w
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	tbl
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	xar
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	zip1
+usr/lib/libcrypto.3.dylib	_ChaCha20_ctr32_sve	zip2
+usr/lib/libcrypto.3.dylib	_SHA3_squeeze_cext	fnmls
+usr/lib/libcrypto.3.dylib	_unroll8_eor3_aes_gcm_dec_128_kernel	eor3.16b
+usr/lib/libcrypto.3.dylib	_unroll8_eor3_aes_gcm_dec_192_kernel	eor3.16b
+usr/lib/libcrypto.3.dylib	_unroll8_eor3_aes_gcm_dec_256_kernel	eor3.16b
+usr/lib/libcrypto.3.dylib	_unroll8_eor3_aes_gcm_enc_128_kernel	eor3.16b
+usr/lib/libcrypto.3.dylib	_unroll8_eor3_aes_gcm_enc_192_kernel	eor3.16b
+usr/lib/libcrypto.3.dylib	_unroll8_eor3_aes_gcm_enc_256_kernel	eor3.16b
+usr/lib/libcrypto.3.dylib	KeccakF1600_ce	bcax.16b
+usr/lib/libcrypto.3.dylib	KeccakF1600_ce	eor3.16b
+usr/lib/libcrypto.3.dylib	KeccakF1600_ce	rax1.2d
+usr/lib/libcrypto.3.dylib	KeccakF1600_ce	xar.2d
+usr/lib/libcrypto.3.dylib	sha512_block_armv8	sha512h.2d
+usr/lib/libcrypto.3.dylib	sha512_block_armv8	sha512h2.2d
+usr/lib/libcrypto.3.dylib	sha512_block_armv8	sha512su0.2d
+usr/lib/libcrypto.3.dylib	sha512_block_armv8	sha512su1.2d
+usr/lib/ossl-modules/legacy.dylib	__armv8_eor3_probe	eor3.16b
+usr/lib/ossl-modules/legacy.dylib	__armv8_sha512_probe	sha512su0.2d
+usr/lib/ossl-modules/legacy.dylib	__armv8_sm3_probe	sm3partw1.4s
+usr/lib/ossl-modules/legacy.dylib	__armv8_sm4_probe	sm4e.4s
+usr/lib/ossl-modules/legacy.dylib	__armv8_sve_probe	eor
+usr/lib/ossl-modules/legacy.dylib	__armv8_sve2_probe	xar
+usr/lib/system/libsystem_kernel.dylib	_os_cpu_in_cksum_mbuf	cblo
+usr/lib/system/libunwind.dylib	__ZN9libunwind17DwarfInstructionsINS_17LocalAddressSpaceENS_15Registers_arm64EE13stepWithDwarfERS1_mmRS2_Rbb	stg
