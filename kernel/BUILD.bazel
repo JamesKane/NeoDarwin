@@ -813,9 +813,9 @@ sh_test(
         "//tools/efi:qemu_efi_test.sh",
     ],
     shard_count = 8,
-    # Not tagged qemu yet: kexts/zfs/tests/expected.tsv hasn't had a clean
-    # full run (docs/architecture/filesystems.md §7.2: intermittent hangs).
-    tags = ["manual", "kernel"],
+    # About 30 minutes on a 16-core host (the zpool_import shard is the
+    # longest); two consecutive clean full runs on 2026-10-04 (§7.2).
+    tags = ["manual", "kernel", "qemu"],
 )
 
 # The same disk boot on virt,secure=on with TF-A (DS = 0), as on SBSA

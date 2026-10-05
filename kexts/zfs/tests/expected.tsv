@@ -251,7 +251,7 @@ cli_root/zpool_import/zpool_import_008_pos	PASS
 cli_root/zpool_import/zpool_import_009_neg	PASS	
 cli_root/zpool_import/zpool_import_010_pos	FLAKY	creates and destroys five pools (one dRAID): near the 240 s cap under TCG (KILLED in some runs)
 cli_root/zpool_import/zpool_import_011_neg	FLAKY	fails when zpool_import_010_pos is KILLED (its destroyed pools hold the disk files)
-cli_root/zpool_import/zpool_import_012_pos	FLAKY	fails on NFS sharing (no NFS server; share options are not validated); once (2026-10-02) its zpool import testpool hung in the kernel and ZFS was wedged (to investigate, §7.2)
+cli_root/zpool_import/zpool_import_012_pos	FAIL	fails on NFS sharing (no NFS server; share options are not validated). Its zpool import hung in the kernel in some runs until zfs patch 0011 (an asynchronous vdev read taken for a synchronous one)
 cli_root/zpool_import/zpool_import_013_neg	FAIL	needs bzcat (bzip2 is not in the base; P3-02)
 cli_root/zpool_import/zpool_import_014_pos	PASS	
 cli_root/zpool_import/zpool_import_015_pos	PASS	

@@ -1,0 +1,73 @@
+From: NeoDarwin
+Subject: [PATCH] ldi_vnode: don't read the ldi buf after starting asynchronous I/O
+
+buf_strategy_vnode() reread lbp->b_iodone after VNOP_STRATEGY() to tell
+synchronous I/O from asynchronous. An asynchronous buf's completion
+(ldi_vnode_io_intr(), then vdev_disk_io_intr()) can run on another CPU
+before that read, and lbp is zio->macos.zm_buf: once the zio is done and
+freed, the next zio_create() zeroes it. The reread then saw b_iodone NULL
+and treated the I/O as synchronous: buf_biowait() on a buf already freed
+slept for good, holding a vdev_disk taskq thread, so `zpool import`
+waited in spa_ld_verify_logs -> dmu_objset_find_dp -> taskq_wait past
+SIGKILL (zpool_import_012_pos, P3-01 checkpoint 2; nd_threaddump showed
+buf_biowait < buf_strategy_vnode < vdev_disk_io_strategy and the reads
+under zil_parse in zio_wait). Before patch 0008 the same race freed the
+buf twice (free_io_buf: bufs_iobufinuse < 0). Whether the I/O is
+synchronous, and whether it writes, is now decided before it starts.
+
+Rebase-risk: low
+---
+diff --git a/module/os/neodarwin/zfs/ldi_vnode.c b/module/os/neodarwin/zfs/ldi_vnode.c
+--- a/module/os/neodarwin/zfs/ldi_vnode.c
++++ b/module/os/neodarwin/zfs/ldi_vnode.c
+@@ -601,6 +601,21 @@
+ 		/* Does not return an error status */
+ 		vnode_startwrite(LH_VNODE(lhp));
+ 	}
++
++#ifdef __NEODARWIN__
++	/*
++	 * Decide now whether the I/O is synchronous: once VNOP_STRATEGY()
++	 * has started an asynchronous one, its completion
++	 * (ldi_vnode_io_intr(), then lbp->b_iodone) can run on another
++	 * CPU at any moment and release lbp, so lbp mustn't be read after
++	 * it. Rereading lbp->b_iodone found it zeroed by a new zio and
++	 * waited in buf_biowait() on a buf already freed, for good
++	 * (zpool import hung in the OpenZFS test suite), or, before patch
++	 * 0008, freed the buf twice (bufs_iobufinuse < 0).
++	 */
++	const boolean_t synchronous = (lbp->b_iodone == NULL);
++	const boolean_t is_write = !(lbp->b_flags & B_READ);
++#endif
+ 
+ 	/* Issue the IO, preserving error */
+ 	error = VNOP_STRATEGY(bp);
+@@ -609,7 +624,11 @@
+ 		dprintf("%s VNOP_STRATEGY error %d\n",
+ 		    __func__, error);
+ 		/* Reclaim write count on vnode */
++#ifdef __NEODARWIN__
++		if (is_write) {
++#else
+ 		if (!(lbp->b_flags & B_READ)) {
++#endif
+ 			vnode_writedone(LH_VNODE(lhp));
+ 		}
+ 		vnode_put(LH_VNODE(lhp));
+@@ -621,7 +640,16 @@
+ 	vnode_put(LH_VNODE(lhp));
+ 
+ 	/* For synchronous IO, call completion */
++#ifdef __NEODARWIN__
++	/*
++	 * Not lbp->b_iodone: an asynchronous buf's completion may already
++	 * have run, and its lbp (zio->macos.zm_buf) been freed and zeroed
++	 * by the next zio_create().
++	 */
++	if (synchronous) {
++#else
+ 	if (lbp->b_iodone == NULL) {
++#endif
+ #ifdef __NEODARWIN__
+ 		/*
+ 		 * VNOP_STRATEGY() only starts the I/O: wait for it before

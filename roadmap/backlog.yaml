@@ -350,7 +350,7 @@ epics:
     title: "zfs.kext on NeoDarwin (module/os/neodarwin from macOS layer; KPI exports as kernel patches)"
     phase: 3
     owner: storage
-    status: doing
+    status: done
     depends: [P0-08, P1-10]
     exit: "zpool create/import on a data disk; zfs test suite subset passes"
     doc: docs/architecture/filesystems.md
@@ -425,6 +425,14 @@ epics:
     status: todo
     depends: [P3-03]
     exit: "an encrypted var unlocks at boot from a prompt on the console; an encrypted home unlocks with zfs load-key"
+    doc: docs/architecture/filesystems.md
+  - id: P3-11
+    title: "zfs.kext follow-ups after P3-01 — zvols and ZFSDataset proxies on IOStorageFamily, GPT labels on whole disks, .zfs/snapshot mounts, the kext in the default collection with a limited personality, the test suite's \"to investigate\" failures"
+    phase: 3
+    owner: storage
+    status: todo
+    depends: [P3-01]
+    exit: "the zvol and snapshot groups of the OpenZFS test suite pass in the ratchet on QEMU, and every sbsa boot loads zfs.kext without probing non-ZFS disks"
     doc: docs/architecture/filesystems.md
   # ---- Phase 4: FreeBSD command-line parity ----
   - id: P4-01
