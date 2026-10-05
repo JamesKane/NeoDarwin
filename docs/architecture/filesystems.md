@@ -167,4 +167,14 @@ mockfs executable ramdisk (kernel M3) → HFS+ ramdisk root (M4) → HFS+ image 
 - the BLAKE3 and Fletcher-4 NEON paths, and the RAID-Z SIMD ones (the macOS layer builds none for arm64);
 - the kext on the Q8B (the board wasn't available).
 
-**Next (P3-11).** (1) zvols and dataset proxies: the IOKit side (`zvolIO.cpp`, `ZFSDataset*`) checked on NeoDarwin's IOStorageFamily, GPT labels on whole disks with a re-probe of the new partitions, `.zfs/snapshot` mounts, and the suite's tests that need them (a zvol-backed `new_fs`, partitioned `DISKS` through `gpt` in place of `diskutil`) raised in the ratchet. (2) The kext in `//kernel:sbsa_kc` for every boot, with its personality limited so whole disks without ZFS labels aren't probed, then root on ZFS (P3-03).
+**P3-11's checkpoints** (scoped 2026-10-04). Each one ends with its tests raised in `expected.tsv` and two clean full suite runs.
+
+| cp | Contents | Ratchet | Notes |
+|---|---|---|---|
+| 1 | **zvols on IOStorageFamily.** `zvolIO.cpp`'s IOMedia appears, takes I/O and is removed cleanly; `newfs_hfs` on a zvol (`new_fs`); the suite's `zvol` groups added to `groups.txt`. Test the `zfs_destroy_003_pos` hypothesis (IOKit matching on a new zvol racing `zvolRemoveDeviceTerminate`) with `nd_threaddump` | 11 FAIL, 1 FLAKY | The partition schemes are built (`docs/kernel/storage.md`), so a zvol's partition probe is a real path |
+| 2 | **Snapshots and mounts.** `.zfs/snapshot` mounts (`zfs_snapshot_009_pos`), ZFSDatasetProxy disks with `com.apple.devdisk`, the `zfs_mount` tests to investigate (`_005`, `_007`, `_010`, `_011`, `zfs_mount_remount`), `mount -F` changed through `tests/patches`; the `snapshot` group added | about 7 | |
+| 3 | **GPT labels and partitioning.** libzfs's whole-disk EFI label (libefi) with IOKit re-reading the new partitions; the in-use check sees an unmounted HFS+ volume; the tests' `diskutil` and `gpt` calls go through **`gpart`**, a NeoDarwin subset of FreeBSD's (`create`, `add`, `delete`, `show`, `resize`, `bootcode`) over IOStorageFamily (decided 2026-10-04; `freebsd-parity.md` §6) | about 3 | `gpart` is also the installer's (P3-03, P7-03) |
+| 4 | **The remaining "to investigate" list.** Tunables (`set_tunable64` over sysctls, 6), the KILLED ones rerun with `ZTS_TEST_TIMEOUT=600` to tell slow from hung, dRAID file vdevs, `xxh128sum` (a small helper), `draidcfg.gz` in the image; `bzcat` comes with P4-21 checkpoint 2 | 20 or more | `fio` and `python3` stay FAIL (ports) |
+| 5 | **The kext in every boot.** `zfs.kext` in `//kernel:sbsa_kc` with its personality limited so whole disks without ZFS labels aren't probed, and the `kernel-abi` declaration (§2 step 3); every QEMU test still passes, and boot time is measured | – | Leads into root on ZFS (P3-03) |
+
+Checkpoints 1 and 2 are independent. A full suite run holds the Bazel server and loads the host for about 30 minutes, so P3-11 doesn't run alongside other QEMU-heavy work.
