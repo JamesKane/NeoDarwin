@@ -1,0 +1,23 @@
+From: NeoDarwin
+Subject: [PATCH] libarchive: the xar stub calls the entitlement check by its name
+
+Without an XML parser (no libxml2, expat or bsdxml), the xar reader
+compiles to a stub that reports the format unsupported. Apple's builds
+always have libxml2, so the stub's entitlement check, which calls
+archive_allow_format(), a name archive_check_entitlement.h doesn't
+declare, has never been compiled. It calls
+archive_allow_entitlement_format(), as the reader proper does.
+NeoDarwin's base has no libxml2 (nd_libarchive_config.h).
+Rebase-risk: low (one line).
+
+--- a/libarchive/libarchive/archive_read_support_format_xar.c
++++ b/libarchive/libarchive/archive_read_support_format_xar.c
+@@ -77,7 +77,7 @@
+ 	struct archive_read *a = (struct archive_read *)_a;
+ 
+ #ifdef __APPLE__
+-	if (!archive_allow_format("xar")) {
++	if (!archive_allow_entitlement_format("xar")) {
+ 		archive_set_error(_a, ARCHIVE_ERRNO_MISC, "Format not allow-listed in entitlements");
+ 		return ARCHIVE_FATAL;
+ 	}

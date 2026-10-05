@@ -8,7 +8,7 @@
 # roots, _GNU_SOURCE, _FILE_OFFSET_BITS=64), with FreeBSD's paths (/sbin,
 # /etc, /var/run) and no NLS. NeoDarwin supplies what the macOS build takes
 # from frameworks and Homebrew: kexts/zfs/compat (libintl.h, libdiskmgt) and
-# zlib (//kexts/zfs:zlib, a private static zlib until P3-02).
+# zlib (the base's libz, //base:libz_dylib).
 
 # user_cflags OUT_RSP B SYSROOT CRYPTO ZLIB [EXTRA...]: the userland's flags
 # (NDEBUG, as libzfs and the commands build); EXTRA is appended.
@@ -22,7 +22,7 @@ user_cflags() {
 		'-DLIBEXECDIR=\"/usr/libexec\"' '-DZFSEXECDIR=\"/usr/libexec/zfs\"' '-DRUNSTATEDIR=\"/var/run\"' \
 		'-DSBINDIR=\"/sbin\"' '-DSYSCONFDIR=\"/etc\"' '-DPKGDATADIR=\"/usr/share/zfs\"' \
 		-UDEBUG -DNDEBUG '-DTEXT_DOMAIN=\"zfs-neodarwin-user\"' \
-		-I"$PROJ/compat" -I"$zlib/usr/local/include/nd_zfs" -I"$crypto/usr/local/openssl/include" \
+		-I"$PROJ/compat" -I"$zlib/usr/local/include" -I"$crypto/usr/local/openssl/include" \
 		$(cmd_sysroot_flags "$sysroot") \
 		-ffile-prefix-map="$b/"= -ffile-prefix-map="$PROJ/"=kexts/zfs/ "$@"
 }

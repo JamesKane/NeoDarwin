@@ -348,6 +348,65 @@ base_library(
     sysroot = ":sysroot",
 )
 
+# P4-21 checkpoint 2, compression and archives
+# (docs/architecture/freebsd-parity.md §2.1): libz (Apple's zlib, which the
+# ZFS userland links too), libbz2 and the bzip2 commands, liblzma and the
+# xz commands; libarchive with bsdtar, cpio and bsdcat; libzstd and zstd;
+# Info-ZIP's unzip.
+base_library(
+    name = "libz_dylib",
+    data = glob(["zlib/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "zlib/build.sh",
+    srcs = "@apple_zlib//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "bzip2_commands",
+    data = glob(["bzip2/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "bzip2/build.sh",
+    srcs = "@apple_bzip2//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "xz_commands",
+    data = glob(["xz/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "xz/build.sh",
+    srcs = "@tukaani_xz//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "libarchive_commands",
+    data = glob(["libarchive/**"]) + ["commands.sh"],
+    deps = [":root", ":libz_dylib", ":bzip2_commands", ":xz_commands", ":libmd_dylib"],
+    script = "libarchive/build.sh",
+    srcs = "@apple_libarchive//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "zstd_commands",
+    data = glob(["zstd/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "zstd/build.sh",
+    srcs = "@facebook_zstd//:all",
+    sysroot = ":sysroot",
+)
+
+base_library(
+    name = "unzip_commands",
+    data = glob(["zip/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "zip/build.sh",
+    srcs = "@apple_zip//:all",
+    sysroot = ":sysroot",
+)
+
 base_library(
     name = "shell_commands",
     data = glob(["shell_cmds/**"]) + ["commands.sh"],
@@ -415,7 +474,7 @@ base_library(
 base_library(
     name = "file_commands",
     data = glob(["file_cmds/**"]) + ["commands.sh"],
-    deps = [":root", ":libutil_dylib", ":libxo_dylib", ":libmd_dylib"],
+    deps = [":root", ":libutil_dylib", ":libxo_dylib", ":libmd_dylib", ":libz_dylib", ":bzip2_commands", ":xz_commands"],
     script = "file_cmds/build.sh",
     srcs = "@apple_file_cmds//:all",
     sysroot = ":sysroot",
@@ -424,7 +483,7 @@ base_library(
 base_library(
     name = "text_commands",
     data = glob(["text_cmds/**"]) + ["commands.sh"],
-    deps = [":root", ":libxo_dylib", ":libutil_dylib", ":libncurses_dylib", ":libmd_dylib"],
+    deps = [":root", ":libxo_dylib", ":libutil_dylib", ":libncurses_dylib", ":libmd_dylib", ":libz_dylib", ":bzip2_commands", ":xz_commands"],
     script = "text_cmds/build.sh",
     srcs = "@apple_text_cmds//:all",
     sysroot = ":sysroot",
@@ -764,6 +823,12 @@ base_root(
         ":libxo_dylib",
         ":libmd_dylib",
         ":libsbuf_dylib",
+        ":libz_dylib",
+        ":bzip2_commands",
+        ":xz_commands",
+        ":libarchive_commands",
+        ":zstd_commands",
+        ":unzip_commands",
         ":shell_commands",
         ":system_commands",
         ":libpam_dylib",
@@ -857,6 +922,11 @@ base_root(
     ("libxo", ":libxo_dylib", "usr/lib/libxo.dylib", "libxo/exports.txt"),
     ("libmd", ":libmd_dylib", "usr/lib/libmd.dylib", "libmd/exports.txt"),
     ("libsbuf", ":libsbuf_dylib", "usr/lib/libsbuf.dylib", "libsbuf/exports.txt"),
+    ("libz", ":libz_dylib", "usr/lib/libz.1.dylib", "zlib/exports.txt"),
+    ("libbz2", ":bzip2_commands", "usr/lib/libbz2.1.0.dylib", "bzip2/exports.txt"),
+    ("liblzma", ":xz_commands", "usr/lib/liblzma.5.dylib", "xz/exports.txt"),
+    ("libarchive", ":libarchive_commands", "usr/lib/libarchive.2.dylib", "libarchive/exports.txt"),
+    ("libzstd", ":zstd_commands", "usr/lib/libzstd.1.dylib", "zstd/exports.txt"),
     ("libxpc", ":libxpc", "usr/lib/system/libxpc.dylib", "launchd/exports.txt"),
     ("libncurses", ":libncurses_dylib", "usr/lib/libncurses.5.4.dylib", "ncurses/exports.txt"),
     ("libpam", ":libpam_dylib", "usr/lib/libpam.2.dylib", "openpam/exports/libpam.2.txt"),
@@ -919,5 +989,7 @@ lang_audit_test(
         "system_cmds/compat/**/*.h",
         "libmd/compat/*.h",
         "libsbuf/compat/*.h",
+        "libarchive/compat/*.h",
+        "libarchive/compat/*.c",
     ]),
 )

@@ -153,13 +153,14 @@ The OpenZFS test suite (P3-01, `docs/architecture/filesystems.md` §7) and its `
 
 | Problem | Resolution |
 |---|---|
-| grep links libbz2, liblzma and libz for `-Z`, `-J`, `--xz` and `--lzma`; the base has none of them (zlib is P3-02) | text_cmds patch 0001 (`GREP_NO_DECOMPRESSION`): compressed input fails with status 2; the `z*` and `bz*` variants aren't installed |
 | sort `-R` hashes with CommonCrypto's `CC_SHA256_*` (libcommonCrypto, closed, not reexported) | `base/text_cmds/compat/nd_cc_sha256.c`, SHA-256 per FIPS 180-4, linked into sort |
 | pkill reads the process table through libsysmon (closed; asks sysmond over XPC) | `base/adv_cmds/compat`: the `sysmon.h` and `xpc/xpc.h` subset pkill uses, answered from `sysctl(3)` (`KERN_PROC_ALL`, `KERN_PROCARGS2`) by `nd_sysmon.c`; pkill.c is unmodified |
 | FreeBSD's timeout uses `procctl(2)`'s reaper to signal and wait for the command's descendants | timeout patch 0001: the command runs in its own process group, which `killpg(2)` signals; `pipe2` and `str2sig` are local |
 | getconf's tables are gperf sources turned into C by `fake-gperf.awk` | the build machine's awk runs it, as Xcode's script phase does |
 
-Not built: `gzip` and `bzip2`/`bzcat` (zlib and libbz2 in the base are P3-02), `tar` and `cpio` (libarchive), `strings` (cctools), `bc` and `jq`.
+grep links the base's libbz2, liblzma and libz for `-Z`, `-J`, `--xz` and `--lzma`, with the `z*` and `bz*` variants installed. The compression and archive programs (`gzip`, `bzip2`, `xz`, `zstd`, `tar`, `cpio`, `bsdcat`, `unzip`) and their libraries are P4-21's second checkpoint (`docs/architecture/freebsd-parity.md` §2.1).
+
+Not built: `strings` (cctools), `bc` and `jq`.
 
 ### After P1-08: mount and fsck
 

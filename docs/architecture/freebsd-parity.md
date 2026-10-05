@@ -59,19 +59,19 @@ A program's key name is the installed name that matches its directory (`vi`, not
 
 **Coverage.** `bazel build //tools/parity:coverage` writes `coverage.md`: counts by status and directory, how much of the base is built, and the unbuilt rows grouped by roadmap item and source. That last part is P4-21's work list. `ci/parity.sh` runs the checks, builds the report and copies it to `$PARITY_OUT` (and to the job summary on GitHub and Forgejo Actions). The workflow that publishes it as an artifact waits for the CI runners (P0-05). Coverage is every status except `todo`, as a share of all rows. The 1.0 gate is **no `todo` rows**, and every `apple`, `freebsd`, `new` and `equivalent` row built, installed and passing the FreeBSD test suite's tests for that program where they exist (`/usr/tests`, Kyua).
 
-Today (2026-10-04, after P4-21 checkpoint 1), on 15.1-RELEASE's 752 rows:
+Today (2026-10-05, after P4-21 checkpoint 2), on 15.1-RELEASE's 752 rows:
 
 | Status | Rows | Built |
 |---|---:|---:|
-| `apple` | 246 | 173 |
-| `freebsd` | 107 | 6 |
+| `apple` | 246 | 180 |
+| `freebsd` | 107 | 10 |
 | `new` | 16 | 0 |
 | `equivalent` | 43 | 9 |
 | `port` | 45 | – |
 | `n/a` | 295 | – |
 | `todo` | 0 | – |
 
-Coverage is 100% (no `todo`). Of the 412 base rows, 188 (45.6%) are built: 78.9% of `bin`, 46.2% of `sbin`, 52.1% of `usr.bin` and 22.9% of `usr.sbin`. P4-21 holds 107 of the 224 unbuilt base rows (193 before checkpoint 1; 241 of 327 until 2026-10-04, when NFS, tracing, quotas, printing and `at` moved to their own items and the obsolete network programs became ports; §2.1). The largest groups are 63 FreeBSD programs (`fetch`, `ee`, `mandoc`, `bmake`, `xz`, `zstd`, `kyua`, `certctl`, `makefs`, ...), then less, libarchive and libiconv (3 each). The toolchain (31 rows, P5-10), NFS (15, P4-28), accounts (13, P4-22), services (8, P4-23), printing (7, P4-31), quotas (5, P4-30), tracing (3, P4-29) and the ndpkg-backed equivalents (P2-02 to P2-04) make up the rest.
+Coverage is 100% (no `todo`). Of the 412 base rows, 199 (48.3%) are built: 78.9% of `bin`, 46.2% of `sbin`, 57.1% of `usr.bin` and 22.9% of `usr.sbin`. P4-21 holds 96 of the 213 unbuilt base rows (107 before checkpoint 2, 193 before checkpoint 1; 241 of 327 until 2026-10-04, when NFS, tracing, quotas, printing and `at` moved to their own items and the obsolete network programs became ports; §2.1). The largest groups are 59 FreeBSD programs (`fetch`, `ee`, `mandoc`, `bmake`, `kyua`, `certctl`, `makefs`, ...), then less and libiconv (3 each). The toolchain (31 rows, P5-10), NFS (15, P4-28), accounts (13, P4-22), services (8, P4-23), printing (7, P4-31), quotas (5, P4-30), tracing (3, P4-29) and the ndpkg-backed equivalents (P2-02 to P2-04) make up the rest.
 
 **Workflow.** Reclassify a row by editing `inventory.tsv`, then run `bazel run //tools/parity:accept`. After a base change installs or removes programs, run `bazel run //tools/parity:update` then `accept`. For a new FreeBSD release, run `bazel run //tools/parity:lock -- CHECKOUT "15.2-RELEASE (tag release/15.2.0)"` on a checkout of the tag (a sparse checkout of `bin sbin usr.bin usr.sbin share/mk` is enough), then `update` (new directories arrive as `todo`), classify them, and `accept`.
 
@@ -82,7 +82,7 @@ P4-21 is planned as seven checkpoints, cheapest first. Each one is about one age
 | cp | Contents | Rows | Notes |
 |---|---|---:|---|
 | 1 (done, but `iostat`) | **The Apple projects already in `base/`.** text_cmds (25, including `md5` and `ed`), shell_cmds (25), patch_cmds (3), file_cmds (8; `gzip` is in cp2), adv_cmds (7), system_cmds' leaf tools (`dmesg`, `reboot`, `shutdown`, `iostat`, `pagesize`, `gcore`, `zic`, `zdump`, `ac`, `accton`, `sa`), misc_cmds (5), basic_cmds (2), and remote_cmds' `logger` and `wall` | ~85 | Each one extends an existing `build.sh`. It can be split into 1a (text, shell, patch) and 1b (the rest) |
-| 2 | **Compression and archives.** libz (moving Apple's zlib-100.120.1 out of `kexts/zfs` into the base), libbz2, liblzma and libzstd; `gzip`, `bzip2`, `xz`, `xzdec`, `lzmainfo`, `zstd`; libarchive's `tar`, `cpio` and `bsdcat`; `unzip` | ~14 | Turns grep's decompression back on (dropping text_cmds patch 0001) and fixes the ZFS suite's `bzcat` failures |
+| 2 (done) | **Compression and archives.** libz (moving Apple's zlib-100.120.1 out of `kexts/zfs` into the base), libbz2, liblzma and libzstd; `gzip`, `bzip2`, `xz`, `xzdec`, `lzmainfo`, `zstd`; libarchive's `tar`, `cpio` and `bsdcat`; `unzip` | ~14 | Turns grep's decompression back on (dropping text_cmds patch 0001) and fixes the ZFS suite's `bzcat` failures |
 | 3 | **Interactive essentials.** `less` (3), vim as `vi`, `man` with `mandoc` and `soelim`, `file`, `bc`, `top`, `nc`, `csh` (tcsh), `mail`, `iconv` (3), the ncurses tools, `locale` and `localedef` with locale data | ~20 | `zsh` is the default interactive shell (§6) |
 | 4 | **FreeBSD leaf utilities** on the FreeBSD source drop at `050683bb8e13` (as for `timeout` and libxo): `nmtree`, `nproc`, `uuidgen`, `pwait`, `m4`, `ident`, `ministat`, `xo`, `perror`, `getaddrinfo`, `ts`, `daemon`, `fsync`, `lock`, `asa`, `ee`, `bsdiff`, `bspatch`, `resizewin`, `domainname`, ... | ~30 | Sets up the shared build pattern for FreeBSD programs. The obsolete network programs are ports, not base (§6) |
 | 5 | **Heavier FreeBSD programs.** `bmake`, `dtc`, `mkimg`, `makefs`, `iasl` and `acpidb` (from `third_party/acpica`), `fetch` and `certctl` (with OpenSSL), `drill`, `tzsetup`, and the IPv6 tools (`route6d`, `rtadvctl`, `ip6addrctl`, `mld6query`, `rrenumd`, ...) | ~25 | `diskinfo`, `trim` and `recoverdisk` use GEOM and CAM ioctls and need rewriting over IOKit |
@@ -98,13 +98,25 @@ Part 1b is done too (2026-10-04): system_cmds' `dmesg`, `reboot` (with `halt`), 
 
 `cal` and `ncal` warn `setlocale: Bad file descriptor` until the locale data arrives (cp3). The image rule sets modes but not groups, so `write` isn't setgid `tty` as on macOS: it reaches only terminals open to everyone.
 
-`lsvfs` doesn't hang on QEMU, it is slow: it asks for every type number below `vfs.generic.maxtypenum`. The kernel's mockfs (MOCKFS, kernel patch 0011) registers the FourCC type number `'mock'` (0x6D6F636B), so the maximum is 1,836,016,492, and after hfs `lsvfs` makes that many `sysctl` calls, each failing with ENOTSUP. macOS release kernels don't build mockfs. The fix is on the kernel side, so `lsvfs` stays out of the smoke test.
+`lsvfs` doesn't hang on QEMU, it is slow: it asks for every type number below `vfs.generic.maxtypenum`. The kernel's mockfs (MOCKFS, kernel patch 0011) registers the FourCC type number `'mock'` (0x6D6F636B), so the maximum is 1,836,016,492, and after hfs `lsvfs` makes that many `sysctl` calls, each failing with ENOTSUP. macOS release kernels don't build mockfs. Kernel patch 0044 (2026-10-05) gives mockfs type number 24 on SBSA, and the smoke test now runs `lsvfs`.
 
 `nmtree` is `freebsd` (user, 2026-10-04), built in cp4: Apple's `mtree` needs CoreFoundation, CommonCrypto and APFS's private `<apfs/apfs_fsctl.h>`.
 
 *Left for cp1:* `iostat`. It reads drive statistics from the IOKit registry (IOBlockStorageDriver) with IOKit.framework and CoreFoundation. NeoDarwin's base has neither (the sysroot's IOKit.framework is xnu's headers alone), so it waits for an IOKit userland (IOKitUser and CoreFoundation, with cp6's `ioreg`). Its row stays `apple`, unbuilt, with a `note`.
 
 cp1, cp2 and cp4 touch separate directories, so they can run in parallel. They still share one Bazel server.
+
+**cp2 (done, 2026-10-05).** 11 rows: `gzip`, `bzip2`, `bzip2recover`, `xz`, `xzdec`, `lzmainfo`, `zstd`, `tar`, `cpio`, `bsdcat` and `unzip`, with four libraries in `/usr/lib` (headers build-only in each tree's `usr/local/include`, as for the base's other libraries) and an exports test each:
+- `base/zlib`: `libz.1.dylib` from Apple's zlib-100.120.1 (zlib 1.2.12; the release set lists zlib-100, and 100.120.1 is its later update), with Apple's arm64 adler32 and crc32 assembly and optimised `inflate_fast` (`VEC_OPTIMIZE`, `INFFAST_OPT`). The published sources don't include AddOn's `zopt_defs.h`, so the C files force-include it. Its 81 exports are the SDK's `libz.tbd` less `zSetAllocInfo`, which isn't in the published source. The ZFS userland links it now; its private static copy (`//kexts/zfs:zlib`, `zlib.sh`) is gone.
+- `base/bzip2`: `libbz2.1.0.dylib` (bzip2-47; exports match `libbz2.tbd`), `bzip2` with `bunzip2` and `bzcat`, `bzip2recover`, `bzdiff`/`bzcmp`, `bzmore`/`bzless`.
+- `base/xz`: `liblzma.5.dylib` and the commands from XZ Utils 5.4.7, the upstream release pinned by hash. macOS ships liblzma without publishing it; its `liblzma.tbd` exports are 5.4's, and the 107 built match them exactly. `xz` with FreeBSD's names (`unxz`, `lzma`, `unlzma`, `xzcat`, `lzcat`), `xzdec` with `lzdec`, `lzmainfo`. The three rows stay `freebsd` (FreeBSD's `usr.bin/xz` builds contrib/xz 5.8.4), with source `xz-5.4.7 (upstream)`. `config.h` is committed (a configure run, CoreFoundation answers removed).
+- `base/zstd`: `libzstd.1.dylib` and `zstd` (`unzstd`, `zstdcat`, `zstdmt`) from Zstandard 1.5.7's release tarball, the version FreeBSD's `sys/contrib/zstd` has at `050683bb8e13`, built as FreeBSD's `lib/libzstd` and `usr.bin/zstd` Makefiles do. macOS has no zstd, so the exports list (208) is the ratchet alone. libarchive doesn't link it, as on macOS.
+- `base/libarchive`: `libarchive.2.dylib` (libarchive-158, 3.7.4), `bsdtar` with the `tar` link, `cpio`, and `bsdcat` (built as FreeBSD's `usr.bin/bsdcat`; Apple's project has no cat target). `compat/nd_libarchive_config.h` wraps Apple's `config.h`: no libiconv (cp3), no libxml2 (the xar format reports itself unsupported), digests from libmd instead of CommonCrypto (no SHA-384). `compat/nd_archive_check_entitlement.c` replaces the Security/CoreFoundation entitlement check with its answer for a process without the entitlements (every format allowed). Exports are `libarchive.tbd`'s less the two quarantine calls.
+- `base/zip`: `unzip` (Info-ZIP UnZip 6.0 from Apple's zip-29) with `zipinfo`, `funzip`, `unzipsfx` and `zipgrep`. The row stays `apple`; FreeBSD's `unzip` is libarchive's `bsdunzip`, which libarchive-158 also carries if the row is ever reclassified.
+- `gzip` (file_cmds-475) with `gunzip`, `gzcat`, `zcat`, `zcmp`, `zless` and the `gzexe`, `zdiff`, `zforce`, `zmore`, `znew` scripts, linking libz, libbz2 and liblzma.
+- grep links libz, libbz2 and liblzma (grep.xcconfig): text_cmds patch 0001 (`GREP_NO_DECOMPRESSION`) is dropped, and grep_variant_links.sh's `zgrep`, `zegrep`, `zfgrep`, `bzgrep`, `bzegrep`, `bzfgrep` are installed.
+
+Patches: libarchive 0001 (no libquarantine: `HAVE_MAC_QUARANTINE` off, as on Apple's embedded platforms; no CommonCrypto for the zip/7-Zip cryptor and HMAC, so encrypted entries are refused), libarchive 0002 (the xar stub, never compiled on Apple's side, calls the entitlement check by its declared name), zip 0001 (unzip without libquarantine; `mkdir_qtn()` returns 0 after a successful `mkdir()` instead of falling off its end). `//kernel:sbsa_base_commands_test` adds gzip, bzip2, xz, xzdec and zstd round trips, `lzmainfo`, `tar cf`/`tf`/`czf`/`xzf`, `bsdcat`, `cpio -o`/`-it`/`-id`, `zgrep`, `bzgrep`, `grep --xz`, and `unzip -l`/`-p` on a zip made on the host. The ZFS suite's three `bzcat` tests (`zpool_import_013_neg`, `zpool_import_errata3`, `zpool_import_errata4`) should now pass; `kexts/zfs/tests/expected.tsv` still lists them as failures until the suite is rerun.
 
 **Split out of P4-21 (2026-10-04).** These rows need kernel work or daemons, not just command ports, so they belong to their own items:
 - NFS: 15 rows, including `rpcbind`, `rpcinfo`, `autofs` and `gssd` (P4-28).

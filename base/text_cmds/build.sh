@@ -6,20 +6,22 @@
 # xcconfigs/base.xcconfig (gnu99, __FBSDID=__RCSID, DEAD_CODE_STRIPPING,
 # VERSION_INFO_PREFIX __; INSTALL_PATH /usr/bin, /bin for cat).
 #   build.sh OUT TEXT_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root, //base:libxo, //base:libutil,
-#                                                    //base:libncurses_dylib, //base:libmd_dylib)
+#                                                    //base:libncurses_dylib, //base:libmd_dylib,
+#                                                    //base:libz_dylib, //base:bzip2_commands,
+#                                                    //base:xz_commands)
 # OUT receives bin/cat and usr/bin/{head,wc,sed,cut,sort,uniq,tr,tail,grep,
-# egrep,fgrep}, and the project's other targets (P4-21): bin/ed,
+# egrep,fgrep,zgrep,zegrep,zfgrep,bzgrep,bzegrep,bzfgrep}, and the
+# project's other targets (P4-21): bin/ed,
 # sbin/md5 with md5_variant_links.sh's names, usr/bin/bintrans with the
 # "Install bintrans links" names, and usr/bin/{banner,col,colrm,column,comm,
 # csplit,expand,fmt,fold,join,lam,look,nl,paste,pr,rev,rs,split,ul,
 # unexpand,unvis,vis}. Not jq, which macOS 26 adds to text_cmds and FreeBSD
 # has as a port.
 # wc links libxo (FreeBSD's; base/libxo), tail libutil (expand_number(3)).
-# grep links libbz2, liblzma and libz on macOS (grep.xcconfig), for
-# compressed input; the base has none of them yet (zlib is P3-02), so patch
-# 0001 builds it without them (GREP_NO_DECOMPRESSION), and of
-# grep_variant_links.sh's names only egrep and fgrep are installed (the z
-# and bz ones read compressed input).
+# grep links libbz2, liblzma and libz (grep.xcconfig), for compressed
+# input (-Z, -J, --xz, --lzma and the z and bz names), and
+# grep_variant_links.sh's names are installed: egrep, fgrep, zgrep, zegrep,
+# zfgrep, bzgrep, bzegrep, bzfgrep.
 source "$(dirname "$0")/../../tools/base/common.sh"
 source "$(dirname "$0")/../commands.sh"
 OUT="$(abspath "$1")"; T="$(abspath "$2")"; SYSROOT="$(abspath "$3")"; shift 3
@@ -29,6 +31,13 @@ XO=""; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/libxo.dylib" ] && XO="$d"; don
 [ -n "$XO" ] || { echo "text_cmds: no DEPROOT holds usr/lib/libxo.dylib (pass //base:libxo)" >&2; exit 1; }
 NC=""; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/libncurses.5.4.dylib" ] && NC="$d"; done
 [ -n "$NC" ] || { echo "text_cmds: no DEPROOT holds usr/lib/libncurses.5.4.dylib (pass //base:libncurses_dylib)" >&2; exit 1; }
+ZL=""; BZ=""; LZ=""
+for d in "${DEPS[@]}"; do
+	[ -f "$d/usr/lib/libz.1.dylib" ] && ZL="$d"; [ -f "$d/usr/lib/libbz2.1.0.dylib" ] && BZ="$d"
+	[ -f "$d/usr/lib/liblzma.5.dylib" ] && LZ="$d"
+done
+[ -n "$ZL" ] && [ -n "$BZ" ] && [ -n "$LZ" ] ||
+	{ echo "text_cmds: grep needs //base:libz_dylib, //base:bzip2_commands and //base:xz_commands" >&2; exit 1; }
 MD=""; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/libmd.dylib" ] && MD="$d"; done
 [ -n "$MD" ] || { echo "text_cmds: no DEPROOT holds usr/lib/libmd.dylib (pass //base:libmd_dylib)" >&2; exit 1; }
 UTIL=""; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/libutil.dylib" ] && UTIL="$d"; done
@@ -65,11 +74,13 @@ tool "$B" "$ROOT" "$OUT/usr/bin/sort" "$B/sort.rsp" sort/bwstring.c sort/coll.c 
 write_rsp "$B/tail.rsp" "${base[@]}" -I"$UTIL/usr/local/include" $(cmd_sysroot_flags "$SYSROOT")
 tool "$B" "$ROOT" "$OUT/usr/bin/tail" "$B/tail.rsp" tail/forward.c tail/misc.c tail/read.c tail/reverse.c \
 	tail/tail.c "$(vers tail)" -- -L"$UTIL/usr/lib" -lutil
-# grep: grep.xcconfig less its OTHER_LDFLAGS (patch 0001), and
-# grep_variant_links.sh's egrep and fgrep (hard links: copies here).
-write_rsp "$B/grep.rsp" "${base[@]}" -DGREP_NO_DECOMPRESSION $(cmd_sysroot_flags "$SYSROOT")
-tool "$B" "$ROOT" "$OUT/usr/bin/grep" "$B/grep.rsp" grep/file.c grep/grep.c grep/queue.c grep/util.c "$(vers grep)"
-cp "$OUT/usr/bin/grep" "$OUT/usr/bin/egrep"; cp "$OUT/usr/bin/grep" "$OUT/usr/bin/fgrep"
+# grep: grep.xcconfig (OTHER_LDFLAGS -lbz2 -llzma -lz), and
+# grep_variant_links.sh's names (hard links: copies here).
+write_rsp "$B/grep.rsp" "${base[@]}" -I"$ZL/usr/local/include" -I"$BZ/usr/local/include" \
+	-I"$LZ/usr/local/include" $(cmd_sysroot_flags "$SYSROOT")
+tool "$B" "$ROOT" "$OUT/usr/bin/grep" "$B/grep.rsp" grep/file.c grep/grep.c grep/queue.c grep/util.c "$(vers grep)" \
+	-- -L"$BZ/usr/lib" -lbz2 -L"$LZ/usr/lib" -llzma -L"$ZL/usr/lib" -lz
+for v in e f z ze zf bz bze bzf; do cp "$OUT/usr/bin/grep" "$OUT/usr/bin/${v}grep"; done
 
 # The other targets (P4-21), one source each unless listed; INSTALL_PATH
 # /usr/bin unless the target says otherwise. Their per-target warning

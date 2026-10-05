@@ -8,7 +8,7 @@
 #   /usr/bin/zstream (and zstreamdump, a link)   libzfs and libzpool
 #   /usr/sbin/zdb, /usr/sbin/zhack               libzpool
 #   userland.sh OUT ZFS_SRC SYSROOT DEPROOT...
-#   (DEPROOT: //base:root, //base:libcrypto_dylib, //kexts/zfs:zlib,
+#   (DEPROOT: //base:root, //base:libcrypto_dylib, //base:libz_dylib,
 #   //kexts/zfs:zfs_libs)
 # The libraries are //kexts/zfs:zfs_libs' static archives (libs.sh), the
 # flags user.sh's (libzpool's users with LIBZPOOL_CPPFLAGS, as
@@ -17,7 +17,7 @@
 # (Linux-only in cmd/Makefile.am; the hostid on Darwin is kern.hostid, not
 # /etc/hostid), ztest and raidz_test (stress tools), zed (P3-02).
 # libcrypto is the base's OpenSSL 3.5 (key derivation for encryption); zlib
-# is the private static one (//kexts/zfs:zlib).
+# is the base's /usr/lib/libz.1.dylib (Apple's zlib, //base:libz_dylib).
 source "$(dirname "$0")/common.sh"
 source "$PROJ/../../base/commands.sh"
 source "$PROJ/user.sh"
@@ -25,7 +25,7 @@ OUT="$(abspath "$1")"; Z="$(abspath "$2")"; SYSROOT="$(abspath "$3")"; shift 3
 DEPS=(); for d in "$@"; do DEPS+=("$(abspath "$d")"); done
 ROOT="$(find_root "${DEPS[@]}")"
 CRYPTO="$(find_dep usr/lib/libcrypto.3.dylib "${DEPS[@]}")"
-ZLIB="$(find_dep usr/local/lib/nd_zfs/libz.a "${DEPS[@]}")"
+ZLIB="$(find_dep usr/lib/libz.1.dylib "${DEPS[@]}")"
 LIBS="$(find_dep usr/local/lib/nd_zfs/libzpool.a "${DEPS[@]}")/usr/local/lib/nd_zfs"
 B="$(mktemp -d)"; trap 'rm -rf "$B"' EXIT
 S="$(prepare_tree "$Z" "$B/src")"
@@ -33,7 +33,7 @@ cd "$S"
 
 user_cflags "$B/cflags" "$B" "$SYSROOT" "$CRYPTO" "$ZLIB"
 zpool_cflags "$B/zpool.rsp" "$B/cflags"
-LINK=("$LIBS/libzfs.a" "$ZLIB/usr/local/lib/nd_zfs/libz.a" "$CRYPTO/usr/lib/libcrypto.3.dylib")
+LINK=("$LIBS/libzfs.a" "$ZLIB/usr/lib/libz.1.dylib" "$CRYPTO/usr/lib/libcrypto.3.dylib")
 ZLINK=("$LIBS/libzpool.a" "${LINK[@]}")
 
 tool "$B" "$ROOT" "$OUT/sbin/zpool" "$B/cflags" cmd/zpool/zpool_iter.c cmd/zpool/zpool_main.c \

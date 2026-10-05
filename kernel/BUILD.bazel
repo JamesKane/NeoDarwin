@@ -1211,7 +1211,11 @@ sh_test(
 # pathchk, ipcs; misc_cmds: cal, tsort, units, ncal -e, calendar on a
 # one-line file; system_cmds: pagesize, dmesg (the kernel's message buffer),
 # zdump, zic, shutdown -s (refused: no IOPMLib, patch 0006); basic_cmds:
-# mesg, write to the console; remote_cmds: logger, wall. cal and ncal warn
+# mesg, write to the console; remote_cmds: logger, wall. Compression and
+# archives (cp2): gzip, bzip2, xz, xzdec and zstd round trips and lzmainfo;
+# tar cf/tf, czf/xzf and bsdcat; cpio -o, -it and -id; zgrep, bzgrep and
+# grep --xz; unzip -l and -p on a zip made on the host (base64 in the typed
+# line). cal and ncal warn
 # "setlocale" until the locale data (cp3). Each expected
 # line is output the typed text can't contain ("" splits the words that
 # would match).
@@ -1243,6 +1247,22 @@ sh_test(
         "zdump UTC | sed \"s/ .* / <> /\"; zic --version; logger lg-x && echo logger-o\"\"k; echo wall-\"\"x | wall; " +
         "echo wr-\"\"x | write root console; printf \"01/01\\tcy\"\"-x\" > /tmp/c; echo >> /tmp/c; " +
         "calendar -f /tmp/c -t 01.01.2026; shutdown -s now\\n'",
+        "--send-after 'sleep is not supported' 'echo gz-r\"\"t | gzip | gzip -d; echo bz-r\"\"t | bzip2 | bzcat; " +
+        "echo xz-r\"\"t | xz | xzcat; echo xd-r\"\"t | xz | xzdec; echo lz | lzma | lzmainfo; " +
+        "echo zs-r\"\"t | zstd | unzstd\\n'",
+        "--send-after 'zs-rt' 'mkdir -p /tmp/t/d && cd /tmp/t && echo tar-\"\"a1 > d/f1 && echo tar-\"\"b2 > d/f2 && " +
+        "tar cf x.tar d && tar tf x.tar | paste -sd, - && tar czf x.tgz d && rm -r d && tar xzf x.tgz && " +
+        "cat d/f2 && bsdcat x.tgz | tar tf - | paste -sd: -\\n'",
+        "--send-after 'd/:d/f1:d/f2' 'find d | cpio -o > x.cpio && cpio -it < x.cpio | paste -sd+ - && mkdir c && " +
+        "cd c && cpio -id < ../x.cpio && cmp d/f1 ../d/f1 && echo cpio-\"\"ok; cd /tmp\\n'",
+        "--send-after 'cpio-ok' 'echo zg-ne\"\"edle | gzip > /tmp/z.gz; zgrep ne\"\"edle /tmp/z.gz; " +
+        "echo bg-ne\"\"edle | bzip2 | bzgrep ne\"\"edle; echo xg-ne\"\"edle | xz | grep --xz ne\"\"edle\\n'",
+        "--send-after 'xg-needle' 'echo UEsDBBQAAAAIAAAAIVxcWMj6EwAAABEAAAANAAAAdXotbWVtYmVyLnR4dCvNq8os0E3OzytJzSvRzc/m" +
+        "AgBQSwECFAMUAAAACAAAACFcXFjI+hMAAAARAAAADQAAAAAAAAAAAAAApAEAAAAAdXotbWVtYmVyLnR4dFBLBQYAAAAAAQABADsAAAA+AAAA" +
+        "AAA= | base64 -d > /tmp/u.zip; unzip -l /tmp/u.zip; unzip -p /tmp/u.zip\\n'",
+        # lsvfs walks every type number below vfs.generic.maxtypenum: before
+        # kernel patch 0044, mockfs's 'mock' made that 1.8 billion sysctls.
+        "--send-after 'unzip-content-ok' 'lsvfs > /tmp/v && echo lsvfs-d\"\"one-$$(grep -c . /tmp/v)\\n'",
         "$(rootpath //boot/neoboot)",
         "240",
         "'7,8,9'",
@@ -1280,6 +1300,23 @@ sh_test(
         "'wr-x'",
         "'cy-x'",
         "'sleep is not supported'",
+        "'gz-rt'",
+        "'bz-rt'",
+        "'xz-rt'",
+        "'xd-rt'",
+        "'Uncompressed size:'",
+        "'zs-rt'",
+        "'d/,d/f1,d/f2'",
+        "'tar-b2'",
+        "'d/:d/f1:d/f2'",
+        "'d+d/f1+d/f2'",
+        "'cpio-ok'",
+        "'zg-needle'",
+        "'bg-needle'",
+        "'xg-needle'",
+        "'uz-member.txt'",
+        "'unzip-content-ok'",
+        "'lsvfs-done-'",
     ],
     data = [
         ":sbsa_kc",

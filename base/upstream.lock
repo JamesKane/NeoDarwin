@@ -31,6 +31,12 @@ patch_cmds           patch_cmds-72                 sha256:01b59460aa5c58550fca92
 misc_cmds            misc_cmds-45                  sha256:13bd44ff5a84ce33ef3445f06b24b020c1042225cc4af93df5f4a1acd438ae4e  (calendar, leave, ncal, tsort, units)
 basic_cmds           basic_cmds-70                 sha256:67c317119b1d147dff89394c562f2c4521618fb77184a38b4f49922ce0a15afa  (mesg, write)
 remote_cmds          remote_cmds-306               sha256:7f014f7eebb115460ea782e6bcade6d16effa56da17ee30f00012af07bc96c36  (logger and wall only)
+zlib                 zlib-100.120.1                sha256:4164f788ca1d36a360c6105de0032e544885b052822dacdec683543e0978582f  (zlib 1.2.12, libz.1.dylib; the release set's zlib-100 with its later inflate fix; the ZFS userland links it too)
+bzip2                bzip2-47                      sha256:650323fa85aeb0b00c458580a352e1290bd477e112893eae77b56024cfd007e7  (bzip2 1.0.8, libbz2.1.0.dylib)
+xz                   v5.4.7                        sha256:8db6664c48ca07908b92baedcfe7f3ba23f49ef2476864518ab5db6723836e71  (github.com/tukaani-project/xz release tarball; liblzma.5.dylib, xz, xzdec, lzmainfo: macOS ships liblzma 5.4 unpublished; outside the release set)
+libarchive           libarchive-158                sha256:e653bed893dd8d1f08000d7485897e7b0e562d029282bbe9559a2b2ca4679e06  (libarchive 3.7.4, libarchive.2.dylib; bsdtar, cpio, bsdcat)
+zip                  zip-29                        sha256:47f06c8605d58b559bb98e27cb00529aedf9b2df68db47a6ca54c80e1e291148  (Info-ZIP UnZip 6.0 only: unzip, funzip, unzipsfx, zipinfo, zipgrep)
+zstd                 v1.5.7                        sha256:eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3  (github.com/facebook/zstd release tarball; libzstd.1.dylib, zstd: FreeBSD's sys/contrib/zstd is 1.5.7 at freebsd-src 050683bb8e13; macOS has no zstd; outside the release set)
 libutil              libutil-73                    sha256:dfb7a334e716768079c46bf9ae0846e6231eb6e4481dbad9981ac666f112d61e
 files                files-968                     sha256:86ca6ad735f4731f0ed49fe1a8e393834a9bbef143995883ee96fa8834887b35
 libxo                freebsd-src 050683bb8e13      contrib/libxo (1.6.0); pinned per file in base/libxo/freebsd.lock (Apple publishes no libxo)

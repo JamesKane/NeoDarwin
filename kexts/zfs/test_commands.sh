@@ -4,7 +4,7 @@
 # (P3-01 checkpoint 2), at usr/share/zfs/zfs-tests/bin, where
 # tests/zfs-tests/cmd/Makefile.am installs them ($(datadir)/zfs/zfs-tests/bin).
 #   test_commands.sh OUT ZFS_SRC SYSROOT DEPROOT...
-#   (DEPROOT: //base:root, //base:libcrypto_dylib, //kexts/zfs:zlib,
+#   (DEPROOT: //base:root, //base:libcrypto_dylib, //base:libz_dylib,
 #   //kexts/zfs:zfs_libs; ZFS_SRC is @openzfs//:tests, the tree with tests/)
 # Each as Makefile.am builds it, with user.sh's flags, linked against
 # //kexts/zfs:zfs_libs' archives: libzfs.a (libzfs, libzfs_core, libnvpair,
@@ -36,7 +36,7 @@ OUT="$(abspath "$1")"; Z="$(abspath "$2")"; SYSROOT="$(abspath "$3")"; shift 3
 DEPS=(); for d in "$@"; do DEPS+=("$(abspath "$d")"); done
 ROOT="$(find_root "${DEPS[@]}")"
 CRYPTO="$(find_dep usr/lib/libcrypto.3.dylib "${DEPS[@]}")"
-ZLIB="$(find_dep usr/local/lib/nd_zfs/libz.a "${DEPS[@]}")"
+ZLIB="$(find_dep usr/lib/libz.1.dylib "${DEPS[@]}")"
 LIBS="$(find_dep usr/local/lib/nd_zfs/libzpool.a "${DEPS[@]}")/usr/local/lib/nd_zfs"
 [ -d "$Z/tests/zfs-tests/cmd" ] || { echo "test_commands.sh: no tests/zfs-tests/cmd in $Z (pass @openzfs//:tests)" >&2; exit 1; }
 B="$(mktemp -d)"; trap 'rm -rf "$B"' EXIT
@@ -45,7 +45,7 @@ cd "$S"
 
 user_cflags "$B/cflags" "$B" "$SYSROOT" "$CRYPTO" "$ZLIB"
 zpool_cflags "$B/zpool.rsp" "$B/cflags"
-LINK=("$LIBS/libzfs.a" "$ZLIB/usr/local/lib/nd_zfs/libz.a" "$CRYPTO/usr/lib/libcrypto.3.dylib")
+LINK=("$LIBS/libzfs.a" "$ZLIB/usr/lib/libz.1.dylib" "$CRYPTO/usr/lib/libcrypto.3.dylib")
 BIN="$OUT/usr/share/zfs/zfs-tests/bin"
 C=tests/zfs-tests/cmd
 

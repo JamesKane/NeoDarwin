@@ -6,9 +6,9 @@
  * against NeoDarwin's Kernel.framework, less what NeoDarwin's userland lacks.
  * Its two CoreFoundation answers are gone (no CoreFoundation in the base),
  * and LIBFETCH_* are off: libzfs doesn't dlopen() libcurl for keylocation=
- * https:// (the base has no libcurl). HAVE_ZLIB stays: zlib is
- * Apple's zlib-100.120.1 as a private static library (//kexts/zfs:zlib)
- * until P3-02. Every Linux kernel probe is undefined, as on macOS.
+ * https:// (the base has no libcurl). HAVE_ZLIB stays: zlib is the
+ * base's /usr/lib/libz.1.dylib (Apple's zlib-100.120.1, //base:libz_dylib).
+ * Every Linux kernel probe is undefined, as on macOS.
  */
 #define	HAVE_BACKTRACE 1
 #define	HAVE_DLFCN_H 1

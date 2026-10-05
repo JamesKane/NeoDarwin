@@ -262,6 +262,52 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/remote_cmds/archive/refs/tags/remote_cmds-306.tar.gz"],
 )
 
+# P4-21 checkpoint 2, compression and archives (base/zlib, base/bzip2,
+# base/xz, base/libarchive, base/zstd, base/zip): Apple's bzip2-47,
+# libarchive-158 and zip-29 from macOS 26's release set (zlib is
+# apple_zlib below); XZ Utils 5.4.7 (macOS ships liblzma 5.4 without
+# publishing it) and Zstandard 1.5.7 (FreeBSD's sys/contrib/zstd at
+# 050683bb8e13; macOS has no zstd) from their upstream releases.
+http_archive(
+    name = "apple_bzip2",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "650323fa85aeb0b00c458580a352e1290bd477e112893eae77b56024cfd007e7",
+    strip_prefix = "bzip2-bzip2-47",
+    urls = ["https://github.com/apple-oss-distributions/bzip2/archive/refs/tags/bzip2-47.tar.gz"],
+)
+
+http_archive(
+    name = "apple_libarchive",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "e653bed893dd8d1f08000d7485897e7b0e562d029282bbe9559a2b2ca4679e06",
+    strip_prefix = "libarchive-libarchive-158",
+    urls = ["https://github.com/apple-oss-distributions/libarchive/archive/refs/tags/libarchive-158.tar.gz"],
+)
+
+http_archive(
+    name = "apple_zip",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "47f06c8605d58b559bb98e27cb00529aedf9b2df68db47a6ca54c80e1e291148",
+    strip_prefix = "zip-zip-29",
+    urls = ["https://github.com/apple-oss-distributions/zip/archive/refs/tags/zip-29.tar.gz"],
+)
+
+http_archive(
+    name = "tukaani_xz",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "8db6664c48ca07908b92baedcfe7f3ba23f49ef2476864518ab5db6723836e71",
+    strip_prefix = "xz-5.4.7",
+    urls = ["https://github.com/tukaani-project/xz/releases/download/v5.4.7/xz-5.4.7.tar.gz"],
+)
+
+http_archive(
+    name = "facebook_zstd",
+    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    sha256 = "eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3",
+    strip_prefix = "zstd-1.5.7",
+    urls = ["https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz"],
+)
+
 http_archive(
     name = "apple_diskdev_cmds",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
@@ -617,9 +663,9 @@ filegroup(
     urls = ["https://github.com/openzfsonosx/openzfs-fork/archive/a4c1b11ab900dc9db701ecff92c712dfe2d967d3.tar.gz"],
 )
 
-# zlib 1.2.12 from Apple's zlib-100.120.1 (zlib licence), as a private static
-# library of the ZFS userland (//kexts/zfs:zlib: resume tokens, GPT CRCs)
-# until the base carries zlib (P3-02).
+# zlib 1.2.12 from Apple's zlib-100.120.1 (zlib licence): the base's
+# /usr/lib/libz.1.dylib (base/zlib, //base:libz_dylib), which the ZFS
+# userland links too.
 http_archive(
     name = "apple_zlib",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",

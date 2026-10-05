@@ -1,0 +1,57 @@
+From: NeoDarwin
+Subject: [PATCH] unzip: no libquarantine; mkdir_qtn() returns 0 on success
+
+Apple's unix.c gives each directory and file unzip creates the zip file's
+quarantine attribute (libquarantine's qtn_file_* calls). libquarantine is
+a closed part of macOS that NeoDarwin's base doesn't have
+(docs/base/libsystem.md); with ND_NO_QUARANTINE (base/zip/build.sh) those
+calls are left out, as for libarchive (base/libarchive patch 0001).
+mkdir_qtn() falls off its end after a successful mkdir(), and checkdir()
+tests its result: it returns 0 there.
+Rebase-risk: low (unix/unix.c only).
+
+--- a/unzip/unzip60/unix/unix.c
++++ b/unzip/unzip60/unix/unix.c
+@@ -71,7 +71,9 @@
+ #  endif
+ #endif /* ?DIRENT */
+ 
++#ifndef ND_NO_QUARANTINE
+ #include <quarantine.h>
++#endif
+ 
+ #ifdef SET_DIR_ATTRIB
+ typedef struct uxdirattr {      /* struct for holding unix style directory */
+@@ -815,6 +817,7 @@
+     if (r != 0 && errno != EEXIST)
+         return r;
+ 
++#ifndef ND_NO_QUARANTINE
+     qtn_file_t qf = qtn_file_alloc();
+     if (qf != NULL) {
+         if (qtn_file_init_with_fd(qf, zipfd) == 0) {
+@@ -822,6 +825,8 @@
+         }
+         qtn_file_free(qf);
+     }
++#endif
++    return 0;
+ }
+ 
+ #ifdef __APPLE__
+@@ -1403,6 +1408,7 @@
+     if (fchmod(fileno(G.outfile), filtattr(__G__ G.pInfo->file_attr)))
+         perror("fchmod (file attributes) error");
+ 
++#ifndef ND_NO_QUARANTINE
+     qtn_file_t qf = qtn_file_alloc();
+     if (qf != NULL) {
+         if (qtn_file_init_with_fd(qf, G.zipfd) == 0) {
+@@ -1410,6 +1416,7 @@
+         }
+         qtn_file_free(qf);
+     }
++#endif
+ 
+     fclose(G.outfile);
+ #endif /* !NO_FCHOWN && !NO_FCHMOD */

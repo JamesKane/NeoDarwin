@@ -3,7 +3,7 @@
 # The ZFS userland's static libraries (P3-01; the libraries as packages are
 # P3-02), for //kexts/zfs:zfs_commands and //kexts/zfs:zfs_test_commands.
 #   libs.sh OUT ZFS_SRC SYSROOT DEPROOT...
-#   (DEPROOT: //base:root, //base:libcrypto_dylib, //kexts/zfs:zlib)
+#   (DEPROOT: //base:root, //base:libcrypto_dylib, //base:libz_dylib)
 # OUT receives, in build-only paths (never in an image):
 #   usr/local/lib/nd_zfs/libzfs.a    libspl, libavl, libnvpair, libzfs_core,
 #                                    libzutil, libefi and libzfs with zcommon
@@ -19,7 +19,7 @@ source "$PROJ/user.sh"
 OUT="$(abspath "$1")"; Z="$(abspath "$2")"; SYSROOT="$(abspath "$3")"; shift 3
 DEPS=(); for d in "$@"; do DEPS+=("$(abspath "$d")"); done
 CRYPTO="$(find_dep usr/lib/libcrypto.3.dylib "${DEPS[@]}")"
-ZLIB="$(find_dep usr/local/lib/nd_zfs/libz.a "${DEPS[@]}")"
+ZLIB="$(find_dep usr/lib/libz.1.dylib "${DEPS[@]}")"
 B="$(mktemp -d)"; trap 'rm -rf "$B"' EXIT
 S="$(prepare_tree "$Z" "$B/src")"
 cd "$S"

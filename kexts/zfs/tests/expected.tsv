@@ -226,7 +226,7 @@ cli_root/zpool_export/zpool_export_003_neg	PASS
 cli_root/zpool_export/zpool_export_004_pos	PASS	
 cli_root/zpool_export/zpool_export_parallel_admin	PASS	
 cli_root/zpool_export/zpool_export_parallel_pos	FAIL	timing assertion (parallel speed-up) under TCG
-cli_root/zpool_import/cleanup	SKIP	ZFS is wedged after zpool_import_parallel_admin (see it)
+cli_root/zpool_import/cleanup	FLAKY	SKIP, FAIL or PASS, depending on whether zpool_import_parallel_admin (KILLED or FAIL) leaves ZFS wedged (see it)
 cli_root/zpool_import/import_cachefile_device_added	FLAKY	fails when zpool_import_all_001_pos is KILLED (its exported pools hold the disk files)
 cli_root/zpool_import/import_cachefile_device_removed	PASS	
 cli_root/zpool_import/import_cachefile_device_replaced	PASS	
@@ -252,7 +252,7 @@ cli_root/zpool_import/zpool_import_009_neg	PASS
 cli_root/zpool_import/zpool_import_010_pos	FLAKY	creates and destroys five pools (one dRAID): near the 240 s cap under TCG (KILLED in some runs)
 cli_root/zpool_import/zpool_import_011_neg	FLAKY	fails when zpool_import_010_pos is KILLED (its destroyed pools hold the disk files)
 cli_root/zpool_import/zpool_import_012_pos	FAIL	fails on NFS sharing (no NFS server; share options are not validated). Its zpool import hung in the kernel in some runs until zfs patch 0011 (an asynchronous vdev read taken for a synchronous one)
-cli_root/zpool_import/zpool_import_013_neg	FAIL	needs bzcat (bzip2 is not in the base; P3-02)
+cli_root/zpool_import/zpool_import_013_neg	PASS	
 cli_root/zpool_import/zpool_import_014_pos	PASS	
 cli_root/zpool_import/zpool_import_015_pos	PASS	
 cli_root/zpool_import/zpool_import_016_pos	PASS	
@@ -260,13 +260,13 @@ cli_root/zpool_import/zpool_import_017_pos	PASS
 cli_root/zpool_import/zpool_import_all_001_pos	FLAKY	creates, exports and imports many pools: near the 240 s cap under TCG (KILLED in some runs)
 cli_root/zpool_import/zpool_import_encrypted	FLAKY	fails when zpool_import_all_001_pos is KILLED (its exported pools hold the disk files)
 cli_root/zpool_import/zpool_import_encrypted_load	PASS	
-cli_root/zpool_import/zpool_import_errata3	FAIL	needs bzcat (bzip2 is not in the base; P3-02)
-cli_root/zpool_import/zpool_import_errata4	FAIL	needs bzcat (bzip2 is not in the base; P3-02)
+cli_root/zpool_import/zpool_import_errata3	FAIL	zfs mount -o ro of an encrypted dataset fails: Read-only file system (to investigate, P3-11)
+cli_root/zpool_import/zpool_import_errata4	FAIL	compares two zvols with diff /dev/zvol/... (needs zvols, P3-11)
 cli_root/zpool_import/zpool_import_features_001_pos	PASS	
 cli_root/zpool_import/zpool_import_features_002_neg	PASS	
 cli_root/zpool_import/zpool_import_features_003_pos	PASS	
-cli_root/zpool_import/zpool_import_missing_001_pos	FAIL	dRAID file vdevs: truncate of the files in TESTDIR fails (to investigate)
-cli_root/zpool_import/zpool_import_missing_002_pos	FAIL	to investigate
+cli_root/zpool_import/zpool_import_missing_001_pos	PASS	
+cli_root/zpool_import/zpool_import_missing_002_pos	PASS	
 cli_root/zpool_import/zpool_import_missing_003_pos	SKIP	the test skips itself, or its group is skipped
 cli_root/zpool_import/zpool_import_parallel_admin	KILLED	zpool_import_parallel_pos fails (a tunable) and leaves testpool1, which zpool_import_parallel_neg suspends by truncating its files; this test hangs on it and ZFS is wedged
 cli_root/zpool_import/zpool_import_parallel_neg	PASS	

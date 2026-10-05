@@ -152,12 +152,12 @@ usr.bin/bluetooth/btsockstat	n/a				no	FreeBSD's netgraph Bluetooth stack
 usr.bin/bluetooth/rfcomm_sppd	n/a				no	FreeBSD's netgraph Bluetooth stack
 usr.bin/bmake	freebsd	FreeBSD usr.bin/bmake		P4-21	no	FreeBSD's make; ports build with ndports
 usr.bin/brandelf	n/a				no	ELF; NeoDarwin binaries are Mach-O
-usr.bin/bsdcat	apple	libarchive-158		P4-21	no	macOS doesn't install it; same source as tar
+usr.bin/bsdcat	apple	libarchive-158		P4-21	yes	macOS doesn't install it; same source as tar
 usr.bin/bsddialog	freebsd	FreeBSD usr.bin/bsddialog		P7-03	no	the installer
 usr.bin/bsdiff/bsdiff	freebsd	FreeBSD usr.bin/bsdiff/bsdiff		P4-21	no	
 usr.bin/bsdiff/bspatch	freebsd	FreeBSD usr.bin/bsdiff/bspatch		P4-21	no	
-usr.bin/bzip2	apple	bzip2-47		P4-21	no	
-usr.bin/bzip2recover	apple	bzip2-47		P4-21	no	
+usr.bin/bzip2	apple	bzip2-47		P4-21	yes	
+usr.bin/bzip2recover	apple	bzip2-47		P4-21	yes	
 usr.bin/c89	freebsd	FreeBSD usr.bin/c89		P5-10	no	
 usr.bin/c99	freebsd	FreeBSD usr.bin/c99		P5-10	no	
 usr.bin/caesar	port	games/freebsd-games			no	MK_GAMES
@@ -212,7 +212,7 @@ usr.bin/column	apple	text_cmds-197		P4-21	yes
 usr.bin/comm	apple	text_cmds-197		P4-21	yes	
 usr.bin/compile_et	n/a				no	not built for FreeBSD/arm64 (!MK_MITKRB5 && MK_KERBEROS)
 usr.bin/compress	apple	file_cmds-475		P4-21	yes	
-usr.bin/cpio	apple	libarchive-158		P4-21	no	
+usr.bin/cpio	apple	libarchive-158		P4-21	yes	
 usr.bin/csplit	apple	text_cmds-197		P4-21	yes	
 usr.bin/ctags	freebsd	FreeBSD usr.bin/ctags		P5-10	no	
 usr.bin/ctlstat	n/a				no	CAM target layer
@@ -260,7 +260,7 @@ usr.bin/gh-bc	apple	bc-35		P4-21	no
 usr.bin/gprof	n/a				no	ELF gmon profiling; Darwin profiles with dtrace
 usr.bin/grdc	port	games/freebsd-games			no	MK_GAMES
 usr.bin/grep	apple	text_cmds-197		P4-21	yes	
-usr.bin/gzip	apple	file_cmds-475		P4-21	no	
+usr.bin/gzip	apple	file_cmds-475		P4-21	yes	
 usr.bin/head	apple	text_cmds-197		P4-21	yes	
 usr.bin/hesinfo	n/a				no	not built for FreeBSD/arm64 (MK_HESIOD)
 usr.bin/hexdump	apple	shell_cmds-326		P4-21	yes	
@@ -304,7 +304,7 @@ usr.bin/logname	apple	shell_cmds-326		P4-21	yes
 usr.bin/look	apple	text_cmds-197		P4-21	yes	
 usr.bin/lorder	freebsd	FreeBSD usr.bin/lorder		P5-10	no	
 usr.bin/lsvfs	apple	adv_cmds-237		P4-21	yes	
-usr.bin/lzmainfo	freebsd	FreeBSD usr.bin/lzmainfo		P4-21	no	
+usr.bin/lzmainfo	freebsd	xz-5.4.7 (upstream)		P4-21	yes	XZ Utils 5.4, as macOS's liblzma
 usr.bin/m4	freebsd	FreeBSD usr.bin/m4		P4-21	no	
 usr.bin/mail	apple	mail_cmds-41		P4-21	no	
 usr.bin/man	apple	man-62		P4-21	no	
@@ -420,7 +420,7 @@ usr.bin/su	apple	shell_cmds-326		P4-22	yes
 usr.bin/systat	equivalent	top (top-144)	usr/bin/top	P4-21	no	systat reads FreeBSD kernel structures
 usr.bin/tail	apple	text_cmds-197		P4-21	yes	
 usr.bin/talk	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from remote_cmds-306
-usr.bin/tar	apple	libarchive-158		P4-21	no	
+usr.bin/tar	apple	libarchive-158		P4-21	yes	
 usr.bin/tcopy	n/a				no	tape
 usr.bin/tee	apple	shell_cmds-326		P4-21	yes	
 usr.bin/telnet	port	net/freebsd-legacy			no	no FreeBSD port; a NeoDarwin recipe (P2-05) from remote_cmds-306
@@ -443,7 +443,7 @@ usr.bin/unifdef	freebsd	FreeBSD usr.bin/unifdef		P5-10	no
 usr.bin/uniq	apple	text_cmds-197		P4-21	yes	
 usr.bin/units	apple	misc_cmds-45		P4-21	yes	
 usr.bin/unvis	apple	text_cmds-197		P4-21	yes	
-usr.bin/unzip	apple	zip-29		P4-21	no	
+usr.bin/unzip	apple	zip-29		P4-21	yes	Info-ZIP UnZip 6.0 (Apple's); FreeBSD's is libarchive's bsdunzip
 usr.bin/usbhidaction	n/a				no	usbhid(4); HID is a dext (P3-07)
 usr.bin/usbhidctl	n/a				no	usbhid(4); HID is a dext (P3-07)
 usr.bin/users	apple	shell_cmds-326		P4-21	yes	
@@ -466,14 +466,14 @@ usr.bin/xargs	apple	shell_cmds-326		P4-21	yes
 usr.bin/xinstall	apple	file_cmds-475		P4-21	yes	
 usr.bin/xo	freebsd	FreeBSD usr.bin/xo		P4-21	no	
 usr.bin/xstr	freebsd	FreeBSD usr.bin/xstr		P5-10	no	
-usr.bin/xz	freebsd	FreeBSD usr.bin/xz		P4-21	no	
-usr.bin/xzdec	freebsd	FreeBSD usr.bin/xzdec		P4-21	no	
+usr.bin/xz	freebsd	xz-5.4.7 (upstream)		P4-21	yes	XZ Utils 5.4, the liblzma macOS ships unpublished; FreeBSD builds contrib/xz 5.8.4
+usr.bin/xzdec	freebsd	xz-5.4.7 (upstream)		P4-21	yes	with lzdec; XZ Utils 5.4, as macOS's liblzma
 usr.bin/yacc	freebsd	FreeBSD usr.bin/yacc		P5-10	no	
 usr.bin/yes	apple	shell_cmds-326		P4-21	yes	
 usr.bin/ypcat	n/a				no	NIS: accounts are the flat files (P4-22)
 usr.bin/ypmatch	n/a				no	NIS: accounts are the flat files (P4-22)
 usr.bin/ypwhich	n/a				no	NIS: accounts are the flat files (P4-22)
-usr.bin/zstd	freebsd	FreeBSD usr.bin/zstd		P4-21	no	
+usr.bin/zstd	freebsd	zstd-1.5.7 (upstream)		P4-21	yes	the release FreeBSD's sys/contrib/zstd carries; libzstd is /usr/lib/libzstd.1.dylib
 usr.sbin/ac	apple	system_cmds-1039		P4-21	yes	
 usr.sbin/accton	apple	system_cmds-1039		P4-21	yes	
 usr.sbin/acpi/acpiconf	equivalent	pmset (PowerManagement-1846.0.25.0.1)	usr/bin/pmset	P7-02	no	

@@ -5,13 +5,17 @@
 # (project settings: __FBSDID=__RCSID, _DARWIN_USE_64_BIT_INODE,
 # DEAD_CODE_STRIPPING; each target installs in /bin).
 #   build.sh OUT FILE_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root, //base:libutil, //base:libxo,
-#                                                    //base:libmd_dylib)
+#                                                    //base:libmd_dylib, //base:libz_dylib,
+#                                                    //base:bzip2_commands, //base:xz_commands)
 # OUT receives bin/{ls,cp,mv,rm,mkdir,ln,chmod,df,dd,rmdir},
 # usr/bin/{du,touch,stat,readlink,truncate,cksum,sum,mkfifo,chgrp,compress,
 # uncompress} and usr/sbin/chown; and for P4-21, bin/{chflags,pax},
 # sbin/mknod and usr/bin/{ipcrm,ipcs,pathchk,install}. Not mtree, whose
 # target needs CoreFoundation, CommonCrypto and APFS's private
-# <apfs/apfs_fsctl.h>, all closed; nor gzip (P4-21's second checkpoint).
+# <apfs/apfs_fsctl.h>, all closed. P4-21's second checkpoint adds gzip
+# (usr/bin/gzip with install_scripts.sh's links gunzip, gzcat, zcat, zcmp
+# and zless, and its gzexe, zdiff, zforce, zmore and znew scripts), linking
+# the base's libz, libbz2 and liblzma.
 # ls links libutil for humanize_number(3). Apple builds it with COLORLS,
 # which links libcurses for termcap; NeoDarwin has no ncurses yet, so ls
 # builds without colour (ls -G is accepted and ignored).
@@ -24,6 +28,13 @@ UTIL=""; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/libutil.dylib" ] && UTIL="$d
 [ -n "$UTIL" ] || { echo "file_cmds: no DEPROOT holds usr/lib/libutil.dylib (pass //base:libutil)" >&2; exit 1; }
 MD=""; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/libmd.dylib" ] && MD="$d"; done
 [ -n "$MD" ] || { echo "file_cmds: no DEPROOT holds usr/lib/libmd.dylib (pass //base:libmd_dylib)" >&2; exit 1; }
+ZL=""; BZ=""; LZ=""
+for d in "${DEPS[@]}"; do
+	[ -f "$d/usr/lib/libz.1.dylib" ] && ZL="$d"; [ -f "$d/usr/lib/libbz2.1.0.dylib" ] && BZ="$d"
+	[ -f "$d/usr/lib/liblzma.5.dylib" ] && LZ="$d"
+done
+[ -n "$ZL" ] && [ -n "$BZ" ] && [ -n "$LZ" ] ||
+	{ echo "file_cmds: gzip needs //base:libz_dylib, //base:bzip2_commands and //base:xz_commands" >&2; exit 1; }
 XO=""; for d in "${DEPS[@]}"; do [ -f "$d/usr/lib/libxo.dylib" ] && XO="$d"; done
 [ -n "$XO" ] || { echo "file_cmds: no DEPROOT holds usr/lib/libxo.dylib (pass //base:libxo)" >&2; exit 1; }
 PROJ="$(cd "$(dirname "$0")" && pwd)"
@@ -101,3 +112,15 @@ tool "$B" "$ROOT" "$OUT/usr/bin/ipcs" "$B/ipcs.rsp" ipcs/ipcs.c "$(vers ipcs)"
 write_rsp "$B/install.rsp" "${base[@]}" -I"$MD/usr/local/include" -include libmd_cdefs.h -iquote mtree \
 	$(cmd_sysroot_flags "$SYSROOT")
 tool "$B" "$ROOT" "$OUT/usr/bin/install" "$B/install.rsp" install/xinstall.c "$(vers install)" -- -L"$MD/usr/lib" -lmd
+# gzip: gzip.xcconfig (GZIP_PREFIX /usr on macOS; its
+# GCC_PREPROCESSOR_DEFINITIONS, GZIP_APPLE_VERSION alone, replace the
+# project's) and its Frameworks phase's libbz2, liblzma and libz;
+# install_scripts.sh installs GZIP_SCRIPTS and makes GZIP_LINKS' hard links
+# (copies here).
+write_rsp "$B/gzip.rsp" "${TARGET_FLAGS[@]}" -Os -fno-common '-DGZIP_APPLE_VERSION=\"475\"' -I"$ZL/usr/local/include" \
+	-I"$BZ/usr/local/include" -I"$LZ/usr/local/include" $(cmd_sysroot_flags "$SYSROOT")
+tool "$B" "$ROOT" "$OUT/usr/bin/gzip" "$B/gzip.rsp" gzip/futimens.c gzip/gzip.c "$(vers gzip)" \
+	-- -L"$BZ/usr/lib" -lbz2 -L"$LZ/usr/lib" -llzma -L"$ZL/usr/lib" -lz
+for s in gzexe zdiff zforce zmore znew; do install -m 0755 "gzip/$s" "$OUT/usr/bin/$s"; done
+set -- gzip gunzip gzip gzcat gzip zcat zdiff zcmp zmore zless
+while [ $# -ge 2 ]; do cp "$OUT/usr/bin/$1" "$OUT/usr/bin/$2"; shift 2; done

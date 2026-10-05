@@ -28,22 +28,13 @@ nd_kext(
     upstream_headers = ["@apple_iostoragefamily//:headers"],
 )
 
-# The userland (user.sh): a private static zlib (Apple's zlib-100.120.1)
-# until the base has zlib (P3-02), and the libraries as static archives
-# (libs.sh: libzfs.a, libzpool.a), all in build-only usr/local paths.
+# The userland (user.sh): the libraries as static archives (libs.sh:
+# libzfs.a, libzpool.a) in build-only usr/local paths, linking the base's
+# libz (//base:libz_dylib, Apple's zlib).
 _USER = _PORT + glob(["compat/*"]) + [
     "user.sh",
     "//base:commands.sh",
 ]
-
-base_library(
-    name = "zlib",
-    data = ["//base:commands.sh"],
-    deps = ["//base:root"],
-    script = "zlib.sh",
-    srcs = "@apple_zlib//:all",
-    sysroot = "//base:sysroot",
-)
 
 base_library(
     name = "zfs_libs",
@@ -51,7 +42,7 @@ base_library(
     deps = [
         "//base:root",
         "//base:libcrypto_dylib",
-        ":zlib",
+        "//base:libz_dylib",
     ],
     script = "libs.sh",
     srcs = "@openzfs//:all",
@@ -61,7 +52,7 @@ base_library(
 _USER_DEPS = [
     "//base:root",
     "//base:libcrypto_dylib",
-    ":zlib",
+    "//base:libz_dylib",
     ":zfs_libs",
 ]
 

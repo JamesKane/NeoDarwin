@@ -1,0 +1,59 @@
+From: NeoDarwin
+Subject: [PATCH] libarchive: no libquarantine and no CommonCrypto
+
+On macOS, bsdtar and libarchive's read side attach the archive's
+quarantine attribute to what they extract (HAVE_MAC_QUARANTINE, through
+libquarantine's qtn_file_* calls), and the zip and 7-Zip encryption code
+(archive_cryptor, archive_hmac) uses CommonCrypto. Both are closed parts of
+macOS that NeoDarwin's base doesn't have (docs/base/libsystem.md). With
+ND_NO_QUARANTINE (base/libarchive/build.sh), HAVE_MAC_QUARANTINE stays
+undefined, as on Apple's embedded platforms; with ND_NO_COMMONCRYPTO, the
+cryptor and HMAC fall through to libarchive's other back ends, and with
+none configured, encrypted zip and 7-Zip entries are refused ("Decryption
+is unsupported due to lack of crypto library").
+Rebase-risk: low (four preprocessor conditions).
+
+--- a/libarchive/libarchive/archive_cryptor_private.h
++++ b/libarchive/libarchive/archive_cryptor_private.h
+@@ -40,7 +40,7 @@
+  */
+ int __libarchive_cryptor_build_hack(void);
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(ND_NO_COMMONCRYPTO)
+ # include <AvailabilityMacros.h>
+ # if MAC_OS_X_VERSION_MAX_ALLOWED >= 1080
+ #  define ARCHIVE_CRYPTOR_USE_Apple_CommonCrypto
+--- a/libarchive/libarchive/archive_hmac_private.h
++++ b/libarchive/libarchive/archive_hmac_private.h
+@@ -40,7 +40,7 @@
+  */
+ int __libarchive_hmac_build_hack(void);
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(ND_NO_COMMONCRYPTO)
+ # include <AvailabilityMacros.h>
+ # if MAC_OS_X_VERSION_MAX_ALLOWED >= 1060
+ #  define ARCHIVE_HMAC_USE_Apple_CommonCrypto
+--- a/libarchive/libarchive/archive_mac.h
++++ b/libarchive/libarchive/archive_mac.h
+@@ -4,7 +4,7 @@
+ #ifndef ARCHIVE_MAC_H
+ #define ARCHIVE_MAC_H
+ 
+-#if TARGET_OS_MAC && !TARGET_OS_IPHONE
++#if TARGET_OS_MAC && !TARGET_OS_IPHONE && !defined(ND_NO_QUARANTINE)
+ #define HAVE_MAC_QUARANTINE 1
+ 
+ #include <quarantine.h>
+--- a/libarchive/tar/read.c
++++ b/libarchive/tar/read.c
+@@ -79,7 +79,7 @@
+ #include <libgen.h>
+ 
+ #include <TargetConditionals.h>
+-#if TARGET_OS_MAC && !TARGET_OS_IPHONE
++#if TARGET_OS_MAC && !TARGET_OS_IPHONE && !defined(ND_NO_QUARANTINE)
+ #define HAVE_MAC_QUARANTINE 1
+ #endif /* TARGET_OS_MAC */
+ 
