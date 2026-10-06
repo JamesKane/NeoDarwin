@@ -791,6 +791,7 @@ base_library(
     data = glob(
         ["freebsd_tests/**"],
         exclude = [
+            "freebsd_tests/exit_check.sh",
             "freebsd_tests/expected.tsv",
             "freebsd_tests/groups.txt",
             "freebsd_tests/suite_test.sh",
@@ -807,6 +808,26 @@ exports_files([
     "freebsd_tests/groups.txt",
     "freebsd_tests/suite_test.sh",
 ])
+
+# P4-21's exit (docs/architecture/freebsd-parity.md §2.1): every case of
+# expected.tsv that isn't PASS or XFAIL is marked structural:, fixable: or
+# timing:, and every suite row is a built inventory row. It prints the rows
+# that pass and the rows fixable cases block (exit_summary.txt in the
+# outputs), and passes while fixable cases remain; run it with
+# --test_arg=--require-exit to fail on them.
+sh_test(
+    name = "freebsd_tests_exit_check",
+    size = "small",
+    srcs = ["freebsd_tests/exit_check.sh"],
+    args = [
+        "$(rootpath freebsd_tests/expected.tsv)",
+        "$(rootpath //tools/parity:inventory.tsv)",
+    ],
+    data = [
+        "freebsd_tests/expected.tsv",
+        "//tools/parity:inventory.tsv",
+    ],
+)
 
 # The ZFS test suite's commands from projects of their own
 # (docs/architecture/filesystems.md §7): awk-40, patch_cmds-72's cmp and

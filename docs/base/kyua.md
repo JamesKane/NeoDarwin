@@ -30,7 +30,7 @@ Differences from FreeBSD's build:
 
 The tree isn't in `system_root`; `//images:freebsd_test_disk` (the session disk plus `/usr/tests`, a 256 MB volume) installs it. `//base:base_isa_audit` audits its programs too.
 
-**Adding a program's tests:** add its `tests/` files (and any contrib/netbsd-tests or other sources its Makefile names) to `base/freebsd_tests/freebsd.lock` (`git show 050683bb8e13:PATH | shasum -a 256` in a freebsd-src checkout), write its lines in `build.sh` from its Makefile, add its directory to `groups.txt` with a shard, run the suite (below) and record every case in `expected.tsv`.
+**Adding a program's tests:** add its `tests/` files (and any contrib/netbsd-tests or other sources its Makefile names) to `base/freebsd_tests/freebsd.lock` (`git show 050683bb8e13:PATH | shasum -a 256` in a freebsd-src checkout), write its lines in `build.sh` from its Makefile, add its directory to `groups.txt` with a shard, run the suite (below) and record every case in `expected.tsv`. A case that isn't `PASS` or `XFAIL` gets its class before the reason's category: `structural:`, `fixable:` or (a `FLAKY` case that fails only under load) `timing:`, as defined in docs/architecture/freebsd-parity.md §2.1; `//base:freebsd_tests_exit_check` fails on an unmarked one.
 
 ## 3. The suite: `//kernel:sbsa_freebsd_tests_test`
 

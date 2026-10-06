@@ -16,7 +16,10 @@ nd_swift_binary(
     ],
 )
 
-exports_files(["freebsd.lock"])
+exports_files([
+    "freebsd.lock",
+    "inventory.tsv",
+])
 
 # FreeBSD's program set (path, cond, aarch64, names) from the pinned
 # Makefiles (@freebsd_parity, freebsd.lock).

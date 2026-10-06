@@ -20,7 +20,9 @@
 # The ratchet (expected.tsv: PROGRAM:CASE RESULT REASON, PROGRAM under
 # /usr/tests). RESULT is PASS, XFAIL (an ATF expected failure, which kyua
 # counts as good), FAIL, BROKEN, SKIP, KILLED, or FLAKY (any result; give the
-# reason). The test fails if
+# reason). A reason starts with its exit class (structural:, fixable:,
+# timing:), which exit_check.sh checks; the ratchet doesn't read reasons.
+# The test fails if
 #   - a case expected PASS or XFAIL gets anything else (a regression);
 #   - a case expected FAIL, BROKEN, SKIP or KILLED now passes (PASS or
 #     XFAIL: raise the list);
