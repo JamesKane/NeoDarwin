@@ -1,0 +1,33 @@
+# The T2 gate (language policy §2): allocation-free Swift.
+# nd_swift_library(tier = "T2") runs t2check.sh on the module; the selftest
+# proves the gate fails each kind of violation with its diagnostic.
+load("@nd_embedded_swift//:toolchain.bzl", "EMBEDDED_TOOLCHAIN")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:swift.bzl", "nd_swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["t2check.sh"])
+
+# Positive: a T2 module that passes the gate (its _t2 test runs in CI).
+nd_swift_library(
+    name = "T2Fixture",
+    srcs = ["testdata/good.swift"],
+    tier = "T2",
+)
+
+# Negative: an annotated entry point that allocates, a stray allocation in an
+# unannotated helper, a public entry point without the annotation and a
+# class on the hot path each fail the gate with the expected diagnostic.
+sh_test(
+    name = "selftest",
+    size = "small",
+    srcs = ["selftest.sh"],
+    args = [
+        "$(rootpath t2check.sh)",
+        EMBEDDED_TOOLCHAIN,
+        "tools/t2check/testdata",
+    ],
+    data = ["t2check.sh"] + glob(["testdata/*.swift"]),
+    tags = ["requires-darwin", "no-remote"],
+)

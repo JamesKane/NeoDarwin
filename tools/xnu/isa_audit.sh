@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
 # ISA audit for generic Arm kernels.
-#   isa_audit.sh [--mattr FEATURES] FILE... BASELINE   (the *.unstripped kernel among FILEs is audited,
+#   isa_audit.sh [--mattr FEATURES] [--no-sysreg-control] FILE... BASELINE   (the *.unstripped kernel among FILEs is audited,
 #                                                     or a kext bundle's executable: FILE is the .kext)
 # Lists every instruction a generic Arm core would fault on or mis-execute:
 #   - MRS/MSR to op0=3, CRn=15 (S3_<op1>_C15_<CRm>_<op2>), the IMPLEMENTATION
@@ -21,10 +21,14 @@
 #     instruction's mnemonic, plus the first operand for system instructions.
 # The set may shrink but never grow. Controls guard the parser: the kernel must
 # contain NOPs and system-register moves, or the disassembly format changed,
-# and both disassemblies must list the same addresses.
+# and both disassemblies must list the same addresses. --no-sysreg-control
+# drops the second control for a small kext that touches no system register
+# (//kexts/swift_trial); the NOP and address controls still guard the parser.
 set -euo pipefail
 mattr=""
 [ "${1:-}" = "--mattr" ] && { mattr="$2"; shift 2; }
+sysreg_control=1
+[ "${1:-}" = "--no-sysreg-control" ] && { sysreg_control=0; shift; }
 baseline="${@: -1}"; kernel=""
 for f in "${@:1:$#-1}"; do case "$f" in *.unstripped) kernel="$f" ;; *.kext) kernel="$f/Contents/MacOS/$(basename "$f" .kext)" ;; esac; done
 [ -n "$kernel" ] || { echo "no *.unstripped kernel or .kext bundle among inputs"; exit 1; }
@@ -60,7 +64,7 @@ paste -d $'\001' "$tmp/all" "$tmp/base" | awk -F '\001' -v controls="$tmp/contro
 	}
 	END { print (nops + 0) " " (sysmoves + 0) " " (bad + 0) > controls }' | sort -u > "$tmp/current"
 read -r nops sysmoves bad < "$tmp/controls"
-if [ "$nops" -eq 0 ] || [ "$sysmoves" -eq 0 ] || [ "$bad" -ne 0 ]; then
+if [ "$nops" -eq 0 ] || { [ "$sysreg_control" -eq 1 ] && [ "$sysmoves" -eq 0 ]; } || [ "$bad" -ne 0 ]; then
 	echo "parser control failed (nops=$nops system-register moves=$sysmoves misaligned lines=$bad): llvm-objdump output format changed"
 	exit 1
 fi

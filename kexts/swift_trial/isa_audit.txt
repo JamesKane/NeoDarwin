@@ -1,0 +1,3 @@
+# NDSwiftTrial.kext: ISA findings past the SBSA baseline
+# (+v8.2a,+rcpc,+dotprod,+aes,+sha2,+fullfp16, //kernel:sbsa_isa_audit's).
+# None: the Embedded Swift and the C++ shell both stay inside it.

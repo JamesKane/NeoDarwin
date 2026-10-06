@@ -1,0 +1,5 @@
+// Kernel.framework's C KPIs for Embedded Swift in the kext_swift trial.
+module KernelKPI {
+    header "kpi.h"
+    export *
+}

@@ -38,3 +38,6 @@ The XNU actions (`rules/xnu.bzl`) also use the host Xcode: its macOS SDK is the 
 | Embedded Swift (T3) | `-enable-experimental-feature Embedded -wmo` (swift.org toolchain; Xcode has no Embedded stdlib) |
 | no heap allocation (T3) | `-no-allocations` (rejects, among others, closures that capture mutable locals) |
 | no stack protector (UEFI) | `-Xfrontend -disable-stack-protector` |
+| T2 entry point: no lock, allocation, reference counting or metadata use | `@_noLocks` (`@_noAllocation` is weaker: it still allows reference counting). No flag is needed: the performance diagnostics run in every compile, `-Onone` included, and they are errors (for example `this code performs reference counting operations which can cause locking`, or `Using type 'X' can cause metadata allocation or locks`). The spelling is the same in Xcode's 6.4 and swift.org 6.3.2 |
+| T2 module-wide second check | the T3 Embedded flags with `-no-allocations`, on the swift.org toolchain (`tools/t2check/t2check.sh`) |
+| T3 in a kext (kext_swift) | `-target arm64-apple-macos26.0 -target-cpu cortex-a76` plus the Embedded flags; KPI headers through `-Xcc -nostdinc -Xcc -mkernel -Xcc -DKERNEL`; link with `ld -kext -dead_strip -unexported_symbol '_swift_*' -unexported_symbol '__swift_*' -unexported_symbol '_$e*'` (`kexts/swift_trial/kext.sh`) |

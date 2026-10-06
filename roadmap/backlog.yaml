@@ -83,7 +83,7 @@ epics:
     title: "Language-policy CI gates — strict concurrency, no-allocation diagnostics for T2 modules, -no-allocations for T3, lang-audit for C/C++ justifications; kext_swift feasibility trial on a non-critical kext"
     phase: 0
     owner: build
-    status: doing
+    status: done
     depends: [P0-02, P0-03]
     exit: "a T2 module with a stray allocation fails CI; a C file without a justification fails CI; kext_swift verdict recorded"
     doc: docs/architecture/language-policy.md

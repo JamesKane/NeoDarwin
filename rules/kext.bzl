@@ -5,8 +5,12 @@ pinned upstream tree, NeoDarwin's Kernel.framework headers (//kernel:headers)
 and xnu's source (libkmod), and produces the kext bundle: a directory
 <bundle>.kext with Contents/Info.plist and Contents/MacOS/<executable>.
 kext_collection (rules/kc.bzl) links bundles into a boot kernel collection.
-Phase 1 uses the host Xcode toolchain, like the kernel and base rules.
+Phase 1 uses the host Xcode toolchain, like the kernel and base rules;
+embedded_swift kexts also get the Embedded Swift toolchain's path (the
+kext_swift trial, //kexts/swift_trial).
 """
+
+load("@nd_embedded_swift//:toolchain.bzl", "EMBEDDED_TOOLCHAIN")
 
 _XCODE_REQS = {"requires-darwin": "", "no-remote": ""}
 
@@ -20,7 +24,8 @@ def _kext_impl(ctx):
     ctx.actions.run(
         executable = ctx.file.script,
         arguments = [out.path, _root(ctx.attr.srcs), headers[0].path, _root(ctx.attr.xnu)] +
-                    [_root(t) for t in ctx.attr.upstream_headers],
+                    [_root(t) for t in ctx.attr.upstream_headers] +
+                    ([EMBEDDED_TOOLCHAIN] if ctx.attr.embedded_swift else []),
         inputs = ctx.files.srcs + headers + ctx.files.xnu + ctx.files.upstream_headers + ctx.files.data,
         outputs = [out],
         tools = ctx.files._tools,
@@ -42,6 +47,7 @@ nd_kext = rule(
         "xnu": attr.label(default = "@apple_xnu//:all", doc = "xnu's source, for libkmod (libkern/kmod)."),
         "upstream_headers": attr.label_list(doc = "Further pinned trees whose roots the script takes, in order."),
         "data": attr.label_list(allow_files = True, doc = "The script's own files: patches, source lists, headers."),
+        "embedded_swift": attr.bool(doc = "Pass the Embedded Swift toolchain's path as the script's last argument."),
         "_tools": attr.label(default = "//tools/base:scripts"),
     },
 )

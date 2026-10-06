@@ -1,0 +1,59 @@
+# The kext_swift trial (P0-10, docs/architecture/language-policy.md §3):
+# NDSwiftTrial.kext, Embedded Swift logic (Trial.swift, language policy T3)
+# behind a C++ IOService (glue.cpp). Not boot-critical: it is linked only
+# into //kernel:sbsa_swift_trial_kc, which only //kernel:sbsa_swift_trial_test
+# boots.
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:kext.bzl", "nd_kext")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "Info.plist",
+        "KernelKPI/kpi.h",
+        "KernelKPI/module.modulemap",
+        "Trial.swift",
+        "glue.cpp",
+        "trial.h",
+    ],
+)
+
+nd_kext(
+    name = "swift_trial",
+    bundle = "NDSwiftTrial.kext",
+    data = ["//kernel/neodarwin/pthread:kernel_srcs"],  # compat/TargetConditionals.h
+    embedded_swift = True,
+    script = "kext.sh",
+    srcs = ":srcs",
+)
+
+lang_audit_test(
+    name = "lang_audit",
+    srcs = [
+        "KernelKPI/kpi.h",
+        "glue.cpp",
+        "trial.h",
+    ],
+)
+
+# The kext against the SBSA baseline (//kernel:sbsa_isa_audit's), with no
+# exceptions: Swift compiled with -target-cpu cortex-a76 stays in Armv8.2.
+sh_test(
+    name = "isa_audit",
+    size = "small",
+    srcs = ["//tools/xnu:isa_audit.sh"],
+    args = [
+        "--mattr +v8.2a,+rcpc,+dotprod,+aes,+sha2,+fullfp16",
+        "--no-sysreg-control",  # the kext touches no system register
+        "$(rootpath :swift_trial)",
+        "$(rootpath isa_audit.txt)",
+    ],
+    data = [
+        "isa_audit.txt",
+        ":swift_trial",
+    ],
+    tags = ["kernel"],
+)

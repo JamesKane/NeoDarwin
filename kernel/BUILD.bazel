@@ -275,6 +275,63 @@ sh_test(
     tags = ["manual", "kernel"],
 )
 
+# P0-10's kext_swift trial (docs/architecture/language-policy.md §3): the
+# kernel with NDSwiftTrial.kext (//kexts/swift_trial), Embedded Swift logic
+# behind a C++ IOService. A collection of its own, so no other test boots it.
+kext_collection(
+    name = "sbsa_swift_trial_kc",
+    kernel = ":sbsa_release",
+    kernel_components = "@apple_xnu//:all",
+    kernel_version = DARWIN_VERSION,
+    kexts = ["//kexts/swift_trial"],
+    out = "kernelcache.swift_trial.release.sbsa",
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "sbsa_swift_trial_kc_check",
+    size = "small",
+    srcs = ["//tools/kcheck:kcheck_kexts_test.sh"],
+    args = [
+        "$(rootpath //tools/kcheck)",
+        "$(rootpath :sbsa_swift_trial_kc)",
+    ],
+    data = [
+        ":sbsa_swift_trial_kc",
+        "//tools/kcheck",
+    ],
+    tags = ["manual", "kernel"],
+)
+
+# The kernel matches the kext's IOResources personality at boot and its
+# C++ start() calls the Swift: a well-formed table walks (0) and a
+# corrupted one fails its checksum (-2), through typed throws.
+qemu_test(
+    name = "sbsa_swift_trial_test",
+    cpu = "cortex-a76",
+    mem = "2G",
+    esp = {
+        ":sbsa_swift_trial_kc": "NeoDarwin/kernelcache",
+        "//images:pid1_root": "NeoDarwin/ramdisk",
+        "//images:pid1_root_trustcache": "NeoDarwin/trustcache",
+    },
+    timeout_s = 120,
+    expect = [
+        "NDSwiftTrial: starting; calling Embedded Swift",
+        "NDSwiftTrial: table bytes 20",
+        "NDSwiftTrial: records 4",
+        "NDSwiftTrial: payload bytes 6",
+        "NDSwiftTrial: kind 1 records 2",
+        "NDSwiftTrial: well-formed table: Swift returned 0",
+        "NDSwiftTrial: bad checksum, expected 2501889715",
+        "NDSwiftTrial: corrupted table: Swift returned -2",
+        "NDSwiftTrial: kernel KPIs from Swift: returned 42, counter 42",
+        "pid1: all checks passed",
+    ],
+    extra_args = ["--absent 'panic('"],
+    tags = ["manual", "kernel", "qemu"],
+)
+
 # P1-03: neoboot boots the collection on QEMU virt and the kernel reaches the
 # listed serial lines, on neoverse-n2 (Armv9.0). The kernel's baseline is
 # Armv8.2 since P1-17; the sbsa_a76_* tests boot it on cortex-a76.

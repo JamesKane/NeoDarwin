@@ -18,5 +18,5 @@ sh_test(
         "$(rootpath :lang_audit)",
         "tools/lang_audit/testdata",
     ],
-    data = [":lang_audit"] + glob(["testdata/*.c"]),
+    data = [":lang_audit"] + glob(["testdata/**/*.c"]),
 )
