@@ -7,7 +7,7 @@
 #   build.sh OUT FILE_CMDS_SRC SYSROOT DEPROOT...   (DEPROOT: //base:root, //base:libutil, //base:libxo,
 #                                                    //base:libmd_dylib, //base:libz_dylib,
 #                                                    //base:bzip2_commands, //base:xz_commands)
-# OUT receives bin/{ls,cp,mv,rm,mkdir,ln,chmod,df,dd,rmdir},
+# OUT receives bin/{ls,cp,mv,rm,mkdir,ln,chmod,df,dd,rmdir,link,unlink},
 # usr/bin/{du,touch,stat,readlink,truncate,cksum,sum,mkfifo,chgrp,compress,
 # uncompress} and usr/sbin/chown; and for P4-21, bin/{chflags,pax},
 # sbin/mknod and usr/bin/{ipcrm,ipcs,pathchk,install}. Not mtree, whose
@@ -58,6 +58,9 @@ for t in cp:cp/utils.c,cp/cp.c mv:mv/mv.c rm:rm/rm.c mkdir:mkdir/mkdir.c ln:ln/l
 	IFS=, read -r -a srcs <<< "${t#*:}"
 	tool "$B" "$ROOT" "$OUT/bin/${t%%:*}" "$B/cflags" "${srcs[@]}" "$(vers "${t%%:*}")"
 done
+# The ln and rm targets' link and unlink (macOS's and FreeBSD's /bin/link
+# and /bin/unlink): each command tells by its name which it is.
+cp "$OUT/bin/ln" "$OUT/bin/link"; cp "$OUT/bin/rm" "$OUT/bin/unlink"
 
 # df (P1-10: the disk root's device and space): libutil for
 # humanize_number(3), libxo for its output, and a compat get_compat.h

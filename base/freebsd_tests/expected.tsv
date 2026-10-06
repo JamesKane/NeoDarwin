@@ -4,9 +4,10 @@
 # (PROGRAM under /usr/tests) TAB RESULT TAB REASON. RESULT is PASS, XFAIL (an
 # ATF expected failure), FAIL, BROKEN, SKIP, KILLED (kyua's timeout) or FLAKY
 # (any result). Reasons start with a category: Apple flag, Apple behaviour,
-# Apple chown/chflags/ps (another Apple program the test uses), missing
-# feature, environment (HFS+, the QEMU guest), FreeBSD kernel, or FreeBSD's
-# own expected failure. docs/base/kyua.md.
+# Apple chown/chflags/ps/stat (another Apple program the test uses), missing
+# feature, environment (HFS+, the QEMU guest), FreeBSD kernel, equivalent
+# (the row's program is another implementation, as pfctl), or FreeBSD's own
+# expected failure. docs/base/kyua.md.
 bin/cat/cat_extra_test:A_output	FAIL	Apple flag: Apple's cat (text_cmds) has no -A
 bin/cat/cat_extra_test:E_output	FAIL	Apple flag: Apple's cat has no -E
 bin/cat/cat_extra_test:T_output	FAIL	Apple flag: Apple's cat has no -T
@@ -20,6 +21,219 @@ bin/cat/cat_test:s_output	PASS
 bin/cat/cat_test:se_output	PASS	
 bin/cat/cat_test:stdin_test	PASS	
 bin/cat/cat_test:vt_output	PASS	
+bin/chflags/chflags_test:absolute_path	PASS	
+bin/chflags/chflags_test:dotdot_path	PASS	
+bin/chflags/chflags_test:invalid_usage	PASS	
+bin/chflags/chflags_test:mixed_paths	PASS	
+bin/chflags/chflags_test:no_arguments	PASS	
+bin/chflags/chflags_test:outside_symlink_rejected	FAIL	Apple behaviour: Apple's chflags -RL follows a symlink out of the tree (FreeBSD refuses unless --dereference-links-unsafely)
+bin/chflags/chflags_test:outside_symlink_unsafe	FAIL	Apple flag: Apple's chflags has no --dereference-links-unsafely
+bin/chflags/chflags_test:recursive	PASS	
+bin/chflags/chflags_test:relative_path	PASS	
+bin/chflags/chflags_test:symlink_no_h	PASS	
+bin/chflags/chflags_test:symlink_rootlevel_H	PASS	
+bin/chflags/chflags_test:symlink_rootlevel_H_dead	PASS	
+bin/chmod/chmod_test:RH_flag	PASS	
+bin/chmod/chmod_test:RL_flag	PASS	
+bin/chmod/chmod_test:RP_flag	PASS	
+bin/chmod/chmod_test:f_flag	PASS	
+bin/chmod/chmod_test:h_flag	PASS	
+bin/chmod/chmod_test:v_flag	PASS	
+bin/cp/cp_test:basic	PASS	
+bin/cp/cp_test:basic_symlink	PASS	
+bin/cp/cp_test:chrdev	PASS	
+bin/cp/cp_test:directory_to_symlink	PASS	
+bin/cp/cp_test:dirloop	PASS	
+bin/cp/cp_test:dstmode	PASS	
+bin/cp/cp_test:hardlink	PASS	
+bin/cp/cp_test:hardlink_exists	PASS	
+bin/cp/cp_test:hardlink_exists_force	PASS	
+bin/cp/cp_test:matching_srctgt	PASS	
+bin/cp/cp_test:matching_srctgt_contained	PASS	
+bin/cp/cp_test:matching_srctgt_link	PASS	
+bin/cp/cp_test:matching_srctgt_nonexistent	PASS	
+bin/cp/cp_test:nopermute	PASS	
+bin/cp/cp_test:overwrite_directory	PASS	
+bin/cp/cp_test:pflag_acls	SKIP	environment: HFS+ here has no POSIX.1e ACLs and there is no setfacl
+bin/cp/cp_test:pflag_flags	PASS	
+bin/cp/cp_test:recursive_link_Hflag	PASS	
+bin/cp/cp_test:recursive_link_Lflag	PASS	
+bin/cp/cp_test:recursive_link_dflt	PASS	
+bin/cp/cp_test:root	FAIL	Apple behaviour: Apple's cp -R / dst asserts (cp.c:552 strcmp(to.end, fts_name))
+bin/cp/cp_test:samefile	PASS	
+bin/cp/cp_test:sparse_leading_hole	FAIL	Apple stat: the test's stat -h (FreeBSD's holes listing) isn't Apple's
+bin/cp/cp_test:sparse_multiple_holes	FAIL	Apple stat: the test's stat -h (FreeBSD's holes listing) isn't Apple's
+bin/cp/cp_test:sparse_only_hole	FAIL	Apple stat: the test's stat -h (FreeBSD's holes listing) isn't Apple's
+bin/cp/cp_test:sparse_to_dev	FAIL	Apple stat: the test's stat -h (FreeBSD's holes listing) isn't Apple's
+bin/cp/cp_test:sparse_trailing_hole	FAIL	Apple stat: the test's stat -h (FreeBSD's holes listing) isn't Apple's
+bin/cp/cp_test:standalone_Pflag	PASS	
+bin/cp/cp_test:symlink	PASS	
+bin/cp/cp_test:symlink_exists	PASS	
+bin/cp/cp_test:symlink_exists_force	PASS	
+bin/cp/cp_test:to_deaddirlink	PASS	
+bin/cp/cp_test:to_deadlink	PASS	
+bin/cp/cp_test:to_deadlink_append	PASS	
+bin/cp/cp_test:to_dir_dne	PASS	
+bin/cp/cp_test:to_dirlink	PASS	
+bin/cp/cp_test:to_link_outside	PASS	
+bin/cp/cp_test:to_nondir	PASS	
+bin/cp/cp_test:to_root	PASS	
+bin/cp/cp_test:unrdir	FAIL	Apple flag: Apple's cp has no long options (the test's --sort)
+bin/cp/cp_test:unrfile	FAIL	Apple flag: Apple's cp has no long options (the test's --sort)
+bin/date/format_string_test:12N_test	FAIL	Apple flag: Apple's date has no %N (nanoseconds)
+bin/date/format_string_test:3N_test	FAIL	Apple flag: Apple's date has no %N (nanoseconds)
+bin/date/format_string_test:A_test	PASS	
+bin/date/format_string_test:B_test	PASS	
+bin/date/format_string_test:C_test	PASS	
+bin/date/format_string_test:D_test	PASS	
+bin/date/format_string_test:F_test	PASS	
+bin/date/format_string_test:G_test	PASS	
+bin/date/format_string_test:H_test	PASS	
+bin/date/format_string_test:I_test	PASS	
+bin/date/format_string_test:M_test	PASS	
+bin/date/format_string_test:N_test	PASS	
+bin/date/format_string_test:R_test	PASS	
+bin/date/format_string_test:S_test	PASS	
+bin/date/format_string_test:U_test	PASS	
+bin/date/format_string_test:V_test	PASS	
+bin/date/format_string_test:W_test	PASS	
+bin/date/format_string_test:X_test	PASS	
+bin/date/format_string_test:Y_test	PASS	
+bin/date/format_string_test:Z_test	PASS	
+bin/date/format_string_test:a_test	PASS	
+bin/date/format_string_test:b_test	PASS	
+bin/date/format_string_test:c_test	PASS	
+bin/date/format_string_test:d_test	PASS	
+bin/date/format_string_test:e_test	PASS	
+bin/date/format_string_test:flag_r_file_test	PASS	
+bin/date/format_string_test:g_test	PASS	
+bin/date/format_string_test:h_test	PASS	
+bin/date/format_string_test:iso8601_date_parity	SKIP	environment: needs GNU date (gdate), a port
+bin/date/format_string_test:iso8601_date_test	PASS	
+bin/date/format_string_test:iso8601_default_parity	SKIP	environment: needs GNU date (gdate), a port
+bin/date/format_string_test:iso8601_default_test	PASS	
+bin/date/format_string_test:iso8601_hours_parity	SKIP	environment: needs GNU date (gdate), a port
+bin/date/format_string_test:iso8601_hours_test	PASS	
+bin/date/format_string_test:iso8601_minutes_parity	SKIP	environment: needs GNU date (gdate), a port
+bin/date/format_string_test:iso8601_minutes_test	PASS	
+bin/date/format_string_test:iso8601_ns_parity	SKIP	environment: needs GNU date (gdate), a port
+bin/date/format_string_test:iso8601_ns_test	PASS	
+bin/date/format_string_test:iso8601_seconds_parity	SKIP	environment: needs GNU date (gdate), a port
+bin/date/format_string_test:iso8601_seconds_test	PASS	
+bin/date/format_string_test:j_test	PASS	
+bin/date/format_string_test:k_test	PASS	
+bin/date/format_string_test:l_test	PASS	
+bin/date/format_string_test:m_test	PASS	
+bin/date/format_string_test:p_test	PASS	
+bin/date/format_string_test:percent_test	PASS	
+bin/date/format_string_test:plus_test	PASS	
+bin/date/format_string_test:r_test	PASS	
+bin/date/format_string_test:s_test	PASS	
+bin/date/format_string_test:u_test	PASS	
+bin/date/format_string_test:v_test	PASS	
+bin/date/format_string_test:w_test	PASS	
+bin/date/format_string_test:x_test	PASS	
+bin/date/format_string_test:y_test	PASS	
+bin/date/format_string_test:z_test	PASS	
+bin/dd/dd2_test:max_seek	SKIP	environment: the test knows only FreeBSD's file systems (HFS+ isn't one)
+bin/dd/dd2_test:seek_overflow	PASS	
+bin/dd/dd2_test:sigint_open	PASS	
+bin/dd/dd2_test:sigint_read	PASS	
+bin/dd/dd_test:io	PASS	
+bin/dd/dd_test:length	SKIP	environment: no fdescfs on /dev/fd
+bin/dd/dd_test:seek	PASS	
+bin/echo/echo_test:append_c_output	PASS	
+bin/echo/echo_test:n_output	PASS	
+bin/ed/ed_test:address	PASS	
+bin/ed/ed_test:append	PASS	
+bin/ed/ed_test:change	PASS	
+bin/ed/ed_test:delete	PASS	
+bin/ed/ed_test:edit_command	PASS	
+bin/ed/ed_test:edit_file	PASS	
+bin/ed/ed_test:edit_lowercase	PASS	
+bin/ed/ed_test:edit_reread	PASS	
+bin/ed/ed_test:err_addr_negative	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_addr_out_of_range	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_append_suffix	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_bang_addr	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_bang_double	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_change_suffix	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_change_zero	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_crypt_addr	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_delete_suffix	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_edit_addr	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_edit_nosuffix	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_edit_suffix	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_file_addr	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_file_suffix	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_global_delim	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_global_empty	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_global_incomplete	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_help_addr	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_insert_suffix	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_insert_zero	FAIL	Apple behaviour: Apple's ed accepts 0i (FreeBSD's ed rejects address 0, exit 2)
+bin/ed/ed_test:err_mark_ref	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_mark_upper	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_mark_zero	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_move_dest	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_quit_addr	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_read_nofile	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_scroll	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_subst_bare	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_subst_bracket	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_subst_class	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_subst_collate	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_subst_delim	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_subst_empty	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_subst_equiv	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_subst_escape	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_subst_infinite	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_subst_sr	PASS	
+bin/ed/ed_test:err_transfer_addr	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_transfer_suffix	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_undo_addr	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_write_flags	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_write_nopath	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:err_write_suffix	FAIL	Apple behaviour: Apple's ed writes its ? diagnostics to stdout (FreeBSD's to stderr)
+bin/ed/ed_test:global_change	PASS	
+bin/ed/ed_test:global_copy	PASS	
+bin/ed/ed_test:global_move	PASS	
+bin/ed/ed_test:global_substitute	PASS	
+bin/ed/ed_test:global_undo	PASS	
+bin/ed/ed_test:insert	PASS	
+bin/ed/ed_test:inverse_global	PASS	
+bin/ed/ed_test:join	PASS	
+bin/ed/ed_test:mark	PASS	
+bin/ed/ed_test:move	PASS	
+bin/ed/ed_test:newline_insert	PASS	
+bin/ed/ed_test:newline_search	PASS	
+bin/ed/ed_test:quit	PASS	
+bin/ed/ed_test:read_command	PASS	
+bin/ed/ed_test:read_default	PASS	
+bin/ed/ed_test:read_file	PASS	
+bin/ed/ed_test:shell_command	PASS	
+bin/ed/ed_test:subst_backreference	FAIL	Apple behaviour: Apple's ed rejects the test's s with a backreference (invalid pattern delimiter)
+bin/ed/ed_test:subst_charclass	PASS	
+bin/ed/ed_test:subst_range	PASS	
+bin/ed/ed_test:transfer	PASS	
+bin/ed/ed_test:transfer_search	PASS	
+bin/ed/ed_test:undo	PASS	
+bin/ed/ed_test:unicode_append	PASS	
+bin/ed/ed_test:unicode_cyrillic	PASS	
+bin/ed/ed_test:unicode_global_substitute	PASS	
+bin/ed/ed_test:unicode_join	PASS	
+bin/ed/ed_test:unicode_list_cjk	FAIL	Apple behaviour: Apple's ed l escapes multibyte characters as octal (FreeBSD's prints them in a UTF-8 locale)
+bin/ed/ed_test:unicode_list_invalid	PASS	
+bin/ed/ed_test:unicode_list_mixed	FAIL	Apple behaviour: Apple's ed l escapes multibyte characters as octal (FreeBSD's prints them in a UTF-8 locale)
+bin/ed/ed_test:unicode_list_multibyte	FAIL	Apple behaviour: Apple's ed l escapes multibyte characters as octal (FreeBSD's prints them in a UTF-8 locale)
+bin/ed/ed_test:unicode_list_wrap_cjk	FAIL	Apple behaviour: Apple's ed l escapes multibyte characters as octal (FreeBSD's prints them in a UTF-8 locale)
+bin/ed/ed_test:unicode_number	PASS	
+bin/ed/ed_test:unicode_print	PASS	
+bin/ed/ed_test:unicode_regex	PASS	
+bin/ed/ed_test:unicode_regex_charclass	PASS	
+bin/ed/ed_test:unicode_substitute	PASS	
+bin/ed/ed_test:unicode_substitute_cjk	PASS	
+bin/ed/ed_test:write_pipe	PASS	
 bin/expr/expr_test:arithmetic_ops	XFAIL	FreeBSD's own expected failure (atf_expect_fail: syntax errors on FreeBSD too)
 bin/expr/expr_test:basic_functional	PASS	
 bin/expr/expr_test:basic_math	PASS	
@@ -34,6 +248,24 @@ bin/expr/expr_test:negative	PASS
 bin/expr/expr_test:overflow	PASS	
 bin/expr/expr_test:precedence	PASS	
 bin/expr/expr_test:regex	PASS	
+bin/hostname/hostname_test:basic	SKIP	missing feature: runs in a jail (execenv=jail; no jails)
+bin/ln/ln_test:L_flag	PASS	
+bin/ln/ln_test:P_flag	FAIL	environment: HFS+ can't hard-link a symlink itself (ln -P: Operation not supported)
+bin/ln/ln_test:f_flag	PASS	
+bin/ln/ln_test:link_argc	PASS	
+bin/ln/ln_test:link_basic	PASS	
+bin/ln/ln_test:link_eexist	PASS	
+bin/ln/ln_test:link_eisdir	PASS	
+bin/ln/ln_test:sF_flag	PASS	
+bin/ln/ln_test:s_flag	PASS	
+bin/ln/ln_test:s_flag_broken	PASS	
+bin/ln/ln_test:sfF_flag	PASS	
+bin/ln/ln_test:sf_flag	PASS	
+bin/ln/ln_test:shf_flag_dir	PASS	
+bin/ln/ln_test:snf_flag_dir	PASS	
+bin/ln/ln_test:sw_flag	PASS	
+bin/ln/ln_test:target_exists_hard	PASS	
+bin/ln/ln_test:target_exists_symbolic	PASS	
 bin/ls/ls_tests:1_flag	PASS	
 bin/ls/ls_tests:A_flag	PASS	
 bin/ls/ls_tests:A_flag_implied_when_root	PASS	
@@ -72,8 +304,60 @@ bin/ls/ls_tests:u_flag	PASS
 bin/ls/ls_tests:v_flag	FAIL	Apple flag: Apple's ls -v prints non-printing characters raw; FreeBSD's sorts by version
 bin/ls/ls_tests:x_flag	PASS	
 bin/ls/ls_tests:y_flag	PASS	
-bin/pwait/pwait_reap:pwait_normal	KILLED	FreeBSD kernel: the test writes to a pipe's read end (FreeBSD's pipes are bidirectional, xnu's aren't), then polls forever; kyua kills it at 300 s
-bin/pwait/pwait_reap:pwait_reap	KILLED	FreeBSD kernel: bidirectional pipes, as pwait_normal; pwait -r also needs NOTE_REAP, which xnu doesn't have
+bin/mkdir/mkdir_test:invalid_usage	PASS	
+bin/mkdir/mkdir_test:no_arguments	PASS	
+bin/mv/mv_test:dir_into_dir	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:dir_to_dir	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:dir_to_empty_dir	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:dir_to_file	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:dir_to_nonempty_dir	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:fifo_from_dir	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:fifo_from_dir_into_dir	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:fifo_into_dir	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:file_from_dir	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:file_from_dir_replace	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:file_from_rename_dir	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:file_into_dir	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:file_to_dir	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:mv_f	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:mv_h	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:mv_i	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:mv_n	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:mv_v	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:rename_dir	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:rename_fifo	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/mv/mv_test:rename_file	FAIL	missing feature: the test mounts a tmpfs (no tmpfs on NeoDarwin)
+bin/pkill/pgrep-_f_test:main	PASS	
+bin/pkill/pgrep-_g_test:main	PASS	
+bin/pkill/pgrep-_lf_test:main	PASS	
+bin/pkill/pgrep-_p_test:main	PASS	
+bin/pkill/pgrep-_s_test:main	FAIL	Apple flag: Apple's pgrep/pkill has no -S (system processes)
+bin/pkill/pgrep-_u_test:main	PASS	
+bin/pkill/pgrep-f_test:main	PASS	
+bin/pkill/pgrep-g_test:main	PASS	
+bin/pkill/pgrep-i_test:main	PASS	
+bin/pkill/pgrep-j_test:main	SKIP	missing feature: jail(8) and jls(8) (no jails)
+bin/pkill/pgrep-l_test:main	PASS	
+bin/pkill/pgrep-n_test:main	PASS	
+bin/pkill/pgrep-o_test:main	PASS	
+bin/pkill/pgrep-q_test:main	PASS	
+bin/pkill/pgrep-s_test:main	FAIL	Apple flag: Apple's pgrep/pkill has no -s (session), and Apple's ps no tsid
+bin/pkill/pgrep-t_test:main	FAIL	Apple behaviour: Apple's ps prints ?? for no terminal, which Apple's pgrep -t rejects (No such tty)
+bin/pkill/pgrep-v_test:main	PASS	
+bin/pkill/pgrep-x_test:main	FAIL	FreeBSD kernel: a process run through a symlink is named after the target on FreeBSD (sleep), after the link on xnu (sleep.txt)
+bin/pkill/pkill-_f_test:main	PASS	
+bin/pkill/pkill-_g_test:main	PASS	
+bin/pkill/pkill-_lf_test:main	PASS	
+bin/pkill/pkill-_p_test:main	PASS	
+bin/pkill/pkill-_u_test:main	PASS	
+bin/pkill/pkill-g_test:main	PASS	
+bin/pkill/pkill-i_test:main	PASS	
+bin/pkill/pkill-j_test:main	SKIP	missing feature: jail(8) and jls(8) (no jails)
+bin/pkill/pkill-s_test:main	FAIL	Apple flag: Apple's pgrep/pkill has no -s (session), and Apple's ps no tsid
+bin/pkill/pkill-t_test:main	FAIL	Apple behaviour: Apple's ps prints ?? for no terminal, which Apple's pgrep -t rejects (No such tty)
+bin/pkill/pkill-x_test:main	FAIL	FreeBSD kernel: a process run through a symlink is named after the target on FreeBSD (sleep), after the link on xnu (sleep.txt)
+bin/pwait/pwait_reap:pwait_normal	FAIL	FreeBSD kernel: waitpid(WNOWAIT) fails on xnu (WNOWAIT is waitid-only); the pipe it reads both ends of is a socketpair (compat/nd_pipe_socketpair.h; it hung until kyua's 300 s timeout before)
+bin/pwait/pwait_reap:pwait_reap	FAIL	FreeBSD kernel: waitpid(WNOWAIT), as pwait_normal; pwait -r also needs NOTE_REAP, which xnu doesn't have
 bin/pwait/pwait_test:basic	PASS	
 bin/pwait/pwait_test:or_flag	PASS	
 bin/pwait/pwait_test:print	PASS	
@@ -81,6 +365,533 @@ bin/pwait/pwait_test:time_unit	PASS
 bin/pwait/pwait_test:timeout_many	PASS	
 bin/pwait/pwait_test:timeout_no_timeout	PASS	
 bin/pwait/pwait_test:timeout_trigger_timeout	PASS	
+bin/pwd/pwd_test:logical	PASS	
+bin/pwd/pwd_test:physical	FAIL	Apple behaviour: Apple's pwd -L prints a $PWD with . components (FreeBSD's falls back to the physical path)
+bin/pwd/pwd_test:stdout	PASS	
+bin/rm/rm_test:unlink_dash_filename	PASS	
+bin/rmdir/rmdir_test:invalid_usage	FAIL	Apple behaviour: Apple's rmdir exits 1 on a usage error (FreeBSD's 2)
+bin/rmdir/rmdir_test:no_arguments	FAIL	Apple behaviour: Apple's rmdir exits 1 on a usage error (FreeBSD's 2)
+bin/sh/builtins/functional_test:alias	PASS	
+bin/sh/builtins/functional_test:alias3	PASS	
+bin/sh/builtins/functional_test:alias4	PASS	
+bin/sh/builtins/functional_test:break1	PASS	
+bin/sh/builtins/functional_test:break2	PASS	
+bin/sh/builtins/functional_test:break3	PASS	
+bin/sh/builtins/functional_test:break4	PASS	
+bin/sh/builtins/functional_test:break5	PASS	
+bin/sh/builtins/functional_test:break6	PASS	
+bin/sh/builtins/functional_test:builtin1	PASS	
+bin/sh/builtins/functional_test:case1	PASS	
+bin/sh/builtins/functional_test:case10	PASS	
+bin/sh/builtins/functional_test:case11	PASS	
+bin/sh/builtins/functional_test:case12	PASS	
+bin/sh/builtins/functional_test:case13	PASS	
+bin/sh/builtins/functional_test:case14	PASS	
+bin/sh/builtins/functional_test:case15	PASS	
+bin/sh/builtins/functional_test:case16	PASS	
+bin/sh/builtins/functional_test:case17	PASS	
+bin/sh/builtins/functional_test:case18	PASS	
+bin/sh/builtins/functional_test:case19	PASS	
+bin/sh/builtins/functional_test:case2	PASS	
+bin/sh/builtins/functional_test:case20	PASS	
+bin/sh/builtins/functional_test:case21	PASS	
+bin/sh/builtins/functional_test:case22	PASS	
+bin/sh/builtins/functional_test:case23	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): [[:alpha:]] matches [ (bracket parsing)
+bin/sh/builtins/functional_test:case3	PASS	
+bin/sh/builtins/functional_test:case4	PASS	
+bin/sh/builtins/functional_test:case5	PASS	
+bin/sh/builtins/functional_test:case6	PASS	
+bin/sh/builtins/functional_test:case7	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): case patterns over ISO8859-1 in de_DE.ISO8859-1
+bin/sh/builtins/functional_test:case8	PASS	
+bin/sh/builtins/functional_test:case9	PASS	
+bin/sh/builtins/functional_test:cd1	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): cd -P/-L PWD handling (undiagnosed; /tmp is a symlink to /private/tmp)
+bin/sh/builtins/functional_test:cd10	PASS	
+bin/sh/builtins/functional_test:cd11	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): cd with an empty CDPATH entry
+bin/sh/builtins/functional_test:cd12	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): cd -P/-L PWD handling (undiagnosed; /tmp is a symlink to /private/tmp)
+bin/sh/builtins/functional_test:cd2	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): cd -P/-L PWD handling (undiagnosed; /tmp is a symlink to /private/tmp)
+bin/sh/builtins/functional_test:cd3	PASS	
+bin/sh/builtins/functional_test:cd4	PASS	
+bin/sh/builtins/functional_test:cd5	PASS	
+bin/sh/builtins/functional_test:cd6	PASS	
+bin/sh/builtins/functional_test:cd7	PASS	
+bin/sh/builtins/functional_test:cd8	PASS	
+bin/sh/builtins/functional_test:cd9	PASS	
+bin/sh/builtins/functional_test:command1	PASS	
+bin/sh/builtins/functional_test:command10	PASS	
+bin/sh/builtins/functional_test:command11	PASS	
+bin/sh/builtins/functional_test:command12	PASS	
+bin/sh/builtins/functional_test:command13	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): command -v/-V and type with a relative PATH entry
+bin/sh/builtins/functional_test:command14	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): command -v/-V and type with a relative PATH entry
+bin/sh/builtins/functional_test:command2	PASS	
+bin/sh/builtins/functional_test:command3	PASS	
+bin/sh/builtins/functional_test:command4	PASS	
+bin/sh/builtins/functional_test:command5	PASS	
+bin/sh/builtins/functional_test:command6	PASS	
+bin/sh/builtins/functional_test:command7	FAIL	environment: the test looks up /libexec/ld-elf.so.1 (FreeBSD's dynamic linker; Darwin's is /usr/lib/dyld)
+bin/sh/builtins/functional_test:command8	PASS	
+bin/sh/builtins/functional_test:command9	PASS	
+bin/sh/builtins/functional_test:dot1	PASS	
+bin/sh/builtins/functional_test:dot2	PASS	
+bin/sh/builtins/functional_test:dot3	PASS	
+bin/sh/builtins/functional_test:dot4	PASS	
+bin/sh/builtins/functional_test:echo1	PASS	
+bin/sh/builtins/functional_test:echo2	PASS	
+bin/sh/builtins/functional_test:echo3	PASS	
+bin/sh/builtins/functional_test:eval1	PASS	
+bin/sh/builtins/functional_test:eval2	PASS	
+bin/sh/builtins/functional_test:eval3	PASS	
+bin/sh/builtins/functional_test:eval4	PASS	
+bin/sh/builtins/functional_test:eval5	PASS	
+bin/sh/builtins/functional_test:eval6	PASS	
+bin/sh/builtins/functional_test:eval7	PASS	
+bin/sh/builtins/functional_test:eval8	PASS	
+bin/sh/builtins/functional_test:exec1	PASS	
+bin/sh/builtins/functional_test:exec2	PASS	
+bin/sh/builtins/functional_test:exit1	PASS	
+bin/sh/builtins/functional_test:exit2	PASS	
+bin/sh/builtins/functional_test:exit3	PASS	
+bin/sh/builtins/functional_test:export1	PASS	
+bin/sh/builtins/functional_test:fc1	PASS	
+bin/sh/builtins/functional_test:fc2	PASS	
+bin/sh/builtins/functional_test:fc3	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): fc -l output
+bin/sh/builtins/functional_test:fc4	KILLED	Apple script: the test runs sh -i under script(1) fed by a here-document; it never ends (undiagnosed: Apple's script or sh at the input's end); killed at the 60 s TIMEOUT build.sh gives builtins
+bin/sh/builtins/functional_test:for1	PASS	
+bin/sh/builtins/functional_test:for2	PASS	
+bin/sh/builtins/functional_test:for3	PASS	
+bin/sh/builtins/functional_test:getopts1	PASS	
+bin/sh/builtins/functional_test:getopts10	PASS	
+bin/sh/builtins/functional_test:getopts2	PASS	
+bin/sh/builtins/functional_test:getopts3	PASS	
+bin/sh/builtins/functional_test:getopts4	PASS	
+bin/sh/builtins/functional_test:getopts5	PASS	
+bin/sh/builtins/functional_test:getopts6	PASS	
+bin/sh/builtins/functional_test:getopts7	PASS	
+bin/sh/builtins/functional_test:getopts8	PASS	
+bin/sh/builtins/functional_test:getopts9	PASS	
+bin/sh/builtins/functional_test:hash1	PASS	
+bin/sh/builtins/functional_test:hash2	PASS	
+bin/sh/builtins/functional_test:hash3	PASS	
+bin/sh/builtins/functional_test:hash4	PASS	
+bin/sh/builtins/functional_test:jobid1	PASS	
+bin/sh/builtins/functional_test:jobid2	PASS	
+bin/sh/builtins/functional_test:kill1	PASS	
+bin/sh/builtins/functional_test:kill2	PASS	
+bin/sh/builtins/functional_test:lineno	PASS	
+bin/sh/builtins/functional_test:lineno2	PASS	
+bin/sh/builtins/functional_test:lineno3	PASS	
+bin/sh/builtins/functional_test:local1	PASS	
+bin/sh/builtins/functional_test:local2	PASS	
+bin/sh/builtins/functional_test:local3	PASS	
+bin/sh/builtins/functional_test:local4	PASS	
+bin/sh/builtins/functional_test:local5	PASS	
+bin/sh/builtins/functional_test:local6	PASS	
+bin/sh/builtins/functional_test:local7	PASS	
+bin/sh/builtins/functional_test:locale1	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): LC_* assignments take effect in the shell itself
+bin/sh/builtins/functional_test:locale2	PASS	
+bin/sh/builtins/functional_test:printf1	PASS	
+bin/sh/builtins/functional_test:printf2	PASS	
+bin/sh/builtins/functional_test:printf3	PASS	
+bin/sh/builtins/functional_test:printf4	PASS	
+bin/sh/builtins/functional_test:read1	PASS	
+bin/sh/builtins/functional_test:read10	PASS	
+bin/sh/builtins/functional_test:read11	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): read -t with fractional and unit timeouts
+bin/sh/builtins/functional_test:read12	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): read -t with fractional and unit timeouts
+bin/sh/builtins/functional_test:read2	PASS	
+bin/sh/builtins/functional_test:read3	PASS	
+bin/sh/builtins/functional_test:read4	PASS	
+bin/sh/builtins/functional_test:read5	PASS	
+bin/sh/builtins/functional_test:read6	PASS	
+bin/sh/builtins/functional_test:read7	PASS	
+bin/sh/builtins/functional_test:read8	PASS	
+bin/sh/builtins/functional_test:read9	PASS	
+bin/sh/builtins/functional_test:return1	PASS	
+bin/sh/builtins/functional_test:return2	PASS	
+bin/sh/builtins/functional_test:return3	PASS	
+bin/sh/builtins/functional_test:return4	PASS	
+bin/sh/builtins/functional_test:return5	PASS	
+bin/sh/builtins/functional_test:return6	PASS	
+bin/sh/builtins/functional_test:return7	PASS	
+bin/sh/builtins/functional_test:return8	PASS	
+bin/sh/builtins/functional_test:set1	PASS	
+bin/sh/builtins/functional_test:set2	PASS	
+bin/sh/builtins/functional_test:set3	PASS	
+bin/sh/builtins/functional_test:trap1	PASS	
+bin/sh/builtins/functional_test:trap10	PASS	
+bin/sh/builtins/functional_test:trap11	PASS	
+bin/sh/builtins/functional_test:trap12	PASS	
+bin/sh/builtins/functional_test:trap13	PASS	
+bin/sh/builtins/functional_test:trap14	PASS	
+bin/sh/builtins/functional_test:trap15	PASS	
+bin/sh/builtins/functional_test:trap16	PASS	
+bin/sh/builtins/functional_test:trap17	PASS	
+bin/sh/builtins/functional_test:trap2	PASS	
+bin/sh/builtins/functional_test:trap3	PASS	
+bin/sh/builtins/functional_test:trap4	PASS	
+bin/sh/builtins/functional_test:trap5	PASS	
+bin/sh/builtins/functional_test:trap6	PASS	
+bin/sh/builtins/functional_test:trap7	PASS	
+bin/sh/builtins/functional_test:trap8	PASS	
+bin/sh/builtins/functional_test:trap9	PASS	
+bin/sh/builtins/functional_test:type1	PASS	
+bin/sh/builtins/functional_test:type2	FAIL	environment: the test looks up /libexec/ld-elf.so.1 (FreeBSD's dynamic linker; Darwin's is /usr/lib/dyld)
+bin/sh/builtins/functional_test:type3	PASS	
+bin/sh/builtins/functional_test:type4	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): command -v/-V and type with a relative PATH entry
+bin/sh/builtins/functional_test:unalias	PASS	
+bin/sh/builtins/functional_test:var_assign	PASS	
+bin/sh/builtins/functional_test:var_assign2	PASS	
+bin/sh/builtins/functional_test:wait1	PASS	
+bin/sh/builtins/functional_test:wait10	PASS	
+bin/sh/builtins/functional_test:wait11	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): wait %job for a killed pipeline
+bin/sh/builtins/functional_test:wait2	PASS	
+bin/sh/builtins/functional_test:wait3	PASS	
+bin/sh/builtins/functional_test:wait4	PASS	
+bin/sh/builtins/functional_test:wait5	PASS	
+bin/sh/builtins/functional_test:wait6	PASS	
+bin/sh/builtins/functional_test:wait7	PASS	
+bin/sh/builtins/functional_test:wait8	PASS	
+bin/sh/builtins/functional_test:wait9	PASS	
+bin/sh/errors/functional_test:assignment_error1	PASS	
+bin/sh/errors/functional_test:assignment_error2	PASS	
+bin/sh/errors/functional_test:backquote_error1	PASS	
+bin/sh/errors/functional_test:backquote_error2	PASS	
+bin/sh/errors/functional_test:bad_binary1	PASS	
+bin/sh/errors/functional_test:bad_keyword1	PASS	
+bin/sh/errors/functional_test:bad_parm_exp1	PASS	
+bin/sh/errors/functional_test:bad_parm_exp2	PASS	
+bin/sh/errors/functional_test:bad_parm_exp3	PASS	
+bin/sh/errors/functional_test:bad_parm_exp4	PASS	
+bin/sh/errors/functional_test:bad_parm_exp5	PASS	
+bin/sh/errors/functional_test:bad_parm_exp6	PASS	
+bin/sh/errors/functional_test:bad_parm_exp7	PASS	
+bin/sh/errors/functional_test:bad_parm_exp8	PASS	
+bin/sh/errors/functional_test:option_error	PASS	
+bin/sh/errors/functional_test:redirection_error	PASS	
+bin/sh/errors/functional_test:redirection_error2	PASS	
+bin/sh/errors/functional_test:redirection_error3	PASS	
+bin/sh/errors/functional_test:redirection_error4	PASS	
+bin/sh/errors/functional_test:redirection_error5	PASS	
+bin/sh/errors/functional_test:redirection_error6	PASS	
+bin/sh/errors/functional_test:redirection_error7	PASS	
+bin/sh/errors/functional_test:redirection_error8	PASS	
+bin/sh/errors/functional_test:script_error1	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): a missing script's exit status (127) and message
+bin/sh/errors/functional_test:write_error1	PASS	
+bin/sh/execution/functional_test:bg1	PASS	
+bin/sh/execution/functional_test:bg10	PASS	
+bin/sh/execution/functional_test:bg11	PASS	
+bin/sh/execution/functional_test:bg12	PASS	
+bin/sh/execution/functional_test:bg13	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): traps in background subshells
+bin/sh/execution/functional_test:bg14	FLAKY	Apple behaviour: Apple's sh (shell_cmds-326): traps in background subshells; passes or exits uncleanly by timing (2026-10-06)
+bin/sh/execution/functional_test:bg2	PASS	
+bin/sh/execution/functional_test:bg3	PASS	
+bin/sh/execution/functional_test:bg4	PASS	
+bin/sh/execution/functional_test:bg5	PASS	
+bin/sh/execution/functional_test:bg6	PASS	
+bin/sh/execution/functional_test:bg7	PASS	
+bin/sh/execution/functional_test:bg8	PASS	
+bin/sh/execution/functional_test:bg9	PASS	
+bin/sh/execution/functional_test:env1	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): export of an unset variable
+bin/sh/execution/functional_test:fork1	FAIL	Apple ps: ps -o comm= prints the full path (FreeBSD's the name), so the test can't see the exec optimisation
+bin/sh/execution/functional_test:fork2	FAIL	Apple ps: ps -o comm= prints the full path (FreeBSD's the name), so the test can't see the exec optimisation
+bin/sh/execution/functional_test:fork3	PASS	
+bin/sh/execution/functional_test:func1	PASS	
+bin/sh/execution/functional_test:func2	PASS	
+bin/sh/execution/functional_test:func3	PASS	
+bin/sh/execution/functional_test:hash1	PASS	
+bin/sh/execution/functional_test:int_cmd1	PASS	
+bin/sh/execution/functional_test:killed1	PASS	
+bin/sh/execution/functional_test:killed2	PASS	
+bin/sh/execution/functional_test:not1	PASS	
+bin/sh/execution/functional_test:not2	PASS	
+bin/sh/execution/functional_test:path1	PASS	
+bin/sh/execution/functional_test:pipefail1	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): no set -o pipefail (FreeBSD 13.3)
+bin/sh/execution/functional_test:pipefail2	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): no set -o pipefail (FreeBSD 13.3)
+bin/sh/execution/functional_test:pipefail3	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): no set -o pipefail (FreeBSD 13.3)
+bin/sh/execution/functional_test:pipefail4	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): no set -o pipefail (FreeBSD 13.3)
+bin/sh/execution/functional_test:pipefail5	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): no set -o pipefail (FreeBSD 13.3)
+bin/sh/execution/functional_test:pipefail6	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): no set -o pipefail (FreeBSD 13.3)
+bin/sh/execution/functional_test:pipefail7	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): no set -o pipefail (FreeBSD 13.3)
+bin/sh/execution/functional_test:redir1	PASS	
+bin/sh/execution/functional_test:redir2	PASS	
+bin/sh/execution/functional_test:redir3	PASS	
+bin/sh/execution/functional_test:redir4	PASS	
+bin/sh/execution/functional_test:redir5	PASS	
+bin/sh/execution/functional_test:redir6	PASS	
+bin/sh/execution/functional_test:redir7	PASS	
+bin/sh/execution/functional_test:set_C1	PASS	
+bin/sh/execution/functional_test:set_n1	PASS	
+bin/sh/execution/functional_test:set_n2	PASS	
+bin/sh/execution/functional_test:set_n3	PASS	
+bin/sh/execution/functional_test:set_n4	PASS	
+bin/sh/execution/functional_test:set_x1	PASS	
+bin/sh/execution/functional_test:set_x2	PASS	
+bin/sh/execution/functional_test:set_x3	PASS	
+bin/sh/execution/functional_test:set_x4	PASS	
+bin/sh/execution/functional_test:shellproc1	PASS	
+bin/sh/execution/functional_test:shellproc2	PASS	
+bin/sh/execution/functional_test:shellproc3	PASS	
+bin/sh/execution/functional_test:shellproc4	PASS	
+bin/sh/execution/functional_test:shellproc5	PASS	
+bin/sh/execution/functional_test:shellproc6	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): won't run a script containing a NUL byte (Exec format error)
+bin/sh/execution/functional_test:shellproc7	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): won't run a script containing a NUL byte (Exec format error)
+bin/sh/execution/functional_test:subshell1	PASS	
+bin/sh/execution/functional_test:subshell2	PASS	
+bin/sh/execution/functional_test:subshell3	PASS	
+bin/sh/execution/functional_test:subshell4	PASS	
+bin/sh/execution/functional_test:unknown1	PASS	
+bin/sh/execution/functional_test:unknown2	PASS	
+bin/sh/execution/functional_test:var_assign1	PASS	
+bin/sh/expansion/functional_test:arith1	PASS	
+bin/sh/expansion/functional_test:arith10	PASS	
+bin/sh/expansion/functional_test:arith11	PASS	
+bin/sh/expansion/functional_test:arith12	PASS	
+bin/sh/expansion/functional_test:arith13	PASS	
+bin/sh/expansion/functional_test:arith14	PASS	
+bin/sh/expansion/functional_test:arith15	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): arithmetic overflow wraps differently
+bin/sh/expansion/functional_test:arith16	PASS	
+bin/sh/expansion/functional_test:arith17	PASS	
+bin/sh/expansion/functional_test:arith2	PASS	
+bin/sh/expansion/functional_test:arith3	PASS	
+bin/sh/expansion/functional_test:arith4	PASS	
+bin/sh/expansion/functional_test:arith5	PASS	
+bin/sh/expansion/functional_test:arith6	PASS	
+bin/sh/expansion/functional_test:arith7	PASS	
+bin/sh/expansion/functional_test:arith8	PASS	
+bin/sh/expansion/functional_test:arith9	PASS	
+bin/sh/expansion/functional_test:assign1	PASS	
+bin/sh/expansion/functional_test:cmdsubst1	PASS	
+bin/sh/expansion/functional_test:cmdsubst10	PASS	
+bin/sh/expansion/functional_test:cmdsubst11	PASS	
+bin/sh/expansion/functional_test:cmdsubst12	PASS	
+bin/sh/expansion/functional_test:cmdsubst13	PASS	
+bin/sh/expansion/functional_test:cmdsubst14	PASS	
+bin/sh/expansion/functional_test:cmdsubst15	PASS	
+bin/sh/expansion/functional_test:cmdsubst16	PASS	
+bin/sh/expansion/functional_test:cmdsubst17	PASS	
+bin/sh/expansion/functional_test:cmdsubst18	PASS	
+bin/sh/expansion/functional_test:cmdsubst19	PASS	
+bin/sh/expansion/functional_test:cmdsubst2	PASS	
+bin/sh/expansion/functional_test:cmdsubst20	PASS	
+bin/sh/expansion/functional_test:cmdsubst21	PASS	
+bin/sh/expansion/functional_test:cmdsubst22	PASS	
+bin/sh/expansion/functional_test:cmdsubst23	PASS	
+bin/sh/expansion/functional_test:cmdsubst24	PASS	
+bin/sh/expansion/functional_test:cmdsubst25	PASS	
+bin/sh/expansion/functional_test:cmdsubst26	PASS	
+bin/sh/expansion/functional_test:cmdsubst3	PASS	
+bin/sh/expansion/functional_test:cmdsubst4	PASS	
+bin/sh/expansion/functional_test:cmdsubst5	PASS	
+bin/sh/expansion/functional_test:cmdsubst6	PASS	
+bin/sh/expansion/functional_test:cmdsubst7	PASS	
+bin/sh/expansion/functional_test:cmdsubst8	PASS	
+bin/sh/expansion/functional_test:cmdsubst9	PASS	
+bin/sh/expansion/functional_test:export1	PASS	
+bin/sh/expansion/functional_test:export2	PASS	
+bin/sh/expansion/functional_test:export3	PASS	
+bin/sh/expansion/functional_test:heredoc1	PASS	
+bin/sh/expansion/functional_test:heredoc2	PASS	
+bin/sh/expansion/functional_test:ifs1	PASS	
+bin/sh/expansion/functional_test:ifs2	PASS	
+bin/sh/expansion/functional_test:ifs3	PASS	
+bin/sh/expansion/functional_test:ifs4	PASS	
+bin/sh/expansion/functional_test:ifs5	PASS	
+bin/sh/expansion/functional_test:ifs6	PASS	
+bin/sh/expansion/functional_test:ifs7	PASS	
+bin/sh/expansion/functional_test:length1	PASS	
+bin/sh/expansion/functional_test:length2	PASS	
+bin/sh/expansion/functional_test:length3	PASS	
+bin/sh/expansion/functional_test:length4	PASS	
+bin/sh/expansion/functional_test:length5	PASS	
+bin/sh/expansion/functional_test:length6	PASS	
+bin/sh/expansion/functional_test:length7	PASS	
+bin/sh/expansion/functional_test:length8	PASS	
+bin/sh/expansion/functional_test:local1	PASS	
+bin/sh/expansion/functional_test:local2	PASS	
+bin/sh/expansion/functional_test:pathname1	PASS	
+bin/sh/expansion/functional_test:pathname2	PASS	
+bin/sh/expansion/functional_test:pathname3	PASS	
+bin/sh/expansion/functional_test:pathname4	PASS	
+bin/sh/expansion/functional_test:pathname5	PASS	
+bin/sh/expansion/functional_test:pathname6	FAIL	environment: HFS+ here is case-insensitive, so a and A (b and B) are one file
+bin/sh/expansion/functional_test:plus_minus1	PASS	
+bin/sh/expansion/functional_test:plus_minus2	PASS	
+bin/sh/expansion/functional_test:plus_minus3	PASS	
+bin/sh/expansion/functional_test:plus_minus4	PASS	
+bin/sh/expansion/functional_test:plus_minus5	PASS	
+bin/sh/expansion/functional_test:plus_minus6	PASS	
+bin/sh/expansion/functional_test:plus_minus7	PASS	
+bin/sh/expansion/functional_test:plus_minus8	PASS	
+bin/sh/expansion/functional_test:plus_minus9	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): parameter expansion parsing (Syntax error: Missing '}')
+bin/sh/expansion/functional_test:question1	PASS	
+bin/sh/expansion/functional_test:question2	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): ${var?} message
+bin/sh/expansion/functional_test:readonly1	PASS	
+bin/sh/expansion/functional_test:redir1	PASS	
+bin/sh/expansion/functional_test:set_u1	PASS	
+bin/sh/expansion/functional_test:set_u2	PASS	
+bin/sh/expansion/functional_test:set_u3	PASS	
+bin/sh/expansion/functional_test:tilde1	PASS	
+bin/sh/expansion/functional_test:tilde2	PASS	
+bin/sh/expansion/functional_test:trim1	PASS	
+bin/sh/expansion/functional_test:trim10	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): parameter expansion parsing (Syntax error: Missing '}')
+bin/sh/expansion/functional_test:trim11	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): parameter expansion parsing (Syntax error: Missing '}')
+bin/sh/expansion/functional_test:trim2	PASS	
+bin/sh/expansion/functional_test:trim3	PASS	
+bin/sh/expansion/functional_test:trim4	PASS	
+bin/sh/expansion/functional_test:trim5	PASS	
+bin/sh/expansion/functional_test:trim6	PASS	
+bin/sh/expansion/functional_test:trim7	PASS	
+bin/sh/expansion/functional_test:trim8	PASS	
+bin/sh/expansion/functional_test:trim9	PASS	
+bin/sh/invocation/functional_test:sh_ac1	PASS	
+bin/sh/invocation/functional_test:sh_c1	PASS	
+bin/sh/invocation/functional_test:sh_c_missing1	PASS	
+bin/sh/invocation/functional_test:sh_ca1	PASS	
+bin/sh/invocation/functional_test:sh_fca1	PASS	
+bin/sh/parameters/functional_test:env1	PASS	
+bin/sh/parameters/functional_test:exitstatus1	PASS	
+bin/sh/parameters/functional_test:ifs1	PASS	
+bin/sh/parameters/functional_test:mail1	FAIL	missing feature: the test runs ktrace (P4-29)
+bin/sh/parameters/functional_test:mail2	PASS	
+bin/sh/parameters/functional_test:optind1	PASS	
+bin/sh/parameters/functional_test:optind2	PASS	
+bin/sh/parameters/functional_test:positional1	PASS	
+bin/sh/parameters/functional_test:positional2	PASS	
+bin/sh/parameters/functional_test:positional3	PASS	
+bin/sh/parameters/functional_test:positional4	PASS	
+bin/sh/parameters/functional_test:positional5	PASS	
+bin/sh/parameters/functional_test:positional6	PASS	
+bin/sh/parameters/functional_test:positional7	PASS	
+bin/sh/parameters/functional_test:positional8	PASS	
+bin/sh/parameters/functional_test:positional9	PASS	
+bin/sh/parameters/functional_test:pwd1	PASS	
+bin/sh/parameters/functional_test:pwd2	PASS	
+bin/sh/parser/functional_test:alias1	PASS	
+bin/sh/parser/functional_test:alias10	PASS	
+bin/sh/parser/functional_test:alias11	PASS	
+bin/sh/parser/functional_test:alias12	PASS	
+bin/sh/parser/functional_test:alias13	PASS	
+bin/sh/parser/functional_test:alias14	PASS	
+bin/sh/parser/functional_test:alias15	PASS	
+bin/sh/parser/functional_test:alias16	PASS	
+bin/sh/parser/functional_test:alias17	PASS	
+bin/sh/parser/functional_test:alias18	PASS	
+bin/sh/parser/functional_test:alias19	PASS	
+bin/sh/parser/functional_test:alias2	PASS	
+bin/sh/parser/functional_test:alias20	PASS	
+bin/sh/parser/functional_test:alias3	PASS	
+bin/sh/parser/functional_test:alias4	PASS	
+bin/sh/parser/functional_test:alias5	PASS	
+bin/sh/parser/functional_test:alias6	PASS	
+bin/sh/parser/functional_test:alias7	PASS	
+bin/sh/parser/functional_test:alias8	PASS	
+bin/sh/parser/functional_test:alias9	PASS	
+bin/sh/parser/functional_test:and_pipe_not	PASS	
+bin/sh/parser/functional_test:case1	PASS	
+bin/sh/parser/functional_test:case2	PASS	
+bin/sh/parser/functional_test:comment1	PASS	
+bin/sh/parser/functional_test:comment2	PASS	
+bin/sh/parser/functional_test:dollar_quote1	PASS	
+bin/sh/parser/functional_test:dollar_quote10	PASS	
+bin/sh/parser/functional_test:dollar_quote11	PASS	
+bin/sh/parser/functional_test:dollar_quote12	PASS	
+bin/sh/parser/functional_test:dollar_quote13	PASS	
+bin/sh/parser/functional_test:dollar_quote2	PASS	
+bin/sh/parser/functional_test:dollar_quote3	PASS	
+bin/sh/parser/functional_test:dollar_quote4	PASS	
+bin/sh/parser/functional_test:dollar_quote5	PASS	
+bin/sh/parser/functional_test:dollar_quote6	PASS	
+bin/sh/parser/functional_test:dollar_quote7	PASS	
+bin/sh/parser/functional_test:dollar_quote8	PASS	
+bin/sh/parser/functional_test:dollar_quote9	PASS	
+bin/sh/parser/functional_test:empty_braces1	PASS	
+bin/sh/parser/functional_test:empty_cmd1	PASS	
+bin/sh/parser/functional_test:for1	PASS	
+bin/sh/parser/functional_test:for2	PASS	
+bin/sh/parser/functional_test:func1	PASS	
+bin/sh/parser/functional_test:func2	PASS	
+bin/sh/parser/functional_test:func3	PASS	
+bin/sh/parser/functional_test:heredoc1	PASS	
+bin/sh/parser/functional_test:heredoc10	PASS	
+bin/sh/parser/functional_test:heredoc11	PASS	
+bin/sh/parser/functional_test:heredoc12	PASS	
+bin/sh/parser/functional_test:heredoc13	PASS	
+bin/sh/parser/functional_test:heredoc14	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): here-documents inside $( ) and case
+bin/sh/parser/functional_test:heredoc15	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): here-documents inside $( ) and case
+bin/sh/parser/functional_test:heredoc16	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): here-documents inside $( ) and case
+bin/sh/parser/functional_test:heredoc2	PASS	
+bin/sh/parser/functional_test:heredoc3	PASS	
+bin/sh/parser/functional_test:heredoc4	PASS	
+bin/sh/parser/functional_test:heredoc5	PASS	
+bin/sh/parser/functional_test:heredoc6	PASS	
+bin/sh/parser/functional_test:heredoc7	PASS	
+bin/sh/parser/functional_test:heredoc8	PASS	
+bin/sh/parser/functional_test:heredoc9	PASS	
+bin/sh/parser/functional_test:line_cont1	PASS	
+bin/sh/parser/functional_test:line_cont10	PASS	
+bin/sh/parser/functional_test:line_cont11	PASS	
+bin/sh/parser/functional_test:line_cont12	PASS	
+bin/sh/parser/functional_test:line_cont2	PASS	
+bin/sh/parser/functional_test:line_cont3	PASS	
+bin/sh/parser/functional_test:line_cont4	PASS	
+bin/sh/parser/functional_test:line_cont5	PASS	
+bin/sh/parser/functional_test:line_cont6	PASS	
+bin/sh/parser/functional_test:line_cont7	PASS	
+bin/sh/parser/functional_test:line_cont8	PASS	
+bin/sh/parser/functional_test:line_cont9	PASS	
+bin/sh/parser/functional_test:no_space1	PASS	
+bin/sh/parser/functional_test:no_space2	PASS	
+bin/sh/parser/functional_test:nul1	PASS	
+bin/sh/parser/functional_test:only_redir1	PASS	
+bin/sh/parser/functional_test:only_redir2	PASS	
+bin/sh/parser/functional_test:only_redir3	PASS	
+bin/sh/parser/functional_test:only_redir4	PASS	
+bin/sh/parser/functional_test:pipe_not1	PASS	
+bin/sh/parser/functional_test:ps1_expand1	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): no PS1/PS2 parameter expansion (FreeBSD 14)
+bin/sh/parser/functional_test:ps1_expand2	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): no PS1/PS2 parameter expansion (FreeBSD 14)
+bin/sh/parser/functional_test:ps1_expand3	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): no PS1/PS2 parameter expansion (FreeBSD 14)
+bin/sh/parser/functional_test:ps1_expand4	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): no PS1/PS2 parameter expansion (FreeBSD 14)
+bin/sh/parser/functional_test:ps1_expand5	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): no PS1/PS2 parameter expansion (FreeBSD 14)
+bin/sh/parser/functional_test:ps2_expand1	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): no PS1/PS2 parameter expansion (FreeBSD 14)
+bin/sh/parser/functional_test:set_v1	PASS	
+bin/sh/parser/functional_test:var_assign1	PASS	
+bin/sh/set-e/functional_test:and1	PASS	
+bin/sh/set-e/functional_test:and2	PASS	
+bin/sh/set-e/functional_test:and3	PASS	
+bin/sh/set-e/functional_test:and4	PASS	
+bin/sh/set-e/functional_test:background1	PASS	
+bin/sh/set-e/functional_test:cmd1	PASS	
+bin/sh/set-e/functional_test:cmd2	PASS	
+bin/sh/set-e/functional_test:elif1	PASS	
+bin/sh/set-e/functional_test:elif2	PASS	
+bin/sh/set-e/functional_test:eval1	PASS	
+bin/sh/set-e/functional_test:eval2	PASS	
+bin/sh/set-e/functional_test:for1	PASS	
+bin/sh/set-e/functional_test:func1	PASS	
+bin/sh/set-e/functional_test:func2	PASS	
+bin/sh/set-e/functional_test:if1	PASS	
+bin/sh/set-e/functional_test:if2	PASS	
+bin/sh/set-e/functional_test:if3	PASS	
+bin/sh/set-e/functional_test:not1	PASS	
+bin/sh/set-e/functional_test:not2	PASS	
+bin/sh/set-e/functional_test:or1	PASS	
+bin/sh/set-e/functional_test:or2	PASS	
+bin/sh/set-e/functional_test:or3	PASS	
+bin/sh/set-e/functional_test:pipe1	PASS	
+bin/sh/set-e/functional_test:pipe2	PASS	
+bin/sh/set-e/functional_test:return1	PASS	
+bin/sh/set-e/functional_test:semi1	PASS	
+bin/sh/set-e/functional_test:semi2	PASS	
+bin/sh/set-e/functional_test:subshell1	PASS	
+bin/sh/set-e/functional_test:subshell2	PASS	
+bin/sh/set-e/functional_test:until1	PASS	
+bin/sh/set-e/functional_test:until2	PASS	
+bin/sh/set-e/functional_test:until3	PASS	
+bin/sh/set-e/functional_test:while1	PASS	
+bin/sh/set-e/functional_test:while2	PASS	
+bin/sh/set-e/functional_test:while3	PASS	
+bin/sleep/sleep_test:fraction	PASS	
+bin/sleep/sleep_test:hex	PASS	
+bin/sleep/sleep_test:nonnumeric	PASS	
+bin/test/legacy_test:main	PASS	
 bin/timeout/timeout_test:exit_numbers	PASS	
 bin/timeout/timeout_test:invalid_command	PASS	
 bin/timeout/timeout_test:invalid_signal	PASS	
@@ -90,6 +901,610 @@ bin/timeout/timeout_test:no_timeout	PASS
 bin/timeout/timeout_test:nominal	PASS	
 bin/timeout/timeout_test:time_unit	PASS	
 bin/timeout/timeout_test:with_a_child	PASS	
+sbin/devd/client_test:seqpacket	SKIP	missing feature: devd (launchd and IOKit matching instead; /var/run/devd.pid)
+sbin/devd/client_test:stream	SKIP	missing feature: devd (launchd and IOKit matching instead; /var/run/devd.pid)
+sbin/dhclient/option-domain-search_test:main	PASS	
+sbin/dhclient/pcp:__test_cases_list__	BROKEN	missing feature: sources /usr/tests/sys/common/vnet.subr (no /usr/tests/sys, no vnet jails)
+sbin/ifconfig/ifconfig:__test_cases_list__	BROKEN	missing feature: sources /usr/tests/sys/common/vnet.subr (no /usr/tests/sys, no vnet jails)
+sbin/ifconfig/inet6:__test_cases_list__	BROKEN	missing feature: sources /usr/tests/sys/common/vnet.subr (no /usr/tests/sys, no vnet jails)
+sbin/ifconfig/nonexistent_test:nonexistent	SKIP	missing feature: runs in a vnet jail (execenv=jail; no jails)
+sbin/md5/md5_test:bsd_md5_vec1	PASS	
+sbin/md5/md5_test:bsd_md5_vec2	PASS	
+sbin/md5/md5_test:bsd_md5_vec3	PASS	
+sbin/md5/md5_test:bsd_md5_vec4	PASS	
+sbin/md5/md5_test:bsd_md5_vec5	PASS	
+sbin/md5/md5_test:bsd_md5_vec6	PASS	
+sbin/md5/md5_test:bsd_md5_vec7	PASS	
+sbin/md5/md5_test:bsd_md5_vec8	PASS	
+sbin/md5/md5_test:bsd_rmd160_vec1	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_rmd160_vec2	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_rmd160_vec3	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_rmd160_vec4	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_rmd160_vec5	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_rmd160_vec6	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_rmd160_vec7	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_rmd160_vec8	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha1_vec1	PASS	
+sbin/md5/md5_test:bsd_sha1_vec2	PASS	
+sbin/md5/md5_test:bsd_sha1_vec3	PASS	
+sbin/md5/md5_test:bsd_sha1_vec4	PASS	
+sbin/md5/md5_test:bsd_sha1_vec5	PASS	
+sbin/md5/md5_test:bsd_sha1_vec6	PASS	
+sbin/md5/md5_test:bsd_sha1_vec7	PASS	
+sbin/md5/md5_test:bsd_sha1_vec8	PASS	
+sbin/md5/md5_test:bsd_sha224_vec1	PASS	
+sbin/md5/md5_test:bsd_sha224_vec2	PASS	
+sbin/md5/md5_test:bsd_sha224_vec3	PASS	
+sbin/md5/md5_test:bsd_sha224_vec4	PASS	
+sbin/md5/md5_test:bsd_sha224_vec5	PASS	
+sbin/md5/md5_test:bsd_sha224_vec6	PASS	
+sbin/md5/md5_test:bsd_sha224_vec7	PASS	
+sbin/md5/md5_test:bsd_sha224_vec8	PASS	
+sbin/md5/md5_test:bsd_sha256_vec1	PASS	
+sbin/md5/md5_test:bsd_sha256_vec2	PASS	
+sbin/md5/md5_test:bsd_sha256_vec3	PASS	
+sbin/md5/md5_test:bsd_sha256_vec4	PASS	
+sbin/md5/md5_test:bsd_sha256_vec5	PASS	
+sbin/md5/md5_test:bsd_sha256_vec6	PASS	
+sbin/md5/md5_test:bsd_sha256_vec7	PASS	
+sbin/md5/md5_test:bsd_sha256_vec8	PASS	
+sbin/md5/md5_test:bsd_sha384_vec1	PASS	
+sbin/md5/md5_test:bsd_sha384_vec2	PASS	
+sbin/md5/md5_test:bsd_sha384_vec3	PASS	
+sbin/md5/md5_test:bsd_sha384_vec4	PASS	
+sbin/md5/md5_test:bsd_sha384_vec5	PASS	
+sbin/md5/md5_test:bsd_sha384_vec6	PASS	
+sbin/md5/md5_test:bsd_sha384_vec7	PASS	
+sbin/md5/md5_test:bsd_sha384_vec8	PASS	
+sbin/md5/md5_test:bsd_sha512_vec1	PASS	
+sbin/md5/md5_test:bsd_sha512_vec2	PASS	
+sbin/md5/md5_test:bsd_sha512_vec3	PASS	
+sbin/md5/md5_test:bsd_sha512_vec4	PASS	
+sbin/md5/md5_test:bsd_sha512_vec5	PASS	
+sbin/md5/md5_test:bsd_sha512_vec6	PASS	
+sbin/md5/md5_test:bsd_sha512_vec7	PASS	
+sbin/md5/md5_test:bsd_sha512_vec8	PASS	
+sbin/md5/md5_test:bsd_sha512t224_vec1	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t224_vec2	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t224_vec3	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t224_vec4	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t224_vec5	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t224_vec6	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t224_vec7	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t224_vec8	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t256_vec1	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t256_vec2	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t256_vec3	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t256_vec4	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t256_vec5	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t256_vec6	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t256_vec7	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_sha512t256_vec8	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein1024_vec1	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein1024_vec2	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein1024_vec3	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein1024_vec4	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein1024_vec5	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein1024_vec6	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein1024_vec7	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein1024_vec8	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein256_vec1	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein256_vec2	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein256_vec3	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein256_vec4	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein256_vec5	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein256_vec6	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein256_vec7	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein256_vec8	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein512_vec1	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein512_vec2	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein512_vec3	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein512_vec4	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein512_vec5	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein512_vec6	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein512_vec7	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:bsd_skein512_vec8	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_bflag	PASS	
+sbin/md5/md5_test:gnu_cflag	PASS	
+sbin/md5/md5_test:gnu_cflag_mode	PASS	
+sbin/md5/md5_test:gnu_check_md5	PASS	
+sbin/md5/md5_test:gnu_check_rmd160	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_check_sha1	PASS	
+sbin/md5/md5_test:gnu_check_sha224	PASS	
+sbin/md5/md5_test:gnu_check_sha256	PASS	
+sbin/md5/md5_test:gnu_check_sha384	PASS	
+sbin/md5/md5_test:gnu_check_sha512	PASS	
+sbin/md5/md5_test:gnu_check_sha512t224	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_check_sha512t256	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_check_skein1024	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_check_skein256	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_check_skein512	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_md5_vec1	PASS	
+sbin/md5/md5_test:gnu_md5_vec2	PASS	
+sbin/md5/md5_test:gnu_md5_vec3	PASS	
+sbin/md5/md5_test:gnu_md5_vec4	PASS	
+sbin/md5/md5_test:gnu_md5_vec5	PASS	
+sbin/md5/md5_test:gnu_md5_vec6	PASS	
+sbin/md5/md5_test:gnu_md5_vec7	PASS	
+sbin/md5/md5_test:gnu_md5_vec8	PASS	
+sbin/md5/md5_test:gnu_rmd160_vec1	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_rmd160_vec2	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_rmd160_vec3	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_rmd160_vec4	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_rmd160_vec5	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_rmd160_vec6	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_rmd160_vec7	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_rmd160_vec8	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha1_vec1	PASS	
+sbin/md5/md5_test:gnu_sha1_vec2	PASS	
+sbin/md5/md5_test:gnu_sha1_vec3	PASS	
+sbin/md5/md5_test:gnu_sha1_vec4	PASS	
+sbin/md5/md5_test:gnu_sha1_vec5	PASS	
+sbin/md5/md5_test:gnu_sha1_vec6	PASS	
+sbin/md5/md5_test:gnu_sha1_vec7	PASS	
+sbin/md5/md5_test:gnu_sha1_vec8	PASS	
+sbin/md5/md5_test:gnu_sha224_vec1	PASS	
+sbin/md5/md5_test:gnu_sha224_vec2	PASS	
+sbin/md5/md5_test:gnu_sha224_vec3	PASS	
+sbin/md5/md5_test:gnu_sha224_vec4	PASS	
+sbin/md5/md5_test:gnu_sha224_vec5	PASS	
+sbin/md5/md5_test:gnu_sha224_vec6	PASS	
+sbin/md5/md5_test:gnu_sha224_vec7	PASS	
+sbin/md5/md5_test:gnu_sha224_vec8	PASS	
+sbin/md5/md5_test:gnu_sha256_vec1	PASS	
+sbin/md5/md5_test:gnu_sha256_vec2	PASS	
+sbin/md5/md5_test:gnu_sha256_vec3	PASS	
+sbin/md5/md5_test:gnu_sha256_vec4	PASS	
+sbin/md5/md5_test:gnu_sha256_vec5	PASS	
+sbin/md5/md5_test:gnu_sha256_vec6	PASS	
+sbin/md5/md5_test:gnu_sha256_vec7	PASS	
+sbin/md5/md5_test:gnu_sha256_vec8	PASS	
+sbin/md5/md5_test:gnu_sha384_vec1	PASS	
+sbin/md5/md5_test:gnu_sha384_vec2	PASS	
+sbin/md5/md5_test:gnu_sha384_vec3	PASS	
+sbin/md5/md5_test:gnu_sha384_vec4	PASS	
+sbin/md5/md5_test:gnu_sha384_vec5	PASS	
+sbin/md5/md5_test:gnu_sha384_vec6	PASS	
+sbin/md5/md5_test:gnu_sha384_vec7	PASS	
+sbin/md5/md5_test:gnu_sha384_vec8	PASS	
+sbin/md5/md5_test:gnu_sha512_vec1	PASS	
+sbin/md5/md5_test:gnu_sha512_vec2	PASS	
+sbin/md5/md5_test:gnu_sha512_vec3	PASS	
+sbin/md5/md5_test:gnu_sha512_vec4	PASS	
+sbin/md5/md5_test:gnu_sha512_vec5	PASS	
+sbin/md5/md5_test:gnu_sha512_vec6	PASS	
+sbin/md5/md5_test:gnu_sha512_vec7	PASS	
+sbin/md5/md5_test:gnu_sha512_vec8	PASS	
+sbin/md5/md5_test:gnu_sha512t224_vec1	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t224_vec2	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t224_vec3	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t224_vec4	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t224_vec5	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t224_vec6	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t224_vec7	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t224_vec8	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t256_vec1	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t256_vec2	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t256_vec3	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t256_vec4	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t256_vec5	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t256_vec6	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t256_vec7	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_sha512t256_vec8	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein1024_vec1	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein1024_vec2	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein1024_vec3	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein1024_vec4	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein1024_vec5	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein1024_vec6	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein1024_vec7	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein1024_vec8	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein256_vec1	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein256_vec2	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein256_vec3	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein256_vec4	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein256_vec5	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein256_vec6	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein256_vec7	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein256_vec8	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein512_vec1	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein512_vec2	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein512_vec3	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein512_vec4	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein512_vec5	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein512_vec6	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein512_vec7	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:gnu_skein512_vec8	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:perl_check_sha1	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_check_sha224	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_check_sha256	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_check_sha384	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_check_sha512	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_check_sha512t224	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_check_sha512t256	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha1_vec1	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha1_vec2	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha1_vec3	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha1_vec4	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha1_vec5	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha1_vec6	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha1_vec7	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha1_vec8	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha224_vec1	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha224_vec2	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha224_vec3	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha224_vec4	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha224_vec5	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha224_vec6	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha224_vec7	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha224_vec8	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha256_vec1	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha256_vec2	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha256_vec3	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha256_vec4	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha256_vec5	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha256_vec6	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha256_vec7	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha256_vec8	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha384_vec1	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha384_vec2	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha384_vec3	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha384_vec4	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha384_vec5	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha384_vec6	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha384_vec7	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha384_vec8	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512_vec1	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512_vec2	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512_vec3	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512_vec4	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512_vec5	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512_vec6	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512_vec7	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512_vec8	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t224_vec1	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t224_vec2	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t224_vec3	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t224_vec4	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t224_vec5	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t224_vec6	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t224_vec7	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t224_vec8	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t256_vec1	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t256_vec2	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t256_vec3	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t256_vec4	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t256_vec5	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t256_vec6	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t256_vec7	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:perl_sha512t256_vec8	SKIP	environment: needs shasum, a Perl script (no Perl in the base)
+sbin/md5/md5_test:self_test_md5	PASS	
+sbin/md5/md5_test:self_test_rmd160	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:self_test_sha1	PASS	
+sbin/md5/md5_test:self_test_sha224	PASS	
+sbin/md5/md5_test:self_test_sha256	PASS	
+sbin/md5/md5_test:self_test_sha384	PASS	
+sbin/md5/md5_test:self_test_sha512	PASS	
+sbin/md5/md5_test:self_test_sha512t224	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:self_test_sha512t256	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:self_test_skein1024	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:self_test_skein256	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/md5/md5_test:self_test_skein512	SKIP	Apple flag: Apple's md5 (text_cmds) has no RIPEMD-160, Skein or SHA-512/t algorithms or their links
+sbin/pfctl/macro:space	FAIL	equivalent: OpenBSD 4.3's pfctl accepts a macro name with a space
+sbin/pfctl/pfctl_test:pf0001	PASS	
+sbin/pfctl/pfctl_test:pf0002	PASS	
+sbin/pfctl/pfctl_test:pf0003	PASS	
+sbin/pfctl/pfctl_test:pf0004	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0005	PASS	
+sbin/pfctl/pfctl_test:pf0006	PASS	
+sbin/pfctl/pfctl_test:pf0007	PASS	
+sbin/pfctl/pfctl_test:pf0008	PASS	
+sbin/pfctl/pfctl_test:pf0009	PASS	
+sbin/pfctl/pfctl_test:pf0010	PASS	
+sbin/pfctl/pfctl_test:pf0011	PASS	
+sbin/pfctl/pfctl_test:pf0012	PASS	
+sbin/pfctl/pfctl_test:pf0013	PASS	
+sbin/pfctl/pfctl_test:pf0014	PASS	
+sbin/pfctl/pfctl_test:pf0016	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0018	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0019	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0020	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0022	PASS	
+sbin/pfctl/pfctl_test:pf0023	PASS	
+sbin/pfctl/pfctl_test:pf0024	PASS	
+sbin/pfctl/pfctl_test:pf0025	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0026	PASS	
+sbin/pfctl/pfctl_test:pf0028	PASS	
+sbin/pfctl/pfctl_test:pf0030	PASS	
+sbin/pfctl/pfctl_test:pf0031	PASS	
+sbin/pfctl/pfctl_test:pf0032	PASS	
+sbin/pfctl/pfctl_test:pf0034	PASS	
+sbin/pfctl/pfctl_test:pf0035	PASS	
+sbin/pfctl/pfctl_test:pf0038	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0039	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0040	PASS	
+sbin/pfctl/pfctl_test:pf0041	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0047	PASS	
+sbin/pfctl/pfctl_test:pf0048	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0049	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0050	PASS	
+sbin/pfctl/pfctl_test:pf0052	PASS	
+sbin/pfctl/pfctl_test:pf0053	PASS	
+sbin/pfctl/pfctl_test:pf0055	PASS	
+sbin/pfctl/pfctl_test:pf0056	PASS	
+sbin/pfctl/pfctl_test:pf0057	PASS	
+sbin/pfctl/pfctl_test:pf0060	PASS	
+sbin/pfctl/pfctl_test:pf0061	PASS	
+sbin/pfctl/pfctl_test:pf0065	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0067	PASS	
+sbin/pfctl/pfctl_test:pf0069	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0070	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0071	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0072	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0074	PASS	
+sbin/pfctl/pfctl_test:pf0075	PASS	
+sbin/pfctl/pfctl_test:pf0077	PASS	
+sbin/pfctl/pfctl_test:pf0078	PASS	
+sbin/pfctl/pfctl_test:pf0079	PASS	
+sbin/pfctl/pfctl_test:pf0081	PASS	
+sbin/pfctl/pfctl_test:pf0082	PASS	
+sbin/pfctl/pfctl_test:pf0084	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0085	PASS	
+sbin/pfctl/pfctl_test:pf0087	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0088	PASS	
+sbin/pfctl/pfctl_test:pf0089	PASS	
+sbin/pfctl/pfctl_test:pf0090	PASS	
+sbin/pfctl/pfctl_test:pf0091	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0092	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0094	PASS	
+sbin/pfctl/pfctl_test:pf0095	PASS	
+sbin/pfctl/pfctl_test:pf0096	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0097	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0098	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0100	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0101	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0102	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf0104	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1001	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1002	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1003	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1004	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1005	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1006	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1007	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1008	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1009	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1010	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1011	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1012	PASS	
+sbin/pfctl/pfctl_test:pf1013	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1014	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1015	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1016	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1017	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1018	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1019	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1020	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1021	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1022	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1023	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1024	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1025	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1026	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1027	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1028	PASS	
+sbin/pfctl/pfctl_test:pf1029	PASS	
+sbin/pfctl/pfctl_test:pf1030	PASS	
+sbin/pfctl/pfctl_test:pf1031	PASS	
+sbin/pfctl/pfctl_test:pf1032	PASS	
+sbin/pfctl/pfctl_test:pf1033	PASS	
+sbin/pfctl/pfctl_test:pf1034	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1035	PASS	
+sbin/pfctl/pfctl_test:pf1036	PASS	
+sbin/pfctl/pfctl_test:pf1037	PASS	
+sbin/pfctl/pfctl_test:pf1038	PASS	
+sbin/pfctl/pfctl_test:pf1039	PASS	
+sbin/pfctl/pfctl_test:pf1040	PASS	
+sbin/pfctl/pfctl_test:pf1041	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1042	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1043	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1044	PASS	
+sbin/pfctl/pfctl_test:pf1045	PASS	
+sbin/pfctl/pfctl_test:pf1046	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1047	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1048	PASS	
+sbin/pfctl/pfctl_test:pf1049	PASS	
+sbin/pfctl/pfctl_test:pf1050	PASS	
+sbin/pfctl/pfctl_test:pf1051	PASS	
+sbin/pfctl/pfctl_test:pf1052	PASS	
+sbin/pfctl/pfctl_test:pf1053	PASS	
+sbin/pfctl/pfctl_test:pf1054	PASS	
+sbin/pfctl/pfctl_test:pf1055	PASS	
+sbin/pfctl/pfctl_test:pf1056	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1057	SKIP	missing feature: creates interfaces in a vnet jail (execenv=jail; no jails)
+sbin/pfctl/pfctl_test:pf1058	SKIP	missing feature: creates interfaces in a vnet jail (execenv=jail; no jails)
+sbin/pfctl/pfctl_test:pf1059	SKIP	missing feature: creates interfaces in a vnet jail (execenv=jail; no jails)
+sbin/pfctl/pfctl_test:pf1060	SKIP	missing feature: creates interfaces in a vnet jail (execenv=jail; no jails)
+sbin/pfctl/pfctl_test:pf1061	SKIP	missing feature: creates interfaces in a vnet jail (execenv=jail; no jails)
+sbin/pfctl/pfctl_test:pf1062	SKIP	missing feature: creates interfaces in a vnet jail (execenv=jail; no jails)
+sbin/pfctl/pfctl_test:pf1063	SKIP	missing feature: creates interfaces in a vnet jail (execenv=jail; no jails)
+sbin/pfctl/pfctl_test:pf1064	SKIP	missing feature: creates interfaces in a vnet jail (execenv=jail; no jails)
+sbin/pfctl/pfctl_test:pf1065	PASS	
+sbin/pfctl/pfctl_test:pf1066	PASS	
+sbin/pfctl/pfctl_test:pf1067	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1068	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1069	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1070	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1071	PASS	
+sbin/pfctl/pfctl_test:pf1072	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1073	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1074	PASS	
+sbin/pfctl/pfctl_test:pf1075	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1076	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1077	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1078	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:pf1079	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0001	PASS	
+sbin/pfctl/pfctl_test:selfpf0002	PASS	
+sbin/pfctl/pfctl_test:selfpf0003	PASS	
+sbin/pfctl/pfctl_test:selfpf0004	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0005	PASS	
+sbin/pfctl/pfctl_test:selfpf0006	PASS	
+sbin/pfctl/pfctl_test:selfpf0007	PASS	
+sbin/pfctl/pfctl_test:selfpf0008	PASS	
+sbin/pfctl/pfctl_test:selfpf0009	PASS	
+sbin/pfctl/pfctl_test:selfpf0010	PASS	
+sbin/pfctl/pfctl_test:selfpf0011	PASS	
+sbin/pfctl/pfctl_test:selfpf0012	PASS	
+sbin/pfctl/pfctl_test:selfpf0013	PASS	
+sbin/pfctl/pfctl_test:selfpf0014	PASS	
+sbin/pfctl/pfctl_test:selfpf0016	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0018	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0019	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0020	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0022	PASS	
+sbin/pfctl/pfctl_test:selfpf0023	PASS	
+sbin/pfctl/pfctl_test:selfpf0024	PASS	
+sbin/pfctl/pfctl_test:selfpf0025	PASS	
+sbin/pfctl/pfctl_test:selfpf0026	PASS	
+sbin/pfctl/pfctl_test:selfpf0028	PASS	
+sbin/pfctl/pfctl_test:selfpf0030	PASS	
+sbin/pfctl/pfctl_test:selfpf0031	PASS	
+sbin/pfctl/pfctl_test:selfpf0032	PASS	
+sbin/pfctl/pfctl_test:selfpf0034	PASS	
+sbin/pfctl/pfctl_test:selfpf0035	PASS	
+sbin/pfctl/pfctl_test:selfpf0038	PASS	
+sbin/pfctl/pfctl_test:selfpf0039	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0040	PASS	
+sbin/pfctl/pfctl_test:selfpf0041	PASS	
+sbin/pfctl/pfctl_test:selfpf0047	PASS	
+sbin/pfctl/pfctl_test:selfpf0048	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0049	PASS	
+sbin/pfctl/pfctl_test:selfpf0050	PASS	
+sbin/pfctl/pfctl_test:selfpf0052	PASS	
+sbin/pfctl/pfctl_test:selfpf0053	PASS	
+sbin/pfctl/pfctl_test:selfpf0055	PASS	
+sbin/pfctl/pfctl_test:selfpf0056	PASS	
+sbin/pfctl/pfctl_test:selfpf0057	PASS	
+sbin/pfctl/pfctl_test:selfpf0060	PASS	
+sbin/pfctl/pfctl_test:selfpf0061	PASS	
+sbin/pfctl/pfctl_test:selfpf0065	PASS	
+sbin/pfctl/pfctl_test:selfpf0067	PASS	
+sbin/pfctl/pfctl_test:selfpf0069	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0070	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0071	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0072	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0074	PASS	
+sbin/pfctl/pfctl_test:selfpf0075	PASS	
+sbin/pfctl/pfctl_test:selfpf0077	PASS	
+sbin/pfctl/pfctl_test:selfpf0078	PASS	
+sbin/pfctl/pfctl_test:selfpf0079	PASS	
+sbin/pfctl/pfctl_test:selfpf0081	PASS	
+sbin/pfctl/pfctl_test:selfpf0082	PASS	
+sbin/pfctl/pfctl_test:selfpf0084	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0085	PASS	
+sbin/pfctl/pfctl_test:selfpf0087	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0088	PASS	
+sbin/pfctl/pfctl_test:selfpf0089	PASS	
+sbin/pfctl/pfctl_test:selfpf0090	PASS	
+sbin/pfctl/pfctl_test:selfpf0091	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0092	PASS	
+sbin/pfctl/pfctl_test:selfpf0094	PASS	
+sbin/pfctl/pfctl_test:selfpf0095	PASS	
+sbin/pfctl/pfctl_test:selfpf0096	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0097	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0098	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0100	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0101	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf0102	PASS	
+sbin/pfctl/pfctl_test:selfpf0104	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1001	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1002	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1003	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1004	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1005	PASS	
+sbin/pfctl/pfctl_test:selfpf1006	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1007	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1008	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1009	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1010	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1011	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1012	PASS	
+sbin/pfctl/pfctl_test:selfpf1013	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1014	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1015	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1016	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1017	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1018	PASS	
+sbin/pfctl/pfctl_test:selfpf1019	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1020	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1021	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1022	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1023	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1024	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1025	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1026	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1027	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1028	PASS	
+sbin/pfctl/pfctl_test:selfpf1029	PASS	
+sbin/pfctl/pfctl_test:selfpf1030	PASS	
+sbin/pfctl/pfctl_test:selfpf1031	PASS	
+sbin/pfctl/pfctl_test:selfpf1032	PASS	
+sbin/pfctl/pfctl_test:selfpf1035	PASS	
+sbin/pfctl/pfctl_test:selfpf1036	PASS	
+sbin/pfctl/pfctl_test:selfpf1037	PASS	
+sbin/pfctl/pfctl_test:selfpf1038	PASS	
+sbin/pfctl/pfctl_test:selfpf1039	PASS	
+sbin/pfctl/pfctl_test:selfpf1041	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1044	PASS	
+sbin/pfctl/pfctl_test:selfpf1045	PASS	
+sbin/pfctl/pfctl_test:selfpf1048	PASS	
+sbin/pfctl/pfctl_test:selfpf1049	PASS	
+sbin/pfctl/pfctl_test:selfpf1050	PASS	
+sbin/pfctl/pfctl_test:selfpf1051	PASS	
+sbin/pfctl/pfctl_test:selfpf1052	PASS	
+sbin/pfctl/pfctl_test:selfpf1053	PASS	
+sbin/pfctl/pfctl_test:selfpf1054	PASS	
+sbin/pfctl/pfctl_test:selfpf1055	PASS	
+sbin/pfctl/pfctl_test:selfpf1056	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1065	PASS	
+sbin/pfctl/pfctl_test:selfpf1066	PASS	
+sbin/pfctl/pfctl_test:selfpf1068	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1069	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1071	PASS	
+sbin/pfctl/pfctl_test:selfpf1073	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1075	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1076	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1077	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/pfctl/pfctl_test:selfpf1078	PASS	
+sbin/pfctl/pfctl_test:selfpf1079	FAIL	equivalent: pfctl is OpenBSD 4.3's (base/pfctl); FreeBSD 15's syntax and -nv output differ
+sbin/ping/ping_test:inject_opts	SKIP	environment: needs python3 and scapy (no Python in the base)
+sbin/ping/ping_test:inject_pip	SKIP	environment: needs python3 and scapy (no Python in the base)
+sbin/ping/ping_test:inject_reply	SKIP	environment: needs python3 and scapy (no Python in the base)
+sbin/ping/ping_test:ping4_nohost	FAIL	Apple flag: Apple's ping/ping6 (network_cmds) have no -4/-6, and ping6 no -t (the tests' flags and FreeBSD's output)
+sbin/ping/ping_test:ping6_4	FAIL	Apple flag: Apple's ping/ping6 (network_cmds) have no -4/-6, and ping6 no -t (the tests' flags and FreeBSD's output)
+sbin/ping/ping_test:ping6_c1_s8_t1	FAIL	missing feature: getaddrinfo of localhost for IPv6 fails: libinfo dlopens /usr/lib/libnetwork.dylib, which the base doesn't have
+sbin/ping/ping_test:ping6_c1t4	FAIL	Apple flag: Apple's ping/ping6 (network_cmds) have no -4/-6, and ping6 no -t (the tests' flags and FreeBSD's output)
+sbin/ping/ping_test:ping6_nohost	FAIL	Apple flag: Apple's ping/ping6 (network_cmds) have no -4/-6, and ping6 no -t (the tests' flags and FreeBSD's output)
+sbin/ping/ping_test:ping_46	FAIL	Apple flag: Apple's ping/ping6 (network_cmds) have no -4/-6, and ping6 no -t (the tests' flags and FreeBSD's output)
+sbin/ping/ping_test:ping_64	FAIL	Apple flag: Apple's ping/ping6 (network_cmds) have no -4/-6, and ping6 no -t (the tests' flags and FreeBSD's output)
+sbin/ping/ping_test:ping_6_c1_s8_t1	FAIL	Apple flag: Apple's ping/ping6 (network_cmds) have no -4/-6, and ping6 no -t (the tests' flags and FreeBSD's output)
+sbin/ping/ping_test:ping_c1_s56_t1	FAIL	Apple flag: Apple's ping/ping6 (network_cmds) have no -4/-6, and ping6 no -t (the tests' flags and FreeBSD's output)
+sbin/ping/ping_test:ping_c1_s56_t1_S127	PASS	
+sbin/ping/ping_test:ping_c1_s8_t1_S1	FAIL	Apple behaviour: Apple's ping is IPv4 only (FreeBSD's ping takes ::1 and -S for IPv6 too)
+sbin/ping/ping_test:ping_c1t6	PASS	
+sbin/ping/ping_test:ping_nohost	PASS	
+sbin/ping/ping_test:timestamp_origin	SKIP	environment: needs kyua's allow_sysctl_side_effects
+sbin/route/basic:__test_cases_list__	BROKEN	missing feature: sources /usr/tests/sys/common/vnet.subr (no /usr/tests/sys, no vnet jails)
+sbin/sysctl/sysctl_test:sysctl_aflag	PASS	
+sbin/sysctl/sysctl_test:sysctl_aflag_jail	FAIL	missing feature: needs a jail (sysctl -ao inside one)
+sbin/sysctl/sysctl_test:sysctl_by_name	FAIL	environment: kern.ostype is Darwin (the test expects FreeBSD)
+sbin/sysctl/sysctl_test:sysctl_dflag	FAIL	Apple behaviour: xnu's sysctls have no descriptions (sysctl -d prints none)
+sbin/sysctl/sysctl_test:sysctl_eflag	FAIL	environment: kern.ostype is Darwin (the test expects FreeBSD)
+sbin/sysctl/sysctl_test:sysctl_nflag	FAIL	environment: kern.ostype is Darwin (the test expects FreeBSD)
+sbin/sysctl/sysctl_test:sysctl_nflag_tflag_dflag	FAIL	Apple behaviour: xnu's sysctls have no descriptions (sysctl -d prints none)
+sbin/sysctl/sysctl_test:sysctl_tflag	PASS	
+sbin/sysctl/sysctl_test:sysctl_tflag_dflag	FAIL	Apple behaviour: xnu's sysctls have no descriptions (sysctl -d prints none)
 usr.bin/asa/asa_test:dashdash	PASS	
 usr.bin/asa/asa_test:one	PASS	
 usr.bin/asa/asa_test:plus	PASS	
@@ -98,6 +1513,37 @@ usr.bin/asa/asa_test:space	PASS
 usr.bin/asa/asa_test:stdout	PASS	
 usr.bin/asa/asa_test:unterminated	PASS	
 usr.bin/asa/asa_test:zero	PASS	
+usr.bin/bmake/archives/fmt_44bsd/legacy_test:main	PASS	
+usr.bin/bmake/archives/fmt_44bsd_mod/legacy_test:main	PASS	
+usr.bin/bmake/archives/fmt_oldbsd/legacy_test:main	PASS	
+usr.bin/bmake/basic/t0/legacy_test:main	PASS	
+usr.bin/bmake/basic/t1/legacy_test:main	PASS	
+usr.bin/bmake/basic/t2/legacy_test:main	PASS	
+usr.bin/bmake/basic/t3/legacy_test:main	PASS	
+usr.bin/bmake/execution/ellipsis/legacy_test:main	PASS	
+usr.bin/bmake/execution/empty/legacy_test:main	PASS	
+usr.bin/bmake/execution/joberr/legacy_test:main	PASS	
+usr.bin/bmake/execution/plus/legacy_test:main	PASS	
+usr.bin/bmake/shell/builtin/legacy_test:main	PASS	
+usr.bin/bmake/shell/meta/legacy_test:main	PASS	
+usr.bin/bmake/shell/path/legacy_test:main	PASS	
+usr.bin/bmake/shell/path_select/legacy_test:main	PASS	
+usr.bin/bmake/shell/replace/legacy_test:main	PASS	
+usr.bin/bmake/shell/select/legacy_test:main	PASS	
+usr.bin/bmake/suffixes/basic/legacy_test:main	PASS	
+usr.bin/bmake/suffixes/src_wild1/legacy_test:main	PASS	
+usr.bin/bmake/suffixes/src_wild2/legacy_test:main	PASS	
+usr.bin/bmake/syntax/directive-t0/legacy_test:main	PASS	
+usr.bin/bmake/syntax/enl/legacy_test:main	PASS	
+usr.bin/bmake/syntax/funny-targets/legacy_test:main	PASS	
+usr.bin/bmake/syntax/semi/legacy_test:main	PASS	
+usr.bin/bmake/sysmk/t0/2/1/legacy_test:main	PASS	
+usr.bin/bmake/sysmk/t1/2/1/legacy_test:main	PASS	
+usr.bin/bmake/sysmk/t2/2/1/legacy_test:main	PASS	
+usr.bin/bmake/variables/modifier_M/legacy_test:main	PASS	
+usr.bin/bmake/variables/modifier_t/legacy_test:main	PASS	
+usr.bin/bmake/variables/opt_V/legacy_test:main	PASS	
+usr.bin/bmake/variables/t0/legacy_test:main	PASS	
 usr.bin/cut/cut2_test:s_flag	PASS	
 usr.bin/cut/cut_test:basic	PASS	
 usr.bin/cut/cut_test:dflag	PASS	
@@ -143,6 +1589,156 @@ usr.bin/m4/m4_test:redef	PASS
 usr.bin/m4/m4_test:strangequotes	PASS	
 usr.bin/m4/m4_test:translit	PASS	
 usr.bin/m4/m4_test:translit2	PASS	
+usr.bin/mkimg/mkimg_offset_test:file_absolute_offset	PASS	
+usr.bin/mkimg/mkimg_offset_test:file_absolute_offset_4k	PASS	
+usr.bin/mkimg/mkimg_offset_test:file_colon_in_name	PASS	
+usr.bin/mkimg/mkimg_offset_test:file_relative_offset	PASS	
+usr.bin/mkimg/mkimg_offset_test:size_absolute_offset	PASS	
+usr.bin/mkimg/mkimg_offset_test:size_absolute_offset_4k	PASS	
+usr.bin/mkimg/mkimg_offset_test:size_no_offset	PASS	
+usr.bin/mkimg/mkimg_offset_test:size_no_offset_4k	PASS	
+usr.bin/mkimg/mkimg_offset_test:size_relative_offset	PASS	
+usr.bin/mkimg/mkimg_offset_test:size_relative_offset_4k	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_4096_qcow	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_4096_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_4096_raw	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_4096_vhd	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_4096_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_4096_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_4096_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_512_qcow	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_512_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_512_raw	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_512_vhd	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_512_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_512_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:apm_1x1_512_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_4096_qcow	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_4096_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_4096_raw	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_4096_vhd	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_4096_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_4096_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_4096_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_512_qcow	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_512_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_512_raw	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_512_vhd	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_512_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_512_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:apm_63x255_512_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_4096_qcow	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_4096_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_4096_raw	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_4096_vhd	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_4096_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_4096_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_4096_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_512_qcow	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_512_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_512_raw	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_512_vhd	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_512_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_512_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:bsd_1x1_512_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_4096_qcow	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_4096_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_4096_raw	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_4096_vhd	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_4096_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_4096_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_4096_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_512_qcow	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_512_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_512_raw	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_512_vhd	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_512_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_512_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:bsd_63x255_512_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_4096_qcow	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_4096_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_4096_raw	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_4096_vhd	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_4096_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_4096_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_4096_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_512_qcow	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_512_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_512_raw	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_512_vhd	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_512_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_512_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:ebr_1x1_512_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_4096_qcow	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_4096_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_4096_raw	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_4096_vhd	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_4096_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_4096_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_4096_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_512_qcow	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_512_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_512_raw	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_512_vhd	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_512_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_512_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:ebr_63x255_512_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_4096_qcow	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_4096_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_4096_raw	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_4096_vhd	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_4096_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_4096_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_4096_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_512_qcow	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_512_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_512_raw	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_512_vhd	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_512_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_512_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:gpt_1x1_512_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_4096_qcow	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_4096_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_4096_raw	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_4096_vhd	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_4096_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_4096_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_4096_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_512_qcow	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_512_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_512_raw	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_512_vhd	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_512_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_512_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:gpt_63x255_512_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_4096_qcow	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_4096_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_4096_raw	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_4096_vhd	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_4096_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_4096_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_4096_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_512_qcow	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_512_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_512_raw	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_512_vhd	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_512_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_512_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:mbr_1x1_512_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_4096_qcow	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_4096_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_4096_raw	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_4096_vhd	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_4096_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_4096_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_4096_vmdk	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_512_qcow	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_512_qcow2	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_512_raw	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_512_vhd	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_512_vhdf	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_512_vhdx	PASS	
+usr.bin/mkimg/mkimg_test:mbr_63x255_512_vmdk	PASS	
 usr.bin/soelim/soelim_test:files	PASS	
 usr.bin/soelim/soelim_test:stdin	PASS	
 usr.bin/tail/tail_test:broken_pipe	FAIL	Apple behaviour: Apple's tail dies of SIGPIPE (status 141); FreeBSD's reports "tail: stdout" and exits 1
@@ -205,6 +1801,12 @@ usr.bin/xo/functional_test:xo_01__JP	PASS
 usr.bin/xo/functional_test:xo_01__T	PASS	
 usr.bin/xo/functional_test:xo_01__X	PASS	
 usr.bin/xo/functional_test:xo_01__XP	PASS	
+usr.sbin/certctl/certctl_test:list	PASS	
+usr.sbin/certctl/certctl_test:metalog	PASS	
+usr.sbin/certctl/certctl_test:misc	PASS	
+usr.sbin/certctl/certctl_test:rehash	PASS	
+usr.sbin/certctl/certctl_test:trust	PASS	
+usr.sbin/certctl/certctl_test:untrust	PASS	
 usr.sbin/daemon/daemon_test:both_pidfile	FAIL	missing feature: setproctitle(3) is a no-op in base/freebsd_cmds' compat layer, so ps shows no "daemon: sleep" title
 usr.sbin/daemon/daemon_test:chdir	PASS	
 usr.sbin/daemon/daemon_test:child_pidfile	PASS	
@@ -217,6 +1819,38 @@ usr.sbin/daemon/daemon_test:supervisor_pidfile	FAIL	missing feature: setproctitl
 usr.sbin/daemon/daemon_test:supervisor_pidfile_lock	PASS	
 usr.sbin/daemon/daemon_test:title	FAIL	missing feature: setproctitle(3) is a no-op (compat layer); no -t title in ps
 usr.sbin/daemon/daemon_test:user	FAIL	Apple ps: -u takes a user list on macOS (ps -up PID); FreeBSD's -u is the user-oriented format
+usr.sbin/makefs/makefs_cd9660_tests:D_flag	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:F_flag	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:T_flag_F_flag	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:T_flag_dir	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:T_flag_mtree	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:duplicate_names	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:from_mtree_spec_file	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:from_multiple_dirs	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:from_single_dir	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:o_flag_allow_deep_trees	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:o_flag_allow_max_name	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:o_flag_isolevel_1	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:o_flag_isolevel_2	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:o_flag_isolevel_3	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:o_flag_preparer	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:o_flag_publisher	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:o_flag_rockridge	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_cd9660_tests:o_flag_rockridge_dev_nodes	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
+usr.sbin/makefs/makefs_ffs_tests:D_flag	PASS	
+usr.sbin/makefs/makefs_ffs_tests:F_flag	FAIL	missing feature: attaches the image with mdconfig and mounts UFS (no md(4) or UFS)
+usr.sbin/makefs/makefs_ffs_tests:T_flag_F_flag	FAIL	missing feature: attaches the image with mdconfig and mounts UFS (no md(4) or UFS)
+usr.sbin/makefs/makefs_ffs_tests:T_flag_dir	FAIL	missing feature: attaches the image with mdconfig and mounts UFS (no md(4) or UFS)
+usr.sbin/makefs/makefs_ffs_tests:T_flag_mtree	FAIL	missing feature: attaches the image with mdconfig and mounts UFS (no md(4) or UFS)
+usr.sbin/makefs/makefs_ffs_tests:autocalculate_image_size	FAIL	missing feature: attaches the image with mdconfig and mounts UFS (no md(4) or UFS)
+usr.sbin/makefs/makefs_ffs_tests:from_mtree_spec_file	FAIL	missing feature: attaches the image with mdconfig and mounts UFS (no md(4) or UFS)
+usr.sbin/makefs/makefs_ffs_tests:from_multiple_dirs	FAIL	missing feature: attaches the image with mdconfig and mounts UFS (no md(4) or UFS)
+usr.sbin/makefs/makefs_ffs_tests:from_single_dir	FAIL	missing feature: attaches the image with mdconfig and mounts UFS (no md(4) or UFS)
+usr.sbin/makefs/makefs_ffs_tests:o_flag_version_1	SKIP	environment: the test supports only amd64, i386 and sparc64 (Unsupported platform)
+usr.sbin/makefs/makefs_ffs_tests:o_flag_version_2	SKIP	environment: the test supports only amd64, i386 and sparc64 (Unsupported platform)
+usr.sbin/makefs/makefs_msdos_tests:T_flag_F_flag	SKIP	missing feature: mounts the image with mount_msdosfs (msdosfs isn't in the base)
+usr.sbin/makefs/makefs_msdos_tests:T_flag_dir	SKIP	missing feature: mounts the image with mount_msdosfs (msdosfs isn't in the base)
+usr.sbin/makefs/makefs_msdos_tests:T_flag_mtree	SKIP	missing feature: mounts the image with mount_msdosfs (msdosfs isn't in the base)
 usr.sbin/nmtree/nmtree_test:mtree_check	PASS	
 usr.sbin/nmtree/nmtree_test:mtree_convert_C	PASS	
 usr.sbin/nmtree/nmtree_test:mtree_convert_C_S	PASS	

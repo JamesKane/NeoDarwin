@@ -54,7 +54,11 @@ timeout="${KYUA_TIMEOUT:-2400}"
 # level; level 0 keeps the results readable.
 run="sysctl -w vm.shared_region_trace_level=0 >/dev/null; cd /tmp && kyua test -r /tmp/kyua.db -k /usr/tests/Kyuafile $groups;"
 run="$run kyua report -r /tmp/kyua.db --results-filter passed,skipped,xfail,broken,failed > /tmp/kyua-report.txt 2>&1;"
-run="$run echo KYUA-RESULTS-BEGIN; cat /tmp/kyua-report.txt; echo KYUA-RESULTS-END; echo kyua-done-\$((6*7))"
+run="$run echo KYUA-RESULTS-BEGIN; cat /tmp/kyua-report.txt; echo KYUA-RESULTS-END;"
+# KYUA_VERBOSE=1 (--test_env=KYUA_VERBOSE): also every failing case's
+# output (kyua report --verbose), after the results, for classifying them.
+[ -n "${KYUA_VERBOSE:-}" ] && run="$run kyua report --verbose -r /tmp/kyua.db --results-filter broken,failed,skipped;"
+run="$run echo kyua-done-\$((6*7))"
 status=0
 ND_QEMU_LOG_DIR="$logdir" ND_QEMU_STOP_ON='panic(cpu' "$qemu_test" "$@" \
 	--dump-cpus-on 'panic(cpu' \

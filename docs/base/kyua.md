@@ -26,7 +26,7 @@ Differences from FreeBSD's build:
 
 ## 2. The tests: `//base:freebsd_tests`
 
-`base/freebsd_tests/build.sh` installs `/usr/tests` from `@freebsd_tests` (`base/freebsd_tests/freebsd.lock`): one line per program's `tests/Makefile`, in the words of share/mk's `atf.test.mk`, `tap.test.mk` and `netbsd-tests.test.mk` (`atf_sh`, `netbsd_sh`, `tap_sh`, `atf_c`, `script`, `files`, `meta`). It writes each directory's `Kyuafile` as `suite.test.mk` generates it, and installs `tests/Kyuafile` (auto-discovery) in `/usr/tests`, `/usr/tests/bin`, `/usr/tests/usr.bin` and `/usr/tests/usr.sbin`, as FreeBSD's `bin/tests` and friends do (`KYUAFILE=yes`), with `usr.bin/tests`' `regress.m4`. C tests are compiled with `TARGET_FLAGS` and base/freebsd_cmds' compat layer (`nd_freebsd.h`, which now has `pipe2()`), linked with `libatf-c.a`.
+`base/freebsd_tests/build.sh` installs `/usr/tests` from `@freebsd_tests` (`base/freebsd_tests/freebsd.lock`): one line per program's `tests/Makefile`, in the words of share/mk's `atf.test.mk`, `tap.test.mk` and `netbsd-tests.test.mk` (`atf_sh`, `netbsd_sh`, `tap_sh`, `atf_c`, `plain_c`, `prog`, `script`, `files`, `tree_files`, `meta`). It writes each directory's `Kyuafile` as `suite.test.mk` generates it (a `TESTS_SUBDIRS` parent's, as `bin/sh`'s, `include()`s its subdirectories'), and installs `tests/Kyuafile` (auto-discovery) in `/usr/tests`, `/usr/tests/bin`, `/usr/tests/sbin`, `/usr/tests/usr.bin` and `/usr/tests/usr.sbin`, as FreeBSD's `bin/tests` and friends do (`KYUAFILE=yes`), with `usr.bin/tests`' `regress.m4`. C tests are compiled with `TARGET_FLAGS` and base/freebsd_cmds' compat layer (`nd_freebsd.h`, which now has `pipe2()`), linked with `libatf-c.a`. `base/freebsd_tests/compat` has the tests' own shims: `nd_pipe_socketpair.h` (`pipe()` as a socketpair, for tests that use both ends of a pipe, which FreeBSD's pipes allow: pfctl_test, pwait_reap) and an empty `<sys/module.h>`. A program that can't run here (a Perl or pytest test, a test of code the base doesn't build) is left out and listed in build.sh's header and freebsd-parity.md §2.1. A program whose cases hang gets a shorter `timeout` with `meta`, as FreeBSD's `TIMEOUT`.
 
 The tree isn't in `system_root`; `//images:freebsd_test_disk` (the session disk plus `/usr/tests`, a 256 MB volume) installs it. `//base:base_isa_audit` audits its programs too.
 
@@ -34,7 +34,7 @@ The tree isn't in `system_root`; `//images:freebsd_test_disk` (the session disk 
 
 ## 3. The suite: `//kernel:sbsa_freebsd_tests_test`
 
-`base/freebsd_tests/suite_test.sh`, sharded (4) like `//kernel:sbsa_zfs_suite_test`; tagged `manual`, `kernel`, `qemu`:
+`base/freebsd_tests/suite_test.sh`, sharded (8; `groups.txt` gives each directory its shard, each under about 7 minutes) like `//kernel:sbsa_zfs_suite_test`; tagged `manual`, `kernel`, `qemu`:
 - boots the test disk on QEMU virt (2 GB, 2 CPUs), logs in as root, sets `vm.shared_region_trace_level=0` (xnu reported every exec's failed shared-cache check on the console; kernel patch 0045 traces that at INFO now, and the sysctl stays, harmless) and runs `kyua test -r /tmp/kyua.db -k /usr/tests/Kyuafile DIR...` for the shard's directories (`groups.txt`);
 - prints `kyua report` with every result (passed too) between `KYUA-RESULTS-BEGIN` and `KYUA-RESULTS-END`, which the host parses (falling back on kyua test's progress lines);
 - holds every case, `PROGRAM:CASE`, to `expected.tsv` (`PROGRAM:CASE`, `RESULT`, `REASON`; `RESULT` is `PASS`, `XFAIL`, `FAIL`, `BROKEN`, `SKIP`, `KILLED` or `FLAKY`). A regression (an expected `PASS` or `XFAIL` that isn't), an unexpected pass (raise the list) and drift (a case missing from either side) fail the test; a change between two failing results is reported;
@@ -44,4 +44,5 @@ The tree isn't in `system_root`; `//images:freebsd_test_disk` (the session disk 
 ```
 bazel test //kernel:sbsa_freebsd_tests_test --test_output=errors
 KYUA_GROUPS="usr.bin/wc bin/cat" bazel test //kernel:sbsa_freebsd_tests_test --test_env=KYUA_GROUPS --test_sharding_strategy=disabled
+bazel test //kernel:sbsa_freebsd_tests_test --test_env=KYUA_VERBOSE=1   # serial.log gets every failing case's output
 ```

@@ -843,7 +843,7 @@ sh_test(
         "//images:freebsd_test_disk",
         "//tools/efi:qemu_efi_test.sh",
     ],
-    shard_count = 4,
+    shard_count = 8,
     tags = ["manual", "kernel", "qemu"],
 )
 
