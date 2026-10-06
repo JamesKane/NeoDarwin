@@ -39,7 +39,8 @@
 # test_ping.py (ATF_TESTS_PYTEST: no Python) and in_cksum_test (a unit test
 # of FreeBSD's sbin/ping/utils.c; the base's ping is network_cmds'), and
 # usr.sbin/makefs's makefs_zfs_tests (makefs is built without zfs, as
-# MK_ZFS=no).
+# MK_ZFS=no), and usr.bin/sockstat's sockstat_test (a unit test of FreeBSD's
+# sockstat.c port parser; the base's sockstat row is lsof).
 # The ratchet that holds these tests is base/freebsd_tests/expected.tsv
 # (//kernel:sbsa_freebsd_tests_test).
 source "$(dirname "$0")/../../tools/base/common.sh"
@@ -213,8 +214,10 @@ mkfiles() {
 	local dir="$1" f; mkdir -p "$T/$dir"
 	for f in $(awk '/\\$/ { sub(/\\$/, ""); printf "%s", $0; next } { print }' "$dir/tests/Makefile" |
 		awk '/^\$\{PACKAGE\}FILES\+?=/ { for (i = 2; i <= NF; i++) print $i }'); do
-		if [ -f "$dir/tests/$f" ]; then install -m 0444 "$dir/tests/$f" "$T/$dir/$f"
-		else install -m 0444 "contrib/netbsd-tests/$dir/$f" "$T/$dir/$f"; fi
+		# Installed by its last component, as bsd.files.mk's FILESNAME
+		# (praudit's input/trail is /usr/tests/usr.sbin/praudit/trail).
+		if [ -f "$dir/tests/$f" ]; then install -m 0444 "$dir/tests/$f" "$T/$dir/${f##*/}"
+		else install -m 0444 "contrib/netbsd-tests/$dir/$f" "$T/$dir/${f##*/}"; fi
 	done
 }
 plain_sh() { reg "$1" plain "$2"; install -m 0555 "${3:-$1/tests/$2.sh}" "$T/$1/$2"; }
@@ -311,6 +314,53 @@ la_test usr.bin/bsdcat bsdcat_test cat
 atf_sh usr.bin/cpio functional_test
 la_test usr.bin/cpio bsdcpio_test cpio "$LAS/cpio/cmdline.c" "$LAS/libarchive_fe/lafe_err.c"
 
+# Batch 3 of part 2: usr.bin n to z and usr.sbin (docs/architecture/freebsd-parity.md
+# §2.1). procstat, vmstat (and usr.sbin/extattr) are equivalent rows: their
+# tests run FreeBSD's programs, which the base doesn't have (expected.tsv).
+tap_sh usr.bin/ncal legacy_test; mkfiles usr.bin/ncal
+atf_sh usr.bin/patch unified_patch_test; mkfiles usr.bin/patch
+atf_sh usr.bin/pr basic2_test
+netbsd_sh usr.bin/pr basic; mkfiles usr.bin/pr
+atf_sh usr.bin/printenv printenv_test
+tap_sh usr.bin/printf legacy_test; mkfiles usr.bin/printf
+atf_sh usr.bin/procstat procstat_test
+prog usr.bin/procstat while1 usr.bin/procstat/tests/while1.c
+atf_sh usr.bin/renice renice_test; meta usr.bin/renice renice_test 'is_exclusive="true"'
+atf_sh usr.bin/rs rs_test
+atf_sh usr.bin/sdiff sdiff_test; mkfiles usr.bin/sdiff
+# sed: the Makefile's SUBDIR regress.multitest.out holds multi_test's outputs.
+atf_sh usr.bin/sed sed2_test
+netbsd_sh usr.bin/sed sed_test -e 's,atf_expect_fail "PR bin/28126",,g'
+for t in legacy_test multi_test inplace_race_test; do tap_sh usr.bin/sed $t; done
+meta usr.bin/sed multi_test 'required_files="/usr/share/dict/words"'
+mkfiles usr.bin/sed
+files usr.bin/sed/regress.multitest.out usr.bin/sed/tests/regress.multitest.out \
+	$(cd usr.bin/sed/tests/regress.multitest.out && ls | grep -v '^Makefile')
+atf_sh usr.bin/seq seq_test
+atf_sh usr.bin/sort sort_monthsort_test
+netbsd_sh usr.bin/sort sort_test; mkfiles usr.bin/sort
+atf_sh usr.bin/split split_test
+atf_sh usr.bin/stat readlink_test
+atf_sh usr.bin/stat stat_test
+atf_sh usr.bin/tar functional_test
+la_test usr.bin/tar bsdtar_test tar
+# NeoDarwin's TIMEOUT: bsdtar 3.5.3 hangs in test_option_s (expected.tsv);
+# every other case takes under 5 s.
+meta usr.bin/tar functional_test 'timeout="60"'
+atf_sh usr.bin/tee tee_test; mkfiles usr.bin/tee
+atf_sh usr.bin/touch touch_test
+atf_sh usr.bin/truncate truncate_test
+atf_sh usr.bin/tsort tsort_test
+tap_sh usr.bin/units basics_test
+# unzip: the tests drive libarchive's bsdunzip (BSDUNZIP=$(which bsdunzip));
+# the base's unzip is Info-ZIP's.
+atf_sh usr.bin/unzip functional_test
+la_test usr.bin/unzip bsdunzip_test unzip "$LAS/libarchive_fe/lafe_err.c"
+netbsd_sh usr.bin/vmstat vmstat_test
+atf_sh usr.bin/xargs xargs_test; mkfiles usr.bin/xargs
+atf_sh usr.bin/xinstall install_test
+atf_sh usr.bin/yes yes_test
+
 # --- sbin ---
 atf_c sbin/devd client_test
 for m in 'required_files="/var/run/devd.pid"' 'required_programs="devd"' 'required_user="root"' 'timeout="15"'; do
@@ -374,6 +424,20 @@ meta usr.sbin/makefs makefs_cd9660_tests 'required_kmods="cd9660"'
 meta usr.sbin/makefs makefs_msdos_tests 'required_files="/sbin/mount_msdosfs"'
 meta usr.sbin/makefs makefs_msdos_tests 'required_kmods="msdosfs"'
 script usr.sbin/makefs makefs_tests_common.sh usr.sbin/makefs/tests/makefs_tests_common.sh
+# Batch 3 of part 2 (with usr.bin n to z, above).
+atf_sh usr.sbin/chown chown_test
+atf_sh usr.sbin/extattr extattr_test
+atf_sh usr.sbin/fstyp fstyp_test; mkfiles usr.sbin/fstyp
+atf_sh usr.sbin/praudit praudit_test; mkfiles usr.sbin/praudit
+meta usr.sbin/praudit praudit_test 'timeout="10"'
+# sa: its accounting files are amd64's and i386's (skipped on arm64).
+tap_sh usr.sbin/sa legacy_test; mkfiles usr.sbin/sa
+meta usr.sbin/sa legacy_test 'allowed_architectures="amd64 i386"'
+meta usr.sbin/sa legacy_test 'required_programs="sa"'
+# traceroute: every case in a vnet jail.
+atf_sh usr.sbin/traceroute traceroute_test
+meta usr.sbin/traceroute traceroute_test 'execenv="jail"'
+meta usr.sbin/traceroute traceroute_test 'execenv_jail_params="vnet allow.raw_sockets"'
 
 # The Kyuafiles: suite.test.mk's for each directory (its tests sorted, as
 # _TESTS:O; TEST_METADATA after the name; then include() for each

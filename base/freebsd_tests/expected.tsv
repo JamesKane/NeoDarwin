@@ -2090,8 +2090,165 @@ usr.bin/mktemp/mktemp_test:tmpdir_pflag	FAIL	Apple behaviour: Apple's mktemp (sh
 usr.bin/mktemp/mktemp_test:tmpdir_pflag_dir	PASS	
 usr.bin/mktemp/mktemp_test:tmpdir_pflag_noarg	PASS	
 usr.bin/mktemp/mktemp_test:tmpdir_tflag_oneslash	PASS	
+usr.bin/ncal/legacy_test:main	PASS	
+usr.bin/patch/unified_patch_test:basic	PASS	
+usr.bin/patch/unified_patch_test:file_creation	PASS	
+usr.bin/patch/unified_patch_test:file_nodupe	PASS	
+usr.bin/patch/unified_patch_test:file_removal	PASS	
+usr.bin/patch/unified_patch_test:limited_ctx	PASS	
+usr.bin/patch/unified_patch_test:namespace	PASS	
+usr.bin/patch/unified_patch_test:plinelen	FAIL	Apple behaviour: patch_cmds-72's patch doesn't report "Hunk #1 succeeded" for a hunk past a long line
+usr.bin/pr/basic2_test:across	PASS	
+usr.bin/pr/basic2_test:merge	PASS	
+usr.bin/pr/basic2_test:threecol	PASS	
+usr.bin/pr/basic:basic	PASS	
+usr.bin/printenv/printenv_test:add_delete_env	PASS	
+usr.bin/printenv/printenv_test:basic	PASS	
+usr.bin/printenv/printenv_test:multi	FAIL	Apple behaviour: shell_cmds' printenv takes two names without a usage error
+usr.bin/printenv/printenv_test:stdout	FAIL	Apple behaviour: shell_cmds' printenv exits 0 when its stdout write fails (no "stdout" error)
+usr.bin/printf/legacy_test:main	PASS	
+usr.bin/procstat/procstat_test:binary_info	FAIL	equivalent: procstat is lsof and ps here (libprocstat reads FreeBSD kernel structures); no procstat
+usr.bin/procstat/procstat_test:command_line_arguments	FAIL	equivalent: procstat is lsof and ps here (libprocstat reads FreeBSD kernel structures); no procstat
+usr.bin/procstat/procstat_test:environment	FAIL	equivalent: procstat is lsof and ps here (libprocstat reads FreeBSD kernel structures); no procstat
+usr.bin/procstat/procstat_test:file_descriptor	FAIL	equivalent: procstat is lsof and ps here (libprocstat reads FreeBSD kernel structures); no procstat
+usr.bin/procstat/procstat_test:kernel_stacks	FAIL	equivalent: procstat is lsof and ps here (libprocstat reads FreeBSD kernel structures); no procstat
+usr.bin/renice/renice_test:renice_abs_pgid	PASS	
+usr.bin/renice/renice_test:renice_abs_pid	PASS	
+usr.bin/renice/renice_test:renice_abs_user	FAIL	environment: kyua's unprivileged user is nobody, uid -2 (no tests account until P4-22); getpriority(PRIO_USER, -2) is EINVAL
+usr.bin/renice/renice_test:renice_delim	PASS	
+usr.bin/renice/renice_test:renice_incr_noarg	PASS	
+usr.bin/renice/renice_test:renice_rel_pgid	PASS	
+usr.bin/renice/renice_test:renice_rel_pid	PASS	
+usr.bin/renice/renice_test:renice_rel_user	FAIL	environment: kyua's unprivileged user is nobody, uid -2 (no tests account until P4-22); getpriority(PRIO_USER, -2) is EINVAL
+usr.bin/rs/rs_test:C_flag	PASS	
+usr.bin/rs/rs_test:G_flag	FAIL	Apple behaviour: text_cmds' rs -G (gutter percentage) lays out too many rows
+usr.bin/rs/rs_test:H_flag	PASS	
+usr.bin/rs/rs_test:K_flag	PASS	
+usr.bin/rs/rs_test:S_flag	PASS	
+usr.bin/rs/rs_test:T_flag	PASS	
+usr.bin/rs/rs_test:c_flag	PASS	
+usr.bin/rs/rs_test:e_flag	PASS	
+usr.bin/rs/rs_test:g_flag	FAIL	Apple behaviour: text_cmds' rs -g (gutter width) with rows and columns
+usr.bin/rs/rs_test:h_flag	PASS	
+usr.bin/rs/rs_test:invalid_usage	FAIL	Apple behaviour: text_cmds' rs -w without an argument says "width must be a positive integer", no usage
+usr.bin/rs/rs_test:j_flag	PASS	
+usr.bin/rs/rs_test:k_flag	FAIL	Apple behaviour: text_cmds' rs -k (skip lines) drops input
+usr.bin/rs/rs_test:m_flag	PASS	
+usr.bin/rs/rs_test:n_flag	PASS	
+usr.bin/rs/rs_test:no_arguments	PASS	
+usr.bin/rs/rs_test:rows_2	PASS	
+usr.bin/rs/rs_test:rows_3	PASS	
+usr.bin/rs/rs_test:rows_4	PASS	
+usr.bin/rs/rs_test:s_flag	PASS	
+usr.bin/rs/rs_test:t_flag	PASS	
+usr.bin/rs/rs_test:y_flag	PASS	
+usr.bin/rs/rs_test:z_flag	PASS	
+usr.bin/sdiff/sdiff_test:binary	PASS	
+usr.bin/sdiff/sdiff_test:dot	PASS	
+usr.bin/sdiff/sdiff_test:flags	PASS	
+usr.bin/sdiff/sdiff_test:iflags	PASS	
+usr.bin/sdiff/sdiff_test:merge	PASS	
+usr.bin/sdiff/sdiff_test:oneline	PASS	
+usr.bin/sdiff/sdiff_test:same	PASS	
+usr.bin/sdiff/sdiff_test:short	PASS	
+usr.bin/sdiff/sdiff_test:stdin	PASS	
+usr.bin/sdiff/sdiff_test:tabends	PASS	
+usr.bin/sdiff/sdiff_test:tabs	PASS	
+usr.bin/sdiff/sdiff_test:tflag	PASS	
+usr.bin/sed/inplace_race_test:main	PASS	
+usr.bin/sed/legacy_test:main	PASS	
+usr.bin/sed/multi_test:main	SKIP	environment: no /usr/share/dict/words
+usr.bin/sed/sed2_test:bracket_y	PASS	
+usr.bin/sed/sed2_test:command_D	PASS	
+usr.bin/sed/sed2_test:command_c	PASS	
+usr.bin/sed/sed2_test:commands_on_stdin	PASS	
+usr.bin/sed/sed2_test:escape_subst	FAIL	Apple behaviour: text_cmds' sed takes \r and \t literally in a bracket expression
+usr.bin/sed/sed2_test:hex_subst	FAIL	Apple behaviour: text_cmds' sed accepts \x without hex digits (FreeBSD's refuses)
+usr.bin/sed/sed2_test:inplace_command_q	PASS	
+usr.bin/sed/sed2_test:inplace_hardlink_src	PASS	
+usr.bin/sed/sed2_test:inplace_symlink_src	PASS	
+usr.bin/sed/sed2_test:minus_e	PASS	
+usr.bin/sed/sed_test:c2048	PASS	
+usr.bin/sed/sed_test:emptybackref	PASS	
+usr.bin/sed/sed_test:longlines	PASS	
+usr.bin/sed/sed_test:preserve_leading_ws_ia	PASS	
+usr.bin/sed/sed_test:rangeselection	PASS	
+usr.bin/seq/seq_test:float_rounding	PASS	
+usr.bin/seq/seq_test:format_includes_conversion	PASS	
 usr.bin/soelim/soelim_test:files	PASS	
 usr.bin/soelim/soelim_test:stdin	PASS	
+usr.bin/sort/sort_monthsort_test:monthsort_all_formats_greek	FAIL	missing feature: locales: the base has C and en_US.UTF-8 only (no el_GR.UTF-8)
+usr.bin/sort/sort_monthsort_test:monthsort_english	PASS	
+usr.bin/sort/sort_monthsort_test:monthsort_mixed_formats_greek	FAIL	missing feature: locales: the base has C and en_US.UTF-8 only (no el_GR.UTF-8)
+usr.bin/sort/sort_test:any_char	PASS	
+usr.bin/sort/sort_test:basic	PASS	
+usr.bin/sort/sort_test:bflag	XFAIL	FreeBSD's own expected failure (atf_expect_fail: behaviour differs from NetBSD)
+usr.bin/sort/sort_test:cflag	PASS	
+usr.bin/sort/sort_test:empty_file	PASS	
+usr.bin/sort/sort_test:end_of_options	PASS	
+usr.bin/sort/sort_test:kflag_alpha	PASS	
+usr.bin/sort/sort_test:kflag_limits	PASS	
+usr.bin/sort/sort_test:kflag_many_fields	PASS	
+usr.bin/sort/sort_test:kflag_no_end	PASS	
+usr.bin/sort/sort_test:kflag_nonmonotone	PASS	
+usr.bin/sort/sort_test:kflag_one_field	PASS	
+usr.bin/sort/sort_test:kflag_outofbounds	PASS	
+usr.bin/sort/sort_test:kflag_two_fields	PASS	
+usr.bin/sort/sort_test:long_file	PASS	
+usr.bin/sort/sort_test:long_records	PASS	
+usr.bin/sort/sort_test:mflag	PASS	
+usr.bin/sort/sort_test:mflag_uflag	PASS	
+usr.bin/sort/sort_test:mflag_uflag_first	PASS	
+usr.bin/sort/sort_test:missing_newline	PASS	
+usr.bin/sort/sort_test:nflag	PASS	
+usr.bin/sort/sort_test:nflag_rflag	PASS	
+usr.bin/sort/sort_test:null_bytes	PASS	
+usr.bin/sort/sort_test:oflag	PASS	
+usr.bin/sort/sort_test:oflag_displaced	PASS	
+usr.bin/sort/sort_test:plus_as_path	XFAIL	FreeBSD's own expected failure (atf_expect_fail: behaviour differs from NetBSD)
+usr.bin/sort/sort_test:plus_bad_tempfile	PASS	
+usr.bin/sort/sort_test:plus_no_end	PASS	
+usr.bin/sort/sort_test:plus_nonmonotone	PASS	
+usr.bin/sort/sort_test:plus_one	PASS	
+usr.bin/sort/sort_test:plus_one_minus_two	PASS	
+usr.bin/sort/sort_test:plus_rflag_invalid	XFAIL	FreeBSD's own expected failure (atf_expect_fail: no -R on FreeBSD)
+usr.bin/sort/sort_test:plus_tflag	PASS	
+usr.bin/sort/sort_test:plus_zero	PASS	
+usr.bin/sort/sort_test:rflag	PASS	
+usr.bin/sort/sort_test:sflag	PASS	
+usr.bin/sort/sort_test:sflag_many_files	PASS	
+usr.bin/sort/sort_test:tflag	PASS	
+usr.bin/sort/sort_test:tflag_alphabetic	PASS	
+usr.bin/sort/sort_test:tflag_char_pos	PASS	
+usr.bin/sort/sort_test:tflag_whitespace	PASS	
+usr.bin/sort/sort_test:uflag	PASS	
+usr.bin/sort/sort_test:uflag_rflag	PASS	
+usr.bin/split/split_test:autoextend	FAIL	Apple behaviour: text_cmds' split doesn't extend the suffix (xz -> xzaaa) when it runs out
+usr.bin/split/split_test:bytes	PASS	
+usr.bin/split/split_test:chunks	PASS	
+usr.bin/split/split_test:continue	PASS	
+usr.bin/split/split_test:duplicate_linecount	PASS	
+usr.bin/split/split_test:larger_suffix_length	PASS	
+usr.bin/split/split_test:long_lines	PASS	
+usr.bin/split/split_test:noautoextend	PASS	
+usr.bin/split/split_test:numeric_suffix	PASS	
+usr.bin/split/split_test:pattern	PASS	
+usr.bin/split/split_test:reautoextend	FAIL	Apple behaviour: text_cmds' split doesn't extend the suffix (xz -> xzaaa) when it runs out
+usr.bin/split/split_test:sensible_lines	PASS	
+usr.bin/split/split_test:undocumented_kludge	PASS	
+usr.bin/stat/readlink_test:basic	PASS	
+usr.bin/stat/readlink_test:f_flag	PASS	
+usr.bin/stat/readlink_test:n_flag	PASS	
+usr.bin/stat/stat_test:F_flag	PASS	
+usr.bin/stat/stat_test:devname	FAIL	missing feature: no mdconfig (md(4) disks; sbin/mdconfig is P4-21's, unbuilt)
+usr.bin/stat/stat_test:h_flag	FAIL	missing feature: no tmpfs (mount -t tmpfs)
+usr.bin/stat/stat_test:l_flag	PASS	
+usr.bin/stat/stat_test:n_flag	PASS	
+usr.bin/stat/stat_test:q_flag	PASS	
+usr.bin/stat/stat_test:r_flag	PASS	
+usr.bin/stat/stat_test:s_flag	PASS	
+usr.bin/stat/stat_test:t_flag	PASS	
+usr.bin/stat/stat_test:x_flag	PASS	
 usr.bin/tail/tail_test:broken_pipe	FAIL	Apple behaviour: Apple's tail dies of SIGPIPE (status 141); FreeBSD's reports "tail: stdout" and exits 1
 usr.bin/tail/tail_test:empty_r	PASS	
 usr.bin/tail/tail_test:file_r	PASS	
@@ -2116,7 +2273,122 @@ usr.bin/tail/tail_test:tail_b	FAIL	Apple flag: Apple's tail -b +N fails with EIN
 usr.bin/tail/tail_test:tail_c	PASS	
 usr.bin/tail/tail_test:tail_n	PASS	
 usr.bin/tail/tail_test:verbose_header	PASS	
+usr.bin/tar/functional_test:test_0	PASS	
+usr.bin/tar/functional_test:test_basic	FAIL	environment: bsdtar_test runs as nobody, uid -2 (4294967294), too large for ustar's uid field: "Numeric user ID too large" (no tests account until P4-22)
+usr.bin/tar/functional_test:test_copy	FAIL	environment: bsdtar_test runs as nobody, uid -2 (4294967294), too large for ustar's uid field: "Numeric user ID too large" (no tests account until P4-22)
+usr.bin/tar/functional_test:test_crlf_mtree	FAIL	Apple behaviour: bsdtar 3.5.3 (libarchive-158; the tests are 3.8's) can't read an mtree file list with CRLF line ends
+usr.bin/tar/functional_test:test_empty_mtree	PASS	
+usr.bin/tar/functional_test:test_extract_tar_Z	PASS	
+usr.bin/tar/functional_test:test_extract_tar_absolute_paths	PASS	
+usr.bin/tar/functional_test:test_extract_tar_bz2	PASS	
+usr.bin/tar/functional_test:test_extract_tar_grz	PASS	
+usr.bin/tar/functional_test:test_extract_tar_gz	PASS	
+usr.bin/tar/functional_test:test_extract_tar_lrz	PASS	
+usr.bin/tar/functional_test:test_extract_tar_lz	PASS	
+usr.bin/tar/functional_test:test_extract_tar_lz4	PASS	
+usr.bin/tar/functional_test:test_extract_tar_lzma	PASS	
+usr.bin/tar/functional_test:test_extract_tar_lzo	PASS	
+usr.bin/tar/functional_test:test_extract_tar_xz	PASS	
+usr.bin/tar/functional_test:test_extract_tar_zstd	PASS	
+usr.bin/tar/functional_test:test_format_newc	PASS	
+usr.bin/tar/functional_test:test_help	PASS	
+usr.bin/tar/functional_test:test_leading_slash	PASS	
+usr.bin/tar/functional_test:test_list_item	PASS	
+usr.bin/tar/functional_test:test_missing_file	PASS	
+usr.bin/tar/functional_test:test_option_C_mtree	PASS	
+usr.bin/tar/functional_test:test_option_C_upper	PASS	
+usr.bin/tar/functional_test:test_option_H_upper	PASS	
+usr.bin/tar/functional_test:test_option_L_upper	PASS	
+usr.bin/tar/functional_test:test_option_O_upper	PASS	
+usr.bin/tar/functional_test:test_option_T_upper	PASS	
+usr.bin/tar/functional_test:test_option_U_upper	PASS	
+usr.bin/tar/functional_test:test_option_X_upper	PASS	
+usr.bin/tar/functional_test:test_option_a	PASS	
+usr.bin/tar/functional_test:test_option_acls	PASS	
+usr.bin/tar/functional_test:test_option_b	FAIL	Apple behaviour: bsdtar 3.5.3 (libarchive-158) pads an archive written to a regular file
+usr.bin/tar/functional_test:test_option_b64encode	PASS	
+usr.bin/tar/functional_test:test_option_exclude	PASS	
+usr.bin/tar/functional_test:test_option_exclude_vcs	PASS	
+usr.bin/tar/functional_test:test_option_fflags	PASS	
+usr.bin/tar/functional_test:test_option_gid_gname	FAIL	environment: bsdtar_test runs as nobody, uid -2 (4294967294), too large for ustar's uid field: "Numeric user ID too large" (no tests account until P4-22)
+usr.bin/tar/functional_test:test_option_group	FAIL	environment: bsdtar_test runs as nobody, uid -2 (4294967294), too large for ustar's uid field: "Numeric user ID too large" (no tests account until P4-22)
+usr.bin/tar/functional_test:test_option_grzip	PASS	
+usr.bin/tar/functional_test:test_option_ignore_zeros_mode_c	PASS	
+usr.bin/tar/functional_test:test_option_ignore_zeros_mode_r	PASS	
+usr.bin/tar/functional_test:test_option_ignore_zeros_mode_t	PASS	
+usr.bin/tar/functional_test:test_option_ignore_zeros_mode_u	PASS	
+usr.bin/tar/functional_test:test_option_ignore_zeros_mode_x	PASS	
+usr.bin/tar/functional_test:test_option_j	PASS	
+usr.bin/tar/functional_test:test_option_k	PASS	
+usr.bin/tar/functional_test:test_option_keep_newer_files	PASS	
+usr.bin/tar/functional_test:test_option_lrzip	PASS	
+usr.bin/tar/functional_test:test_option_lz4	PASS	
+usr.bin/tar/functional_test:test_option_lzma	PASS	
+usr.bin/tar/functional_test:test_option_lzop	PASS	
+usr.bin/tar/functional_test:test_option_mtime	FAIL	Apple flag: bsdtar 3.5.3 (libarchive-158) has no --mtime (3.7's)
+usr.bin/tar/functional_test:test_option_n	PASS	
+usr.bin/tar/functional_test:test_option_newer_than	PASS	
+usr.bin/tar/functional_test:test_option_nodump	PASS	
+usr.bin/tar/functional_test:test_option_older_than	PASS	
+usr.bin/tar/functional_test:test_option_owner	FAIL	environment: bsdtar_test runs as nobody, uid -2 (4294967294), too large for ustar's uid field: "Numeric user ID too large" (no tests account until P4-22)
+usr.bin/tar/functional_test:test_option_passphrase	PASS	
+usr.bin/tar/functional_test:test_option_q	PASS	
+usr.bin/tar/functional_test:test_option_r	FAIL	environment: bsdtar_test runs as nobody, uid -2 (4294967294), too large for ustar's uid field: "Numeric user ID too large" (no tests account until P4-22)
+usr.bin/tar/functional_test:test_option_s	KILLED	Apple behaviour: bsdtar 3.5.3 (libarchive-158) hangs in test_option_s (kyua's timeout, 60 s here)
+usr.bin/tar/functional_test:test_option_safe_writes	FAIL	Apple behaviour: bsdtar 3.5.3 (libarchive-158): --safe-writes doesn't replace a directory with a file
+usr.bin/tar/functional_test:test_option_stdout_size_exceeds_declared	FAIL	Apple behaviour: bsdtar 3.5.3 (libarchive-158) writes past a zip entry's declared size to stdout (fixed in 3.8)
+usr.bin/tar/functional_test:test_option_uid_uname	FAIL	environment: bsdtar_test runs as nobody, uid -2 (4294967294), too large for ustar's uid field: "Numeric user ID too large" (no tests account until P4-22)
+usr.bin/tar/functional_test:test_option_uuencode	PASS	
+usr.bin/tar/functional_test:test_option_xattrs	PASS	
+usr.bin/tar/functional_test:test_option_xz	PASS	
+usr.bin/tar/functional_test:test_option_z	PASS	
+usr.bin/tar/functional_test:test_option_zstd	PASS	
+usr.bin/tar/functional_test:test_patterns	PASS	
+usr.bin/tar/functional_test:test_print_longpath	PASS	
+usr.bin/tar/functional_test:test_stdio	PASS	
+usr.bin/tar/functional_test:test_strip_components	PASS	
+usr.bin/tar/functional_test:test_symlink_dir	PASS	
+usr.bin/tar/functional_test:test_version	PASS	
+usr.bin/tee/tee_test:append	PASS	
+usr.bin/tee/tee_test:device	PASS	
+usr.bin/tee/tee_test:multiple_file	PASS	
+usr.bin/tee/tee_test:sigint_ignored	SKIP	missing feature: no porch(1) (FreeBSD 16's, after the 15.1-RELEASE inventory)
+usr.bin/tee/tee_test:single_file	PASS	
+usr.bin/tee/tee_test:unixsock	FAIL	Apple behaviour: shell_cmds' tee can't write to a Unix-domain socket path (FreeBSD's connects to it)
+usr.bin/touch/touch_test:touch_absolute	FAIL	Apple behaviour: file_cmds' touch refuses -t 196912312359.59 (time -1)
+usr.bin/touch/touch_test:touch_copy	PASS	
+usr.bin/touch/touch_test:touch_just_atime	FAIL	Apple behaviour: after touch -a -t, stat -f%a shows the current time (Apple's touch or HFS+; not yet looked into)
+usr.bin/touch/touch_test:touch_just_mtime	PASS	
+usr.bin/touch/touch_test:touch_multiple	PASS	
+usr.bin/touch/touch_test:touch_nocreate	PASS	
+usr.bin/touch/touch_test:touch_none	PASS	
+usr.bin/touch/touch_test:touch_one	PASS	
+usr.bin/touch/touch_test:touch_relative	PASS	
+usr.bin/touch/touch_test:touch_symlink_h_flag	PASS	
+usr.bin/touch/touch_test:touch_symlink_no_h_flag	PASS	
 usr.bin/tr/legacy_test:main	PASS	
+usr.bin/truncate/truncate_test:bad_refer	PASS	
+usr.bin/truncate/truncate_test:bad_truncate	PASS	
+usr.bin/truncate/truncate_test:cannot_open	PASS	
+usr.bin/truncate/truncate_test:deallocate	FAIL	Apple stat: the test uses FreeBSD's stat -h (holes)
+usr.bin/truncate/truncate_test:illegal_option	FAIL	Apple flag: file_cmds' truncate has no -d (deallocate; its usage lacks the line)
+usr.bin/truncate/truncate_test:illegal_size	PASS	
+usr.bin/truncate/truncate_test:negative	PASS	
+usr.bin/truncate/truncate_test:new_absolute_grow	PASS	
+usr.bin/truncate/truncate_test:new_absolute_shrink	PASS	
+usr.bin/truncate/truncate_test:new_relative_grow	PASS	
+usr.bin/truncate/truncate_test:new_relative_shrink	PASS	
+usr.bin/truncate/truncate_test:new_zero	PASS	
+usr.bin/truncate/truncate_test:no_files	FAIL	Apple flag: file_cmds' truncate has no -d (deallocate; its usage lacks the line)
+usr.bin/truncate/truncate_test:opt_c	PASS	
+usr.bin/truncate/truncate_test:opt_rs	FAIL	Apple flag: file_cmds' truncate has no -d (deallocate; its usage lacks the line)
+usr.bin/truncate/truncate_test:reference	PASS	
+usr.bin/truncate/truncate_test:rounddown	PASS	
+usr.bin/truncate/truncate_test:rounddown_zero	PASS	
+usr.bin/truncate/truncate_test:roundup	PASS	
+usr.bin/truncate/truncate_test:too_large_size	PASS	
+usr.bin/tsort/tsort_test:basic	PASS	
+usr.bin/tsort/tsort_test:cycle	PASS	
 usr.bin/uniq/uniq_test:all_repeated	PASS	
 usr.bin/uniq/uniq_test:basic	PASS	
 usr.bin/uniq/uniq_test:count	PASS	
@@ -2132,6 +2404,37 @@ usr.bin/uniq/uniq_test:skip_fields	PASS
 usr.bin/uniq/uniq_test:skip_fields_tab	PASS	
 usr.bin/uniq/uniq_test:stdout	PASS	
 usr.bin/uniq/uniq_test:unique	PASS	
+usr.bin/units/basics_test:main	PASS	
+usr.bin/unzip/functional_test:test_0	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_C	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_I	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_L	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_P_encryption	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_Z1	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_basic	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_d_after_zipfile	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_d_before_zipfile	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_doubledash	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_f	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_glob	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_j	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_n	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_not_exist	PASS	
+usr.bin/unzip/functional_test:test_o	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_p	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_q	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_singlefile	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_symlink	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_symlink_dotdot	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_t	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_t_bad	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_u	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_version	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_x_multiple	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_x_multiple_with_d	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/unzip/functional_test:test_x_single	FAIL	Apple behaviour: unzip is Info-ZIP UnZip 6.0 (zip-29); the tests drive libarchive's bsdunzip ($(which bsdunzip)), which the base doesn't install
+usr.bin/vmstat/vmstat_test:default	FAIL	equivalent: vmstat is vm_stat here (system_cmds); no vmstat
+usr.bin/vmstat/vmstat_test:opt_s	FAIL	equivalent: vmstat is vm_stat here (system_cmds); no vmstat
 usr.bin/wc/wc_test:basic	PASS	
 usr.bin/wc/wc_test:blank	PASS	
 usr.bin/wc/wc_test:empty	PASS	
@@ -2144,6 +2447,77 @@ usr.bin/wc/wc_test:total	PASS
 usr.bin/wc/wc_test:unterminated	PASS	
 usr.bin/wc/wc_test:usage	PASS	
 usr.bin/wc/wc_test:whitespace	PASS	
+usr.bin/xargs/xargs_test:xargs_0	PASS	
+usr.bin/xargs/xargs_test:xargs_0I	PASS	
+usr.bin/xargs/xargs_test:xargs_0J	PASS	
+usr.bin/xargs/xargs_test:xargs_0L	PASS	
+usr.bin/xargs/xargs_test:xargs_0P1	PASS	
+usr.bin/xargs/xargs_test:xargs_I	PASS	
+usr.bin/xargs/xargs_test:xargs_J	PASS	
+usr.bin/xargs/xargs_test:xargs_L	PASS	
+usr.bin/xargs/xargs_test:xargs_P1	PASS	
+usr.bin/xargs/xargs_test:xargs_R	PASS	
+usr.bin/xargs/xargs_test:xargs_R_1	PASS	
+usr.bin/xargs/xargs_test:xargs_n1	PASS	
+usr.bin/xargs/xargs_test:xargs_n2	PASS	
+usr.bin/xargs/xargs_test:xargs_n2P0	PASS	
+usr.bin/xargs/xargs_test:xargs_n3	PASS	
+usr.bin/xargs/xargs_test:xargs_nargmax	FAIL	Apple behaviour: shell_cmds' xargs accepts -n above its 1048576 limit
+usr.bin/xargs/xargs_test:xargs_normal	PASS	
+usr.bin/xargs/xargs_test:xargs_parallel1	PASS	
+usr.bin/xargs/xargs_test:xargs_parallel2	PASS	
+usr.bin/xargs/xargs_test:xargs_parallel3	PASS	
+usr.bin/xargs/xargs_test:xargs_parallel4	PASS	
+usr.bin/xargs/xargs_test:xargs_quotes	PASS	
+usr.bin/xinstall/install_test:copy_self	PASS	
+usr.bin/xinstall/install_test:copy_self_comparing	PASS	
+usr.bin/xinstall/install_test:copy_self_safe	PASS	
+usr.bin/xinstall/install_test:copy_self_safe_comparing	PASS	
+usr.bin/xinstall/install_test:copy_to_empty	PASS	
+usr.bin/xinstall/install_test:copy_to_nonexistent	PASS	
+usr.bin/xinstall/install_test:copy_to_nonexistent_backup	PASS	
+usr.bin/xinstall/install_test:copy_to_nonexistent_backup_safe	PASS	
+usr.bin/xinstall/install_test:copy_to_nonexistent_comparing	PASS	
+usr.bin/xinstall/install_test:copy_to_nonexistent_dir	FAIL	Apple behaviour: file_cmds' install names its temporary file (/nonexistent/INS@...) in the error
+usr.bin/xinstall/install_test:copy_to_nonexistent_preserving	PASS	
+usr.bin/xinstall/install_test:copy_to_nonexistent_safe	PASS	
+usr.bin/xinstall/install_test:copy_to_nonexistent_safe_comparing	PASS	
+usr.bin/xinstall/install_test:digest	FAIL	Apple flag: file_cmds' install has no md5 digest for -h
+usr.bin/xinstall/install_test:hard_link	PASS	
+usr.bin/xinstall/install_test:incompatible_opts	FAIL	Apple behaviour: file_cmds' install accepts -s with -d and with -l
+usr.bin/xinstall/install_test:metalog	PASS	
+usr.bin/xinstall/install_test:mkdir_simple	PASS	
+usr.bin/xinstall/install_test:null	PASS	
+usr.bin/xinstall/install_test:overwrite	PASS	
+usr.bin/xinstall/install_test:overwrite_backup	PASS	
+usr.bin/xinstall/install_test:overwrite_backup_comparing	PASS	
+usr.bin/xinstall/install_test:overwrite_backup_safe	PASS	
+usr.bin/xinstall/install_test:overwrite_backup_safe_comparing	PASS	
+usr.bin/xinstall/install_test:overwrite_comparing	PASS	
+usr.bin/xinstall/install_test:overwrite_eq	PASS	
+usr.bin/xinstall/install_test:overwrite_eq_comparing	PASS	
+usr.bin/xinstall/install_test:overwrite_eq_safe	PASS	
+usr.bin/xinstall/install_test:overwrite_eq_safe_comparing	PASS	
+usr.bin/xinstall/install_test:overwrite_safe	PASS	
+usr.bin/xinstall/install_test:overwrite_safe_comparing	PASS	
+usr.bin/xinstall/install_test:set_optional_exec	PASS	
+usr.bin/xinstall/install_test:set_owner_group_mode	PASS	
+usr.bin/xinstall/install_test:set_owner_group_mode_unpriv	PASS	
+usr.bin/xinstall/install_test:stdin	FAIL	Apple flag: file_cmds' install can't install - (stdin)
+usr.bin/xinstall/install_test:strip_changing	PASS	
+usr.bin/xinstall/install_test:strip_changing_comparing	PASS	
+usr.bin/xinstall/install_test:strip_changing_overwrite	PASS	
+usr.bin/xinstall/install_test:strip_changing_overwrite_comparing	PASS	
+usr.bin/xinstall/install_test:strip_changing_overwrite_eq	PASS	
+usr.bin/xinstall/install_test:strip_changing_overwrite_eq_comparing	PASS	
+usr.bin/xinstall/install_test:strip_noop	PASS	
+usr.bin/xinstall/install_test:symbolic_link	PASS	
+usr.bin/xinstall/install_test:symbolic_link_absolute	PASS	
+usr.bin/xinstall/install_test:symbolic_link_relative	PASS	
+usr.bin/xinstall/install_test:symbolic_link_relative_absolute_common	PASS	
+usr.bin/xinstall/install_test:symbolic_link_relative_absolute_source_and_dest1	PASS	
+usr.bin/xinstall/install_test:symbolic_link_relative_absolute_source_and_dest1_double_slash	PASS	
+usr.bin/xinstall/install_test:symbolic_link_relative_absolute_source_and_dest2	PASS	
 usr.bin/xo/functional_test:xo_01__H	PASS	
 usr.bin/xo/functional_test:xo_01__HIPx	PASS	
 usr.bin/xo/functional_test:xo_01__HP	PASS	
@@ -2152,12 +2526,24 @@ usr.bin/xo/functional_test:xo_01__JP	PASS
 usr.bin/xo/functional_test:xo_01__T	PASS	
 usr.bin/xo/functional_test:xo_01__X	PASS	
 usr.bin/xo/functional_test:xo_01__XP	PASS	
+usr.bin/yes/yes_test:argv	FAIL	Apple ps: ps -o args= of `yes y` shows "y\012LOGNAME=root" (the arguments run into the environment; ps or the kernel's procargs, not yet looked into)
+usr.bin/yes/yes_test:multi	FAIL	Apple behaviour: shell_cmds' yes repeats only its first argument
+usr.bin/yes/yes_test:none	PASS	
+usr.bin/yes/yes_test:one	PASS	
+usr.bin/yes/yes_test:stdout	PASS	
 usr.sbin/certctl/certctl_test:list	PASS	
 usr.sbin/certctl/certctl_test:metalog	PASS	
 usr.sbin/certctl/certctl_test:misc	PASS	
 usr.sbin/certctl/certctl_test:rehash	PASS	
 usr.sbin/certctl/certctl_test:trust	PASS	
 usr.sbin/certctl/certctl_test:untrust	PASS	
+usr.sbin/chown/chown_test:RH_flag	PASS	
+usr.sbin/chown/chown_test:RL_flag	PASS	
+usr.sbin/chown/chown_test:RP_flag	PASS	
+usr.sbin/chown/chown_test:f_flag	PASS	
+usr.sbin/chown/chown_test:h_flag	PASS	
+usr.sbin/chown/chown_test:v_flag	FAIL	Apple behaviour: file_cmds' chown -v names a file whose owner didn't change
+usr.sbin/chown/chown_test:x_flag	FAIL	missing feature: no mdconfig (md(4) disks; sbin/mdconfig is P4-21's, unbuilt)
 usr.sbin/daemon/daemon_test:both_pidfile	FAIL	missing feature: setproctitle(3) is a no-op in base/freebsd_cmds' compat layer, so ps shows no "daemon: sleep" title
 usr.sbin/daemon/daemon_test:chdir	PASS	
 usr.sbin/daemon/daemon_test:child_pidfile	PASS	
@@ -2170,6 +2556,47 @@ usr.sbin/daemon/daemon_test:supervisor_pidfile	FAIL	missing feature: setproctitl
 usr.sbin/daemon/daemon_test:supervisor_pidfile_lock	PASS	
 usr.sbin/daemon/daemon_test:title	FAIL	missing feature: setproctitle(3) is a no-op (compat layer); no -t title in ps
 usr.sbin/daemon/daemon_test:user	FAIL	Apple ps: -u takes a user list on macOS (ps -up PID); FreeBSD's -u is the user-oriented format
+usr.sbin/extattr/extattr_test:bad_namespace	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:hex	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:hex_nonascii	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:long_name	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:loud	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:noattrs	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:nonexistent_file	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:null	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:one_system_attr	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:one_user_attr	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:stdin	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:stringify	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:symlink	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:symlink_nofollow	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:system_and_user_attrs	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:two_files	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:two_files_force	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:two_user_attrs	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/extattr/extattr_test:unprivileged_user_cannot_set_system_attr	FAIL	equivalent: extattr is xattr here (file_cmds); no setextattr, getextattr, lsextattr, rmextattr
+usr.sbin/fstyp/fstyp_test:befs	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:cd9660	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:cd9660_label	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:dir	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:empty	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:exfat	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:exfat_label	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:ext2	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:ext3	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:ext4	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:ext4_label	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:fat12	FAIL	missing feature: no newfs_msdos (P3-04)
+usr.sbin/fstyp/fstyp_test:fat16	FAIL	missing feature: no newfs_msdos (P3-04)
+usr.sbin/fstyp/fstyp_test:fat32	FAIL	missing feature: no newfs_msdos (P3-04)
+usr.sbin/fstyp/fstyp_test:fat32_label	FAIL	missing feature: no newfs_msdos (P3-04)
+usr.sbin/fstyp/fstyp_test:ntfs	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:ntfs_with_label	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:ufs1	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:ufs2	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:ufs2_label	FAIL	Apple behaviour: diskdev_cmds' fstyp is macOS's (fstyp_hfs, fstyp_msdos, fstyp_ntfs, fstyp_udf helpers): no type for these images, status 0 for none
+usr.sbin/fstyp/fstyp_test:ufs_on_device	FAIL	missing feature: no mdconfig (md(4) disks; sbin/mdconfig is P4-21's, unbuilt)
+usr.sbin/fstyp/fstyp_test:zeros	FAIL	environment: HFS+ has no sparse files: truncate -s 256m fills the 256 MB test volume
 usr.sbin/makefs/makefs_cd9660_tests:D_flag	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
 usr.sbin/makefs/makefs_cd9660_tests:F_flag	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
 usr.sbin/makefs/makefs_cd9660_tests:T_flag_F_flag	SKIP	missing feature: mounts the image with mount_cd9660 (cd9660 isn't in the base)
@@ -2223,3 +2650,15 @@ usr.sbin/nmtree/nmtree_test:netbsd6_ignore	PASS
 usr.sbin/nmtree/nmtree_test:netbsd6_merge	PASS	
 usr.sbin/nmtree/nmtree_test:netbsd6_nonemptydir	PASS	
 usr.sbin/nmtree/nmtree_test:netbsd6_onlyfile	PASS	
+usr.sbin/praudit/praudit_test:praudit_delim_comma	FAIL	Apple behaviour: OpenBSM-21's praudit exits 1 after the trail's last record (FreeBSD's OpenBSM exits 0)
+usr.sbin/praudit/praudit_test:praudit_delim_underscore	FAIL	Apple behaviour: OpenBSM-21's praudit exits 1 after the trail's last record (FreeBSD's OpenBSM exits 0)
+usr.sbin/praudit/praudit_test:praudit_no_args	FAIL	Apple behaviour: OpenBSM-21's praudit exits 1 after the trail's last record (FreeBSD's OpenBSM exits 0)
+usr.sbin/praudit/praudit_test:praudit_numeric_form	FAIL	Apple behaviour: OpenBSM-21's praudit exits 1 after the trail's last record (FreeBSD's OpenBSM exits 0)
+usr.sbin/praudit/praudit_test:praudit_raw_form	FAIL	Apple behaviour: OpenBSM-21's praudit exits 1 after the trail's last record (FreeBSD's OpenBSM exits 0)
+usr.sbin/praudit/praudit_test:praudit_raw_short_exclusive	PASS	
+usr.sbin/praudit/praudit_test:praudit_same_line	FAIL	Apple behaviour: OpenBSM-21's praudit exits 1 after the trail's last record (FreeBSD's OpenBSM exits 0)
+usr.sbin/praudit/praudit_test:praudit_short_form	FAIL	Apple behaviour: OpenBSM-21's praudit exits 1 after the trail's last record (FreeBSD's OpenBSM exits 0)
+usr.sbin/praudit/praudit_test:praudit_sync_to_next_record	FAIL	Apple behaviour: OpenBSM-21's praudit exits 1 after the trail's last record (FreeBSD's OpenBSM exits 0)
+usr.sbin/praudit/praudit_test:praudit_xml_form	FAIL	Apple behaviour: OpenBSM-21's praudit exits 1 after the trail's last record (FreeBSD's OpenBSM exits 0)
+usr.sbin/sa/legacy_test:main	SKIP	FreeBSD expected failure: allowed_architectures="amd64 i386" (its accounting files are those architectures')
+usr.sbin/traceroute/traceroute_test:__test_cases_list__	BROKEN	missing feature: runs in a vnet jail (execenv=jail); kyua without jails refuses to list it

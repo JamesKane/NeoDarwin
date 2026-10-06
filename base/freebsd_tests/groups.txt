@@ -1,5 +1,5 @@
 # The directories of /usr/tests that //kernel:sbsa_freebsd_tests_test runs
-# (base/freebsd_tests/suite_test.sh), and the shard (0-11) each runs in.
+# (base/freebsd_tests/suite_test.sh), and the shard (0-14) each runs in.
 bin/cat	0
 bin/chflags	0
 bin/chmod	0
@@ -72,13 +72,44 @@ usr.bin/m4	1
 usr.bin/mail	11
 usr.bin/mkimg	6
 usr.bin/mktemp	11
+usr.bin/ncal	12
+usr.bin/patch	12
+usr.bin/pr	12
+usr.bin/printenv	12
+usr.bin/printf	12
+usr.bin/procstat	12
+usr.bin/renice	12
+usr.bin/rs	12
+usr.bin/sdiff	12
+usr.bin/sed	12
+usr.bin/seq	12
 usr.bin/soelim	1
+usr.bin/sort	13
+usr.bin/split	13
+usr.bin/stat	13
 usr.bin/tail	2
+usr.bin/tar	13
+usr.bin/tee	13
+usr.bin/touch	13
 usr.bin/tr	2
+usr.bin/truncate	13
+usr.bin/tsort	13
 usr.bin/uniq	2
+usr.bin/units	13
+usr.bin/unzip	13
+usr.bin/vmstat	14
 usr.bin/wc	2
+usr.bin/xargs	14
+usr.bin/xinstall	14
 usr.bin/xo	2
+usr.bin/yes	14
 usr.sbin/certctl	7
+usr.sbin/chown	14
 usr.sbin/daemon	1
+usr.sbin/extattr	14
+usr.sbin/fstyp	14
 usr.sbin/makefs	7
 usr.sbin/nmtree	2
+usr.sbin/praudit	14
+usr.sbin/sa	14
+usr.sbin/traceroute	14
