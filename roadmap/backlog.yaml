@@ -457,7 +457,7 @@ epics:
     owner: userland
     status: doing
     depends: [P4-20, P1-08]
-    exit: "every inventory row marked base is built and installed, and passes its program's tests from the FreeBSD test suite where one exists"
+    exit: "every inventory row marked base is built and installed, and passes its program's tests from the FreeBSD test suite where one exists: every case is PASS or XFAIL, or carries a reviewed structural reason in base/freebsd_tests/expected.tsv (an Apple implementation, an equivalent, HFS+, an out-of-scope subsystem), which a check enforces (user decision 2026-10-06)"
     doc: docs/architecture/freebsd-parity.md
   - id: P4-22
     title: "Accounts and authentication — pw-style useradd/groupadd over the flat files, pwd.db, login.conf, OpenPAM with libSystem-only modules, su"
