@@ -1,0 +1,190 @@
+From: NeoDarwin
+Subject: [PATCH] rtsold: run resolvconf only when the name servers change
+
+ra_opt_handler() runs on every router advertisement and ran
+`resolvconf -a <if>:slaac` each time, with the same RDNSS and DNSSL lines.
+resolvconf(8) then compares, rewrites nothing and exits, but it is a shell
+script: each run is sh, mkdir (its lock), two subshells and two rm, about
+six processes per advertisement. With a router advertising every few
+seconds (rtadvd's MaxRtrAdvInterval can be 4 s, as in
+//kernel:sbsa_rtadvd_test) the two guests did nothing else, and under host
+load the execs' console traces split the test's expected lines (kernel
+patch 0045 removes those traces).
+
+rtsold now remembers, per resolvconf key (rsid), the text resolvconf last
+took (exit status 0) and runs it again only when the text differs; a
+failed run, a delete (RESDEL) or a restart of rtsold forgets it, so the
+next advertisement adds it again. call_script() returns the script's wait
+status for this. Expiry is unchanged: an expired RDNSS or DNSSL entry
+changes the text, or empties it, which runs `resolvconf -d` as before.
+
+Rebase-risk: low (rtsol.c's ra_opt_rdnss_dispatch() and call_script()).
+--- a/rtsol.c
++++ b/rtsol.c
+@@ -72,7 +72,9 @@
+ static char rsid[IFNAMSIZ + 1 + sizeof(DNSINFO_ORIGIN_LABEL) + 1 + NI_MAXHOST];
+ struct ifinfo_head_t ifinfo_head = TAILQ_HEAD_INITIALIZER(ifinfo_head);
+ 
+-static void call_script(const char *const *, struct script_msg_head_t *);
++static int call_script(const char *const *, struct script_msg_head_t *);
++static int resadd_unchanged(const char *, struct script_msg_head_t *);
++static void resadd_remember(const char *, struct script_msg_head_t *);
+ static size_t dname_labeldec(char *, size_t, const char *);
+ static struct ra_opt *find_raopt(struct rainfo *, int, void *, size_t);
+ static int ra_opt_rdnss_dispatch(struct ifinfo *, struct rainfo *,
+@@ -705,10 +707,25 @@
+ 		error = 1;
+ 		goto ra_opt_rdnss_freeit;
+ 	}
+-	if (!TAILQ_EMPTY(sm_rdnss_head))
+-		CALL_SCRIPT(RESADD, sm_rdnss_head);
+-	else if (ifi->ifi_rdnss == IFI_DNSOPT_STATE_RECEIVED ||
++	if (!TAILQ_EMPTY(sm_rdnss_head)) {
++		/*
++		 * Every router advertisement gets here. Run resolvconf only
++		 * when what it would be given has changed: it would rewrite
++		 * nothing, and it costs several processes per advertisement.
++		 */
++		if (resadd_unchanged(rsid, sm_rdnss_head)) {
++			warnmsg(LOG_DEBUG, __func__,
++			    "%s: name servers unchanged", rsid);
++		} else {
++			const char *const sarg[] = { _ARGS_RESADD, NULL };
++			if (call_script(sarg, sm_rdnss_head) == 0)
++				resadd_remember(rsid, sm_rdnss_head);
++			else
++				resadd_remember(rsid, NULL);
++		}
++	} else if (ifi->ifi_rdnss == IFI_DNSOPT_STATE_RECEIVED ||
+ 	    ifi->ifi_dnssl == IFI_DNSOPT_STATE_RECEIVED) {
++		resadd_remember(rsid, NULL);
+ 		CALL_SCRIPT(RESDEL, NULL);
+ 		ifi->ifi_rdnss = IFI_DNSOPT_STATE_NOINFO;
+ 		ifi->ifi_dnssl = IFI_DNSOPT_STATE_NOINFO;
+@@ -744,9 +761,92 @@
+ 	}
+ 
+ 	return (rao);
++}
++
++/*
++ * What resolvconf -a was last given, successfully, for each rsid, so that
++ * an advertisement repeating it doesn't run resolvconf again.
++ */
++struct resadd_last {
++	TAILQ_ENTRY(resadd_last) next;
++	char *rsid;
++	char *msg;
++};
++static TAILQ_HEAD(, resadd_last) resadd_lasts =
++    TAILQ_HEAD_INITIALIZER(resadd_lasts);
++
++static char *
++resadd_join(struct script_msg_head_t *sm_head)
++{
++	struct script_msg *smp;
++	size_t len = 1;
++	char *msg;
++
++	TAILQ_FOREACH(smp, sm_head, sm_next)
++		len += strlen(smp->sm_msg);
++	if ((msg = malloc(len)) == NULL)
++		return (NULL);
++	msg[0] = '\0';
++	TAILQ_FOREACH(smp, sm_head, sm_next)
++		strlcat(msg, smp->sm_msg, len);
++	return (msg);
++}
++
++static struct resadd_last *
++resadd_find(const char *id)
++{
++	struct resadd_last *rl;
++
++	TAILQ_FOREACH(rl, &resadd_lasts, next)
++		if (strcmp(rl->rsid, id) == 0)
++			return (rl);
++	return (NULL);
+ }
+ 
++static int
++resadd_unchanged(const char *id, struct script_msg_head_t *sm_head)
++{
++	struct resadd_last *rl;
++	char *msg;
++	int same;
++
++	if ((rl = resadd_find(id)) == NULL ||
++	    (msg = resadd_join(sm_head)) == NULL)
++		return (0);
++	same = strcmp(rl->msg, msg) == 0;
++	free(msg);
++	return (same);
++}
++
++/* Remember sm_head's text for id; with NULL, forget id. */
+ static void
++resadd_remember(const char *id, struct script_msg_head_t *sm_head)
++{
++	struct resadd_last *rl;
++	char *msg = NULL;
++
++	if (sm_head != NULL && (msg = resadd_join(sm_head)) == NULL)
++		return;
++	if ((rl = resadd_find(id)) != NULL) {
++		TAILQ_REMOVE(&resadd_lasts, rl, next);
++		free(rl->rsid);
++		free(rl->msg);
++		free(rl);
++	}
++	if (msg == NULL)
++		return;
++	if ((rl = malloc(sizeof(*rl))) == NULL ||
++	    (rl->rsid = strdup(id)) == NULL) {
++		free(rl);
++		free(msg);
++		return;
++	}
++	rl->msg = msg;
++	TAILQ_INSERT_TAIL(&resadd_lasts, rl, next);
++}
++
++/* Returns the script's wait status, or -1 if it didn't run. */
++static int
+ call_script(const char *const argv[], struct script_msg_head_t *sm_head)
+ {
+ 	struct script_msg *smp;
+@@ -754,13 +854,13 @@
+ 	int status, wfd;
+ 
+ 	if (argv[0] == NULL)
+-		return;
++		return (-1);
+ 
+ 	wfd = cap_script_run(capscript, argv);
+ 	if (wfd == -1) {
+ 		warnmsg(LOG_ERR, __func__,
+ 		    "failed to run %s: %s", argv[0], strerror(errno));
+-		return;
++		return (-1);
+ 	}
+ 
+ 	if (sm_head != NULL) {
+@@ -779,11 +879,13 @@
+ 
+ 	(void)close(wfd);
+ 
+-	if (cap_script_wait(capscript, &status) != 0)
++	if (cap_script_wait(capscript, &status) != 0) {
+ 		warnmsg(LOG_ERR, __func__, "wait(): %s", strerror(errno));
+-	else
+-		warnmsg(LOG_DEBUG, __func__, "script \"%s\" status %d",
+-		    argv[0], status);
++		return (-1);
++	}
++	warnmsg(LOG_DEBUG, __func__, "script \"%s\" status %d",
++	    argv[0], status);
++	return (status);
+ }
+ 
+ #define	PERIOD 0x2e

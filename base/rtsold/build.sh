@@ -22,7 +22,8 @@
 # in every source (nitems, __DECONST, CLOCK_MONOTONIC_FAST, closefrom, and
 # xnu's interface flags); -D__APPLE_USE_RFC_3542 for RFC 3542's IPV6_PKTINFO
 # and IPV6_HOPLIMIT, as network_cmds' targets set it.
-# patches/: 0001 xnu's interface flags and routing messages.
+# patches/: 0001 xnu's interface flags and routing messages; 0002 resolvconf
+# only when the name servers change, not on every router advertisement.
 source "$(dirname "$0")/../../tools/base/common.sh"
 source "$(dirname "$0")/../commands.sh"
 OUT="$(abspath "$1")"; D="$(abspath "$2")"; SYSROOT="$(abspath "$3")"; shift 3

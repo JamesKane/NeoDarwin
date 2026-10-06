@@ -67,7 +67,7 @@ bin/ls/ls_tests:q_flag_and_w_flag	PASS
 bin/ls/ls_tests:r_flag	PASS	
 bin/ls/ls_tests:s_flag	SKIP	environment: HFS+ has no sparse files (the test's own check)
 bin/ls/ls_tests:scomma_flag	FAIL	Apple flag: Apple's ls -s, prints no thousands separator
-bin/ls/ls_tests:t_flag	FAIL	environment: HFS+ keeps 1-second timestamps, so two files touched in the same second tie for ls -t
+bin/ls/ls_tests:t_flag	FLAKY	environment: HFS+ keeps 1-second timestamps, so two files touched in the same second tie for ls -t; passes when they land in different seconds (2026-10-05)
 bin/ls/ls_tests:u_flag	PASS	
 bin/ls/ls_tests:v_flag	FAIL	Apple flag: Apple's ls -v prints non-printing characters raw; FreeBSD's sorts by version
 bin/ls/ls_tests:x_flag	PASS	
