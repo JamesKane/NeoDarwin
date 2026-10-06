@@ -125,5 +125,8 @@ void *reallocarray(void *, size_t, size_t) __result_use_check __alloc_size2(2, 3
 void setproctitle(const char *, ...) __printf0like(1, 2);
 // <string.h>
 void *memrchr(const void *, int, size_t);
+// <unistd.h>: pipe2(2), which xnu doesn't have (O_CLOEXEC and O_NONBLOCK
+// only, set after pipe(2): not atomic against a concurrent fork).
+int pipe2(int [2], int);
 __END_DECLS
 #endif

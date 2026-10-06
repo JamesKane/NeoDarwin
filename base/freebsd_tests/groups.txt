@@ -1,0 +1,20 @@
+# The directories of /usr/tests that //kernel:sbsa_freebsd_tests_test runs
+# (base/freebsd_tests/suite_test.sh), and the shard (0-3) each runs in.
+bin/cat	0
+bin/expr	0
+bin/ls	0
+bin/pwait	1
+bin/timeout	2
+usr.bin/asa	0
+usr.bin/cut	0
+usr.bin/head	0
+usr.bin/ident	0
+usr.bin/m4	2
+usr.bin/soelim	2
+usr.bin/tail	3
+usr.bin/tr	3
+usr.bin/uniq	3
+usr.bin/wc	3
+usr.bin/xo	3
+usr.sbin/daemon	2
+usr.sbin/nmtree	3

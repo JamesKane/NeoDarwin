@@ -317,3 +317,38 @@ gpt_disk_image(
     root = ":zfs_test_root_volume",
     tags = ["manual"],
 )
+
+# P4-21 checkpoint 7 (docs/architecture/freebsd-parity.md §2.1): the session
+# disk plus FreeBSD's /usr/tests for the pilot's programs
+# (//base:freebsd_tests; kyua, atf-sh and atf-check are in the base), for
+# //kernel:sbsa_freebsd_tests_test.
+hfs_ramdisk(
+    name = "freebsd_test_root_volume",
+    dirs = _SYSTEM_DIRS,
+    files = {
+        "//base/launchctl": "bin/launchctl",
+        "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
+    } | _NETWORK_FILES,
+    journaled = True,
+    links = _SYSTEM_LINKS,
+    modes = _NETWORK_MODES,
+    volume_size = "256m",
+    tags = ["manual"],
+    tree_modes = _SYSTEM_MODES,
+    trees = [
+        "//base:system_root",
+        "//base:launchd_daemon",
+        "//base:freebsd_tests",
+    ],
+)
+
+gpt_disk_image(
+    name = "freebsd_test_disk",
+    esp = {
+        "//boot/neoboot": "EFI/BOOT/BOOTAA64.EFI",
+        "//kernel:sbsa_kc": "NeoDarwin/kernelcache",
+        ":freebsd_test_root_volume_trustcache": "NeoDarwin/trustcache",
+    },
+    root = ":freebsd_test_root_volume",
+    tags = ["manual"],
+)

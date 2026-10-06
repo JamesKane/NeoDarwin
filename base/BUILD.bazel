@@ -766,6 +766,47 @@ base_library(
     sysroot = ":sysroot",
 )
 
+# P4-21 checkpoint 7 (docs/base/kyua.md): FreeBSD's test framework, kyua
+# with ATF's atf-sh and atf-check, lutok, SQLite and Lua linked in
+# statically; libatf-c.a and libatf-c++.a are build-only (usr/local), for
+# //base:freebsd_tests.
+base_library(
+    name = "kyua_commands",
+    data = glob(["kyua/**"]) + ["commands.sh", "@puc_rio_lua//:all"],
+    deps = [":root"],
+    man_pages = True,
+    script = "kyua/build.sh",
+    srcs = "@freebsd_kyua//:all",
+    sysroot = ":sysroot",
+)
+
+# P4-21 checkpoint 7: FreeBSD's /usr/tests for the pilot's programs
+# (base/freebsd_tests/build.sh), with Kyuafiles as bsd.test.mk writes them.
+# Not in system_root: //images:freebsd_test_disk installs it, for
+# //kernel:sbsa_freebsd_tests_test (the ratchet: freebsd_tests/expected.tsv).
+base_library(
+    name = "freebsd_tests",
+    # The ratchet's files aren't the build's: editing them rebuilds no image.
+    data = glob(
+        ["freebsd_tests/**"],
+        exclude = [
+            "freebsd_tests/expected.tsv",
+            "freebsd_tests/groups.txt",
+            "freebsd_tests/suite_test.sh",
+        ],
+    ) + glob(["freebsd_cmds/compat/**"]) + ["commands.sh"],
+    deps = [":root", ":kyua_commands"],
+    script = "freebsd_tests/build.sh",
+    srcs = "@freebsd_tests//:all",
+    sysroot = ":sysroot",
+)
+
+exports_files([
+    "freebsd_tests/expected.tsv",
+    "freebsd_tests/groups.txt",
+    "freebsd_tests/suite_test.sh",
+])
+
 # The ZFS test suite's commands from projects of their own
 # (docs/architecture/filesystems.md §7): awk-40, patch_cmds-72's cmp and
 # diff, and FreeBSD's timeout (macOS 26 has none).
@@ -1139,6 +1180,7 @@ base_root(
         ":locale_data",
         ":vis_editor",
         ":freebsd_commands",
+        ":kyua_commands",
         ":corefoundation_framework",
         ":iokit_framework",
         ":ioreg_command",
@@ -1309,7 +1351,7 @@ lang_audit_test(
     ]),
 )
 
-# Every arm64 Mach-O the base installs against the userland baseline:
+# Every arm64 Mach-O the base installs (and the test programs of /usr/tests) against the userland baseline:
 # Armv8.2 with RCpc, dot product, crypto and FP16 (TARGET_CPU cortex-a76 in
 # tools/base/common.sh, the kernel's //kernel:sbsa_isa_audit features).
 # QEMU's neoverse-n2 runs apple-m1 code, so only this catches it before the
@@ -1322,9 +1364,11 @@ sh_test(
         "+v8.2a,+rcpc,+dotprod,+aes,+sha2,+fullfp16",
         "$(rootpath isa_audit.txt)",
         "$(rootpath :system_root)",
+        "$(rootpath :freebsd_tests)",
     ],
     data = [
         "isa_audit.txt",
+        ":freebsd_tests",
         ":system_root",
     ],
 )

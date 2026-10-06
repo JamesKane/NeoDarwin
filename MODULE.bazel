@@ -946,6 +946,24 @@ pinned_files(
     url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
 )
 
+# FreeBSD's test framework (base/kyua, P4-21 checkpoint 7): ATF, lutok,
+# SQLite and kyua from contrib, with Lua from @puc_rio_lua.
+pinned_files(
+    name = "freebsd_kyua",
+    build_file = "//base:kyua/freebsd.BUILD",
+    lockfile = "//base:kyua/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
+# The FreeBSD test suite's tests for the base's programs (base/freebsd_tests,
+# P4-21 checkpoint 7): /usr/tests, in //images:freebsd_test_disk only.
+pinned_files(
+    name = "freebsd_tests",
+    build_file = "//base:freebsd_tests/freebsd.BUILD",
+    lockfile = "//base:freebsd_tests/freebsd.lock",
+    url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
+)
+
 # FreeBSD's CLDR-derived locale sources (base/locales) for /usr/share/locale:
 # macOS 26's release set publishes no locale data.
 pinned_files(

@@ -4,6 +4,7 @@
 // Linked into every program base/freebsd_cmds builds; ld's -dead_strip
 // drops what a program doesn't call. Declared in nd_freebsd.h.
 #include <errno.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -106,4 +107,32 @@ memrchr(const void *s, int c, size_t n)
 		} while (--n != 0);
 	}
 	return (NULL);
+}
+
+// pipe2(2) over pipe(2) and fcntl(2): FD_CLOEXEC for O_CLOEXEC and
+// O_NONBLOCK on both ends; any other flag is EINVAL, as on FreeBSD.
+int
+pipe2(int fildes[2], int flags)
+{
+	int fds[2], i;
+
+	if ((flags & ~(O_CLOEXEC | O_NONBLOCK)) != 0) {
+		errno = EINVAL;
+		return (-1);
+	}
+	if (pipe(fds) == -1)
+		return (-1);
+	for (i = 0; i < 2; i++) {
+		if (((flags & O_CLOEXEC) != 0 && fcntl(fds[i], F_SETFD, FD_CLOEXEC) == -1) ||
+		    ((flags & O_NONBLOCK) != 0 && fcntl(fds[i], F_SETFL, fcntl(fds[i], F_GETFL) | O_NONBLOCK) == -1)) {
+			int e = errno;
+			(void)close(fds[0]);
+			(void)close(fds[1]);
+			errno = e;
+			return (-1);
+		}
+	}
+	fildes[0] = fds[0];
+	fildes[1] = fds[1];
+	return (0);
 }

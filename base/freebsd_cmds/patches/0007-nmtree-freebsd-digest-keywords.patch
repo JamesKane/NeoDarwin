@@ -1,0 +1,29 @@
+From: NeoDarwin
+Subject: [PATCH] nmtree: FreeBSD's digest keywords
+
+mtree.h spells the digest keywords that mtree -c writes FreeBSD's way
+(md5digest, sha1digest, sha256digest, ripemd160digest) only #ifdef
+__FreeBSD__; NeoDarwin's build doesn't define it, so its specifications
+said md5, sha1 and sha256, which FreeBSD's mtree reads but doesn't write
+(FreeBSD's tests compare against sha256digest: usr.sbin/nmtree/tests).
+The keywords are FreeBSD's on Darwin too.
+
+--- a/contrib/mtree/mtree.h	2026-10-05 18:25:41
++++ b/contrib/mtree/mtree.h	2026-10-05 18:25:41
+@@ -126,14 +126,14 @@
+ void		 free_nodes(NODE *);
+ char		*vispath(const char *);
+ 
+-#ifdef __FreeBSD__
++#if defined(__FreeBSD__) || defined(__APPLE__)
+ #define KEY_DIGEST "digest"
+ #else
+ #define KEY_DIGEST
+ #endif
+ 
+ #define	MD5KEY		"md5"		KEY_DIGEST
+-#ifdef __FreeBSD__
++#if defined(__FreeBSD__) || defined(__APPLE__)
+ #define	RMD160KEY	"ripemd160"	KEY_DIGEST
+ #else
+ #define	RMD160KEY	"rmd160"	KEY_DIGEST

@@ -277,7 +277,7 @@ usr.bin/kdump	equivalent	no
 usr.bin/killall	apple	yes
 usr.bin/ktrace	equivalent	no
 usr.bin/ktrdump	n/a	no
-usr.bin/kyua	freebsd	no
+usr.bin/kyua	freebsd	yes
 usr.bin/lam	apple	yes
 usr.bin/last	apple	yes
 usr.bin/lastcomm	apple	yes

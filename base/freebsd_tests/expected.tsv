@@ -1,0 +1,240 @@
+# The ratchet of //kernel:sbsa_freebsd_tests_test (base/freebsd_tests/suite_test.sh):
+# every test case of base/freebsd_tests/groups.txt's directories, as kyua runs
+# it on //images:freebsd_test_disk, with its expected result. PROGRAM:CASE
+# (PROGRAM under /usr/tests) TAB RESULT TAB REASON. RESULT is PASS, XFAIL (an
+# ATF expected failure), FAIL, BROKEN, SKIP, KILLED (kyua's timeout) or FLAKY
+# (any result). Reasons start with a category: Apple flag, Apple behaviour,
+# Apple chown/chflags/ps (another Apple program the test uses), missing
+# feature, environment (HFS+, the QEMU guest), FreeBSD kernel, or FreeBSD's
+# own expected failure. docs/base/kyua.md.
+bin/cat/cat_extra_test:A_output	FAIL	Apple flag: Apple's cat (text_cmds) has no -A
+bin/cat/cat_extra_test:E_output	FAIL	Apple flag: Apple's cat has no -E
+bin/cat/cat_extra_test:T_output	FAIL	Apple flag: Apple's cat has no -T
+bin/cat/cat_extra_test:e_implies_v	FAIL	Apple flag: Apple's cat has no -E (the case compares -e with -Ev)
+bin/cat/cat_extra_test:t_implies_v	FAIL	Apple flag: Apple's cat has no -T (the case compares -t with -Tv)
+bin/cat/cat_test:align	PASS	
+bin/cat/cat_test:b_output	PASS	
+bin/cat/cat_test:e_output	PASS	
+bin/cat/cat_test:nonexistent	PASS	
+bin/cat/cat_test:s_output	PASS	
+bin/cat/cat_test:se_output	PASS	
+bin/cat/cat_test:stdin_test	PASS	
+bin/cat/cat_test:vt_output	PASS	
+bin/expr/expr_test:arithmetic_ops	XFAIL	FreeBSD's own expected failure (atf_expect_fail: syntax errors on FreeBSD too)
+bin/expr/expr_test:basic_functional	PASS	
+bin/expr/expr_test:basic_math	PASS	
+bin/expr/expr_test:colon_vs_math	PASS	
+bin/expr/expr_test:compare_ops	PASS	
+bin/expr/expr_test:compare_ops_precedence	PASS	
+bin/expr/expr_test:gtkmm	PASS	
+bin/expr/expr_test:lang	PASS	
+bin/expr/expr_test:math_precedence	PASS	
+bin/expr/expr_test:multiply	PASS	
+bin/expr/expr_test:negative	PASS	
+bin/expr/expr_test:overflow	PASS	
+bin/expr/expr_test:precedence	PASS	
+bin/expr/expr_test:regex	PASS	
+bin/ls/ls_tests:1_flag	PASS	
+bin/ls/ls_tests:A_flag	PASS	
+bin/ls/ls_tests:A_flag_implied_when_root	PASS	
+bin/ls/ls_tests:B_flag	PASS	
+bin/ls/ls_tests:C_flag	PASS	
+bin/ls/ls_tests:D_flag	PASS	
+bin/ls/ls_tests:F_flag	PASS	
+bin/ls/ls_tests:H_flag	PASS	
+bin/ls/ls_tests:I_flag	PASS	
+bin/ls/ls_tests:I_flag_voids_implied_A_flag_when_root	PASS	
+bin/ls/ls_tests:L_flag	PASS	
+bin/ls/ls_tests:R_flag	PASS	
+bin/ls/ls_tests:S_flag	SKIP	environment: HFS+ has no sparse files (the test's own check)
+bin/ls/ls_tests:T_flag	PASS	
+bin/ls/ls_tests:a_flag	PASS	
+bin/ls/ls_tests:b_flag	PASS	
+bin/ls/ls_tests:childerr	FAIL	Apple behaviour: Apple's ls -l prints "total 0" for a directory it can't read (FreeBSD's prints nothing)
+bin/ls/ls_tests:d_flag	PASS	
+bin/ls/ls_tests:f_flag	PASS	
+bin/ls/ls_tests:g_flag	PASS	
+bin/ls/ls_tests:h_flag	SKIP	environment: HFS+ has no sparse files (the test's own check)
+bin/ls/ls_tests:i_flag	PASS	
+bin/ls/ls_tests:k_flag	SKIP	environment: HFS+ has no sparse files (the test's own check)
+bin/ls/ls_tests:l_flag	PASS	
+bin/ls/ls_tests:lcomma_flag	FAIL	Apple flag: Apple's ls -l, prints no thousands separator (en_US.ISO8859-1)
+bin/ls/ls_tests:m_flag	PASS	
+bin/ls/ls_tests:n_flag	FAIL	Apple chown: chown 4294967294:1 (a numeric uid above INT_MAX) is "illegal user name"
+bin/ls/ls_tests:o_flag	FAIL	Apple chflags: no uarch flag (FreeBSD's UF_ARCHIVE name)
+bin/ls/ls_tests:p_flag	PASS	
+bin/ls/ls_tests:q_flag_and_w_flag	PASS	
+bin/ls/ls_tests:r_flag	PASS	
+bin/ls/ls_tests:s_flag	SKIP	environment: HFS+ has no sparse files (the test's own check)
+bin/ls/ls_tests:scomma_flag	FAIL	Apple flag: Apple's ls -s, prints no thousands separator
+bin/ls/ls_tests:t_flag	FAIL	environment: HFS+ keeps 1-second timestamps, so two files touched in the same second tie for ls -t
+bin/ls/ls_tests:u_flag	PASS	
+bin/ls/ls_tests:v_flag	FAIL	Apple flag: Apple's ls -v prints non-printing characters raw; FreeBSD's sorts by version
+bin/ls/ls_tests:x_flag	PASS	
+bin/ls/ls_tests:y_flag	PASS	
+bin/pwait/pwait_reap:pwait_normal	KILLED	FreeBSD kernel: the test writes to a pipe's read end (FreeBSD's pipes are bidirectional, xnu's aren't), then polls forever; kyua kills it at 300 s
+bin/pwait/pwait_reap:pwait_reap	KILLED	FreeBSD kernel: bidirectional pipes, as pwait_normal; pwait -r also needs NOTE_REAP, which xnu doesn't have
+bin/pwait/pwait_test:basic	PASS	
+bin/pwait/pwait_test:or_flag	PASS	
+bin/pwait/pwait_test:print	PASS	
+bin/pwait/pwait_test:time_unit	PASS	
+bin/pwait/pwait_test:timeout_many	PASS	
+bin/pwait/pwait_test:timeout_no_timeout	PASS	
+bin/pwait/pwait_test:timeout_trigger_timeout	PASS	
+bin/timeout/timeout_test:exit_numbers	PASS	
+bin/timeout/timeout_test:invalid_command	PASS	
+bin/timeout/timeout_test:invalid_signal	PASS	
+bin/timeout/timeout_test:invalid_timeout	PASS	
+bin/timeout/timeout_test:no_such_command	PASS	
+bin/timeout/timeout_test:no_timeout	PASS	
+bin/timeout/timeout_test:nominal	PASS	
+bin/timeout/timeout_test:time_unit	PASS	
+bin/timeout/timeout_test:with_a_child	PASS	
+usr.bin/asa/asa_test:dashdash	PASS	
+usr.bin/asa/asa_test:one	PASS	
+usr.bin/asa/asa_test:plus	PASS	
+usr.bin/asa/asa_test:plus_top	PASS	
+usr.bin/asa/asa_test:space	PASS	
+usr.bin/asa/asa_test:stdout	PASS	
+usr.bin/asa/asa_test:unterminated	PASS	
+usr.bin/asa/asa_test:zero	PASS	
+usr.bin/cut/cut2_test:s_flag	PASS	
+usr.bin/cut/cut_test:basic	PASS	
+usr.bin/cut/cut_test:dflag	PASS	
+usr.bin/cut/cut_test:dsflag	PASS	
+usr.bin/cut/cut_test:latin1	PASS	
+usr.bin/cut/cut_test:sflag	PASS	
+usr.bin/cut/cut_test:utf8	PASS	
+usr.bin/head/head_test:byte_count	PASS	
+usr.bin/head/head_test:default_no_options	PASS	
+usr.bin/head/head_test:empty_file	PASS	
+usr.bin/head/head_test:invalid_line_count	PASS	
+usr.bin/head/head_test:line_count	PASS	
+usr.bin/head/head_test:missing_line_count	PASS	
+usr.bin/head/head_test:read_from_stdin	PASS	
+usr.bin/head/head_test:si_number	FAIL	Apple flag: Apple's head takes no SI suffix (-c 1k)
+usr.bin/head/head_test:silent_header	FAIL	Apple flag: Apple's head has no -q
+usr.bin/head/head_test:sparse_file_text_at_beginning	PASS	
+usr.bin/head/head_test:sparse_file_text_at_end	PASS	
+usr.bin/head/head_test:verbose_header	FAIL	Apple flag: Apple's head has no -v
+usr.bin/ident/ident_test:file	PASS	
+usr.bin/ident/ident_test:noid	PASS	
+usr.bin/ident/ident_test:stdin	PASS	
+usr.bin/ident/ident_test:stdout	PASS	
+usr.bin/m4/m4_test:args	PASS	
+usr.bin/m4/m4_test:args2	PASS	
+usr.bin/m4/m4_test:comments	PASS	
+usr.bin/m4/m4_test:defn	PASS	
+usr.bin/m4/m4_test:esyscmd	PASS	
+usr.bin/m4/m4_test:eval	PASS	
+usr.bin/m4/m4_test:ff_after_dnl	PASS	
+usr.bin/m4/m4_test:gnueval	PASS	
+usr.bin/m4/m4_test:gnuformat	PASS	
+usr.bin/m4/m4_test:gnupatterns	PASS	
+usr.bin/m4/m4_test:gnupatterns2	PASS	
+usr.bin/m4/m4_test:gnuprefix	PASS	
+usr.bin/m4/m4_test:gnusofterror	PASS	
+usr.bin/m4/m4_test:gnutranslit2	PASS	
+usr.bin/m4/m4_test:includes	PASS	
+usr.bin/m4/m4_test:m4wrap3	PASS	
+usr.bin/m4/m4_test:patterns	PASS	
+usr.bin/m4/m4_test:quotes	PASS	
+usr.bin/m4/m4_test:redef	PASS	
+usr.bin/m4/m4_test:strangequotes	PASS	
+usr.bin/m4/m4_test:translit	PASS	
+usr.bin/m4/m4_test:translit2	PASS	
+usr.bin/soelim/soelim_test:files	PASS	
+usr.bin/soelim/soelim_test:stdin	PASS	
+usr.bin/tail/tail_test:broken_pipe	FAIL	Apple behaviour: Apple's tail dies of SIGPIPE (status 141); FreeBSD's reports "tail: stdout" and exits 1
+usr.bin/tail/tail_test:empty_r	PASS	
+usr.bin/tail/tail_test:file_r	PASS	
+usr.bin/tail/tail_test:file_rc28	PASS	
+usr.bin/tail/tail_test:file_rn2	PASS	
+usr.bin/tail/tail_test:follow	PASS	
+usr.bin/tail/tail_test:follow_create	PASS	
+usr.bin/tail/tail_test:follow_rename	PASS	
+usr.bin/tail/tail_test:follow_stdin	PASS	
+usr.bin/tail/tail_test:longfile_r	PASS	
+usr.bin/tail/tail_test:longfile_r_enomem	SKIP	environment: the test can't lower ulimit -v (no RLIMIT_AS limit on xnu)
+usr.bin/tail/tail_test:longfile_r_longlines	PASS	
+usr.bin/tail/tail_test:longfile_rc135782	PASS	
+usr.bin/tail/tail_test:longfile_rc145782_longlines	PASS	
+usr.bin/tail/tail_test:longfile_rn2500	PASS	
+usr.bin/tail/tail_test:no_lf_at_eof	PASS	
+usr.bin/tail/tail_test:pipe_leading_newline_r	PASS	
+usr.bin/tail/tail_test:si_number	PASS	
+usr.bin/tail/tail_test:silent_header	PASS	
+usr.bin/tail/tail_test:stdin	PASS	
+usr.bin/tail/tail_test:tail_b	FAIL	Apple flag: Apple's tail -b +N fails with EINVAL
+usr.bin/tail/tail_test:tail_c	PASS	
+usr.bin/tail/tail_test:tail_n	PASS	
+usr.bin/tail/tail_test:verbose_header	PASS	
+usr.bin/tr/legacy_test:main	PASS	
+usr.bin/uniq/uniq_test:all_repeated	PASS	
+usr.bin/uniq/uniq_test:basic	PASS	
+usr.bin/uniq/uniq_test:count	PASS	
+usr.bin/uniq/uniq_test:count_all_repeated	PASS	
+usr.bin/uniq/uniq_test:count_repeated	PASS	
+usr.bin/uniq/uniq_test:count_unique	PASS	
+usr.bin/uniq/uniq_test:ignore_case	PASS	
+usr.bin/uniq/uniq_test:interactive	PASS	
+usr.bin/uniq/uniq_test:interactive_repeated	PASS	
+usr.bin/uniq/uniq_test:repeated	PASS	
+usr.bin/uniq/uniq_test:skip_chars	PASS	
+usr.bin/uniq/uniq_test:skip_fields	PASS	
+usr.bin/uniq/uniq_test:skip_fields_tab	PASS	
+usr.bin/uniq/uniq_test:stdout	PASS	
+usr.bin/uniq/uniq_test:unique	PASS	
+usr.bin/wc/wc_test:basic	PASS	
+usr.bin/wc/wc_test:blank	PASS	
+usr.bin/wc/wc_test:empty	PASS	
+usr.bin/wc/wc_test:invalid	PASS	
+usr.bin/wc/wc_test:multiline	PASS	
+usr.bin/wc/wc_test:multiline_repeated	PASS	
+usr.bin/wc/wc_test:nul	PASS	
+usr.bin/wc/wc_test:poop	PASS	
+usr.bin/wc/wc_test:total	PASS	
+usr.bin/wc/wc_test:unterminated	PASS	
+usr.bin/wc/wc_test:usage	PASS	
+usr.bin/wc/wc_test:whitespace	PASS	
+usr.bin/xo/functional_test:xo_01__H	PASS	
+usr.bin/xo/functional_test:xo_01__HIPx	PASS	
+usr.bin/xo/functional_test:xo_01__HP	PASS	
+usr.bin/xo/functional_test:xo_01__J	PASS	
+usr.bin/xo/functional_test:xo_01__JP	PASS	
+usr.bin/xo/functional_test:xo_01__T	PASS	
+usr.bin/xo/functional_test:xo_01__X	PASS	
+usr.bin/xo/functional_test:xo_01__XP	PASS	
+usr.sbin/daemon/daemon_test:both_pidfile	FAIL	missing feature: setproctitle(3) is a no-op in base/freebsd_cmds' compat layer, so ps shows no "daemon: sleep" title
+usr.sbin/daemon/daemon_test:chdir	PASS	
+usr.sbin/daemon/daemon_test:child_pidfile	PASS	
+usr.sbin/daemon/daemon_test:child_pidfile_lock	PASS	
+usr.sbin/daemon/daemon_test:newsyslog	PASS	
+usr.sbin/daemon/daemon_test:output_file	PASS	
+usr.sbin/daemon/daemon_test:restart_child	PASS	
+usr.sbin/daemon/daemon_test:restart_hang	PASS	
+usr.sbin/daemon/daemon_test:supervisor_pidfile	FAIL	missing feature: setproctitle(3) is a no-op (compat layer); no "daemon: sleep" title
+usr.sbin/daemon/daemon_test:supervisor_pidfile_lock	PASS	
+usr.sbin/daemon/daemon_test:title	FAIL	missing feature: setproctitle(3) is a no-op (compat layer); no -t title in ps
+usr.sbin/daemon/daemon_test:user	FAIL	Apple ps: -u takes a user list on macOS (ps -up PID); FreeBSD's -u is the user-oriented format
+usr.sbin/nmtree/nmtree_test:mtree_check	PASS	
+usr.sbin/nmtree/nmtree_test:mtree_convert_C	PASS	
+usr.sbin/nmtree/nmtree_test:mtree_convert_C_S	PASS	
+usr.sbin/nmtree/nmtree_test:mtree_convert_D	PASS	
+usr.sbin/nmtree/nmtree_test:mtree_convert_D_S	PASS	
+usr.sbin/nmtree/nmtree_test:mtree_create	FAIL	environment: HFS+ directory link counts (nlink) aren't UFS's 2 + subdirectories
+usr.sbin/nmtree/nmtree_test:mtree_ignore	PASS	
+usr.sbin/nmtree/nmtree_test:mtree_merge	PASS	
+usr.sbin/nmtree/nmtree_test:mtree_nonemptydir	PASS	
+usr.sbin/nmtree/nmtree_test:mtree_onlyfile	PASS	
+usr.sbin/nmtree/nmtree_test:mtree_specspec_type	PASS	
+usr.sbin/nmtree/nmtree_test:netbsd6_check	PASS	
+usr.sbin/nmtree/nmtree_test:netbsd6_convert_C	PASS	
+usr.sbin/nmtree/nmtree_test:netbsd6_convert_C_S	PASS	
+usr.sbin/nmtree/nmtree_test:netbsd6_convert_D	PASS	
+usr.sbin/nmtree/nmtree_test:netbsd6_convert_D_S	PASS	
+usr.sbin/nmtree/nmtree_test:netbsd6_create	FAIL	environment: HFS+ directory link counts (nlink) aren't UFS's 2 + subdirectories
+usr.sbin/nmtree/nmtree_test:netbsd6_ignore	PASS	
+usr.sbin/nmtree/nmtree_test:netbsd6_merge	PASS	
+usr.sbin/nmtree/nmtree_test:netbsd6_nonemptydir	PASS	
+usr.sbin/nmtree/nmtree_test:netbsd6_onlyfile	PASS	

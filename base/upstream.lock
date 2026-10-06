@@ -49,7 +49,7 @@ tcsh                 tcsh-75                       sha256:879f9d1991248dce5d2c2c
 mail_cmds            mail_cmds-41                  sha256:8dfd2b77791576c637010b9464ee5dbf5b54082ac89ac07a8547eca6920e54fb  (mail, mailx)
 vis                  v0.9                          sha256:bd37ffba5535e665c1e883c25ba5f4e3307569b6d392c60f3c7d5dedd2efcfca  (github.com/martanne/vis tag tarball; ISC; /usr/bin/vis as vi, user decision 2026-10-05; outside the release set)
 libtermkey           0.22                          sha256:6945bd3c4aaa83da83d80a045c5563da4edd7d0374c62c0d35aec09eb3014600  (leonerd.org.uk release tarball; MIT; linked statically into vis)
-lua                  5.4.9                         sha256:2335b6c582a52654f94612bf10d2f4672805d05329aa6568b1d8cd9e5c6fb8e6  (lua.org release tarball; MIT; linked statically into vis)
+lua                  5.4.9                         sha256:2335b6c582a52654f94612bf10d2f4672805d05329aa6568b1d8cd9e5c6fb8e6  (lua.org release tarball; MIT; linked statically into vis and kyua)
 lpeg                 1.1.0                         sha256:4b155d67d2246c1ffa7ad7bc466c1ea899bbc40fef0257cc9c03cecbaed4352a  (inf.puc-rio.br release tarball; MIT; linked statically into vis, for its lexers)
 libutil              libutil-73                    sha256:dfb7a334e716768079c46bf9ae0846e6231eb6e4481dbad9981ac666f112d61e
 files                files-968                     sha256:86ca6ad735f4731f0ed49fe1a8e393834a9bbef143995883ee96fa8834887b35
@@ -80,6 +80,8 @@ timeout              freebsd-src 050683bb8e13      bin/timeout; pinned per file 
 resolvconf           freebsd-src 050683bb8e13      contrib/openresolv (openresolv 3.17.4), sbin/resolvconf/Makefile; pinned per file in base/resolvconf/freebsd.lock
 dhcp6c               wide-dhcpv6 47f37dfab0cc      v20080615.2, hrs-allbsd/wide-dhcpv6 (FreeBSD's net/dhcp6 port); the client only; pinned per file in base/dhcp6c/wide.lock (Apple's DHCPv6 client is IPConfiguration's; FreeBSD's base has none)
 libcrypt             freebsd-src 050683bb8e13      lib/libcrypt, secure/lib/libcrypt (bcrypt), sys/crypto MD5 and SHA-2; pinned per file in base/libc/freebsd.lock (crypt(3)'s non-DES schemes, Libc patch 0001)
+kyua                 freebsd-src 050683bb8e13      contrib/atf (0.26), contrib/lutok, contrib/sqlite3 (3.53.3), contrib/kyua (0.13), tests/Kyuafile; pinned per file in base/kyua/freebsd.lock (P4-21 cp7)
+freebsd_tests        freebsd-src 050683bb8e13      the pilot's */tests directories, contrib/netbsd-tests and contrib/libxo tests; pinned per file in base/freebsd_tests/freebsd.lock (/usr/tests, test image only)
 pfctl                openbsd/src fd47049c620b      sbin/pfctl (OpenBSD 4.3), sys/net/pf_ruleset.c, etc/pf.os; pinned per file in base/pfctl/openbsd.lock (Apple publishes no pfctl; xnu's pf is OpenBSD's of early 2008)
 ntp                  ntp-139                       sha256:ec5ddb29e33b667c535d8ca2f616927772682d817f25205db80071b4e7b32ac7  (ntp 4.2.8p10; sntp only; the last ntp Apple published, macOS 10.15; outside the release set)
 openzfs              zfs-macOS-2.4.1p1             pinned in kexts/zfs/upstream.lock (zpool, zfs and their libraries; github.com/openzfsonosx/openzfs-fork a4c1b11ab900, OpenZFS 2.4.1 with the macOS OS layer; CDDL-1.0)

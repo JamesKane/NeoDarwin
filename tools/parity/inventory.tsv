@@ -278,7 +278,7 @@ usr.bin/kdump	equivalent	dtruss (dtrace-413)	usr/bin/dtruss	P4-29	no	xnu has no 
 usr.bin/killall	apple	shell_cmds-326		P4-21	yes	
 usr.bin/ktrace	equivalent	dtruss (dtrace-413)	usr/bin/dtruss	P4-29	no	xnu has no ktrace(2)
 usr.bin/ktrdump	n/a				no	ktr(4) kernel trace buffer; xnu has kdebug
-usr.bin/kyua	freebsd	FreeBSD usr.bin/kyua		P4-21	no	the FreeBSD test suite's runner, for P4-21's exit (cp7; Lua and SQLite)
+usr.bin/kyua	freebsd	FreeBSD usr.bin/kyua		P4-21	yes	the FreeBSD test suite's runner, for P4-21's exit (cp7; Lua and SQLite)
 usr.bin/lam	apple	text_cmds-197		P4-21	yes	
 usr.bin/last	apple	adv_cmds-237		P4-21	yes	
 usr.bin/lastcomm	apple	shell_cmds-326		P4-21	yes	
