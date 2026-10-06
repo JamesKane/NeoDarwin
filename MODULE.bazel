@@ -75,6 +75,17 @@ http_archive(
     urls = ["https://github.com/apple-oss-distributions/libplatform/archive/refs/tags/libplatform-359.1.2.tar.gz"],
 )
 
+# ld64 ships with the toolchain, not in the macOS release set; 957.1 is the
+# newest Apple published. It links the kernel and kexts (P0-06,
+# toolchains/ld64/README.md; pin in toolchains/ld64/upstream.lock).
+http_archive(
+    name = "apple_ld64",
+    build_file_content = _ALL_FILES,
+    sha256 = "72b8ce6885721aea5b9bed0d7b799a7de558945e44dfc799d34de4c9ec50c344",
+    strip_prefix = "ld64-ld64-957.1",
+    urls = ["https://github.com/apple-oss-distributions/ld64/archive/refs/tags/ld64-957.1.tar.gz"],
+)
+
 http_archive(
     name = "apple_cctools",
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",

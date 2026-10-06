@@ -28,6 +28,9 @@
 # the collection); IOStorageFamily's classes are exported since patch 0039.
 source "$(dirname "$0")/common.sh"
 OUT="$(abspath "$1")"; Z="$(abspath "$2")"; KH="$(abspath "$3")"; X="$(abspath "$4")"; IOS="$(abspath "$5")"
+# The linker: the from-source ld64 when rules/kext.bzl passes it in
+# ND_KEXT_LD (--//rules:kernel_linker=ld64), otherwise the host Xcode's.
+KLD=(xcrun ld); [ -z "${ND_KEXT_LD:-}" ] || KLD=("$(abspath "$ND_KEXT_LD")")
 B="$(mktemp -d)"; trap 'rm -rf "$B"' EXIT
 S="$(prepare_tree "$Z" "$B/src")"
 cd "$S"   # sources and the tree's include roots by relative path, so __FILE__ names them so
@@ -68,7 +71,7 @@ write_rsp "$B/kmodflags" -arch arm64 -mmacosx-version-min=26.0 -mcpu=cortex-a76 
 compile "$B/kmod" "$B/kmodflags" "$X/libkern/kmod/c_start.c" "$X/libkern/kmod/c_stop.c"
 
 mkdir -p "$OUT/Contents/MacOS"
-xcrun ld -arch arm64 -kext -platform_version macos 26.0 26.0 -o "$OUT/Contents/MacOS/zfs" \
+"${KLD[@]}" -arch arm64 -kext -platform_version macos 26.0 26.0 -o "$OUT/Contents/MacOS/zfs" \
 	"$B"/obj/*.o "$B"/kmod/*.o "$RES/lib/darwin/libclang_rt.cc_kext.a"
 
 # Info.plist: the macOS layer's, with the release's version, required at

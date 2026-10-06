@@ -1,0 +1,5 @@
+# Upstream pin for the from-source ld64 (P0-06). Must match the apple_ld64
+# http_archive in MODULE.bazel. ld64 ships with the toolchain, not in the
+# macOS release set (macOS 26's release.json doesn't list it); this is the
+# newest tag apple-oss-distributions/ld64 publishes.
+ld64                 ld64-957.1                    sha256:72b8ce6885721aea5b9bed0d7b799a7de558945e44dfc799d34de4c9ec50c344

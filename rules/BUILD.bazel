@@ -2,15 +2,18 @@
 
 load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 
-# The kernel's linker (P0-06; docs/architecture/build-system.md, "Linking the
-# kernel with ld64.lld"). ld64 is Xcode's ld, the default. lld links the same
-# objects with ld64.lld through tools/xnu/ld64_lld.sh: the build succeeds,
-# but lld lacks the flags that make the image a kernel kcgen accepts, so it
-# is an experiment for the A/B, not a bootable kernel yet.
+# The kernel's and kexts' linker (P0-06; docs/architecture/build-system.md
+# §2.1, toolchains/ld64/README.md):
+#   ld64   Apple's open-source ld64, built from source (//toolchains/ld64),
+#          the default since the P0-06 A/B.
+#   xcode  the host Xcode's ld (ld-prime), the Phase-0 linker and fallback.
+#   lld    ld64.lld through tools/xnu/ld64_lld.sh, kernel only: the build
+#          succeeds, but lld lacks the flags that make the image a kernel
+#          kcgen accepts, so it is an experiment, not a bootable kernel.
 string_flag(
     name = "kernel_linker",
     build_setting_default = "ld64",
-    values = ["ld64", "lld"],
+    values = ["ld64", "xcode", "lld"],
     visibility = ["//visibility:public"],
 )
 

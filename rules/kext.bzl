@@ -8,8 +8,13 @@ kext_collection (rules/kc.bzl) links bundles into a boot kernel collection.
 Phase 1 uses the host Xcode toolchain, like the kernel and base rules;
 embedded_swift kexts also get the Embedded Swift toolchain's path (the
 kext_swift trial, //kexts/swift_trial).
+
+--//rules:kernel_linker selects the kexts' linker as it does the kernel's:
+with ld64, the script gets the from-source ld64 (//toolchains/ld64) in
+ND_KEXT_LD and links with it; with xcode it runs `xcrun ld`.
 """
 
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@nd_embedded_swift//:toolchain.bzl", "EMBEDDED_TOOLCHAIN")
 
 _XCODE_REQS = {"requires-darwin": "", "no-remote": ""}
@@ -21,6 +26,11 @@ def _root(target):
 def _kext_impl(ctx):
     out = ctx.actions.declare_directory(ctx.attr.bundle)
     headers = ctx.files.kernel_headers
+    tools = list(ctx.files._tools)
+    env = {}
+    if ctx.attr._kernel_linker[BuildSettingInfo].value == "ld64":
+        tools.append(ctx.executable._ld64)
+        env["ND_KEXT_LD"] = ctx.executable._ld64.path
     ctx.actions.run(
         executable = ctx.file.script,
         arguments = [out.path, _root(ctx.attr.srcs), headers[0].path, _root(ctx.attr.xnu)] +
@@ -28,7 +38,8 @@ def _kext_impl(ctx):
                     ([EMBEDDED_TOOLCHAIN] if ctx.attr.embedded_swift else []),
         inputs = ctx.files.srcs + headers + ctx.files.xnu + ctx.files.upstream_headers + ctx.files.data,
         outputs = [out],
-        tools = ctx.files._tools,
+        tools = tools,
+        env = env,
         mnemonic = "Kext",
         progress_message = "Building %{label}",
         execution_requirements = _XCODE_REQS,
@@ -49,5 +60,7 @@ nd_kext = rule(
         "data": attr.label_list(allow_files = True, doc = "The script's own files: patches, source lists, headers."),
         "embedded_swift": attr.bool(doc = "Pass the Embedded Swift toolchain's path as the script's last argument."),
         "_tools": attr.label(default = "//tools/base:scripts"),
+        "_kernel_linker": attr.label(default = "//rules:kernel_linker"),
+        "_ld64": attr.label(default = "//toolchains/ld64", executable = True, cfg = "exec"),
     },
 )

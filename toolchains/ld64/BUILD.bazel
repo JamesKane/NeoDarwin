@@ -1,0 +1,24 @@
+# Apple's ld64, built from source (P0-06; README.md). The kernel and the
+# kexts link with it; userland and UEFI don't use it.
+
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:ld64.bzl", "ld64_binary")
+
+ld64_binary(
+    name = "ld64",
+    srcs = "@apple_ld64//:all",
+    data = glob(["compat/**"]) + ["nd_stubs.cpp"],
+    script = "build.sh",
+    version = "957.1",
+    visibility = ["//visibility:public"],
+)
+
+# Smoke test: -v names ld64-957.1, and a trivial static program links.
+sh_test(
+    name = "ld64_smoke_test",
+    size = "small",
+    srcs = ["smoke_test.sh"],
+    args = ["$(rootpath :ld64)"],
+    data = [":ld64"],
+    tags = ["requires-darwin", "no-remote"],
+)

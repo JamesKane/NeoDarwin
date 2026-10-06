@@ -152,6 +152,13 @@ def _xnu_kernel_impl(ctx):
             "LD=$(KC++) --ld-path=$(SRCROOT)/tools/nd/%s -nostdlib" % wrapper.basename,
             "ND_LD64_LLD=" + ctx.attr._ld64_lld[BuildSettingInfo].value,
         ]
+    elif linker == "ld64":
+        # --//rules:kernel_linker=ld64: XNU's LD is clang++ -nostdlib with
+        # the from-source ld64 (copied into the tree) as its linker.
+        ld = ctx.executable._ld64
+        overlay_files.append(ld)
+        lines.append("tools/nd/ld64/ld\t%s" % ld.path)
+        make_vars.append("LD=$(KC++) --ld-path=$(SRCROOT)/tools/nd/ld64/ld -nostdlib")
     overlay_arg = "-"
     if lines:
         manifest = ctx.actions.declare_file(ctx.label.name + ".overlay")
@@ -211,5 +218,6 @@ xnu_kernel = rule(
         "_kernel_linker": attr.label(default = "//rules:kernel_linker"),
         "_ld64_lld": attr.label(default = "//rules:ld64_lld"),
         "_ld64_lld_wrapper": attr.label(default = "//tools/xnu:ld64_lld.sh", allow_single_file = True),
+        "_ld64": attr.label(default = "//toolchains/ld64", executable = True, cfg = "exec"),
     },
 )

@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: BSD-2-Clause -->
 # Third-party notices
 
-NeoDarwin's own code is under the BSD 2-Clause licence (`LICENSE`). NeoDarwin also builds third-party code, pinned by version and hash in `MODULE.bazel` and the `upstream.lock` files (`base/upstream.lock`, `kernel/upstream.lock`, `third_party/*/upstream.lock`) and never vendored into this repository. Each component stays under its own licence. Changes to upstream files are the numbered patches beside each component, under the component's licence. Binaries NeoDarwin distributes carry the notices below.
+NeoDarwin's own code is under the BSD 2-Clause licence (`LICENSE`). NeoDarwin also builds third-party code, pinned by version and hash in `MODULE.bazel` and the `upstream.lock` files (`base/upstream.lock`, `kernel/upstream.lock`, `toolchains/ld64/upstream.lock`, `third_party/*/upstream.lock`) and never vendored into this repository. Each component stays under its own licence. Changes to upstream files are the numbered patches beside each component, under the component's licence. Binaries NeoDarwin distributes carry the notices below.
 
 ## Components
 
@@ -20,6 +20,7 @@ NeoDarwin's own code is under the BSD 2-Clause licence (`LICENSE`). NeoDarwin al
 | FreeBSD Qualcomm GENI UART driver (`sys/dev/uart/uart_dev_qcom_geni.c`, `sys/dev/qcom_geni/qcom_geni_reg.h`) | `freebsd-src` commit 124c151cbc (branch `radxa-dragon-q8b`), ported into `kernel/neodarwin/serial/nd_geni_uart.h` with its notice (`PROVENANCE.md` there) | BSD-2-Clause (notice below) | the kernel's serial console on the Radxa Dragon Q8B |
 | FreeBSD ACPI xHCI attachment and DWC3 registers (`sys/dev/usb/controller/generic_xhci_acpi.c`, `sys/dev/usb/controller/dwc3/dwc3.h`) | `freebsd-src` commit cbbcf73a5d (branch `radxa-dragon-q8b`), the DWC3 role-switch set-up ported into `kernel/neodarwin/usb/nd_dwc3.h` with its notices (`PROVENANCE.md` there) | BSD-2-Clause (notice below) | the console USB keyboard's USB-C controllers on the Radxa Dragon Q8B |
 | FreeBSD Toshiba TC956x Ethernet driver (`sys/dev/tcx/if_tcx.c`, `sys/dev/tcx/if_tcxreg.h`) | `freebsd-src` branch `radxa-dragon-q8b` at `4c5da483b9`, ported into `kernel/neodarwin/network/nd_tc956x.h` with its notice (`PROVENANCE.md` there) | BSD-2-Clause (notice below) | the kernel's Ethernet driver for the Radxa Dragon Q8B |
+| ld64 | ld64-957.1 (`toolchains/ld64/upstream.lock`) | APSL-2.0; its `src/llvm` headers are LLVM's, under the University of Illinois/NCSA Open Source License | the build-host linker for the kernel and kexts (P0-06); a build tool, not shipped in NeoDarwin |
 | dyld, Libc, libplatform, libpthread, libmalloc, Libinfo, libclosure, Libnotify, syslog, copyfile, removefile, Libsystem, objc4, cctools (libmacho), AvailabilityVersions | per `base/upstream.lock` | APSL-2.0 (BSD-derived parts keep their BSD notices) | the userland base (libSystem and the libraries under it) |
 | libdispatch | libdispatch-1542.0.4 | Apache-2.0 | `libdispatch.dylib` |
 | mDNSResponder | mDNSResponder-2881.0.25 | Apache-2.0 | `libsystem_dnssd` (the client library) and `/usr/sbin/mDNSResponder` (the published POSIX daemon, mDNSPosix) |

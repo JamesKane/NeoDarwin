@@ -22,6 +22,9 @@
 # -fapple-kext); libkmod's _start/_stop come from xnu; ld -kext links.
 source "$(dirname "$0")/../../tools/base/common.sh"
 OUT="$(abspath "$1")"; S="$(abspath "$2")"; KH="$(abspath "$3")"; X="$(abspath "$4")"; TC="$5"
+# The linker: the from-source ld64 when rules/kext.bzl passes it in
+# ND_KEXT_LD (--//rules:kernel_linker=ld64), otherwise the host Xcode's.
+KLD=(xcrun ld); [ -z "${ND_KEXT_LD:-}" ] || KLD=("$(abspath "$ND_KEXT_LD")")
 B="$(mktemp -d)"; trap 'rm -rf "$B"' EXIT
 KF="$KH/System/Library/Frameworks/Kernel.framework/Versions/A"
 [ -d "$KF/Headers" ] || { echo "kext.sh: no Kernel.framework under $KH" >&2; exit 1; }
@@ -47,7 +50,7 @@ xcrun clang "${KFLAGS[@]}" -c "$X/libkern/kmod/c_start.c" -o "$B/c_start.o"
 xcrun clang "${KFLAGS[@]}" -c "$X/libkern/kmod/c_stop.c" -o "$B/c_stop.o"
 
 mkdir -p "$OUT/Contents/MacOS"
-xcrun ld -arch arm64 -kext -dead_strip -unexported_symbol '_swift_*' -unexported_symbol '__swift_*' \
+"${KLD[@]}" -arch arm64 -kext -dead_strip -unexported_symbol '_swift_*' -unexported_symbol '__swift_*' \
 	-unexported_symbol '_$e*' -platform_version macos 26.0 26.0 -o "$OUT/Contents/MacOS/NDSwiftTrial" \
 	"$B/glue.o" "$B/trial.o" "$B/c_start.o" "$B/c_stop.o" "$RES/lib/darwin/libclang_rt.cc_kext.a"
 cp "$S/Info.plist" "$OUT/Contents/Info.plist"

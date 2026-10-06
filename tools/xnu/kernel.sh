@@ -43,8 +43,10 @@ status=0; make -C "$WORK/src" "${MAKEARGS[@]}" MAKEJOBS=-j1 > "$WORK/log" 2>&1 |
 
 undef="$WORK/undefined.txt"
 # ld64 lists each symbol as   "name", referenced from:   followed by lines of
-# "      caller in object.o" or "      <initial-undefines>" (required only by an
-# export list, not by code). C names lose their leading underscore; demangled
+# "      caller in object.o", or, for a symbol required only by an export list
+# or the entry point and not by code, "      <initial-undefines>" (Xcode's
+# ld) or "     -exported_symbol[s_list] command line option" and
+# "     -u command line option" (ld64-957). C names lose their leading underscore; demangled
 # C++ names are kept verbatim. Output: name<TAB>objects (or "export-list").
 awk '
 	/Undefined symbols/ { f = 1; next }
@@ -54,7 +56,7 @@ awk '
 		sym = $0; sub(/^  "/, "", sym); sub(/", referenced from:$/, "", sym); sub(/^_/, "", sym)
 		refs = ""; next
 	}
-	f && /<initial-undefines>/ { refs = (refs == "" ? "export-list" : refs " export-list"); next }
+	f && (/<initial-undefines>/ || /-exported_symbol\[s_list\] command line option/ || /^ +-u command line option$/) { refs = (refs == "" ? "export-list" : refs " export-list"); next }
 	f && / in / { n = split($0, w, " "); o = w[n]; if (index(" " refs " ", " " o " ") == 0) refs = refs (refs == "" ? "" : " ") o }
 	END { if (sym != "") print sym "\t" refs }
 ' "$WORK/log" | sort -u > "$undef" || true
