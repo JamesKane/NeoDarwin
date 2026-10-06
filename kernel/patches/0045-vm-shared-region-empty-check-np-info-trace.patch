@@ -1,0 +1,49 @@
+From: NeoDarwin
+Subject: [PATCH] vm: an empty shared region is not an error on SBSA
+
+dyld calls shared_region_check_np twice in every exec to find the shared
+cache a previous process mapped. NeoDarwin has no dyld shared cache, so the
+region is always empty, vm_shared_region_start_address returns
+KERN_INVALID_ADDRESS, and the default trace level (ERROR) printed
+
+  shared_region: 0x... [846(rm)] check_np(0x16f45f8e0)
+  vm_shared_region_start_address() returned 0x1
+
+twice per exec on the console. On a slow serial console that costs time,
+and the lines land in the middle of user output: //kernel:sbsa_rtadvd_test
+lost expected lines that way under host load, with rtsold running
+resolvconf(8) on every router advertisement. On macOS the answer is wrong
+only until launchd maps the cache, so it is rare there.
+
+Under GENERIC_ARM64_PLATFORM that one answer is traced at INFO
+(vm.shared_region_trace_level=2 shows it); dyld's ENOMEM is unchanged, and
+every other check_np failure (update_task, auth_remap, copyout) and every
+mapping error stays at ERROR.
+
+Rebase-risk: low
+---
+--- a/bsd/vm/vm_unix.c
++++ b/bsd/vm/vm_unix.c
+@@ -1035,6 +1035,22 @@
+ 		} else {
+ 			/* retrieve address of its first mapping... */
+ 			kr = vm_shared_region_start_address(shared_region, &start_address);
++#if defined(GENERIC_ARM64_PLATFORM)
++			/*
++			 * NeoDarwin has no dyld shared cache, so the region is
++			 * always empty (KERN_INVALID_ADDRESS) and dyld asks twice
++			 * per exec: an expected answer, traced as INFO, not an
++			 * error on the console. Other failures stay errors.
++			 */
++			if (kr == KERN_INVALID_ADDRESS) {
++				SHARED_REGION_TRACE_INFO(("shared_region: %p [%d(%s)] "
++				    "check_np(0x%llx) no shared cache mapped\n",
++				    (void *)VM_KERNEL_ADDRPERM(current_thread()),
++				    proc_getpid(p), p->p_comm,
++				    (uint64_t)uap->start_address));
++				error = ENOMEM;
++			} else
++#endif /* GENERIC_ARM64_PLATFORM */
+ 			if (kr != KERN_SUCCESS) {
+ 				SHARED_REGION_TRACE_ERROR(("shared_region: %p [%d(%s)] "
+ 				    "check_np(0x%llx) "

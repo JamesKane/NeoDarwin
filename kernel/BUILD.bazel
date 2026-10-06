@@ -127,6 +127,7 @@ SBSA_PATCHES = [
     "patches/0042-bsd-export-file-offset-kpi.patch",
     "patches/0043-serial-keyboard-thread-dump-boot-arg.patch",
     "patches/0044-vfs-mockfs-small-type-number.patch",
+    "patches/0045-vm-shared-region-empty-check-np-info-trace.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.

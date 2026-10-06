@@ -35,7 +35,7 @@ The tree isn't in `system_root`; `//images:freebsd_test_disk` (the session disk 
 ## 3. The suite: `//kernel:sbsa_freebsd_tests_test`
 
 `base/freebsd_tests/suite_test.sh`, sharded (4) like `//kernel:sbsa_zfs_suite_test`; tagged `manual`, `kernel`, `qemu`:
-- boots the test disk on QEMU virt (2 GB, 2 CPUs), logs in as root, sets `vm.shared_region_trace_level=0` (xnu otherwise reports every exec's failed shared-cache check on the console) and runs `kyua test -r /tmp/kyua.db -k /usr/tests/Kyuafile DIR...` for the shard's directories (`groups.txt`);
+- boots the test disk on QEMU virt (2 GB, 2 CPUs), logs in as root, sets `vm.shared_region_trace_level=0` (xnu reported every exec's failed shared-cache check on the console; kernel patch 0045 traces that at INFO now, and the sysctl stays, harmless) and runs `kyua test -r /tmp/kyua.db -k /usr/tests/Kyuafile DIR...` for the shard's directories (`groups.txt`);
 - prints `kyua report` with every result (passed too) between `KYUA-RESULTS-BEGIN` and `KYUA-RESULTS-END`, which the host parses (falling back on kyua test's progress lines);
 - holds every case, `PROGRAM:CASE`, to `expected.tsv` (`PROGRAM:CASE`, `RESULT`, `REASON`; `RESULT` is `PASS`, `XFAIL`, `FAIL`, `BROKEN`, `SKIP`, `KILLED` or `FLAKY`). A regression (an expected `PASS` or `XFAIL` that isn't), an unexpected pass (raise the list) and drift (a case missing from either side) fail the test; a change between two failing results is reported;
 - a hanging case is killed by kyua at its timeout (ATF's default, 300 s) and reported broken, "timed out": `KILLED`;

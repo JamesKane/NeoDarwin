@@ -205,7 +205,7 @@ To verify on the kernel as the userland grows:
 - `fork` with the stand-ins' empty hooks;
 - `dyld_get_program_sdk_version`;
 - the plain-arm64 objc4 isa layout, once an Objective-C program runs;
-- running with no shared cache: `__shared_region_check_np` currently fails cleanly and dyld loads every image from disk.
+- running with no shared cache: `__shared_region_check_np` currently fails cleanly and dyld loads every image from disk (kernel patch 0045 keeps that expected failure off the console).
 
 
 ### Later changes: crypt(3) with FreeBSD's schemes (2026-10-01)
