@@ -3,6 +3,8 @@
 
 ## 1. Shape: one monorepo plus upstream mirrors
 
+**Hosting (decided 2026-10-06):** the monorepo lives under the maintainer's GitHub account, `github.com/JamesKane`, until the project is named and has an organisation. The `neodarwin/...` names below are the eventual organisation's; until then the same repositories sit under `JamesKane/`.
+
 - **`neodarwin/neodarwin`** (monorepo): all first-party code, BUILD files, docs, roadmap, CI. Cloning it and running `bazel build //images:qemu-virt` produces a bootable image; Bazel fetches vendored upstream by pinned commit.
 - **`neodarwin/mirror-<component>`**: verbatim mirrors of upstream drops, one repository each, tagged per upstream release (`apple/xnu-12377.1.9`, `openzfs/zfs-2.4.x`). Components: `xnu`, `dyld`, `Libc`, `libplatform`, `libpthread`, `libmalloc`, `libdispatch`, `Libinfo`, `IOPCIFamily`, `IOStorageFamily`, `IOGraphics`, `IOSerialFamily`, `hfs`, `launchd-842`, `swift-corelibs-foundation`, `openzfs` (the OpenZFS on OS X fork until the macOS layer is upstream), `acpica`, the Apple command projects (`file_cmds`, `shell_cmds`, `system_cmds`, `network_cmds`, …) and `OpenSSH`. The pilot mirrors (`plan-neo`, `nuaqua`) and `libwayland` moved to Magi. Never edited; NeoDarwin never commits to them. They keep the monorepo small and make a new upstream drop a tag, not a 400 MB commit.
 - **`neodarwin/ports`**: the ports tree (`ports.md`), checked out at `/usr/ports`; separate because its cadence and licences differ.
@@ -13,7 +15,7 @@
 
 ```
 neodarwin/
-  README.md  LICENSE.md  CONTRIBUTING.md  CODEOWNERS  SECURITY.md  DCO
+  README.md  LICENSE  THIRD_PARTY_NOTICES.md  CONTRIBUTING.md  CODEOWNERS  SECURITY.md  DCO
   MODULE.bazel  .bazelrc  .bazelversion
   platforms/  toolchains/  rules/                  # build-system.md §3–4
   boot/neoboot/                                   # UEFI loader (aarch64 first; x86_64, riscv64 later)
@@ -44,7 +46,7 @@ neodarwin/
 2. The build applies the series to the pristine mirror checkout inside the sandbox; nothing in the monorepo is a modified copy of upstream.
 3. New behaviour goes into NeoDarwin-owned files (`kernel/neodarwin/`, BUILD overlays) whenever possible; a patch touches upstream only for hooks and `#ifdef` gates.
 4. On each upstream drop: `tools/upstream-bump <component> <tag>` re-applies the series, reports conflicts, and opens a PR with the diff of generated BUILD files. Budget: one engineer-day per component per drop; patches that exceed it are candidates to upstream or to refactor into NeoDarwin-owned files.
-5. Provenance: `PROVENANCE.md` per derived driver and per referenced Linux file (drivers design §4); CDDL notice for `zfs.kext` in `LICENSE.md`.
+5. Provenance: `PROVENANCE.md` per derived driver and per referenced Linux file (drivers design §4); every upstream's licence, the CDDL notice for `zfs.kext` among them, in `THIRD_PARTY_NOTICES.md` (the licence map; `LICENSE` covers first-party code, BSD-2-Clause).
 
 ### 3.1 Reuse order
 
@@ -59,7 +61,7 @@ Apple's open stack comes first wherever it can do the job. For any component, ta
 
 ## 4. Governance files
 
-`CODEOWNERS` maps directories to workstreams (`kernel/ @kernel-bridge`, `boot/ @loader`, `kexts/zfs @storage`, …). `CONTRIBUTING.md` requires DCO sign-off and SSH-signed commits, states the licence per directory, and describes the patch-series workflow. `SECURITY.md` names the disclosure address and the signing-key rotation policy.
+`CODEOWNERS` maps directories to workstreams, generated from `tools/forge-teams.yaml`, which lists each workstream (the backlog's `owner` values) with its paths. Under a personal account there are no teams, so every path is owned by the maintainer, and the workstreams are comments. With an organisation, each workstream becomes a team (`kernel/ @<org>/kernel-bridge`, `boot/ @<org>/loader`, …). `CONTRIBUTING.md` requires DCO sign-off and SSH-signed commits, states the licence per directory, and describes the patch-series workflow. `SECURITY.md` routes reports through GitHub's private vulnerability reporting and will name the signing keys and their rotation once `ndsign` lands (P2-01). `DCO` is the Developer Certificate of Origin 1.1 that sign-offs certify. Issue templates (bug, backlog item) and the PR template are in `.github/`.
 
 ## 5. GitHub today, Forgejo tomorrow
 
@@ -74,7 +76,7 @@ Rules that make the move a `git push` plus a DNS change:
 | Large files | Git LFS for DT dumps and test images; Forgejo supports LFS. Firmware blobs stay outside git. |
 | Identity | commit authorship by email; SSH signatures verified in CI on both forges. |
 | Mirrors | `mirror-*` repos are push mirrors; Forgejo's built-in mirroring takes over on migration. |
-| Permissions | teams mirror `CODEOWNERS`; `tools/forge-teams.yaml` is the source of truth for both forges. |
+| Permissions | teams mirror `CODEOWNERS`; `tools/forge-teams.yaml` is the source of truth for both forges. Under the personal account, the maintainer owns everything. |
 
 ## 6. Branching
 

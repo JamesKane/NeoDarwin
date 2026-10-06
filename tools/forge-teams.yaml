@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Workstreams and the paths they own: the source of truth for CODEOWNERS
+# (docs/repository.md §4, §5). The workstream names are the `owner` values in
+# roadmap/backlog.yaml.
+#
+# The monorepo lives under a personal GitHub account (github.com/JamesKane)
+# until the project has an organisation. A personal account has no teams, so
+# every workstream's `owners` is the maintainer; when an organisation exists,
+# each workstream becomes a team (@<org>/<workstream>) with the same name, and
+# CODEOWNERS is regenerated from this file. Forgejo reads the same layout.
+
+maintainers:
+  - JamesKane
+
+workstreams:
+  build:
+    owners: [JamesKane]
+    paths: [MODULE.bazel, .bazelrc, .bazelversion, BUILD.bazel, platforms/, toolchains/, rules/, ci/, .github/, tools/xnu/, tools/macho/, tools/kcgen/, tools/kcheck/, tools/pinned/, tools/lang_audit/]
+  loader:
+    owners: [JamesKane]
+    paths: [boot/]
+  dt-abi-keeper:
+    owners: [JamesKane]
+    paths: [docs/kernel/dt-abi.md, tools/dtdump/, boot/neoboot/Sources/Portable/DTCheck.swift]
+  kernel-bridge:
+    owners: [JamesKane]
+    paths: [kernel/]
+  iokit-platform:
+    owners: [JamesKane]
+    paths: [kernel/neodarwin/platform/]
+  acpi:
+    owners: [JamesKane]
+    paths: [kernel/neodarwin/acpi/, third_party/acpica/]
+  storage:
+    owners: [JamesKane]
+    paths: [kexts/zfs/, base/hfs/, images/]
+  drivers:
+    owners: [JamesKane]
+    paths: [kexts/, dexts/]
+  userland:
+    owners: [JamesKane]
+    paths: [base/, services/, libs/, tools/base/, tools/parity/]
+  security:
+    owners: [JamesKane]
+    paths: [kernel/neodarwin/amfi/, kernel/neodarwin/crypto/, base/openssl/, base/openssh/, base/openpam/, base/pam_modules/, tools/trustcache/, SECURITY.md]
+  verification:
+    owners: [JamesKane]
+    paths: [tests/, base/freebsd_tests/, tools/efi/]
+  packaging:
+    owners: [JamesKane]
+    paths: []
+  graphics:
+    owners: [JamesKane]
+    paths: []
+  arch-amd64:
+    owners: [JamesKane]
+    paths: []
+  arch-riscv64:
+    owners: [JamesKane]
+    paths: []
+  docs:
+    owners: [JamesKane]
+    paths: [docs/, roadmap/, README.md, CONTRIBUTING.md, LICENSE, THIRD_PARTY_NOTICES.md, DCO, CODEOWNERS]
