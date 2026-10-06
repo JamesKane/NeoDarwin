@@ -1,6 +1,7 @@
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//rules:cc.bzl", "lang_audit_test")
 load("//rules:efi.bzl", "swift_embedded_uefi_binary")
+load("//rules:qemu.bzl", "qemu_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -31,28 +32,24 @@ lang_audit_test(
 # \NeoDarwin\kernelcache on an ESP that has none, and says so. Fast and
 # kernel-free, so it runs in the default suite; the kernel boot itself is
 # //kernel:sbsa_boot_test. Needs QEMU with its EDK2 firmware.
-sh_test(
+qemu_test(
     name = "neoboot_qemu_test",
     size = "small",
-    srcs = ["//tools/efi:qemu_efi_test.sh"],
-    args = [
-        "--until-lines",
-        "$(rootpath :neoboot)",
-        "45",
-        "'neoboot 0.1: loading NeoDarwin'",
-        "'neoboot: ACPI: 1 CPUs enabled of 1 GICCs; boot CPU MPIDR 0x0'",
-        "'neoboot: ACPI: GICv3 GICD 0x8000000, GICR 0x80a0000 (1 frames in a GICR range)'",
-        "'neoboot: ACPI: timer PPI 27 level, UART PL011 at 0x9000000, PSCI HVC'",
+    efi = ":neoboot",
+    timeout_s = 45,
+    expect = [
+        "neoboot 0.1: loading NeoDarwin",
+        "neoboot: ACPI: 1 CPUs enabled of 1 GICCs; boot CPU MPIDR 0x0",
+        "neoboot: ACPI: GICv3 GICD 0x8000000, GICR 0x80a0000 (1 frames in a GICR range)",
+        "neoboot: ACPI: timer PPI 27 level, UART PL011 at 0x9000000, PSCI HVC",
         # QEMU virt without EL3 has one security state: the timer stays a FIQ.
-        "'DS=1 (Group 0 open to Non-secure); timer PPI 27 on Group 0 (FIQ)'",
+        "DS=1 (Group 0 open to Non-secure); timer PPI 27 on Group 0 (FIQ)",
         # QEMU's own PSCI, behind HVC since there is no EL3 (P1-06).
-        "'neoboot: PSCI conduit: HVC, as the FADT says'",
+        "neoboot: PSCI conduit: HVC, as the FADT says",
         # No display device, so no GOP: the kernel's console is serial only.
-        "'neoboot: GOP: none; the console is serial only'",
-        "'neoboot: no \\NeoDarwin\\kernelcache on the boot volume'",
+        "neoboot: GOP: none; the console is serial only",
+        "neoboot: no \\NeoDarwin\\kernelcache on the boot volume",
     ],
-    data = [":neoboot"],
-    tags = ["qemu"],
 )
 
 # boot.cfg's timer-group=1 puts the timer on Group 1 (an IRQ) although the

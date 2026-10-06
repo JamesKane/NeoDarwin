@@ -35,7 +35,7 @@ epics:
     title: "QEMU harness rule qemu_test with serial capture and expect strings"
     phase: 0
     owner: verification
-    status: todo
+    status: done
     depends: [P0-02]
     exit: "smoke test boots an EFI stub on qemu virt and passes"
     doc: docs/architecture/build-system.md

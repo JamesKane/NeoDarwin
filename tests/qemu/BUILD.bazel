@@ -1,0 +1,15 @@
+load("//rules:qemu.bzl", "qemu_test")
+
+# Phase 0's smoke (P0-04): neoboot, an EFI application, boots on QEMU virt
+# under EDK2, prints its banner on serial and finds no kernel on an ESP that
+# has none. No kernel is built, so it takes seconds. The subdirectories are
+# the userland programs the kernel boot tests run, not tests of their own.
+qemu_test(
+    name = "smoke",
+    size = "small",
+    timeout_s = 45,
+    expect = [
+        "neoboot 0.1: loading NeoDarwin",
+        "neoboot: no \\NeoDarwin\\kernelcache on the boot volume",
+    ],
+)

@@ -61,6 +61,7 @@ xnu_kernel(
 )
 
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:qemu.bzl", "qemu_test")
 
 # The gap may only shrink. Heavy (a full kernel build), so it runs in the
 # kernel CI job (ci/kernel.sh), not in the default `bazel test //...`.
@@ -277,57 +278,49 @@ sh_test(
 # P1-03: neoboot boots the collection on QEMU virt and the kernel reaches the
 # listed serial lines, on neoverse-n2 (Armv9.0). The kernel's baseline is
 # Armv8.2 since P1-17; the sbsa_a76_* tests boot it on cortex-a76.
-sh_test(
+qemu_test(
     name = "sbsa_boot_test",
-    size = "medium",
-    srcs = ["//tools/efi:qemu_efi_test.sh"],
-    args = [
-        "--cpu neoverse-n2",
-        "--mem 2G",
-        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
-        "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
-        "--esp NeoDarwin/trustcache=$(rootpath //images:pid1_root_trustcache)",
-        "--until-lines",
-        "$(rootpath //boot/neoboot)",
-        "120",
-        "'Darwin Kernel Version 25.0.0'",
-        "'iBoot version: neoboot-0.1'",
+    cpu = "neoverse-n2",
+    mem = "2G",
+    esp = {
+        ":sbsa_kc": "NeoDarwin/kernelcache",
+        "//images:pid1_root": "NeoDarwin/ramdisk",
+        "//images:pid1_root_trustcache": "NeoDarwin/trustcache",
+    },
+    timeout_s = 120,
+    expect = [
+        "Darwin Kernel Version 25.0.0",
+        "iBoot version: neoboot-0.1",
         # Printed after ndcrypto has installed the crypto table and the kernel PRNG (P1-13).
-        "'lockdown_mode: lockdown mode in nvram is off'",
+        "lockdown_mode: lockdown mode in nvram is off",
         # After ndamfi has registered the AMFI and Image4 interfaces (P1-14),
         # the ramdisk's static trust cache from neoboot, and code signing
         # enforced with it (P1-15): PID 1 is listed.
-        "'neoboot: trust cache: '",
-        "'ndamfi: code-signing enforcement on (a static trust cache from the loader)'",
-        "'ndamfi: static trust cache '",
-        "'loaded external trust cache module: 0'",
+        "neoboot: trust cache: ",
+        "ndamfi: code-signing enforcement on (a static trust cache from the loader)",
+        "ndamfi: static trust cache ",
+        "loaded external trust cache module: 0",
         # BSD initialisation, reached through the platform expert (P1-06).
-        "'MAC Framework successfully initialized'",
+        "MAC Framework successfully initialized",
         # Past bsd_init's pthread check, with libpthread's kern/ built in (P1-16).
-        "'ifnet_attach: All kernel threads created for interface lo0'",
+        "ifnet_attach: All kernel threads created for interface lo0",
         # Rooted on HFS+ over the ramdisk (P1-08a), with PID 1 checking
         # syscalls, VM, Mach IPC and the calendar from userland (P1-07).
-        "'BSD root: md0'",
-        "'hfs: mounted NeoDarwin on device'",
-        "'pid1: hello from userland: PID 1 on /dev/console'",
-        "'pid1: mach: message round trip through mach_msg2'",
-        "'pid1: all checks passed'",
+        "BSD root: md0",
+        "hfs: mounted NeoDarwin on device",
+        "pid1: hello from userland: PID 1 on /dev/console",
+        "pid1: mach: message round trip through mach_msg2",
+        "pid1: all checks passed",
         # ACPICA in the kernel, publishing IOACPIPlatformDevice nubs from
         # QEMU's DSDT (P1-09, docs/kernel/acpi.md): the PCI host bridge with
         # its windows, _CBA and _PRT read through the nub, the UART and the
         # last virtio-mmio slot with their _CRS registers and GIC INTIDs.
-        "'NeoDarwinACPIPlatform: ACPICA 20260408; 9 tables (FACP DSDT APIC PPTT GTDT MCFG SPCR DBG2 IORT); 44 devices published, 3 more in IOACPIPlane'",
-        "'NeoDarwinACPIPlatform: \\_SB.PCI0 PNP0A08 (PNP0A03) uid 0 bus 0-255 memory 0x10000000+0x2eff0000 io 0x3eff0000+0x10000 memory 0x8000000000+0x8000000000'",
-        "'NeoDarwinACPIPlatform: \\_SB.PCI0: PCI segment 0, bus 0, ECAM 0x4010000000 (_CBA); _PRT 128 routes'",
-        "'NeoDarwinACPIPlatform: \\_SB.COM0 ARMH0011 uid 0 mem 0x9000000+0x1000 irq 33'",
-        "'NeoDarwinACPIPlatform: \\_SB.VR31 LNRO0005 uid 31 mem 0xa003e00+0x200 irq 79'",
-        "'NeoDarwinACPIPlatform: \\_SB.GED ACPI0013 uid GED irq 41 edge'",
-    ],
-    data = [
-        ":sbsa_kc",
-        "//boot/neoboot",
-        "//images:pid1_root",
-        "//images:pid1_root_trustcache",
+        "NeoDarwinACPIPlatform: ACPICA 20260408; 9 tables (FACP DSDT APIC PPTT GTDT MCFG SPCR DBG2 IORT); 44 devices published, 3 more in IOACPIPlane",
+        "NeoDarwinACPIPlatform: \\_SB.PCI0 PNP0A08 (PNP0A03) uid 0 bus 0-255 memory 0x10000000+0x2eff0000 io 0x3eff0000+0x10000 memory 0x8000000000+0x8000000000",
+        "NeoDarwinACPIPlatform: \\_SB.PCI0: PCI segment 0, bus 0, ECAM 0x4010000000 (_CBA); _PRT 128 routes",
+        "NeoDarwinACPIPlatform: \\_SB.COM0 ARMH0011 uid 0 mem 0x9000000+0x1000 irq 33",
+        "NeoDarwinACPIPlatform: \\_SB.VR31 LNRO0005 uid 31 mem 0xa003e00+0x200 irq 79",
+        "NeoDarwinACPIPlatform: \\_SB.GED ACPI0013 uid GED irq 41 edge",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
@@ -1144,46 +1137,40 @@ sh_test(
 # plist; the test logs in over serial and runs commands in root's shell,
 # zsh. Each step waits for zsh's prompt itself, since its PROMPT_SP line
 # also starts with "#".
-sh_test(
+qemu_test(
     name = "sbsa_session_boot_test",
-    size = "medium",
-    srcs = ["//tools/efi:qemu_efi_test.sh"],
-    args = [
-        "--cpu neoverse-n2",
-        "--mem 2G",
-        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
-        "--esp NeoDarwin/ramdisk=$(rootpath //images:session_root)",
-        "--esp NeoDarwin/trustcache=$(rootpath //images:session_root_trustcache)",
-        "--until-lines",
-        "--send-after 'login: ' 'root\\n'",
-        "--send-after 'root@localhost ~ # ' 'echo hi-$$((6*7))\\n'",
-        "--send-after 'root@localhost ~ # ' 'uname -sm; ls /usr/libexec; tty; launchctl list\\n'",
-        "--send-after 'root@localhost ~ # ' 'echo shell=$${(U)ZSH_NAME}-$$ZSH_VERSION\\n'",
-        "--send-after 'root@localhost ~ # ' 'zmodload zsh/datetime && strftime %Y $$EPOCHSECONDS | read y && echo datetime-$$(( y > 2024 ))\\n'",
+    cpu = "neoverse-n2",
+    mem = "2G",
+    esp = {
+        ":sbsa_kc": "NeoDarwin/kernelcache",
+        "//images:session_root": "NeoDarwin/ramdisk",
+        "//images:session_root_trustcache": "NeoDarwin/trustcache",
+    },
+    send_after = [
+        ("login: ", "root\\n"),
+        ("root@localhost ~ # ", "echo hi-$((6*7))\\n"),
+        ("root@localhost ~ # ", "uname -sm; ls /usr/libexec; tty; launchctl list\\n"),
+        ("root@localhost ~ # ", "echo shell=${(U)ZSH_NAME}-$ZSH_VERSION\\n"),
+        ("root@localhost ~ # ", "zmodload zsh/datetime && strftime %Y $EPOCHSECONDS | read y && echo datetime-$(( y > 2024 ))\\n"),
         # The ACPI platform's "ACPI Tables" (docs/kernel/acpi.md), which
         # acpidump reads: its keys, and the RSDP's signature in its data.
-        "--send-after 'root@localhost ~ # ' 'ioreg -rd1 -k \"ACPI Tables\" -w0 | grep -oE \"[A-Z0-9]{4}(-[0-9]+)?.=<\" | " +
-        "sed \"s/.=<//\" | sort | paste -sd, - | sed s/^/a\"\"t-/; " +
-        "ioreg -rd1 -k \"ACPI Tables\" -w0 | grep -c \"RSDP.=<5253442050545220\" | sed s/^/rs\"\"dp-/\\n'",
-        "$(rootpath //boot/neoboot)",
-        "180",
-        "'hfs: mounted NeoDarwin on device'",
-        "'hi-42'",
-        "'Darwin arm64'",
-        "'/dev/console'",
-        "'com.apple.getty'",
-        # zsh 5.9 is root's shell; loading a module dlopens its bundle.
-        "'shell=ZSH-5.9'",
-        "'datetime-1'",
-        "'rsdp-1'",
-        # QEMU virt's tables (P1-09's nine, the DSDT included), RSDP and XSDT.
-        "'at-APIC,DBG2,DSDT,FACP,GTDT,IORT,MCFG,PPTT,RSDP,SPCR,XSDT'",
+        ("root@localhost ~ # ", "ioreg -rd1 -k \"ACPI Tables\" -w0 | grep -oE \"[A-Z0-9]{4}(-[0-9]+)?.=<\" | " +
+                                "sed \"s/.=<//\" | sort | paste -sd, - | sed s/^/a\"\"t-/; " +
+                                "ioreg -rd1 -k \"ACPI Tables\" -w0 | grep -c \"RSDP.=<5253442050545220\" | sed s/^/rs\"\"dp-/\\n"),
     ],
-    data = [
-        ":sbsa_kc",
-        "//boot/neoboot",
-        "//images:session_root",
-        "//images:session_root_trustcache",
+    timeout_s = 180,
+    expect = [
+        "hfs: mounted NeoDarwin on device",
+        "hi-42",
+        "Darwin arm64",
+        "/dev/console",
+        "com.apple.getty",
+        # zsh 5.9 is root's shell; loading a module dlopens its bundle.
+        "shell=ZSH-5.9",
+        "datetime-1",
+        "rsdp-1",
+        # QEMU virt's tables (P1-09's nine, the DSDT included), RSDP and XSDT.
+        "at-APIC,DBG2,DSDT,FACP,GTDT,IORT,MCFG,PPTT,RSDP,SPCR,XSDT",
     ],
     tags = ["manual", "kernel", "qemu"],
 )
