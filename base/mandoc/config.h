@@ -1,4 +1,5 @@
 /*
+// NeoDarwin-Language: portability: mandoc's configure output for Darwin; mandoc is C.
  * SPDX-License-Identifier: ISC
  * mandoc's config.h for NeoDarwin (base/mandoc/build.sh): the output of
  * contrib/mandoc's ./configure run on macOS 26 against the same pinned

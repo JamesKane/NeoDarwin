@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
+// NeoDarwin-Language: portability: the configuration FreeBSD's libarchive test programs expect, for the base's libarchive.
 /*
  * The libarchive test programs' configuration (usr.bin/bsdcat and
  * usr.bin/cpio's tests, base/freebsd_tests/build.sh, HAVE_CONFIG_H):

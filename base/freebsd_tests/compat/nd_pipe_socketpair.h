@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
+// NeoDarwin-Language: portability: FreeBSD tests rely on bidirectional pipes, which Darwin's pipe(2) doesn't give.
 /* pipe(2) as a socketpair, for FreeBSD tests that use both ends of a pipe
  * (FreeBSD's pipes are bidirectional, Darwin's aren't): sbin/pfctl's
  * pfctl_test reads its child's output from the end it didn't hand over. */

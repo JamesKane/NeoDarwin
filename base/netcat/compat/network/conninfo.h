@@ -1,4 +1,5 @@
 /*
+// NeoDarwin-Language: portability: stands in for closed libnetwork's header that netcat-56 includes.
  * SPDX-License-Identifier: BSD-2-Clause
  * <network/conninfo.h> for netcat-56 (base/netcat/build.sh). macOS's comes
  * with libnetwork, which is closed; nc uses only copyconninfo() and
