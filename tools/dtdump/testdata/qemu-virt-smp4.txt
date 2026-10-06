@@ -10,7 +10,7 @@ acpi: SPCR: interface type 0x3 at 0x9000000
 gic: GICD_CTLR 0x40 (DS=1): timer on Group 0
 psci: conduit HVC, as the FADT says
 acpi: relocated copy: 6960 bytes at 0x42000000
-device tree: 4264 bytes
+device tree: 4304 bytes
 /
     compatible = "NeoDarwin,sbsa"
     model = "BOCHS,BXPC"
@@ -27,6 +27,7 @@ device tree: 4264 bytes
     acpi-rsdp = <0x42000000> (u64)
     acpi-tables = <0x42000000 0x1b30> (u64)
     psci-conduit = "hvc"
+    neodarwin,monotonic-timebase = <0x1>
     AAPL,phandle = <0x2>
 /chosen/memory-map
     ACPITables = <0x42000000 0x1b30> (u64)

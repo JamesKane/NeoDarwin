@@ -1,0 +1,146 @@
+From: NeoDarwin
+Subject: [PATCH] generic arm64: a monotonic timebase where the counter isn't
+
+mach_absolute_time() assumes the Arm system counter is uniform across
+PEs: a read ordered after another CPU's read (by a lock, say) is never
+smaller. The Clutch scheduler checks it. A root bucket's deadline is the
+timestamp of its last selection plus its WCEL (0 for FG), both taken under
+the pset lock, and sched_clutch_root_bucket_deadline_update() panics when
+the new deadline is earlier than the old one. Under QEMU TCG the counter
+is not uniform. QEMU computes CNTVCT at every read from the host's
+CLOCK_MONOTONIC, in whichever host thread runs the vCPU, and macOS's
+CLOCK_MONOTONIC (gettimeofday less the boot time, in microseconds) steps
+back across threads. A host probe saw 28 steps of 1 us in 5 minutes on an
+idle host. With about 44 QEMU tests on the host, a 2-CPU ZFS suite shard
+panicked "old_deadline (16019656750) > new_deadline (16019641750);
+root_bucket (1)": 15000 ticks, 240 us, in thread_select (2026-10-06).
+
+On GENERIC_ARM64_PLATFORM, rtclock_early_init now reads /chosen
+neodarwin,monotonic-timebase (u32), which neoboot writes on QEMU. The
+boot-arg nd_monotonic_timebase=0|1 overrides it. When it is set,
+ml_get_timebase() and ml_get_speculative_timebase() return at least the
+largest value any CPU has returned, kept in one atomic high-water mark.
+XNU's own DEVELOPMENT timebase_validation keeps the same mark to panic on
+a step back. Boards leave it unset and keep the plain read, since the
+mark's cache line would move between cores at every read. Raw
+ml_get_hwclock() (the reset time, entropy) and EL0's direct CNTVCT reads
+are unchanged.
+
+Rebase-risk: low (two returns and a helper in machine_routines.c, one call
+in rtclock_early_init, a prototype).
+---
+--- a/osfmk/arm/rtclock.h
++++ b/osfmk/arm/rtclock.h
+@@ -92,5 +92,9 @@
+ 
+ extern void ClearIdlePop(boolean_t);
+ extern void rtclock_early_init(void);
++#if defined(__arm64__)
++/* NeoDarwin: osfmk/arm64/machine_routines.c, from rtclock_early_init. */
++extern void ml_timebase_monotonic_init(void);
++#endif
+ 
+ #endif /* _ARM_RTCLOCK_H_ */
+--- a/osfmk/arm/rtclock.c
++++ b/osfmk/arm/rtclock.c
+@@ -85,6 +85,10 @@
+ rtclock_early_init(void)
+ {
+ 	PE_register_timebase_callback(timebase_callback);
++#if defined(__arm64__)
++	/* NeoDarwin: a timebase kept monotonic where the counter isn't (GENERIC_ARM64_PLATFORM). */
++	ml_timebase_monotonic_init();
++#endif
+ #if DEVELOPMENT || DEBUG
+ 	uint32_t tmp_mv = 1;
+ 
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -2456,7 +2456,63 @@
+ {
+ 	uint64_t timebase = speculative_timebase();
+ 	return timebase;
++}
++
++#if GENERIC_ARM64_PLATFORM
++/*
++ * NeoDarwin: a monotonic timebase where the counter isn't.
++ *
++ * The architecture makes the system counter uniform across PEs, and
++ * mach_absolute_time() relies on it: a value read after another CPU's
++ * read (ordered by a lock, say) is never smaller. The scheduler's Clutch
++ * panics when that fails ("old_deadline > new_deadline",
++ * sched_clutch_root_bucket_deadline_update). QEMU TCG computes CNTVCT from
++ * the host's CLOCK_MONOTONIC at each read, in whichever host thread runs
++ * the vCPU, and macOS's CLOCK_MONOTONIC (gettimeofday less the boot time,
++ * in microseconds) can step back across threads. On such a platform the
++ * loader sets /chosen neodarwin,monotonic-timebase, and every timebase
++ * read below returns at least the largest value any CPU has returned.
++ * Boards keep the plain read: the shared high-water line would bounce
++ * between their cores at every read.
++ */
++SECURITY_READ_ONLY_LATE(static bool) ml_timebase_monotonic = false;
++static _Atomic uint64_t ml_timebase_high_water;
++
++void
++ml_timebase_monotonic_init(void)
++{
++	DTEntry         entry;
++	void const      *prop;
++	unsigned int    size;
++	uint32_t        enable = 0;
++
++	if (SecureDTLookupEntry(NULL, "/chosen", &entry) == kSuccess &&
++	    SecureDTGetProperty(entry, "neodarwin,monotonic-timebase", &prop, &size) == kSuccess &&
++	    size == sizeof(uint32_t)) {
++		enable = *(uint32_t const *)prop;
++	}
++	(void)PE_parse_boot_argn("nd_monotonic_timebase", &enable, sizeof(enable));
++	ml_timebase_monotonic = (enable != 0);
++}
++
++static uint64_t
++ml_timebase_monotonic_clamp(uint64_t now)
++{
++	uint64_t last = os_atomic_load(&ml_timebase_high_water, relaxed);
++
++	while (now > last) {
++		if (os_atomic_cmpxchgv(&ml_timebase_high_water, last, now, &last, relaxed)) {
++			return now;
++		}
++	}
++	return last;
++}
++#else
++void
++ml_timebase_monotonic_init(void)
++{
+ }
++#endif /* GENERIC_ARM64_PLATFORM */
+ 
+ uint64_t
+ ml_get_timebase()
+@@ -2471,6 +2527,11 @@
+ 		os_compiler_barrier();
+ 	} while (getCpuDatap()->cpu_base_timebase != timebase);
+ 
++#if GENERIC_ARM64_PLATFORM
++	if (__improbable(ml_timebase_monotonic)) {
++		return ml_timebase_monotonic_clamp(clock + timebase);
++	}
++#endif
+ 	return clock + timebase;
+ }
+ 
+@@ -2523,6 +2584,11 @@
+ 		os_compiler_barrier();
+ 	} while (getCpuDatap()->cpu_base_timebase != timebase);
+ 
++#if GENERIC_ARM64_PLATFORM
++	if (__improbable(ml_timebase_monotonic)) {
++		return ml_timebase_monotonic_clamp(clock + timebase);
++	}
++#endif
+ 	return clock + timebase;
+ }
+ 

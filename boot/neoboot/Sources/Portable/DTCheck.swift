@@ -226,6 +226,10 @@ enum DTCheck {
             } else {
                 r.violation("no /chosen/memory-map")
             }
+            // machine_routines.c (patch 0046) reads the flag only as a u32.
+            if chosen.property("neodarwin,monotonic-timebase") != nil && chosen.u32("neodarwin,monotonic-timebase") == nil {
+                r.violation("/chosen neodarwin,monotonic-timebase is not a u32")
+            }
             // machine.c panics on a scale that isn't a u32; 0 would zero every timeout.
             if let mt = chosen.child(named: "machine-timeouts"), mt.property("global-scale") != nil,
                (mt.u32("global-scale") ?? 0) == 0 {

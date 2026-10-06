@@ -81,6 +81,7 @@ Types: `u32` and `u64` are little-endian. `string` is NUL-terminated. `(u64,u64)
 | `acpi-tables` | (u64,u64): the ACPI copy | ACPI copy | not read: the copy is inside DRAM, which `nd_acpi_osl.c` maps for ACPICA through the physmap (`dram-base`, `dram-size`), anything else as device memory |
 | `boot-uuid` | string: a UUID, 36 characters and a NUL. Omitted with a ramdisk (unless `boot.cfg` names one) and when the boot disk has no GPT with an HFS+ partition | `boot.cfg` `boot-uuid=`, else the unique GUID of the boot disk's first HFS+ GPT partition (P1-10, `storage.md`) | `IOKitBSDInit.cpp` `IOFindBSDRoot`: published as the `boot-uuid` resource; AppleFileSystemDriver publishes the IOMedia whose `UUID` (or HFS+ volume UUID) it is as `boot-uuid-media`, the root |
 | `psci-conduit` | `"smc"` or `"hvc"`. Omitted when there is no PSCI | FADT `ARM_BOOT_ARCH`, `ID_AA64PFR0_EL1.EL3`, the loader's EL (below) | `NeoDarwinPSCI.cpp` `init`: `CPU_ON`, `CPU_OFF` and `PSCI_VERSION` go through `smc #0` or `hvc #0` |
+| `neodarwin,monotonic-timebase` | u32 1. Present only on QEMU (`Platform.emulated`, as `/chosen/machine-timeouts`) | constant | `machine_routines.c` `ml_timebase_monotonic_init` (kernel patch 0046): `mach_absolute_time()` never steps back across CPUs. QEMU TCG reads the host clock per vCPU thread, and macOS's `CLOCK_MONOTONIC` isn't monotonic across threads. The boot-arg `nd_monotonic_timebase=0|1` overrides it |
 | `AAPL,phandle` | u32 2 | constant | phandle map |
 
 ### `/chosen/memory-map`
@@ -252,6 +253,7 @@ A tree is DT-ABI v1 when:
    - `acpi-rsdp` is non-zero and lies inside `acpi-tables`, which is (u64,u64).
    - `/chosen/memory-map` exists. Each entry is a non-empty (u64,u64) inside DRAM, `ACPITables` equals `acpi-tables`, a `RAMDisk` length is a multiple of 16 KiB, and a `TrustCache` is at least a segment header and a module header (32 bytes).
    - `/chosen/machine-timeouts` `global-scale`, if present, is a non-zero u32.
+   - `/chosen` `neodarwin,monotonic-timebase`, if present, is a u32.
 5. **`/arm-io`.**
    - `device_type` is `"soc"`; `ranges` is three u64 with `ranges[1]` ≠ 0; the cell counts are 2 and 2.
    - Every child `reg` is non-empty (u64,u64) pairs inside `ranges`.
@@ -284,7 +286,7 @@ dtdump adds cross-checks against the tables:
 - `uart=off` in `boot.cfg` makes neoboot treat the SPCR UART as absent (see "The console").
 - `boot-uuid=<UUID>` in `boot.cfg` names the root (`/chosen boot-uuid`), even when there is a ramdisk; then no `rd=md0` is added (`storage.md`).
 - `dtdump [--dram-base HEX] [--dram-size HEX] [--timebase HZ] [--boot-mpidr HEX] [--seed HEX] [--acpi-base HEX] [--ramdisk HEX,HEX] [--trust-cache HEX,HEX] [--gicd-ctlr HEX] [--timer-group 0|1] [--el3] [--loader-el 1|2] [--gop WxH] [--uart-off] [--boot-uuid UUID] [--write-dt FILE] ACPIDUMP` prints the tables' facts and the tree, then checks it, and exits 1 on any violation. `--gicd-ctlr` is the value neoboot would read (default 0x40, DS = 1, as on QEMU). `--el3` says the CPU implements EL3 and `--loader-el` is the EL neoboot runs at (default 1); with the FADT they choose the PSCI conduit. `--gop WxH` says neoboot found a framebuffer of that mode, and `--uart-off` models `uart=off`: together they choose the console. `--boot-uuid` adds `/chosen boot-uuid`, and `--trust-cache` a `/chosen/memory-map` `TrustCache` entry. `dtdump [--gop WxH] --dt FILE` checks an existing binary tree. The tests are `//tools/dtdump:all`:
-  - golden trees (every QEMU one with `/chosen/machine-timeouts`): QEMU with one and four CPUs, one with a DS = 0 distributor, QEMU with TF-A and four CPUs (conduit SMC), and 18 `cortex-a76` CPUs;
+  - golden trees (every QEMU one with `/chosen/machine-timeouts` and `neodarwin,monotonic-timebase`): QEMU with one and four CPUs, one with a DS = 0 distributor, QEMU with TF-A and four CPUs (conduit SMC), and 18 `cortex-a76` CPUs;
   - the Radxa Dragon Q8B's own tables (`radxa-dragon-q8b.acpidump`): golden trees with eight CPUs (MPIDR 0x000–0x700), eight GICR frames at 0x17a60000, PPI 27, SMC and the GENI UART at 0x884000 (16 KiB), without and with `--gop 1920x1080`; with `--uart-off`, no UART with `--gop` and refused without;
   - `qemu-virt-spcr-geni.acpidump`, QEMU's single-CPU tables with the SPCR rewritten as the Q8B's (type 0x13 at 0x884000): golden trees with the GENI UART, without and with `--gop`; its `--uart-off` tree rejected by `--dt` without `--gop`; its tree with the UART's compatible renamed rejected by `--dt`;
   - a truncated MADT, an MPIDR with Aff3 set, and a tree with a dangling `serial-device`;
@@ -302,3 +304,4 @@ Adding an optional property is backwards compatible and keeps v1, with a row her
 - P1-12, next: a 16550 serial node.
 - P1-15 (added): `/chosen/memory-map` `TrustCache`, the static trust cache from `\NeoDarwin\trustcache` (`amfi-provider.md` §4). A kernel without P1-15's ndamfi loads it too (XNU reads it), but enforces nothing.
 - 2026-10-04 (added): `/chosen/machine-timeouts` `global-scale` 8 on QEMU, so a loaded host doesn't trip XNU's real-time lock timeouts (kernel patch 0038).
+- 2026-10-06 (added): `/chosen` `neodarwin,monotonic-timebase` 1 on QEMU. Kernel patch 0046 then keeps the timebase monotonic across vCPUs, which TCG's counter isn't on a macOS host.

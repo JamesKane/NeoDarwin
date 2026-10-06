@@ -544,8 +544,8 @@ bin/sh/builtins/functional_test:wait10	PASS
 bin/sh/builtins/functional_test:wait11	FAIL	Apple behaviour: Apple's sh (shell_cmds-326, FreeBSD's sh of about 2018): wait %job for a killed pipeline
 bin/sh/builtins/functional_test:wait2	PASS	
 bin/sh/builtins/functional_test:wait3	PASS	
-bin/sh/builtins/functional_test:wait4	PASS	
-bin/sh/builtins/functional_test:wait5	PASS	
+bin/sh/builtins/functional_test:wait4	FLAKY	timing: failed under full QEMU load and passed on rerun (2026-10-06)
+bin/sh/builtins/functional_test:wait5	FLAKY	timing: failed under full QEMU load and passed on rerun (2026-10-06)
 bin/sh/builtins/functional_test:wait6	PASS	
 bin/sh/builtins/functional_test:wait7	PASS	
 bin/sh/builtins/functional_test:wait8	PASS	
@@ -1490,7 +1490,7 @@ sbin/ping/ping_test:ping_46	FAIL	Apple flag: Apple's ping/ping6 (network_cmds) h
 sbin/ping/ping_test:ping_64	FAIL	Apple flag: Apple's ping/ping6 (network_cmds) have no -4/-6, and ping6 no -t (the tests' flags and FreeBSD's output)
 sbin/ping/ping_test:ping_6_c1_s8_t1	FAIL	Apple flag: Apple's ping/ping6 (network_cmds) have no -4/-6, and ping6 no -t (the tests' flags and FreeBSD's output)
 sbin/ping/ping_test:ping_c1_s56_t1	FAIL	Apple flag: Apple's ping/ping6 (network_cmds) have no -4/-6, and ping6 no -t (the tests' flags and FreeBSD's output)
-sbin/ping/ping_test:ping_c1_s56_t1_S127	PASS	
+sbin/ping/ping_test:ping_c1_s56_t1_S127	FLAKY	timing: ping -c1 -t1 fails when the loaded guest misses its one-second window (2026-10-06)
 sbin/ping/ping_test:ping_c1_s8_t1_S1	FAIL	Apple behaviour: Apple's ping is IPv4 only (FreeBSD's ping takes ::1 and -S for IPv6 too)
 sbin/ping/ping_test:ping_c1t6	PASS	
 sbin/ping/ping_test:ping_nohost	PASS	

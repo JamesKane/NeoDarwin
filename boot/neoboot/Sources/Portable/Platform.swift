@@ -224,6 +224,9 @@ enum Platform {
         if let uuid = f.bootUUID {  // IOKitBSDInit.cpp IOFindBSDRoot: the root by UUID (AppleFileSystemDriver)
             w.property("boot-uuid", length: GPT.textLength + 1) { v in GPT.writeText(uuid, into: v) }
         }
+        if emulated(a) {  // kernel patch 0046: TCG's counter can step back across vCPUs
+            w.property("neodarwin,monotonic-timebase", u32: 1)
+        }
         w.property("AAPL,phandle", u32: chosenPhandle)
         w.begin()  // /chosen/memory-map
         w.property("name", string: "memory-map")
@@ -358,6 +361,13 @@ enum Platform {
     /// times gives a ticket lock 1 s. A boot-arg ml-timeout-global-scale
     /// still overrides it; boards keep XNU's values.
     static let emulatorTimeoutScale: UInt32 = 8
+
+    // /chosen neodarwin,monotonic-timebase 1 on an emulator: kernel patch
+    // 0046 keeps mach_absolute_time() monotonic across CPUs. QEMU TCG
+    // computes CNTVCT from the host clock in each vCPU's thread, and macOS's
+    // CLOCK_MONOTONIC steps back across threads; the Clutch scheduler
+    // panicked "old_deadline > new_deadline" on a loaded host (2026-10-06).
+    // Boards' counters are uniform, and keep the plain read.
 
     /// QEMU: virt's tables carry OEM ID "BOCHS ", and sbsa-ref's (EDK2
     /// SbsaQemu) OEM ID "LINARO" with OEM table ID "SBSAQEMU".

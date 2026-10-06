@@ -128,6 +128,7 @@ SBSA_PATCHES = [
     "patches/0043-serial-keyboard-thread-dump-boot-arg.patch",
     "patches/0044-vfs-mockfs-small-type-number.patch",
     "patches/0045-vm-shared-region-empty-check-np-info-trace.patch",
+    "patches/0046-generic-arm64-monotonic-timebase-on-emulators.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
