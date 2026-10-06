@@ -1,0 +1,115 @@
+From: NeoDarwin
+Subject: [PATCH] sleh: IRQs before the CPU interrupt controller exists, on generic Arm
+
+sleh_irq hands every IRQ to PE_handle_ext_interrupt(), which calls
+through AppleARMSMP's gCPUIC, the PassthruInterruptController. XNU's
+cpu_boot_thread creates it only once the platform expert has been
+matched, on its own thread. NeoDarwinGICv3 enables Group 1 and registers
+as an interrupt controller earlier, in the platform expert's start(), so
+a driver can register and enable an SPI or LPI on it while gCPUIC is
+still NULL; the interrupt then took a data abort in
+PE_handle_ext_interrupt (//kernel:sbsa_disk_mount_boot_test on QEMU
+virt, once, under host load). Patch 0016's guard covered only the timer
+on Group 1, and virt's timer is Group 0.
+
+On GENERIC_ARM64_PLATFORM, sleh_irq now takes every IRQ before
+NeoDarwinGICv3 has attached (sleh_gic_irq_controller_attached) whatever
+the timer's group, through sleh_gic_irq_before_attach():
+- once NeoDarwinGICv3 has set sleh_gic_irq_early_handler (initWithNode,
+  before it enables Group 1), that handler: the GIC's own IRQ loop, the
+  one PassthruInterruptController::externalInterrupt() calls afterwards,
+  so the interrupt reaches its driver as it would later;
+- before that, patch 0016's loop: the Group 1 timer is handled; any other
+  INTID is completed unhandled, counted in sleh_gic_stray_irqs and
+  reported once with kprintf. No driver exists yet to have enabled one.
+sleh_gic_irqs_before_attach counts them all; NeoDarwinGICv3 logs both
+counts when it attaches (bring-up doc §2.1.11).
+
+Rebase-risk: low (one branch in sleh_irq, and patch 0016's helpers).
+---
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -2569,6 +2569,18 @@
+ /* Group 1 timer interrupts taken, on every CPU (NeoDarwinGICv3 logs it). */
+ extern uint64_t sleh_gic_timer_irqs;
+ uint64_t sleh_gic_timer_irqs;
++
++/*
++ * NeoDarwinGICv3's IRQ loop, set when the driver enables Group 1 delivery,
++ * for IRQs taken before it attaches (sleh_gic_irq_before_attach).
++ */
++extern void (*sleh_gic_irq_early_handler)(void);
++void (*sleh_gic_irq_early_handler)(void);
++/* IRQs taken before the attach, and those completed unhandled (logged then). */
++extern uint64_t sleh_gic_irqs_before_attach;
++uint64_t sleh_gic_irqs_before_attach;
++extern uint64_t sleh_gic_stray_irqs;
++uint64_t sleh_gic_stray_irqs;
+ 
+ void sleh_gic_timer_interrupt(void);
+ 
+@@ -2590,18 +2602,48 @@
+ 	for (;;) {
+ 		uint64_t iar = __builtin_arm_rsr64("ICC_IAR1_EL1");
+ 		uint32_t intid = (uint32_t)(iar & 0xffffff);
+-		if (intid >= 1020) {
++		if (intid >= 1020 && intid < 8192) {
+ 			break;  /* 1023: nothing pending */
+ 		}
+ 		if (intid == pe_gic_timer_intid) {
+ 			sleh_gic_timer_interrupt();
++		} else {
++			/*
++			 * Before NeoDarwinGICv3 exists, no driver can have enabled a
++			 * Group 1 source (firmware hands over with every source
++			 * disabled), so nothing waits for this one: it is completed
++			 * unhandled, counted, and reported once.
++			 */
++			if (os_atomic_inc_orig(&sleh_gic_stray_irqs, relaxed) == 0) {
++				kprintf("sleh_irq: stray INTID %u before the GIC driver, completed unhandled\n", intid);
++			}
+ 		}
+-		/*
+-		 * Nothing else is enabled on Group 1 before the controller is: a
+-		 * stray interrupt is completed unhandled (a level one pends again).
+-		 */
+ 		__builtin_arm_wsr64("ICC_EOIR1_EL1", iar);
+ 		__builtin_arm_isb(ISB_SY);
++	}
++}
++
++/*
++ * An IRQ before NeoDarwinGICv3 has attached to AppleARMSMP's
++ * PassthruInterruptController (patch 0047). PE_handle_ext_interrupt() calls
++ * through gCPUIC, which XNU's cpu_boot_thread creates only once the platform
++ * expert has been matched, on its own thread; NeoDarwinGICv3 registers as
++ * an interrupt controller earlier, in the platform expert's start(), and a
++ * driver may enable an SPI or LPI on it before gCPUIC exists. The IRQ loop
++ * PassthruInterruptController would call is NeoDarwinGICv3's, so it is
++ * called directly (sleh_gic_irq_early_handler, set as the GIC driver
++ * enables Group 1); before the driver exists, the timer on Group 1 is the
++ * only source that can be enabled.
++ */
++static void
++sleh_gic_irq_before_attach(void)
++{
++	os_atomic_inc(&sleh_gic_irqs_before_attach, relaxed);
++	void (*handler)(void) = os_atomic_load(&sleh_gic_irq_early_handler, acquire);
++	if (handler != NULL) {
++		handler();
++	} else {
++		sleh_gic_irq_before_controller();
+ 	}
+ }
+ #endif /* GENERIC_ARM64_PLATFORM */
+@@ -2619,8 +2661,8 @@
+ 
+ #if USE_APPLEARMSMP
+ #if GENERIC_ARM64_PLATFORM
+-	if (pe_gic_timer_group == 1 && !os_atomic_load(&sleh_gic_irq_controller_attached, acquire)) {
+-		sleh_gic_irq_before_controller();
++	if (!os_atomic_load(&sleh_gic_irq_controller_attached, acquire)) {
++		sleh_gic_irq_before_attach();
+ 	} else
+ #endif
+ 	PE_handle_ext_interrupt();

@@ -129,6 +129,7 @@ SBSA_PATCHES = [
     "patches/0044-vfs-mockfs-small-type-number.patch",
     "patches/0045-vm-shared-region-empty-check-np-info-trace.patch",
     "patches/0046-generic-arm64-monotonic-timebase-on-emulators.patch",
+    "patches/0047-generic-arm64-irq-before-cpu-interrupt-controller.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -2026,6 +2027,78 @@ sh_test(
         "//boot/neoboot:testdata/timer-group1.cfg",
         "//images:session_root",
         "//images:session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# An IRQ before NeoDarwinGICv3 has attached to XNU's
+# PassthruInterruptController, whose pointer (AppleARMSMP's gCPUIC) is NULL
+# until cpu_boot_thread creates it (bring-up doc §2.1.11, patch 0047). With
+# nd_gic_early_irq_test=1 the GIC driver sends its CPU SGI 15 from
+# initWithNode, when that controller cannot exist yet; sleh_irq must hand it
+# to the GIC's own IRQ loop. Before patch 0047 this boot took a data abort in
+# PE_handle_ext_interrupt. QEMU virt: the timer on Group 0, as in the panic.
+sh_test(
+    name = "sbsa_early_irq_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pid1_root_trustcache)",
+        "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/early-irq.cfg)",
+        "--absent 'NOT taken'",
+        "--absent 'sleh_irq: stray INTID'",
+        "--until-lines",
+        "$(rootpath //boot/neoboot)",
+        "120",
+        "'NeoDarwinGICv3: early IRQ test: SGI 15 taken and completed before the CPU interrupt controller existed'",
+        "' IRQs taken before the CPU interrupt controller existed, 0 of them strays'",
+        "'NeoDarwinGICv3: timer PPI 27 on Group 0 (FIQ)'",
+        "'pid1: all checks passed'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//boot/neoboot:testdata/early-irq.cfg",
+        "//images:pid1_root",
+        "//images:pid1_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# The same with the timer on Group 1, as on the Q8B: timer IRQs before the
+# GIC driver exists go through patch 0016's loop, later ones and the SGI
+# through the driver's.
+sh_test(
+    name = "sbsa_early_irq_timer_group1_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pid1_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pid1_root_trustcache)",
+        "--esp NeoDarwin/boot.cfg=$(rootpath //boot/neoboot:testdata/early-irq-timer-group1.cfg)",
+        "--absent 'NOT taken'",
+        "--absent 'sleh_irq: stray INTID'",
+        "--until-lines",
+        "$(rootpath //boot/neoboot)",
+        "120",
+        "'NeoDarwinGICv3: early IRQ test: SGI 15 taken and completed before the CPU interrupt controller existed'",
+        "' IRQs taken before the CPU interrupt controller existed, 0 of them strays'",
+        "'NeoDarwinGICv3: timer PPI 27 on Group 1 (IRQ); '",
+        "'pid1: all checks passed'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//boot/neoboot:testdata/early-irq-timer-group1.cfg",
+        "//images:pid1_root",
+        "//images:pid1_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )

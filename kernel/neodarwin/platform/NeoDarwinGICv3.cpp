@@ -50,7 +50,10 @@
 #include <IOKit/IOBufferMemoryDescriptor.h>
 #include <IOKit/IODeviceTreeSupport.h>
 #include <IOKit/IOLib.h>
+#include <kern/clock.h>
+#include <kern/cpu_data.h>
 #include <kern/cpu_number.h>
+#include <mach/clock_types.h>
 #include <machine/machine_routines.h>
 #include <pexpert/arm64/board_config.h>
 #include <pexpert/device_tree.h>
@@ -71,6 +74,13 @@ extern "C" uint32_t pe_gic_timer_group;
 extern "C" bool sleh_gic_irq_controller_attached;
 extern "C" uint64_t sleh_gic_timer_irqs;
 extern "C" void sleh_gic_timer_interrupt(void);
+// IRQs sleh_irq takes before attachToCPUController (patch 0047): this
+// controller's IRQ loop once initWithNode has set the handler, and how many
+// there were, how many of them before the handler existed were completed
+// unhandled.
+extern "C" void (*sleh_gic_irq_early_handler)(void);
+extern "C" uint64_t sleh_gic_irqs_before_attach;
+extern "C" uint64_t sleh_gic_stray_irqs;
 // Called at the end of pe_init_fiq() on each CPU as it comes up (patch 0017).
 extern "C" void (*pe_gic_cpu_init_hook)(void);
 
@@ -238,6 +248,14 @@ nd_gic_cpu_init(void)
 	gNeoDarwinGIC->initCurrentCPU();
 }
 
+// sleh_irq's handler until attachToCPUController has run: the IRQ loop
+// PassthruInterruptController::externalInterrupt() calls afterwards.
+extern "C" void
+nd_gic_irq_early(void)
+{
+	gNeoDarwinGIC->handleInterrupt(NULL, NULL, 0);
+}
+
 bool
 NeoDarwinGICv3::initWithNode(IORegistryEntry *gicNode)
 {
@@ -299,13 +317,25 @@ NeoDarwinGICv3::initWithNode(IORegistryEntry *gicNode)
 		return false;
 	}
 
+	// From here this controller takes every IRQ, before it has attached to
+	// XNU's PassthruInterruptController too (sleh_irq, patch 0047): drivers
+	// may enable interrupts on it as soon as it is registered below, and
+	// cpu_boot_thread creates that controller only once the platform expert
+	// has been matched (bring-up doc §2.1.11).
+	__atomic_store_n(&gNeoDarwinGIC, this, __ATOMIC_RELEASE);
+	__atomic_store_n(&sleh_gic_irq_early_handler, &nd_gic_irq_early, __ATOMIC_RELEASE);
+
 	// Affinity routing and Group 1, alongside the Group 0 pe_fiq.c enabled.
 	wr32(gicd + GICD_CTLR, rd32(gicd + GICD_CTLR) | ND_GICD_CTLR_ARE | ND_GICD_CTLR_ENABLEGRP1);
 	initCPUInterface();
 
 	// Secondary CPUs finish their GIC setup through us as they come up.
-	gNeoDarwinGIC = this;
 	__atomic_store_n(&pe_gic_cpu_init_hook, &nd_gic_cpu_init, __ATOMIC_RELEASE);
+
+	uint32_t earlyTest = 0;
+	if (PE_parse_boot_argn("nd_gic_early_irq_test", &earlyTest, sizeof(earlyTest)) && earlyTest != 0) {
+		earlyIRQSelfTest();
+	}
 
 	// Publish under the name device-tree interrupt specifiers resolve to.
 	const OSSymbol *name = IODTInterruptControllerName(gicNode);
@@ -396,12 +426,63 @@ NeoDarwinGICv3::attachToCPUController(void)
 	    (IOInterruptHandler)getInterruptHandlerAddress(), NULL);
 	// sleh_irq may now reach handleInterrupt through PE_handle_ext_interrupt().
 	__atomic_store_n(&sleh_gic_irq_controller_attached, true, __ATOMIC_RELEASE);
+	uint64_t early = __atomic_load_n(&sleh_gic_irqs_before_attach, __ATOMIC_RELAXED);
+	if (early != 0) {
+		IOLog("NeoDarwinGICv3: %llu IRQs taken before the CPU interrupt controller existed, %llu of them strays\n",
+		    early, __atomic_load_n(&sleh_gic_stray_irqs, __ATOMIC_RELAXED));
+	}
 	if (pe_gic_timer_group == 1) {
 		IOLog("NeoDarwinGICv3: timer PPI %u on Group 1 (IRQ); %llu timer interrupts taken as IRQs so far\n",
 		    pe_gic_timer_intid, __atomic_load_n(&sleh_gic_timer_irqs, __ATOMIC_RELAXED));
 	} else {
 		IOLog("NeoDarwinGICv3: timer PPI %u on Group 0 (FIQ)\n", pe_gic_timer_intid);
 	}
+}
+
+// Boot-arg nd_gic_early_irq_test=1: an SGI to this CPU from initWithNode,
+// before XNU's PassthruInterruptController exists (cpu_boot_thread waits
+// for the platform expert, whose start() is still running), so that
+// sleh_irq takes an IRQ with gCPUIC NULL: the path of a data abort in
+// PE_handle_ext_interrupt (bring-up doc §2.1.11). SGI 15 has no vector; the
+// IRQ loop completes it.
+#define ND_SGI_EARLY_TEST 15
+
+void
+NeoDarwinGICv3::earlyIRQSelfTest(void)
+{
+	if (!ml_get_interrupts_enabled()) {
+		IOLog("NeoDarwinGICv3: early IRQ test skipped: interrupts are masked\n");
+		return;
+	}
+	const uint32_t bit = 1u << ND_SGI_EARLY_TEST;
+	disable_preemption();  // this CPU's redistributor and SGI
+	vm_offset_t rd = redistributorForCurrentCPU();
+	uint64_t before = __atomic_load_n(&sleh_gic_irqs_before_attach, __ATOMIC_RELAXED);
+	wr8(rd + ND_GICR_IPRIORITYR0 + ND_SGI_EARLY_TEST, ND_GIC_PRIORITY_DEFAULT);
+	__builtin_arm_dsb(ND_DSB_ISHST);
+	wr32(rd + GICR_ISENABLER0, bit);
+	uint64_t mpidr = __builtin_arm_rsr64("MPIDR_EL1");
+	uint64_t aff0 = mpidr & 0xff;
+	uint64_t sgi = (uint64_t)ND_SGI_EARLY_TEST << 24 |
+	    ((mpidr >> 32) & 0xff) << 48 |
+	    ((mpidr >> 16) & 0xff) << 32 |
+	    (aff0 >> 4) << 44 |
+	    ((mpidr >> 8) & 0xff) << 16 |
+	    (1ull << (aff0 & 0xf));
+	__builtin_arm_dsb(ND_DSB_ISHST);
+	__builtin_arm_wsr64("ICC_SGI1R_EL1", sgi);
+	__builtin_arm_isb(ND_ISB_SY);
+	uint64_t deadline;
+	nanoseconds_to_absolutetime(100 * NSEC_PER_MSEC, &deadline);
+	deadline += mach_absolute_time();
+	bool taken = false;
+	while (!(taken = __atomic_load_n(&sleh_gic_irqs_before_attach, __ATOMIC_RELAXED) != before) &&
+	    mach_absolute_time() < deadline) {
+	}
+	wr32(rd + ND_GICR_ICENABLER0, bit);
+	enable_preemption();
+	IOLog("NeoDarwinGICv3: early IRQ test: SGI %u %s before the CPU interrupt controller existed\n",
+	    ND_SGI_EARLY_TEST, taken ? "taken and completed" : "NOT taken");
 }
 
 // The banked vector a cpu nub's SGI or PPI source names, and whose CPU it

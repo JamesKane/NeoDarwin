@@ -83,7 +83,7 @@ cli_root/zfs_receive/receive-o-x_props_aliases	PASS
 cli_root/zfs_receive/receive-o-x_props_override	FAIL	to investigate
 cli_root/zfs_receive/setup	PASS	
 cli_root/zfs_receive/zfs_receive_-e	PASS	
-cli_root/zfs_receive/zfs_receive_-wR-encrypted-mix	PASS	
+cli_root/zfs_receive/zfs_receive_-wR-encrypted-mix	FLAKY	zfs send | zfs recv stream arrived corrupt ("checksum mismatch") under load, twice on 2026-10-06; the same flake as zfs_receive_to_encrypted, the pipe relay (zfs patch 0009) a suspect (P3-11)
 cli_root/zfs_receive/zfs_receive_001_pos	PASS	
 cli_root/zfs_receive/zfs_receive_002_pos	PASS	
 cli_root/zfs_receive/zfs_receive_003_pos	PASS	

@@ -192,6 +192,7 @@ private:
 	vm_offset_t redistributorFor(uint64_t mpidr);
 	vm_offset_t redistributorForCurrentCPU(void);
 	void initCPUInterface(void);
+	void earlyIRQSelfTest(void);
 	IOInterruptVector *bankedVector(IOService *nub, int source, unsigned int *cpu, IOInterruptVectorNumber *intid);
 	void enableBanked(unsigned int cpu, IOInterruptVectorNumber intid);
 	void dispatch(IOInterruptVector *vector, IOInterruptVectorNumber intid, vm_offset_t rd);
