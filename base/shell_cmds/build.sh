@@ -103,6 +103,9 @@ tool "$B" "$ROOT" "$OUT/usr/bin/hexdump" "$B/cflags" hexdump/conv.c hexdump/disp
 	hexdump/hexsyntax.c hexdump/odsyntax.c hexdump/parse.c "$(vers hexdump)"
 # install-files.sh: od is a hard link to hexdump (a copy here).
 cp "$OUT/usr/bin/hexdump" "$OUT/usr/bin/od"
+# hd, hexdump -C by its name (hexsyntax.c), as FreeBSD's LINKS install it
+# (macOS doesn't; FreeBSD's usr.bin/hexdump tests run it).
+cp "$OUT/usr/bin/hexdump" "$OUT/usr/bin/hd"
 
 # The project's other targets (P4-21). One source each, INSTALL_PATH
 # /usr/bin unless the target says otherwise; their warning settings change

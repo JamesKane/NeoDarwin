@@ -4,7 +4,8 @@
 # checkpoint 7, docs/architecture/freebsd-parity.md §2.1), from the source
 # drop at 050683bb8e13, installed as FreeBSD's bsd.test.mk installs it:
 #   build.sh OUT FREEBSD_SRC SYSROOT DEPROOT...
-#     (DEPROOT: //base:root, //base:kyua_commands for libatf-c.a)
+#     (DEPROOT: //base:root, //base:kyua_commands for libatf-c.a,
+#      //base:libarchive_commands, //base:libsbuf_dylib, //base:libutil_dylib)
 # One line per tests/Makefile, in the words of share/mk's atf.test.mk,
 # tap.test.mk and netbsd-tests.test.mk:
 #   atf_sh DIR NAME [SRC [SED-EXPR...]]  ATF_TESTS_SH: "#! /usr/libexec/atf-sh"
@@ -14,6 +15,7 @@
 #                                        contrib/netbsd-tests/DIR/t_NAME.sh
 #                                        (NAME less _test);
 #   tap_sh DIR NAME                      TAP_TESTS_SH: NAME.sh, executable;
+#   plain_sh DIR NAME [SRC]              PLAIN_TESTS_SH: NAME.sh, executable;
 #   atf_c DIR NAME [SRC...]              ATF_TESTS_C: NAME.c with libatf-c,
 #                                        compiled with TARGET_FLAGS;
 #   plain_c DIR NAME RSP SRC... [-- LIB...]  PLAIN_TESTS_C: a program whose
@@ -21,6 +23,8 @@
 #   prog DIR NAME SRC...                 PROGS (a C helper, not a test);
 #   script DIR NAME SRC                  SCRIPTS (a helper, not a test);
 #   files DIR SRCDIR FILE...             ${PACKAGE}FILES (0444);
+#   mkfiles DIR                          DIR/tests/Makefile's ${PACKAGE}FILES, from
+#                                        DIR/tests or contrib/netbsd-tests/DIR;
 #   tree_files DIR [SRCDIR]              every file of SRCDIR (DIR/tests)
 #                                        but Makefiles and test sources;
 #   meta DIR NAME 'KEY="VALUE"'          TEST_METADATA.NAME.
@@ -201,6 +205,111 @@ for h in usr.bin/mkimg/tests/*.hex; do
 	f="${h##*/}"; sed -e '/^#.*/D' < "$h" > "$T/usr.bin/mkimg/${f%.hex}"; chmod 0444 "$T/usr.bin/mkimg/${f%.hex}"
 done
 awk 'BEGIN { for (i = 0; i < 2097152; i++) print "P" }' > "$T/usr.bin/mkimg/partition_data_4M.bin"; chmod 0444 "$T/usr.bin/mkimg/partition_data_4M.bin"
+
+# Batch 2 of part 2: usr.bin a to m (docs/architecture/freebsd-parity.md §2.1).
+# mkfiles DIR: the ${PACKAGE}FILES of DIR/tests/Makefile, each from
+# DIR/tests or (netbsd-tests.test.mk's .PATH) contrib/netbsd-tests/DIR.
+mkfiles() {
+	local dir="$1" f; mkdir -p "$T/$dir"
+	for f in $(awk '/\\$/ { sub(/\\$/, ""); printf "%s", $0; next } { print }' "$dir/tests/Makefile" |
+		awk '/^\$\{PACKAGE\}FILES\+?=/ { for (i = 2; i <= NF; i++) print $i }'); do
+		if [ -f "$dir/tests/$f" ]; then install -m 0444 "$dir/tests/$f" "$T/$dir/$f"
+		else install -m 0444 "contrib/netbsd-tests/$dir/$f" "$T/$dir/$f"; fi
+	done
+}
+plain_sh() { reg "$1" plain "$2"; install -m 0555 "${3:-$1/tests/$2.sh}" "$T/$1/$2"; }
+tap_sh usr.bin/apply legacy_test; mkfiles usr.bin/apply
+# awk: TESTS_SUBDIRS bugs-fixed (one-true-awk's own) and netbsd.
+atf_sh usr.bin/awk/bugs-fixed bug_fix_test usr.bin/awk/tests/bugs-fixed/bug_fix_test.sh
+files usr.bin/awk/bugs-fixed contrib/one-true-awk/bugs-fixed \
+	$(cd contrib/one-true-awk/bugs-fixed && ls *.awk *.ok *.in *.err)
+atf_sh usr.bin/awk/netbsd awk_test contrib/netbsd-tests/usr.bin/awk/t_awk.sh
+files usr.bin/awk/netbsd contrib/netbsd-tests/usr.bin/awk $(cd contrib/netbsd-tests/usr.bin/awk && ls d_*)
+netbsd_sh usr.bin/basename basename_test
+atf_sh usr.bin/bintrans bintrans_test
+tap_sh usr.bin/bintrans legacy_test; mkfiles usr.bin/bintrans
+for t in comment_test cond_test legacy_test; do
+	tap_sh usr.bin/calendar $t; meta usr.bin/calendar $t 'timeout="600"'
+done
+mkfiles usr.bin/calendar
+atf_sh usr.bin/cmp cmp_test2
+netbsd_sh usr.bin/cmp cmp_test; mkfiles usr.bin/cmp
+atf_sh usr.bin/col col_test; mkfiles usr.bin/col
+atf_sh usr.bin/column column
+tap_sh usr.bin/comm legacy_test; mkfiles usr.bin/comm
+atf_sh usr.bin/compress compress_test
+atf_sh usr.bin/csplit csplit_test
+atf_sh usr.bin/diff diff_test
+atf_sh usr.bin/diff netbsd_diff_test contrib/netbsd-tests/usr.bin/diff/t_diff.sh -e 's/t_diff/`basename $0`/g'
+mkfiles usr.bin/diff
+atf_sh usr.bin/diff3 diff3_test; mkfiles usr.bin/diff3
+netbsd_sh usr.bin/dirname dirname_test
+atf_sh usr.bin/du du_test
+atf_sh usr.bin/env env_test
+# file: contrib/file's tests, each .result through awk 1 (a final newline).
+atf_sh usr.bin/file file_test
+files usr.bin/file contrib/file/tests $(cd contrib/file/tests && ls *.testfile *.flags *.magic)
+for r in contrib/file/tests/*.result; do
+	awk 1 "$r" > "$T/usr.bin/file/${r##*/}"; chmod 0444 "$T/usr.bin/file/${r##*/}"
+done
+atf_sh usr.bin/find find_test
+atf_sh usr.bin/fold fold_test
+atf_sh usr.bin/getconf getconf_test
+prog usr.bin/getconf arch_type usr.bin/getconf/tests/arch_type.c
+# gh-bc: contrib/bc's own suite (tests/all.sh) behind two plain tests,
+# with the FILESGROUPS of its Makefile.
+plain_sh usr.bin/gh-bc bc_tests; plain_sh usr.bin/gh-bc dc_tests
+mkdir -p "$T/usr.bin/gh-bc/scripts"; install -m 0755 contrib/bc/scripts/functions.sh "$T/usr.bin/gh-bc/scripts/"
+mkdir -p "$T/usr.bin/gh-bc/tests"
+install -m 0755 contrib/bc/tests/*.py contrib/bc/tests/*.sed contrib/bc/tests/*.sh contrib/bc/tests/*.txt "$T/usr.bin/gh-bc/tests/"
+for c in bc dc; do
+	for s in "" /errors /scripts; do
+		m=0444; [ "$s" = /scripts ] && m=0755
+		mkdir -p "$T/usr.bin/gh-bc/tests/$c$s"; install -m $m contrib/bc/tests/$c$s/*.* "$T/usr.bin/gh-bc/tests/$c$s/"
+	done
+done
+atf_sh usr.bin/grep grep_freebsd_test
+netbsd_sh usr.bin/grep grep_test; mkfiles usr.bin/grep
+atf_sh usr.bin/gzip zdiff_test
+netbsd_sh usr.bin/gzip gzip_test; mkfiles usr.bin/gzip
+atf_sh usr.bin/hexdump hexdump_test
+atf_sh usr.bin/hexdump od_test; mkfiles usr.bin/hexdump
+tap_sh usr.bin/join legacy_test; mkfiles usr.bin/join
+tap_sh usr.bin/jot legacy_test; mkfiles usr.bin/jot
+atf_sh usr.bin/lam lam_test
+# lastcomm: its accounting files are amd64's and i386's (skipped on arm64).
+tap_sh usr.bin/lastcomm legacy_test; mkfiles usr.bin/lastcomm
+meta usr.bin/lastcomm legacy_test 'allowed_architectures="amd64 i386"'
+meta usr.bin/lastcomm legacy_test 'required_programs="lastcomm"'
+atf_sh usr.bin/locale locale_test; mkfiles usr.bin/locale
+atf_sh usr.bin/lockf lockf_test
+atf_c usr.bin/mail mailx_signal_test
+atf_sh usr.bin/mktemp mktemp_test
+# bsdcat and cpio: contrib/libarchive's test programs (bsdcat_test,
+# bsdcpio_test: test_utils' driver, list.h from their DEFINE_TESTs) behind
+# a functional_test, linked with the base's libarchive (Apple's 3.7.4; the
+# tests are 3.8's). compat/libarchive/config.h is FreeBSD's
+# config_freebsd.h for Darwin.
+LA="$(dep libarchive.dylib //base:libarchive_commands)"
+LAS=contrib/libarchive
+la_test() {
+	local dir="$1" name="$2" sub="$3"; shift 3
+	local srcs=$(cd "$LAS/$sub/test" && ls test_*.c | grep -v '^test_main\.c$')
+	mkdir -p "$B/la/$sub"
+	cp "$LAS"/libarchive/archive_platform_{acl,xattr}.h "$B/la/$sub/"   # not its archive.h: the base's
+	(cd "$LAS/$sub/test" && grep -h DEFINE_TEST $srcs) > "$B/la/$sub/list.h"
+	write_rsp "$B/la-$sub.rsp" "${TARGET_FLAGS[@]}" -O2 -std=gnu11 -w -DHAVE_CONFIG_H -I"$B/la/$sub" \
+		-I"$PROJ/compat/libarchive" -Ilib/libarchive -I"$LAS/$sub" -I"$LAS/$sub/test" -I"$LAS/test_utils" \
+		-I"$LAS/libarchive_fe" -I"$LA/usr/local/include" $(cmd_sysroot_flags "$SYSROOT")
+	mkdir -p "$T/$dir"
+	tool "$B" "$ROOT" "$T/$dir/$name" "$B/la-$sub.rsp" $(for s in $srcs; do echo "$LAS/$sub/test/$s"; done) \
+		"$LAS/test_utils/test_main.c" "$LAS/test_utils/test_utils.c" "$@" -- -L"$LA/usr/lib" -larchive
+	files "$dir" "$LAS/$sub/test" $(cd "$LAS/$sub/test" && ls *.uu)
+}
+atf_sh usr.bin/bsdcat functional_test
+la_test usr.bin/bsdcat bsdcat_test cat
+atf_sh usr.bin/cpio functional_test
+la_test usr.bin/cpio bsdcpio_test cpio "$LAS/cpio/cmdline.c" "$LAS/libarchive_fe/lafe_err.c"
 
 # --- sbin ---
 atf_c sbin/devd client_test

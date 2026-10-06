@@ -1,5 +1,5 @@
 # The directories of /usr/tests that //kernel:sbsa_freebsd_tests_test runs
-# (base/freebsd_tests/suite_test.sh), and the shard (0-7) each runs in.
+# (base/freebsd_tests/suite_test.sh), and the shard (0-11) each runs in.
 bin/cat	0
 bin/chflags	0
 bin/chmod	0
@@ -31,13 +31,47 @@ sbin/pfctl	5
 sbin/ping	5
 sbin/route	5
 sbin/sysctl	5
+usr.bin/apply	8
 usr.bin/asa	0
+usr.bin/awk	8
+usr.bin/basename	8
+usr.bin/bintrans	8
 usr.bin/bmake	6
+usr.bin/bsdcat	8
+usr.bin/calendar	9
+usr.bin/cmp	9
+usr.bin/col	9
+usr.bin/column	9
+usr.bin/comm	8
+usr.bin/compress	8
+usr.bin/cpio	8
+usr.bin/csplit	9
 usr.bin/cut	0
+usr.bin/diff	9
+usr.bin/diff3	9
+usr.bin/dirname	9
+usr.bin/du	9
+usr.bin/env	10
+usr.bin/file	10
+usr.bin/find	10
+usr.bin/fold	10
+usr.bin/getconf	10
+usr.bin/gh-bc	10
+usr.bin/grep	11
+usr.bin/gzip	11
 usr.bin/head	0
+usr.bin/hexdump	11
 usr.bin/ident	0
+usr.bin/join	11
+usr.bin/jot	11
+usr.bin/lam	11
+usr.bin/lastcomm	11
+usr.bin/locale	11
+usr.bin/lockf	11
 usr.bin/m4	1
+usr.bin/mail	11
 usr.bin/mkimg	6
+usr.bin/mktemp	11
 usr.bin/soelim	1
 usr.bin/tail	2
 usr.bin/tr	2

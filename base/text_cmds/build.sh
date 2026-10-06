@@ -81,6 +81,9 @@ write_rsp "$B/grep.rsp" "${base[@]}" -I"$ZL/usr/local/include" -I"$BZ/usr/local/
 tool "$B" "$ROOT" "$OUT/usr/bin/grep" "$B/grep.rsp" grep/file.c grep/grep.c grep/queue.c grep/util.c "$(vers grep)" \
 	-- -L"$BZ/usr/lib" -lbz2 -L"$LZ/usr/lib" -llzma -L"$ZL/usr/lib" -lz
 for v in e f z ze zf bz bze bzf; do cp "$OUT/usr/bin/grep" "$OUT/usr/bin/${v}grep"; done
+# rgrep (grep -r by its name, grep.c), as FreeBSD's LINKS install it; macOS
+# doesn't (FreeBSD's usr.bin/grep tests run it).
+cp "$OUT/usr/bin/grep" "$OUT/usr/bin/rgrep"
 
 # The other targets (P4-21), one source each unless listed; INSTALL_PATH
 # /usr/bin unless the target says otherwise. Their per-target warning
