@@ -21,7 +21,7 @@ epics:
     owner: build
     status: doing
     depends: [P0-01]
-    exit: "hello-world cc_binary and swift_binary cross-build for aarch64-apple-darwin on macOS and Linux hosts"
+    exit: "hello-world cc_binary and swift_binary build for aarch64-apple-darwin on macOS hosts from the pinned toolchain, without the host Xcode; Linux hosts only run QEMU tests on artifacts built on macOS (user decision 2026-10-06: the macOS SDK is licensed for Apple hardware, so Linux builds wait for a NeoDarwin SDK from Apple's open-source headers, with self-hosting)"
     doc: docs/architecture/build-system.md
   - id: P0-03
     title: "xnu_kernel phase-1 wrapper — pinned Apple archives, NeoDarwin build SDK and shims, xnu_headers, libfirehose_kernel from source, xnu_kernel with link-gap report and ratchet"
