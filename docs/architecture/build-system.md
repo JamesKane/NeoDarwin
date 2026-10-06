@@ -25,9 +25,65 @@ Buck2 is the credible alternative (faster, Rust, same RE API). It loses on Swift
 - **Build hosts (decided 2026-10-06):** builds run on macOS only. Linux hosts run QEMU tests on artifacts built on macOS. Apple's macOS SDK is licensed for Apple hardware, and the base builds against it (`-isysroot`), so Linux builds wait for a NeoDarwin SDK assembled from Apple's open-source (APSL) headers and the sysroot `base/` stages. That belongs with self-hosting (P5-10).
 - One tarball per host OS: `neodarwin-toolchain-<ver>` = clang, lld (`ld64.lld` for Mach-O, `lld-link` for the UEFI PE/COFF loader), llvm-objcopy/objdump/nm/dsymutil, `swiftc`, `swift-driver`, `sourcekit-lsp`, `compiler-rt`, built from `swiftlang/llvm-project` so Swift and C share one LLVM. Pinned by SHA-256 in `MODULE.bazel`.
 - Target triples: `arm64-apple-darwin` for Darwin userland/kernel today (keeps upstream ABI assumptions), with a **`*-neodarwin`** vendor triple introduced when the ABI diverges (roadmap P2). AMD64 and RISCV64 add `x86_64-…` and `riscv64-…` platforms; RISC-V additionally needs a Mach-O `CPU_TYPE_RISCV64` and lld/llvm support (multi-arch design §4).
-- Linker policy: **`ld64.lld` for everything, including the kernel.** XNU is linked upstream with Apple `ld64` using `-fixup_chains`, `-segprot`, `-kext` style flags and `LC_DYLD_CHAINED_FIXUPS`. Making the kernel link with `ld64.lld` is a tracked risk (`P0-06`): the fallback is to vendor Apple's open-source `ld64` (cctools-port) as a host tool while lld catches up.
+- Linker policy: **`ld64.lld` for everything, including the kernel.** XNU is linked upstream with Apple `ld64` using `-static`, `-segprot`, `-segment_order`, `-add_split_seg_info`, `-kext` and similar flags. Making the kernel link with `ld64.lld` is a tracked risk (`P0-06`). As of 2026-10-06 lld can't yet produce a kernel kcgen accepts (§2.1), so Xcode's `ld` still links the kernel and kexts. Xcode's `ld` stays the fallback until P0-02 either vendors Apple's open-source `ld64` as a host tool or carries the lld patches §2.1 lists.
 - Embedded Swift is the same `swiftc` with `-enable-experimental-feature Embedded` (or its stable spelling) and `-no-allocations`; `swift_embedded_binary`/`swift_embedded_library` rules produce freestanding Mach-O/ELF and, for `neoboot`, the PE/COFF image via `lld-link`. The language policy's CI gates (strict concurrency, no-allocation diagnostics for T2 modules, `-no-allocations` for T3, `lang-audit` for C/C++ justifications) are Bazel aspects.
 - Sanitizers, coverage (`-fprofile-instr-generate`), and static analysis run through the same toolchain via Bazel configs (`--config=asan`, `--config=cov`, `--config=analyze`).
+
+### 2.1 Linking the kernel with ld64.lld (P0-06, open)
+
+**Status (2026-10-06):** the SBSA kernel's objects link with upstream `ld64.lld` 22.1.8, but the result isn't a kernel. kcgen rejects it, so it can't boot. **Xcode's `ld` (ld64) stays the default.** P0-06's exit ("boots identically") does not hold yet.
+
+**Which lld.** The swift.org 6.3.2 toolchain's `ld64.lld` (`LLD 21.0.0`, swiftlang/llvm-project 4e6cdf5c), which `@nd_embedded_swift` finds, can't be used: it rejects every object whose `LC_BUILD_VERSION` says macOS ("This version of lld does not support linking for platform macOS"). That covers the kernel's and kexts' objects. Objects without a build version (`-target arm64-apple-none-macho`) link. Upstream lld doesn't have this check: Homebrew's `lld@21` (21.1.8) and `lld@22` (22.1.8) both accept the objects. So P0-02's pinned toolchain must build lld without the swiftlang restriction, or carry a patch that removes it.
+
+**The build setting.** `--//rules:kernel_linker=lld` (default `ld64`) links `xnu_kernel` targets with `--//rules:ld64_lld=PATH`. The default path is `/opt/homebrew/opt/lld@22/bin/ld64.lld`, and P0-02 replaces it. XNU's `LD` becomes `$(KC++) --ld-path=…/ld64_lld.sh -nostdlib`. `tools/xnu/ld64_lld.sh` is copied into the tree as an overlay. It expands `-alias_list` into `-alias` pairs and adds `-no_fixup_chains`, then runs lld. The default build's action is unchanged by the setting. The whole XNU link step succeeds under lld, including the CTF, strip and dSYM stages. It produces `kernel.release.sbsa`, which is an `MH_EXECUTE` that kcgen refuses.
+
+**Flag mapping.** These are the flags XNU's makefiles pass for `RELEASE ARM64 SBSA`. To print the full line, keep the work tree (`ND_XNU_KEEP_WORK`, below) and relink with `VERBOSE=YES`.
+
+| ld64 flag | lld 22 | Effect on the kernel |
+|---|---|---|
+| `-e __start`, `-pie`, `-pagezero_size 0x0`, `-headerpad 152`, `-function_starts` | same | — |
+| `-sectalign SEG SECT ALIGN` | same | — |
+| `-sectcreate`, `-segprot SEG max init` | same | — |
+| `-rename_section`, `-rename_segment` | same | — |
+| `-exported_symbols_list all-kpi.exp` | same | identical export set (7195 symbols, given the aliases) |
+| `-alias_list all-alias.exp` | **not implemented** (warns, ignores) | KPI symbols the export list or code reach only through an alias are undefined (`_MALLOC`, `IOLockLock`, `IOService::resources()`, …) → the wrapper expands the list into `-alias sym alias` pairs, which lld implements |
+| `-static` | **not implemented** (warns, ignores) | lld writes a dyld executable: `DYLDLINK`/`TWOLEVEL` flags, `LC_LOAD_DYLINKER`, `LC_MAIN` instead of `LC_UNIXTHREAD`, `LC_CODE_SIGNATURE`, `LC_DATA_IN_CODE` |
+| `-image_base 0xfffffe0007004000`, `-segaddr __PRELINK_TEXT …` | **not implemented** | linked at address 0 |
+| `-segment_order __TEXT:__DATA_CONST:…:__BOOTDATA` | **not implemented** | lld's own order is `__TEXT, __DATA_CONST, __DATA, __TEXT_EXEC, __BOOTDATA, __KLDDATA, __KLD, __LAST, __LASTDATA_CONST, …, __LINKINFO, __LINKEDIT`. Writable segments then fall outside the `__LAST`…`__PRELINK_DATA` window that arm_vm_init and kcgen require |
+| `-add_split_seg_info` (patch 0040) | **not implemented** | no `LC_SEGMENT_SPLIT_INFO`: kcgen can't move the kernel's segments apart to place kexts |
+| `-version_load_command` | ignored | lld emits `LC_BUILD_VERSION` anyway |
+| (implicit) local relocations for `-static -pie` | — | lld records rebases as chained fixups (`DYLD_CHAINED_PTR_64`), or with `-no_fixup_chains` as `LC_DYLD_INFO_ONLY` rebase opcodes. It never writes `LC_DYSYMTAB` local relocations, which are what kcgen reads |
+| (implicit) chained fixups ⇒ init offsets | — | with chained fixups (the default for macOS ≥ 13), lld rewrites every `S_MOD_INIT_FUNC_POINTERS` section into `__TEXT,__init_offsets`. That dissolves `__LASTDATA_CONST` (`lastkernelconstructor.o`) and changes how the kernel finds its constructors → the wrapper passes `-no_fixup_chains` |
+| `-kernel` (arm64e only, not SBSA) | unknown argument | — |
+| `-kext` (kexts) | ignored | lld links an executable (wants `_main`). `-bundle -undefined dynamic_lookup` gives `MH_BUNDLE` with chained-fixup binds, but no external relocations and no split-seg info. kcgen needs `MH_KEXT_BUNDLE`, `nextrel` and split-seg info |
+
+**Structural diff** (same objects, `kernel.release.sbsa.unstripped`). Code and data match: `__TEXT_EXEC` is 0x8d8000 under ld64 and 0x8d4000 under lld, `__DATA_CONST` 0x18c000 and 0x184000, while `__DATA` (0x108000), `__BOOTDATA` (0x8c000) and `__LINKINFO` (0x50000) are identical. The exported symbols are identical. The ISA audit (`isa_audit.sh --mattr +v8.2a,+rcpc,+dotprod,+aes,+sha2,+fullfp16`) passes on both: 25 findings, all in the baseline. The differences that matter are the load commands, the base address, the segment order, the fixup format and the missing split-seg info in the table. kcgen refuses lld's image: "kernel carries load command 0x80000022" (`LC_DYLD_INFO_ONLY`), or 0x80000034 (`LC_DYLD_CHAINED_FIXUPS`) without the wrapper's `-no_fixup_chains`. So no lld kernel collection exists to boot, and the QEMU A/B can't run.
+
+**What closes it.** Either option works:
+
+- **Patch lld** in P0-02's pinned LLVM. It needs `-static` (no dylinker, `LC_UNIXTHREAD`), `-image_base`/`-segaddr`, `-segment_order`, `-alias_list`, `-add_split_seg_info` (split-seg v1, arm64: ADRP, branch and pointer deltas, as kcgen reads them), and local relocations, or rebase info in a form kcgen reads. For kexts it also needs `-kext`: `MH_KEXT_BUNDLE` with external and local relocations.
+- **Teach kcgen lld's formats.** It could read rebases from chained fixups or `LC_DYLD_INFO`, and take the entry point from `LC_MAIN`. That still leaves the base address, the segment order and split-seg info, which only the linker can produce.
+
+The open-source `ld64` (cctools-port / apple-oss-distributions/ld64) is the other fallback, and it needs none of this.
+
+**Repro.**
+
+```sh
+# The lld kernel via Bazel (overwrites bazel-bin/kernel/kernel.release.sbsa;
+# rebuild without the flag afterwards).
+bazel build --//rules:kernel_linker=lld //kernel:sbsa_release
+bazel-bin/tools/kcgen/kcgen --kernel bazel-bin/kernel/kernel.release.sbsa --output /tmp/kc   # refused
+
+# Link-only iteration: run tools/xnu/kernel.sh outside Bazel with the
+# arguments `bazel aquery 'mnemonic(XnuKernel, //kernel:sbsa_release)'`
+# prints, from a directory linking tools/, kernel/, bazel-out and
+# external -> $(bazel info output_base)/external, with
+# ND_XNU_KEEP_WORK=DIR. Then, in DIR/obj/RELEASE_ARM64_SBSA:
+rm -f kernel.release.sbsa.unstripped kernel.release.sbsa.unstripped.noctf
+mkdir -p DIR/src/tools/nd && cp tools/xnu/ld64_lld.sh DIR/src/tools/nd/
+bash -c "$(cat DIR/make.sh) 'LD=\$(KC++) --ld-path=\$(SRCROOT)/tools/nd/ld64_lld.sh -nostdlib' \
+    ND_LD64_LLD=/opt/homebrew/opt/lld@22/bin/ld64.lld VERBOSE=YES"
+```
 
 ## 3. Repository build layout
 

@@ -27,6 +27,8 @@ This is sound on AArch64 because UEFI uses the standard AAPCS64 calling conventi
 
 The XNU actions (`rules/xnu.bzl`) also use the host Xcode: its macOS SDK is the base of the build SDK and its clang compiles the kernel. They carry `requires-darwin` and `no-remote`. XNU's own warning list is tuned to Apple's internal compiler, so upstream code builds with `BUILD_WERROR=0`; NeoDarwin's own code keeps warnings as errors.
 
+Xcode's `ld` links the kernel and the kexts. `--//rules:kernel_linker=lld` links the kernel with an upstream `ld64.lld` instead (`--//rules:ld64_lld`, default Homebrew's `lld@22`). That's the P0-06 experiment, and its output isn't yet a kernel kcgen accepts: `docs/architecture/build-system.md` §2.1 lists the gaps. The swift.org toolchain's `ld64.lld` can't link the kernel at all. Its swiftlang build rejects every object whose `LC_BUILD_VERSION` names macOS ("This version of lld does not support linking for platform macOS"). That's also the more basic reason it can't link `static_macho` programs (above).
+
 ## Language-mode spelling for the pinned toolchain
 
 `language-policy.md` states intent; the exact flags live here and change with toolchain bumps.

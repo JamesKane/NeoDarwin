@@ -8,6 +8,8 @@ the compiler come from the host's selected Xcode (toolchains/README.md), and
 actions need the Xcode installation, so they run locally on macOS.
 """
 
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
+
 _XCODE_REQS = {"requires-darwin": "", "no-remote": ""}
 
 def _scripts(ctx):
@@ -138,6 +140,18 @@ def _xnu_kernel_impl(ctx):
         for f in target.files.to_list():
             overlay_files.append(f)
             lines.append("%s/%s\t%s" % (dest, f.owner.name, f.path))
+    make_vars = list(ctx.attr.make_vars)
+    linker = ctx.attr._kernel_linker[BuildSettingInfo].value
+    if linker == "lld":
+        # --//rules:kernel_linker=lld: XNU's LD is clang++ -nostdlib; clang
+        # runs tools/xnu/ld64_lld.sh (copied into the tree) as its linker.
+        wrapper = ctx.file._ld64_lld_wrapper
+        overlay_files.append(wrapper)
+        lines.append("tools/nd/%s\t%s" % (wrapper.basename, wrapper.path))
+        make_vars += [
+            "LD=$(KC++) --ld-path=$(SRCROOT)/tools/nd/%s -nostdlib" % wrapper.basename,
+            "ND_LD64_LLD=" + ctx.attr._ld64_lld[BuildSettingInfo].value,
+        ]
     overlay_arg = "-"
     if lines:
         manifest = ctx.actions.declare_file(ctx.label.name + ".overlay")
@@ -155,7 +169,7 @@ def _xnu_kernel_impl(ctx):
         ctx.attr.machine_config,
         ctx.attr.kernel_config,
         overlay_arg,
-    ] + [p.path for p in ctx.files.patches] + ["--"] + ctx.attr.make_vars
+    ] + [p.path for p in ctx.files.patches] + ["--"] + make_vars
     ctx.actions.run(
         executable = ctx.file._script,
         arguments = args,
@@ -194,5 +208,8 @@ xnu_kernel = rule(
         "make_vars": attr.string_list(doc = "Extra VAR=value arguments for make, e.g. ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64."),
         "_script": attr.label(default = "//tools/xnu:kernel.sh", allow_single_file = True),
         "_scripts": attr.label(default = "//tools/xnu:scripts"),
+        "_kernel_linker": attr.label(default = "//rules:kernel_linker"),
+        "_ld64_lld": attr.label(default = "//rules:ld64_lld"),
+        "_ld64_lld_wrapper": attr.label(default = "//tools/xnu:ld64_lld.sh", allow_single_file = True),
     },
 )

@@ -1,1 +1,25 @@
 # NeoDarwin Starlark rules and macros.
+
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+
+# The kernel's linker (P0-06; docs/architecture/build-system.md, "Linking the
+# kernel with ld64.lld"). ld64 is Xcode's ld, the default. lld links the same
+# objects with ld64.lld through tools/xnu/ld64_lld.sh: the build succeeds,
+# but lld lacks the flags that make the image a kernel kcgen accepts, so it
+# is an experiment for the A/B, not a bootable kernel yet.
+string_flag(
+    name = "kernel_linker",
+    build_setting_default = "ld64",
+    values = ["ld64", "lld"],
+    visibility = ["//visibility:public"],
+)
+
+# The ld64.lld that --//rules:kernel_linker=lld runs: an upstream LLVM lld.
+# The swift.org 6.3.2 toolchain's ld64.lld refuses macOS objects ("This
+# version of lld does not support linking for platform macOS"). P0-02's
+# pinned toolchain replaces this host path.
+string_flag(
+    name = "ld64_lld",
+    build_setting_default = "/opt/homebrew/opt/lld@22/bin/ld64.lld",
+    visibility = ["//visibility:public"],
+)
