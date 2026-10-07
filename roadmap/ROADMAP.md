@@ -3,6 +3,22 @@
 
 _Phases are ordered by dependency, not by calendar. `backlog.yaml` is the source of truth for epics, owners and status; this file is the narrative. Re-evaluate at the end of every phase and whenever a kernel-blueprint risk (R1 VM handoff, R2 GIC Group 0, R3 closed kexts) changes state._
 
+## Status (parked 2026-10-07)
+
+The repository is at `github.com/JamesKane/NeoDarwin`. The working rule is to close phases in order, on QEMU, while the board is busy.
+
+| Phase | State |
+|---|---|
+| 0 | Done except **P0-05**, CI runners. The user deferred choosing a host; this Mac was proposed, and the fork-PR guard plan is in `docs/repository.md` §5. P0-01 (governance files, fragile-upstream mirrors, `ci/mirror_check.sh`), P0-02 (pinned Swift 6.4 / LLVM 23.1.3 / SDK 27.0 with `--config=pinned` and `ci/no_xcode.sh`), P0-04 (`qemu_test`, `//tests/qemu:smoke`), P0-06 (from-source ld64-957.1 links the kernel and kexts) and P0-10 (T2 `@_noLocks` gate, kext_swift verdict) are done. |
+| 1 | Done on QEMU. **P1-11** (first boot on the Radxa Dragon Q8B) and the board exits of P1-12, P1-18 and P1-19 wait for board time (`docs/kernel/arm64-sbsa-bringup.md`, "Status"). |
+| 2 | **In progress.** Done: P2-01 (`.ndpkg`, `ndsign`, kernel-checked trust-cache grants), P2-02 (`ndpkg` store, libsolv, nullfs activation), P2-03 (`ndpkg system` upgrade/confirm/rollback over ZFS boot environments, per-BE kernels on the ESP). **Next: P2-04** (signed remote repositories), then P2-05 and P2-10 (ports tree and importers, toward 100 signed ports), plus P2-06, P2-07 and P2-12 (builds). P2-08 and P2-11 need build hosts, like P0-05. |
+| 3 | P3-01 and **P3-03** (root on ZFS, `ndbectl`) are done; P3-11 checkpoint 5 (zfs.kext in every boot) is done. The phase exit needs the Q8B. |
+| 4 | **P4-21** (base userland) is at 96 of 113 tested rows passing FreeBSD's tests under the structural rule (`//base:freebsd_tests_exit_check`). 17 rows have 144 fixable cases left, plus `mdconfig`, `nvmecontrol` and `tzsetup` (`freebsd-parity.md` §2.1). P4-24 is done on QEMU, with its board exit pending. |
+
+**Before any board runs `ndpkg system`:** the ESP rewrite isn't atomic (`docs/architecture/packaging.md` §6.1). It needs A/B ESPs, or P3-06's ZFS loader.
+
+**Known load-sensitive tests** under the full QEMU set: the ZFS suite (FLAKY entries in `kexts/zfs/tests/expected.tsv`), `sbsa_net_intx_test` and `sbsa_pf_ntp_test`. Patch 0046's monotonic timebase costs about 10% on QEMU, until QEMU uses a monotonic Darwin clock (`docs/kernel/arm64-sbsa-bringup.md` §2.1.10).
+
 **NeoDarwin 1.0** is phases 0 to 5 plus the installer and release (P7-03) on ARM64: a system with usage parity with command-line FreeBSD (`docs/architecture/freebsd-parity.md`) that builds itself. AMD64 (6a) follows in 1.x.
 
 On 2026-09-29 the desktop, window system, toolkit, audio service, scheduling contract, namespaces and agent epics moved to **Magi** (`../Magi`), NeoDarwin's reference downstream. Their old ids (the P4 desktop epics, the P5 namespace epics, and P7-04 to P7-07) are recorded in Magi's backlog and are not reused here.
