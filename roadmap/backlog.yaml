@@ -21,7 +21,7 @@ epics:
     owner: build
     status: doing
     depends: [P0-01]
-    exit: "hello-world cc_binary and swift_binary build for aarch64-apple-darwin on macOS hosts from the pinned toolchain, without the host Xcode; Linux hosts only run QEMU tests on artifacts built on macOS (user decision 2026-10-06: the macOS SDK is licensed for Apple hardware, so Linux builds wait for a NeoDarwin SDK from Apple's open-source headers, with self-hosting)"
+    exit: "hello-world cc_binary and swift_binary build for aarch64-apple-darwin on macOS hosts with Xcode hidden, from pinned prebuilt toolchains (swift.org and llvm.org releases, by sha256) and a pinned macOS SDK (an exact version and a content hash of the host-installed SDK, verified at fetch); Embedded Swift (neoboot, static_macho, T2/T3, the kext trial) uses the pinned toolchain (user decisions 2026-10-06/07). Linux hosts only run QEMU tests. The rest of the tree moves off Xcode in P2-12"
     doc: docs/architecture/build-system.md
   - id: P0-03
     title: "xnu_kernel phase-1 wrapper — pinned Apple archives, NeoDarwin build SDK and shims, xnu_headers, libfirehose_kernel from source, xnu_kernel with link-gap report and ratchet"
@@ -345,6 +345,14 @@ epics:
     depends: [P2-05, P2-04]
     exit: "a nightly bulk build of the ports tree publishes a signed ports index and a per-port status page"
     doc: docs/architecture/ports.md
+  - id: P2-12
+    title: "The tree builds without Xcode — the base's build scripts and XNU/kexts on P0-02's pinned toolchain: tool variables instead of xcrun, mig from bootstrap_cmds, llvm-libtool-darwin and llvm binutils, CTF tools from Apple's dtrace source; the base links with the from-source ld64 plus libtapi built in an LLVM tree (user decision 2026-10-07)"
+    phase: 2
+    owner: build
+    status: todo
+    depends: [P0-02, P0-06]
+    exit: "with Xcode hidden and only the pinned toolchain and SDK, bazel test //... and the QEMU set pass, and the kernel and every image build byte-for-byte the same on two runs"
+    doc: docs/architecture/build-system.md
   # ---- Phase 3: Storage, OpenZFS, drivers breadth ----
   - id: P3-01
     title: "zfs.kext on NeoDarwin (module/os/neodarwin from macOS layer; KPI exports as kernel patches)"

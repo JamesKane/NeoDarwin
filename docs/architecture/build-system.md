@@ -22,6 +22,11 @@ Buck2 is the credible alternative (faster, Rust, same RE API). It loses on Swift
 
 ## 2. Toolchain
 
+- **Toolchain (decided 2026-10-07):**
+  - **Binaries:** pinned prebuilt releases, swift.org's toolchain and llvm.org's macOS arm64 release, fetched by sha256. Building LLVM and Swift from source belongs to reproducible builds (P2-08) and self-hosting (P5).
+  - **The SDK** can't be redistributed, so it's pinned in place: an exact version and a content hash of the host-installed SDK, checked when Bazel fetches it.
+  - **Linking:** the base links with the from-source ld64 (P0-06), with libtapi built inside an LLVM tree for `.tbd` stubs.
+  - **Scope:** P0-02 covers the toolchain, hello-world targets and Embedded Swift. Moving the base and XNU builds off `xcrun` is P2-12.
 - **Build hosts (decided 2026-10-06):** builds run on macOS only. Linux hosts run QEMU tests on artifacts built on macOS. Apple's macOS SDK is licensed for Apple hardware, and the base builds against it (`-isysroot`), so Linux builds wait for a NeoDarwin SDK assembled from Apple's open-source (APSL) headers and the sysroot `base/` stages. That belongs with self-hosting (P5-10).
 - One tarball per host OS: `neodarwin-toolchain-<ver>` = clang, lld (`ld64.lld` for Mach-O, `lld-link` for the UEFI PE/COFF loader), llvm-objcopy/objdump/nm/dsymutil, `swiftc`, `swift-driver`, `sourcekit-lsp`, `compiler-rt`, built from `swiftlang/llvm-project` so Swift and C share one LLVM. Pinned by SHA-256 in `MODULE.bazel`.
 - Target triples: `arm64-apple-darwin` for Darwin userland/kernel today (keeps upstream ABI assumptions), with a **`*-neodarwin`** vendor triple introduced when the ABI diverges (roadmap P2). AMD64 and RISCV64 add `x86_64-…` and `riscv64-…` platforms; RISC-V additionally needs a Mach-O `CPU_TYPE_RISCV64` and lld/llvm support (multi-arch design §4).
