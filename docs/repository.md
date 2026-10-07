@@ -7,6 +7,22 @@
 
 - **`neodarwin/neodarwin`** (monorepo): all first-party code, BUILD files, docs, roadmap, CI. Cloning it and running `bazel build //images:qemu-virt` produces a bootable image; Bazel fetches vendored upstream by pinned commit.
 - **`neodarwin/mirror-<component>`**: verbatim mirrors of upstream drops, one repository each, tagged per upstream release (`apple/xnu-12377.1.9`, `openzfs/zfs-2.4.x`). Components: `xnu`, `dyld`, `Libc`, `libplatform`, `libpthread`, `libmalloc`, `libdispatch`, `Libinfo`, `IOPCIFamily`, `IOStorageFamily`, `IOGraphics`, `IOSerialFamily`, `hfs`, `launchd-842`, `swift-corelibs-foundation`, `openzfs` (the OpenZFS on OS X fork until the macOS layer is upstream), `acpica`, the Apple command projects (`file_cmds`, `shell_cmds`, `system_cmds`, `network_cmds`, …) and `OpenSSH`. The pilot mirrors (`plan-neo`, `nuaqua`) and `libwayland` moved to Magi. Never edited; NeoDarwin never commits to them. They keep the monorepo small and make a new upstream drop a tag, not a 400 MB commit.
+- **Mirrors as built (decided 2026-10-07): fragile upstreams only.**
+  - **Coverage:** an upstream gets a mirror under `github.com/JamesKane` when it could disappear or change. That means personal sites and repositories, single-maintainer projects, community forks, and GitHub-generated archives, whose bytes GitHub doesn't guarantee to stay the same. The other upstreams stay pinned by sha256 at their origins: Apple's `apple-oss-distributions`, FreeBSD's and OpenBSD's repositories, and official release assets.
+  - **Format:** an archive mirror holds the exact bytes as a release asset, so the sha256 matches. A file-pinned upstream gets a full git mirror.
+  - **Order:** `MODULE.bazel` lists the mirror first and the origin second, and `pinned_files` takes `mirror_url_templates`.
+  - **The check:** `ci/mirror_check.sh` proves the mirrors resolve. With an empty repository cache and every fragile origin rewritten to an unreachable host, each repository must still fetch and pass its hash.
+
+  | Mirror | Upstream | Pinned |
+  |---|---|---|
+  | `mirror-libtermkey` | libtermkey 0.22, leonerd.org.uk (MIT) | release asset |
+  | `mirror-lpeg` | LPeg 1.1.0, inf.puc-rio.br/~roberto (MIT) | release asset |
+  | `mirror-vis` | vis 0.9, github.com/martanne/vis (ISC) | release asset |
+  | `mirror-ksh93` | ksh93u+m 1.0.10, github.com/ksh93/ksh (EPL-2.0) | release asset |
+  | `mirror-openzfs-fork` | openzfsonosx/openzfs-fork a4c1b11ab900 (CDDL-1.0) | release asset |
+  | `mirror-wide-dhcpv6` | hrs-allbsd/wide-dhcpv6 (BSD) | git mirror; raw files by commit |
+
+  Adding an upstream that fits these criteria means adding a mirror in the same change.
 - **`neodarwin/ports`**: the ports tree (`ports.md`), checked out at `/usr/ports`; separate because its cadence and licences differ.
 - **Downstreams** live in their own repositories and consume this one as a Bazel module (`docs/architecture/downstream.md`). Magi is `../Magi` today.
 - **`neodarwin/hardware`**: board notes, DT dumps, firmware download scripts, hardware-in-the-loop runner configs. No binaries; firmware blobs are LFS pointers to a release bucket.

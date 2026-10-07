@@ -406,7 +406,10 @@ http_archive(
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
     sha256 = "bd37ffba5535e665c1e883c25ba5f4e3307569b6d392c60f3c7d5dedd2efcfca",
     strip_prefix = "vis-0.9",
-    urls = ["https://github.com/martanne/vis/archive/refs/tags/v0.9.tar.gz"],
+    urls = [
+        "https://github.com/JamesKane/mirror-vis/releases/download/v0.9/vis-0.9.tar.gz",
+        "https://github.com/martanne/vis/archive/refs/tags/v0.9.tar.gz",
+    ],
 )
 
 http_archive(
@@ -414,7 +417,10 @@ http_archive(
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
     sha256 = "6945bd3c4aaa83da83d80a045c5563da4edd7d0374c62c0d35aec09eb3014600",
     strip_prefix = "libtermkey-0.22",
-    urls = ["https://www.leonerd.org.uk/code/libtermkey/libtermkey-0.22.tar.gz"],
+    urls = [
+        "https://github.com/JamesKane/mirror-libtermkey/releases/download/v0.22/libtermkey-0.22.tar.gz",
+        "https://www.leonerd.org.uk/code/libtermkey/libtermkey-0.22.tar.gz",
+    ],
 )
 
 http_archive(
@@ -430,7 +436,10 @@ http_archive(
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
     sha256 = "4b155d67d2246c1ffa7ad7bc466c1ea899bbc40fef0257cc9c03cecbaed4352a",
     strip_prefix = "lpeg-1.1.0",
-    urls = ["https://www.inf.puc-rio.br/~roberto/lpeg/lpeg-1.1.0.tar.gz"],
+    urls = [
+        "https://github.com/JamesKane/mirror-lpeg/releases/download/v1.1.0/lpeg-1.1.0.tar.gz",
+        "https://www.inf.puc-rio.br/~roberto/lpeg/lpeg-1.1.0.tar.gz",
+    ],
 )
 
 
@@ -524,7 +533,10 @@ http_archive(
     build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
     sha256 = "9f4c7a9531cec6941d6a9fd7fb70a4aeda24ea32800f578fd4099083f98b4e8a",
     strip_prefix = "ksh-1.0.10",
-    urls = ["https://github.com/ksh93/ksh/archive/refs/tags/v1.0.10.tar.gz"],
+    urls = [
+        "https://github.com/JamesKane/mirror-ksh93/releases/download/v1.0.10/ksh-1.0.10.tar.gz",
+        "https://github.com/ksh93/ksh/archive/refs/tags/v1.0.10.tar.gz",
+    ],
 )
 
 # Loopback and sshd (docs/base/session.md, "Loopback and sshd"): network_cmds'
@@ -786,7 +798,10 @@ filegroup(
 )""",
     sha256 = "b20049676667b1d5700b5ef4935c23ae8683d908ded57e6d0b52ff0e49ac37c1",
     strip_prefix = "openzfs-fork-a4c1b11ab900dc9db701ecff92c712dfe2d967d3",
-    urls = ["https://github.com/openzfsonosx/openzfs-fork/archive/a4c1b11ab900dc9db701ecff92c712dfe2d967d3.tar.gz"],
+    urls = [
+        "https://github.com/JamesKane/mirror-openzfs-fork/releases/download/zfs-macOS-2.4.1p1-a4c1b11ab900/openzfs-fork-a4c1b11ab900dc9db701ecff92c712dfe2d967d3.tar.gz",
+        "https://github.com/openzfsonosx/openzfs-fork/archive/a4c1b11ab900dc9db701ecff92c712dfe2d967d3.tar.gz",
+    ],
 )
 
 # zlib 1.2.12 from Apple's zlib-100.120.1 (zlib licence): the base's
@@ -927,6 +942,7 @@ pinned_files(
     name = "wide_dhcpv6",
     build_file = "//base:dhcp6c/wide.BUILD",
     lockfile = "//base:dhcp6c/wide.lock",
+    mirror_url_templates = ["https://raw.githubusercontent.com/JamesKane/mirror-wide-dhcpv6/{commit}/{path}"],
     url_template = "https://raw.githubusercontent.com/hrs-allbsd/wide-dhcpv6/{commit}/{path}",
 )
 

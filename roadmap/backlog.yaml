@@ -11,9 +11,9 @@ epics:
     title: "Monorepo skeleton, mirrors, CODEOWNERS, DCO, licence map"
     phase: 0
     owner: build
-    status: doing
+    status: done
     depends: []
-    exit: "clone + bazel version succeeds; mirrors resolve by pinned commit"
+    exit: "clone + bazel version succeeds (github.com/JamesKane/NeoDarwin); the fragile upstreams resolve from their mirrors by pinned sha256 with their origins unreachable (ci/mirror_check.sh), and the rest resolve from their origins by sha256 (user decision 2026-10-07)"
     doc: docs/repository.md
   - id: P0-02
     title: "Hermetic LLVM+Swift toolchain tarball and Bazel toolchain config"
