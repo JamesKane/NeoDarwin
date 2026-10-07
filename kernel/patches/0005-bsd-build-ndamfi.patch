@@ -13,21 +13,42 @@ published in xnu, an Image4 interface that declines Image4 objects, and
 (P1-15) the entitlement members over a DER entitlements reader and
 libkern OSObjects, and the code-signing MAC policy that makes
 trust-cached binaries platform binaries and, under enforcement, refuses
-the rest. The build overlays it at bsd/ndamfi; this patch adds it to
-bsd's file list. Design: docs/kernel/amfi-provider.md.
+the rest; and (P2-01) the verifier for run-time trust caches' ndsign
+grants, with OpenSSH's public-domain Ed25519, and the sysctl that loads
+one. The build overlays it at bsd/ndamfi (OpenSSH's ed25519.c at
+bsd/ndamfi/openssh); this patch adds it to bsd's file list, and builds
+nd_ed25519.c, which compiles that file unmodified, with -w. Design:
+docs/kernel/amfi-provider.md.
 
-Rebase-risk: low (six lines in bsd/conf/files).
+Rebase-risk: low (nine lines in bsd/conf/files, one in
+bsd/conf/Makefile.template).
 ---
---- a/bsd/conf/files	2026-09-28 10:04:30
-+++ b/bsd/conf/files	2026-09-28 10:04:30
-@@ -434,6 +434,12 @@
+--- a/bsd/conf/Makefile.template
++++ b/bsd/conf/Makefile.template
+@@ -585,6 +585,10 @@
+ #
+ 
+ subr_prof.o_CFLAGS_RM = -pg
++
++# ndamfi's Ed25519 (bsd/ndamfi/nd_ed25519.c) compiles OpenSSH's public-domain
++# ed25519.c unmodified; it isn't written to the kernel's warning flags.
++nd_ed25519.o_CFLAGS_ADD += -w
+ 
+ # Rebuild if per-file overrides change
+ ${OBJS}: $(firstword $(MAKEFILE_LIST))
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -434,6 +434,15 @@
  bsd/kern/kern_sfi.c			standard
  bsd/kern/kern_time.c			standard
  bsd/kern/kern_trustcache.c  standard
 +bsd/ndamfi/nd_amfi.c	standard
++bsd/ndamfi/nd_amfi_grant.c	standard
 +bsd/ndamfi/nd_amfi_policy.c	standard
++bsd/ndamfi/nd_ed25519.c	standard
 +bsd/ndamfi/nd_entitlements.c	standard
 +bsd/ndamfi/nd_entitlements_os.cpp	standard
++bsd/ndamfi/nd_ndsign.c	standard
 +bsd/ndamfi/nd_trustcache.c	standard
 +bsd/ndamfi/nd_tc_lookup.c	standard
  bsd/kern/kern_codesigning.c standard

@@ -1,0 +1,4 @@
+module NDPkgShim {
+  header "nd_pkg.h"
+  export *
+}

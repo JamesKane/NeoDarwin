@@ -16,6 +16,9 @@
 //    left unset: only the PPL pmap path, not built for SBSA, reaches it.
 //  - the code-signing policy: a MAC policy registered here, and the
 //    enforcement decision (nd_amfi_policy.c).
+//  - run-time trust caches (P2-01): the ndsign grant verifier, the package
+//    roots from nd_pkg_root= and the load_trust_cache sysctl
+//    (nd_amfi_grant.c).
 //  - img4if: registered with a version below 15, so kern_trustcache.c
 //    declines Image4 objects itself; no Image4 function is ever called.
 
@@ -199,6 +202,7 @@ ndamfi_register(void)
 	img4_interface_register(&nd_img4);
 	amfi_interface_register(&nd_amfi);
 	nd_amfi_policy_init();
+	nd_amfi_grant_init();
 }
 
 STARTUP(EARLY_BOOT, STARTUP_RANK_LAST, ndamfi_register);

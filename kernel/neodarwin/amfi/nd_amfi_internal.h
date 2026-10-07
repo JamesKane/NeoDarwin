@@ -2,7 +2,8 @@
 // NeoDarwin-Language: portability: the interface between ndamfi's C and its libkern C++ is a C header.
 //
 // ndamfi's kernel-internal interfaces: the OSEntitlements objects of
-// nd_entitlements_os.cpp and the code-signing policy of nd_amfi_policy.c.
+// nd_entitlements_os.cpp, the code-signing policy of nd_amfi_policy.c and
+// the run-time trust caches of nd_amfi_grant.c.
 
 #ifndef ND_AMFI_INTERNAL_H
 #define ND_AMFI_INTERNAL_H
@@ -34,5 +35,10 @@ kern_return_t nd_osent_copy_object_proc(struct proc *proc, const char *name, voi
 // registers the MAC policy that marks trust-cached binaries as platform
 // binaries. Called once from ndamfi's startup.
 void nd_amfi_policy_init(void);
+
+// Run-time trust caches (nd_amfi_grant.c, P2-01): reads the package roots
+// (nd_pkg_root=) and registers the ndsign grant verifier. Called once from
+// ndamfi's startup.
+void nd_amfi_grant_init(void);
 
 #endif

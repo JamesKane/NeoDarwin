@@ -146,7 +146,7 @@ cli_root/zfs_set/mountpoint_003_pos	FAIL	uses mount -F (illumos syntax)
 cli_root/zfs_set/onoffs_001_pos	FAIL	to investigate
 cli_root/zfs_set/property_alias_001_pos	FAIL	to investigate
 cli_root/zfs_set/readonly_001_pos	FAIL	to investigate
-cli_root/zfs_set/reservation_001_neg	PASS	
+cli_root/zfs_set/reservation_001_neg	FLAKY	near the 240 s cap under full QEMU load: KILLED in three loaded runs (2026-10-06/07), passes alone (131 s)
 cli_root/zfs_set/ro_props_001_pos	KILLED	over the 240 s per-test cap under TCG, or hangs (to investigate)
 cli_root/zfs_set/setup	PASS	
 cli_root/zfs_set/share_mount_001_neg	PASS	

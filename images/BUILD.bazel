@@ -118,6 +118,42 @@ hfs_ramdisk(
     trust_cache_exclude = _CS_PROBES_UNLISTED,
 )
 
+# P2-01's run-time trust grant (tests/qemu/pkg_trust): session_root with
+# ndpkg (entitled to load trust caches), a probe no static trust cache
+# lists, the probe's package, its trust cache and grant, and wrongly signed
+# variants: a package and grant chained to other-root, and the grant with
+# its signatures zeroed. Booted by //kernel:sbsa_pkg_trust_test and
+# //kernel:sbsa_pkg_trust_no_root_test.
+_PKG_TRUST = "usr/local/share/pkg_trust/"
+
+_PKG_TRUST_DATA = {
+    "//tests/qemu/pkg_trust:probe_pkg": _PKG_TRUST + "pkg-probe.ndpkg",
+    "//tests/qemu/pkg_trust:probe_pkg_trustcache": _PKG_TRUST + "pkg-probe.trustcache",
+    "//tests/qemu/pkg_trust:probe_pkg_grant": _PKG_TRUST + "pkg-probe.grant",
+    "//tests/qemu/pkg_trust:probe_pkg_other_root": _PKG_TRUST + "other-root.ndpkg",
+    "//tests/qemu/pkg_trust:probe_pkg_other_root_grant": _PKG_TRUST + "other-root.grant",
+    "//tests/qemu/pkg_trust:unsigned_grant": _PKG_TRUST + "unsigned.grant",
+}
+
+hfs_ramdisk(
+    name = "pkg_trust_root",
+    dirs = _SYSTEM_DIRS,
+    files = {
+        "//base/launchctl": "bin/launchctl",
+        "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
+        "//tests/qemu/pkg_trust:ndpkg": "usr/local/sbin/ndpkg",
+        "//tests/qemu/pkg_trust:pkg_probe": "usr/local/libexec/pkg_probe/pkg-probe",
+    } | _NETWORK_FILES | _PKG_TRUST_DATA,
+    links = _SYSTEM_LINKS,
+    modes = _NETWORK_MODES | {path: "0644" for path in _PKG_TRUST_DATA.values()},
+    tree_modes = _SYSTEM_MODES,
+    trees = [
+        "//base:system_root",
+        "//base:launchd_daemon",
+    ],
+    trust_cache_exclude = ["usr/local/libexec/pkg_probe"],
+)
+
 # The same system with a test-only PID 1 that runs getty itself, without
 # launchd. Booted by //kernel:sbsa_getty_boot_test.
 hfs_ramdisk(

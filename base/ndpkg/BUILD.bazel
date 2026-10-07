@@ -1,0 +1,34 @@
+load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:darwin_executable.bzl", "swift_embedded_executable")
+
+package(default_visibility = ["//visibility:public"])
+
+# ndpkg (P2-01, docs/architecture/packaging.md §8): for now its run-time
+# trust commands, activate-trust and load-trust (Sources/Main.swift). The
+# package key chain is checked by ndamfi's C, the kernel's own verifier,
+# compiled in through the shim (src/nd_pkg.c), with OpenSSH's Ed25519.
+# Signed ad hoc without entitlements here: the kernel loads a trust cache
+# only for a caller entitled com.apple.private.pmap.load-trust-cache =
+# neodarwin.trust-cache.load, which only the P2-01 test image grants
+# (//tests/qemu/pkg_trust:ndpkg); the base gains it with P2-02's store.
+swift_embedded_executable(
+    name = "ndpkg",
+    srcs = ["Sources/Main.swift"],
+    c_srcs = ["src/nd_pkg.c"],
+    hdrs = [
+        "NDPkgShim/module.modulemap",
+        "NDPkgShim/nd_pkg.h",
+        "//kernel/neodarwin/amfi:ndsign_srcs",
+        "@apple_openssh//:ed25519",
+    ],
+    module_name = "ndpkg",
+    root = "//base:root",
+)
+
+lang_audit_test(
+    name = "ndpkg_lang_audit",
+    srcs = [
+        "NDPkgShim/nd_pkg.h",
+        "src/nd_pkg.c",
+    ],
+)

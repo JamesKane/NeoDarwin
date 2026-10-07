@@ -11,8 +11,8 @@
 // Supported: version 1 modules, the format xnu publishes. Not supported:
 // Image4-manifested trust caches. NeoDarwin signs trust caches its own way:
 // load() accepts a module only with a grant that a registered verifier
-// (nd_tc_set_grant_verifier, P2-01's ndsign) accepts, and none is registered
-// until ndsign exists, so runtime loads are refused. Static trust caches,
+// (nd_tc_set_grant_verifier: ndamfi's ndsign verifier, nd_amfi_grant.c)
+// accepts; with none registered, runtime loads are refused. Static trust caches,
 // from the loader, go through loadModule().
 //
 // Runtime loading also requires, in XNU (load_trust_cache_with_type), the

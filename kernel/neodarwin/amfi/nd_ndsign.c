@@ -15,6 +15,12 @@
 #include <sys/random.h>
 #define nd_alloc(n) kalloc_data((n), Z_WAITOK)
 #define nd_free(p, n) kfree_data((p), (n))
+#elif defined(ND_NDSIGN_EXTERNAL_DIGESTS)
+// The program supplies nd_sha512, nd_sha256 and nd_random_bytes (ndpkg on
+// NeoDarwin, which has no CommonCrypto: base/ndpkg).
+#include <stdlib.h>
+#define nd_alloc(n) malloc(n)
+#define nd_free(p, n) free(p)
 #else
 #include <CommonCrypto/CommonDigest.h>
 #include <stdlib.h>
@@ -54,7 +60,7 @@ nd_random_bytes(void *buf, size_t len)
 {
 	read_random(buf, (u_int)len);
 }
-#else
+#elif !defined(ND_NDSIGN_EXTERNAL_DIGESTS)
 void
 nd_sha512(uint8_t out[64], const void *in, size_t len)
 {
@@ -141,6 +147,18 @@ nd_ed25519_sign(uint8_t sig[64], const uint8_t *msg, size_t len, const uint8_t s
 	return ok;
 }
 #endif
+
+// The kernel's libkern has no memchr.
+static const char *
+find_newline(const char *p, size_t n)
+{
+	for (size_t i = 0; i < n; i++) {
+		if (p[i] == '\n') {
+			return p + i;
+		}
+	}
+	return NULL;
+}
 
 // -- hex ---------------------------------------------------------------------------------
 
@@ -254,7 +272,7 @@ nd_ndsign_parse_doc(const char *doc, size_t len, struct nd_ndsign_span *body, ui
 	struct nd_ndsign_span prev = { NULL, 0 }, key, value;
 	size_t at = 0, lines = 0;
 	while (at < len) {
-		const char *nl = memchr(doc + at, '\n', len - at);
+		const char *nl = find_newline(doc + at, len - at);
 		size_t n = (size_t)(nl - (doc + at));
 		if (!parse_line(doc + at, n, &key, &value)) {
 			return false;
@@ -285,7 +303,7 @@ nd_ndsign_field(struct nd_ndsign_span body, const char *name, struct nd_ndsign_s
 {
 	size_t at = 0;
 	while (at < body.n) {
-		const char *nl = memchr(body.p + at, '\n', body.n - at);
+		const char *nl = find_newline(body.p + at, body.n - at);
 		if (nl == NULL) {
 			return false;
 		}

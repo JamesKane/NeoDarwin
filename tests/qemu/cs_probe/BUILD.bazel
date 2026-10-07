@@ -3,6 +3,11 @@ load("//rules:darwin_executable.bzl", "swift_embedded_executable")
 
 package(default_visibility = ["//visibility:public"])
 
+exports_files([
+    "entitlements.plist",
+    "sign.sh",
+])
+
 # cs_probe (P1-15): what the code-signing policy grants the process running
 # it; see Sources/Main.swift. //images:session_root and the session disk
 # carry the signed copies below under /usr/local/libexec/cs_probe.

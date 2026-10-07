@@ -1,0 +1,108 @@
+load("//rules:package.bzl", "nd_package")
+
+package(default_visibility = ["//visibility:public"])
+
+# P2-01's run-time trust grant on QEMU (docs/architecture/packaging.md §4.2,
+# docs/kernel/amfi-provider.md §4.5): //images:pkg_trust_root carries these
+# under /usr/local; //kernel:sbsa_pkg_trust_test and
+# //kernel:sbsa_pkg_trust_no_root_test boot it under enforcement.
+
+# ndpkg with the entitlement the kernel requires to load a trust cache.
+genrule(
+    name = "ndpkg",
+    srcs = [
+        "//base/ndpkg",
+        "ndpkg-entitlements.plist",
+    ],
+    outs = ["ndpkg.entitled"],
+    cmd = "$(location //tests/qemu/cs_probe:sign.sh) $(location //base/ndpkg) $@ org.neodarwin.ndpkg $(location ndpkg-entitlements.plist)",
+    tags = ["requires-darwin"],
+    tools = ["//tests/qemu/cs_probe:sign.sh"],
+)
+
+# The probe a package grants: cs_probe (P1-15) under its own identifier, so
+# its cdhash is in no static trust cache.
+genrule(
+    name = "pkg_probe",
+    srcs = [
+        "//tests/qemu/cs_probe:cs_probe_unsigned_entitlements",
+        "//tests/qemu/cs_probe:entitlements.plist",
+    ],
+    outs = ["pkg-probe"],
+    cmd = "$(location //tests/qemu/cs_probe:sign.sh) $(location //tests/qemu/cs_probe:cs_probe_unsigned_entitlements) $@ org.neodarwin.pkg-probe $(location //tests/qemu/cs_probe:entitlements.plist)",
+    tags = ["requires-darwin"],
+    tools = ["//tests/qemu/cs_probe:sign.sh"],
+)
+
+PROBE_PATH = "usr/local/libexec/pkg_probe/pkg-probe"
+
+# The test chain (//tools/ndsign:testdata/test_keys, TEST-ONLY): the root
+# the test boots with nd_pkg_root.
+nd_package(
+    name = "probe_pkg",
+    chain = [
+        "//tools/ndsign:testdata/test_keys/channel.cert",
+        "//tools/ndsign:testdata/test_keys/release.cert",
+    ],
+    files = {":pkg_probe": PROBE_PATH},
+    key = "//tools/ndsign:testdata/test_keys/release.key",
+    license = "BSD-2-Clause",
+    pkg_name = "pkg-probe",
+    version = "1.0",
+)
+
+# Wrongly signed: the same channel key, certified by other-root, which the
+# kernel doesn't trust.
+genrule(
+    name = "other_root_channel_cert",
+    srcs = [
+        "//tools/ndsign:testdata/test_keys/channel.pub",
+        "//tools/ndsign:testdata/test_keys/other-root.key",
+    ],
+    outs = ["other-root-channel.cert"],
+    cmd = "$(location //tools/ndsign) certify --issuer $(location //tools/ndsign:testdata/test_keys/other-root.key) " +
+          "--kind channel --name test --seq 1 --expires 4102444800 --scope '*' --usage manifest --usage trust-cache " +
+          "--key $(location //tools/ndsign:testdata/test_keys/channel.pub) -o $@",
+    tools = ["//tools/ndsign"],
+)
+
+nd_package(
+    name = "probe_pkg_other_root",
+    chain = [
+        ":other_root_channel_cert",
+        "//tools/ndsign:testdata/test_keys/release.cert",
+    ],
+    files = {":pkg_probe": PROBE_PATH},
+    key = "//tools/ndsign:testdata/test_keys/release.key",
+    license = "BSD-2-Clause",
+    pkg_name = "pkg-probe",
+    version = "1.0",
+)
+
+[filegroup(
+    name = name + "_" + group,
+    srcs = [":" + name],
+    output_group = group,
+) for name in [
+    "probe_pkg",
+    "probe_pkg_other_root",
+] for group in [
+    "trustcache",
+    "grant",
+]]
+
+# Unsigned: the good grant with every signature zeroed.
+genrule(
+    name = "unsigned_grant",
+    srcs = [":probe_pkg_grant"],
+    outs = ["unsigned.grant"],
+    cmd = "sed -E 's/^signature = \"[0-9a-f]+\"$$/signature = \"" + "0" * 128 + "\"/' $< > $@ && ! cmp -s $< $@",
+)
+
+# neoboot's default command line and the test root.
+genrule(
+    name = "pkg_root_cfg",
+    srcs = ["//tools/ndsign:testdata/test_keys/root.pub"],
+    outs = ["pkg-root.cfg"],
+    cmd = "echo \"debug=0x14e serial=3 -v -noprogress nd_pkg_root=$$(cat $<)\" > $@",
+)

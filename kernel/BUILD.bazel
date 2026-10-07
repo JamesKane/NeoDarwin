@@ -138,6 +138,7 @@ SBSA_OVERLAYS = {
     "//kernel/neodarwin/acpi:kernel_srcs": "iokit/ndacpi",
     "@acpica//:kernel_srcs": "iokit/ndacpi/acpica",
     "//kernel/neodarwin/amfi:kernel_srcs": "bsd/ndamfi",
+    "@apple_openssh//:ed25519": "bsd/ndamfi",
     "//kernel/neodarwin/crypto:kernel_srcs": "libkern/ndcrypto",
     "//kernel/neodarwin/hfs:kernel_srcs": "libkern/ndhfs",
     "//kernel/neodarwin/pci:kernel_srcs": "iokit/ndpci",
@@ -2032,6 +2033,114 @@ sh_test(
         "//boot/neoboot:testdata/cs-enforcement-off.cfg",
         "//images:session_root",
         "//images:session_root_trustcache",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P2-01's exit (docs/architecture/packaging.md §4.2, docs/kernel/amfi-provider.md
+# §4.5): a package's ndsign-signed trust cache loads at run time and its
+# binary runs under enforcement; unsigned and wrongly signed grants are
+# refused by the kernel. boot.cfg trusts the test root (nd_pkg_root, the
+# TEST-ONLY chain of //tools/ndsign:testdata/test_keys). The probe is in no
+# static trust cache: refused, then granted by ndpkg activate-trust.
+PKG_PROBE = "/usr/local/libexec/pkg_probe/pkg-probe"
+
+PKG_TRUST = "/usr/local/share/pkg_trust"
+
+sh_test(
+    name = "sbsa_pkg_trust_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pkg_trust_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pkg_trust_root_trustcache)",
+        "--esp NeoDarwin/boot.cfg=$(rootpath //tests/qemu/pkg_trust:pkg_root_cfg)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' '" + PKG_PROBE + "; echo before-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg load-trust " + PKG_TRUST + "/pkg-probe.trustcache " + PKG_TRUST + "/unsigned.grant; echo unsigned-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg load-trust " + PKG_TRUST + "/pkg-probe.trustcache " + PKG_TRUST + "/other-root.grant; echo other-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg activate-trust " + PKG_TRUST + "/other-root.ndpkg; echo other-pkg-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg activate-trust " + PKG_TRUST + "/pkg-probe.ndpkg; echo good-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '" + PKG_PROBE + "; echo after-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg activate-trust " + PKG_TRUST + "/pkg-probe.ndpkg; sysctl security.codesigning.trustcaches.num_loadable\\n'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'ndamfi: code-signing enforcement on (a static trust cache from the loader)'",
+        "'ndamfi: 1 package root from nd_pkg_root: '",
+        # Before activation: the probe is refused.
+        "'ndamfi: refused pkg-probe (cdhash '",
+        "'before-status=137'",
+        # Unsigned: the kernel's verifier refuses the grant.
+        "'ndamfi: trust-cache grant refused: bad signature'",
+        "'unable to load trust cache (type: 4): 5'",
+        "'grant (EAUTH)'",
+        "'unsigned-status=1'",
+        # Wrongly signed (other-root): refused by the kernel, and by ndpkg.
+        "'ndamfi: trust-cache grant refused: untrusted root'",
+        "'other-status=1'",
+        "'manifest signature refused: untrusted root'",
+        "'other-pkg-status=1'",
+        # The good package: verified, granted, loaded; the probe runs.
+        "'ndpkg: pkg-probe 1.0: manifest verified'",
+        "'ndamfi: trust-cache grant accepted ('",
+        "'successfully loaded trust cache of type: 4'",
+        "'ndpkg: pkg-probe 1.0: trust cache loaded'",
+        "'good-status=0'",
+        "'cs_probe: platform binary, valid, CS_KILL'",
+        "'after-status=0'",
+        "'ndpkg: pkg-probe 1.0: trust cache already loaded'",
+        "'security.codesigning.trustcaches.num_loadable: 1'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pkg_trust_root",
+        "//images:pkg_trust_root_trustcache",
+        "//tests/qemu/pkg_trust:pkg_root_cfg",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# The same image booted without nd_pkg_root: the kernel trusts no package
+# root, so it refuses every grant, the good one included, and the probe
+# stays refused.
+sh_test(
+    name = "sbsa_pkg_trust_no_root_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath :sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:pkg_trust_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:pkg_trust_root_trustcache)",
+        "--until-lines",
+        "--absent 'ndamfi: trust-cache grant accepted ('",
+        "--send-after 'login: ' 'root\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg load-trust " + PKG_TRUST + "/pkg-probe.trustcache " + PKG_TRUST + "/pkg-probe.grant; echo good-grant-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg activate-trust " + PKG_TRUST + "/pkg-probe.ndpkg; echo good-pkg-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '" + PKG_PROBE + "; echo probe-status=$$?\\n'",
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'ndamfi: code-signing enforcement on (a static trust cache from the loader)'",
+        "'ndamfi: no package root (nd_pkg_root): run-time trust caches are refused'",
+        "'ndamfi: trust-cache grant refused: no package root (nd_pkg_root)'",
+        "'unable to load trust cache (type: 4): 5'",
+        "'good-grant-status=1'",
+        "'the kernel trusts no package root (boot-arg nd_pkg_root)'",
+        "'good-pkg-status=1'",
+        "'ndamfi: refused pkg-probe (cdhash '",
+        "'probe-status=137'",
+    ],
+    data = [
+        ":sbsa_kc",
+        "//boot/neoboot",
+        "//images:pkg_trust_root",
+        "//images:pkg_trust_root_trustcache",
     ],
     tags = ["manual", "kernel", "qemu"],
 )

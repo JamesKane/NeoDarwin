@@ -261,7 +261,7 @@ epics:
     title: "ndpkg format, manifest schema, nd_package rule, ndsign; ndsign trust-cache load grants against the package key chain (from P1-15: the verifier behind ndamfi's nd_tc_set_grant_verifier)"
     phase: 2
     owner: packaging
-    status: todo
+    status: done
     depends: [P0-02, P1-15]
     exit: "a package builds, signs, verifies offline; a package's ndsign-signed trust cache loads at run time and its binaries run under enforcement, while an unsigned or wrongly signed one is refused"
     doc: docs/architecture/packaging.md

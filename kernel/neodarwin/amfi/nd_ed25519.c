@@ -61,4 +61,11 @@ int nd_ed25519_sign_raw(unsigned char *sm, unsigned long long *smlen, const unsi
 int nd_ed25519_open_raw(unsigned char *m, unsigned long long *mlen, const unsigned char *sm,
     unsigned long long smlen, const unsigned char *pk);
 
+// The kernel's overlay and the host's cc_library put OpenSSH's file under
+// openssh/; ndpkg's build (base/ndpkg) has that directory itself on the
+// include path.
+#if __has_include("openssh/ed25519.c")
 #include "openssh/ed25519.c"
+#else
+#include "ed25519.c"
+#endif

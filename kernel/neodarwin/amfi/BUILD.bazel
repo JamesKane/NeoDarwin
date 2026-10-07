@@ -47,6 +47,17 @@ nd_cc_library(
     deps = [":ed25519_host"],
 )
 
+# The same sources for ndpkg on NeoDarwin (//base/ndpkg), which compiles
+# them into its C shim with its own digests (ND_NDSIGN_EXTERNAL_DIGESTS).
+filegroup(
+    name = "ndsign_srcs",
+    srcs = [
+        "nd_ed25519.c",
+        "nd_ndsign.c",
+        "nd_ndsign.h",
+    ],
+)
+
 # RFC 8032's vectors, and a grant //tools/ndsign wrote (the test chain,
 # tools/ndsign/testdata/test_keys: TEST-ONLY) checked as the kernel does.
 filegroup(
@@ -128,16 +139,21 @@ nd_cc_test(
     deps = [":entitlements_host"],
 )
 
-# Overlaid at bsd/ndamfi by the kernel build (kernel/BUILD.bazel, patch 0005).
+# Overlaid at bsd/ndamfi by the kernel build (kernel/BUILD.bazel, patch 0005),
+# with OpenSSH's Ed25519 (@apple_openssh//:ed25519) at bsd/ndamfi/openssh.
 filegroup(
     name = "kernel_srcs",
     srcs = [
         "nd_amfi.c",
+        "nd_amfi_grant.c",
         "nd_amfi_internal.h",
         "nd_amfi_policy.c",
+        "nd_ed25519.c",
         "nd_entitlements.c",
         "nd_entitlements.h",
         "nd_entitlements_os.cpp",
+        "nd_ndsign.c",
+        "nd_ndsign.h",
         "nd_tc_lookup.c",
         "nd_trustcache.c",
         "nd_trustcache.h",
@@ -150,6 +166,7 @@ lang_audit_test(
     name = "kernel_srcs_lang_audit",
     srcs = [
         "nd_amfi.c",
+        "nd_amfi_grant.c",
         "nd_amfi_internal.h",
         "nd_amfi_policy.c",
         "nd_entitlements_os.cpp",
