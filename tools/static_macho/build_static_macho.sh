@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
 # Build a static arm64 Darwin executable from Embedded Swift (language policy T3).
-#   build_static_macho.sh TOOLCHAIN OUT ENTRY MODULE INCLUDE_DIRS(colon-separated) -- SWIFT_SRCS... -- C_SRCS...
+#   build_static_macho.sh TOOLCHAIN LD64 OUT ENTRY MODULE INCLUDE_DIRS(colon-separated) -- SWIFT_SRCS... -- C_SRCS...
 # Swift and C compile for arm64-apple-macos, the Darwin userland ABI NeoDarwin
-# keeps. Xcode's ld links them -static: an MH_EXECUTE with an LC_UNIXTHREAD
+# keeps, with the pinned swift.org toolchain. The from-source ld64
+# (//toolchains/ld64) links them -static: an MH_EXECUTE with an LC_UNIXTHREAD
 # entry and no LC_LOAD_DYLINKER, so the kernel starts it without dyld or
-# libSystem. The toolchain's ld64.lld cannot: it implements neither -static
-# nor LC_UNIXTHREAD. ld signs the result ad hoc, which the arm64 kernel
-# requires of every executable page.
+# libSystem. A static link reads no .tbd stubs, so ld64 needs no libtapi here.
+# ld64.lld cannot: it implements neither -static nor LC_UNIXTHREAD. ld64
+# signs the result ad hoc, which the arm64 kernel requires of every
+# executable page.
 set -euo pipefail
-tc="$1"; out="$2"; entry="$3"; module="$4"; incs="$5"; shift 5
+tc="$1"; ld64="$2"; out="$3"; entry="$4"; module="$5"; incs="$6"; shift 6
 [ "$1" = "--" ] && shift
 swift=(); while [ $# -gt 0 ] && [ "$1" != "--" ]; do swift+=("$1"); shift; done
 [ "${1:-}" = "--" ] && shift
@@ -31,5 +33,5 @@ for c in ${csrcs[@]+"${csrcs[@]}"}; do
 		-Wall -Wextra -Werror "${iflags[@]}" -c "$c" -o "$work/c$i.o"
 	objs+=("$work/c$i.o"); i=$((i + 1))
 done
-xcrun ld -arch arm64 -platform_version macos 26.0 26.0 -static -dead_strip -adhoc_codesign \
+"$ld64" -arch arm64 -platform_version macos 26.0 26.0 -static -dead_strip -adhoc_codesign \
 	-e "_$entry" -o "$out" "${objs[@]}"

@@ -1,9 +1,8 @@
 """UEFI applications in Embedded Swift (language policy T3).
 
 swift_embedded_uefi_binary builds a PE32+ EFI application for AArch64:
-Embedded Swift -> LLVM bitcode -> aarch64 Windows COFF -> lld-link. The
-toolchain is located on the host by //toolchains/embedded:repo.bzl until the
-pinned NeoDarwin toolchain lands (P0-02).
+Embedded Swift -> LLVM IR -> aarch64 Windows COFF -> lld-link, all with the
+pinned swift.org toolchain (@nd_embedded_swift, P0-02).
 """
 
 load("@nd_embedded_swift//:toolchain.bzl", "EMBEDDED_TOOLCHAIN")

@@ -19,7 +19,7 @@ epics:
     title: "Hermetic LLVM+Swift toolchain tarball and Bazel toolchain config"
     phase: 0
     owner: build
-    status: doing
+    status: done
     depends: [P0-01]
     exit: "hello-world cc_binary and swift_binary build for aarch64-apple-darwin on macOS hosts with Xcode hidden, from pinned prebuilt toolchains (swift.org and llvm.org releases, by sha256) and a pinned macOS SDK (an exact version and a content hash of the host-installed SDK, verified at fetch); Embedded Swift (neoboot, static_macho, T2/T3, the kext trial) uses the pinned toolchain (user decisions 2026-10-06/07). Linux hosts only run QEMU tests. The rest of the tree moves off Xcode in P2-12"
     doc: docs/architecture/build-system.md

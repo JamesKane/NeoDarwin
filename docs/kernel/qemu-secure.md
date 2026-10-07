@@ -37,7 +37,7 @@ ArmVirtQemuKernel is the position-independent ArmVirt build that TF-A's QEMU por
 
 **Toolchain.** The compiler is the swift.org toolchain's clang 21 and `ld.lld`, the same toolchain neoboot uses (`toolchains/README.md`): TF-A builds with `CC=clang`, and EDK2 builds with its `CLANGDWARF` toolchain. The host needs `brew install make gnu-sed acpica openssl@3`: GNU make 4.3 or later and GNU sed for TF-A, `iasl` for EDK2's ASL, and OpenSSL headers for `fiptool`. The build takes about a minute.
 
-**Reproducible.** The image is the same bit for bit on every build, and a manual build gives the same image as a Bazel one: SHA-256 `e9e0f4b9578ef4482fb1debf7c23491c1367d42b26a72e8648c6b99e8d3b6e92` with the pins above and swift-6.3.2's clang. The script does four things to get there:
+**Reproducible.** The image is the same bit for bit on every build, and a manual build gives the same image as a Bazel one: SHA-256 `e197f5d602ba70f0f1b641576691ca3b074bc8aa7568c32bfce4ba96fc9cb7d9` with the pins above and the pinned swift.org 6.4.0's clang (P0-02; `e9e0f4b9…` with swift-6.3.2's). The script does four things to get there:
 - It sets `SOURCE_DATE_EPOCH`, and TF-A's `BUILD_MESSAGE_TIMESTAMP`, to fixed values.
 - It builds at the fixed path `/tmp/neodarwin-qemu-secure-fw`, because EDK2's PE debug entries record the absolute `.dll` path. The action is therefore unsandboxed, and only one build can run at a time.
 - It supplies EDK2's stack-cookie tables from a fixed seed. EDK2 otherwise draws them from `secrets` on every build.

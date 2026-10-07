@@ -2,13 +2,15 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # The T2 gate (language policy §2, allocation-free Swift):
 #   t2check.sh EMBEDDED_TOOLCHAIN MODULE SRC.swift...
+# Env: ND_MACOS_SDK, the pinned macOS SDK (@nd_macos_sdk) for step 2.
 # 1. annotations: every public or open func and init carries @_noLocks,
 #    the stricter performance annotation: no locks, and so no allocation,
 #    reference counting or metadata instantiation, which may lock
 #    (@_noAllocation alone still allows reference counting);
-# 2. the pinned Xcode swiftc compiles the module, where the performance
-#    diagnostics reject an allocation, lock or metadata use reachable from an
-#    annotated entry point (an error, not a warning);
+# 2. the pinned swift.org swiftc compiles the module hosted
+#    (arm64-apple-macos, the pinned SDK), where the performance diagnostics
+#    reject an allocation, lock or metadata use reachable from an annotated
+#    entry point (an error, not a warning);
 # 3. the Embedded Swift toolchain compiles it again with -no-allocations,
 #    which rejects an allocating type anywhere in the module, annotated or
 #    not, so a stray allocation in a helper fails too.
@@ -37,7 +39,7 @@ done
 [ $fail -eq 0 ] || exit 1
 
 # 2. Hosted compile with the performance diagnostics (always on for annotated code).
-xcrun swiftc -parse-as-library -wmo -O -swift-version 6 -warnings-as-errors \
+"$tc/usr/bin/swiftc" -sdk "${ND_MACOS_SDK:?the pinned macOS SDK}" -parse-as-library -wmo -O -swift-version 6 -warnings-as-errors \
 	-module-name "$module" -module-cache-path "$work/mc" -emit-object -o "$work/hosted.o" "$@"
 
 # 3. Embedded -no-allocations: the module-wide second check.

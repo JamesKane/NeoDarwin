@@ -2,6 +2,7 @@
 # nd_swift_library(tier = "T2") runs t2check.sh on the module; the selftest
 # proves the gate fails each kind of violation with its diagnostic.
 load("@nd_embedded_swift//:toolchain.bzl", "EMBEDDED_TOOLCHAIN")
+load("@nd_macos_sdk//:sdk.bzl", "MACOS_SDK")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//rules:swift.bzl", "nd_swift_library")
 
@@ -29,5 +30,6 @@ sh_test(
         "tools/t2check/testdata",
     ],
     data = ["t2check.sh"] + glob(["testdata/*.swift"]),
+    env = {"ND_MACOS_SDK": MACOS_SDK},
     tags = ["requires-darwin", "no-remote"],
 )

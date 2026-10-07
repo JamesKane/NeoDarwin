@@ -11,6 +11,12 @@ ci/test.sh                                        # exactly what CI runs
 
 Bazel is pinned by `.bazelversion`; install Bazelisk (`brew install bazelisk`) and it fetches the right version.
 
+**Setup.** Builds run on macOS (arm64). You need:
+
+- **The Command Line Tools for Xcode 27.0** (`xcode-select --install`): they install the macOS 27.0 SDK the build pins (`/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk`). Bazel checks its version and content hash when it fetches `@nd_macos_sdk`, and the error names the SDK it wants.
+- **Nothing else for the toolchain.** Bazel downloads the pinned swift.org Swift 6.4.0 and llvm.org LLVM 23.1.3 releases by sha256 (`toolchains/upstream.lock`, about 3 GB on first fetch). Embedded Swift (neoboot, PID 1, the T2/T3 checks, the kext trial) always uses them. swiftly is no longer needed.
+- **Xcode, for now, for the rest of the tree.** `--config=pinned` builds hosted C and Swift with the pinned toolchain and no Xcode (`ci/no_xcode.sh` proves it for `//toolchains:hello_cc`, `:hello_swift` and `//tests/smoke`). The default configuration, the base, XNU and the kexts still use the selected Xcode until P2-12.
+
 ## Language policy
 
 New code is Swift 6+ (`docs/architecture/language-policy.md`). Use the NeoDarwin macros, not the raw rules:

@@ -14,6 +14,15 @@ bazel_dep(name = "rules_shell", version = "0.8.0")
 bazel_dep(name = "apple_support", version = "2.9.1")
 bazel_dep(name = "rules_swift", version = "4.1.2")
 
+# The pinned toolchain runs Swift with no developer directory: rules_swift's
+# worker would wrap it in xcrun (toolchains/patches, P0-02).
+single_version_override(
+    module_name = "rules_swift",
+    patch_strip = 1,
+    patches = ["//toolchains/patches:rules_swift_worker_no_xcrun.patch"],
+    version = "4.1.2",
+)
+
 # ---------------------------------------------------------------------------
 # Upstream Apple open source (docs/repository.md §3). The macOS 26.0 release
 # set: distribution-macOS macos-260/release.json. Mirrors replace these URLs
@@ -1027,8 +1036,44 @@ pinned_files(
     url_template = "https://raw.githubusercontent.com/freebsd/freebsd-src/{commit}/{path}",
 )
 
-# Embedded Swift toolchain (language policy T3) located on the host until the
-# pinned NeoDarwin toolchain lands (P0-02). See toolchains/embedded/repo.bzl.
+# The pinned host toolchain (P0-02; toolchains/README.md, toolchains/upstream.lock):
+# swift.org's and llvm.org's releases by sha256, and the host's macOS SDK
+# pinned in place by version and content hash. `--config=pinned` registers
+# them; Embedded Swift (language policy T3) always uses @nd_swift.
+nd_macos_sdk = use_repo_rule("//toolchains:repos.bzl", "nd_macos_sdk")
+
+nd_macos_sdk(
+    name = "nd_macos_sdk",
+    sha256 = "21415c7143ec88cfabaf480265bc509f59e2b25b6135ff644d04d49d5b761b59",
+    version = "27.0",
+)
+
+nd_llvm_toolchain = use_repo_rule("//toolchains:repos.bzl", "nd_llvm_toolchain")
+
+nd_llvm_toolchain(
+    name = "nd_llvm",
+    min_os = "26.0",
+    sha256 = "3dcfd88aec10be204a24037bcb0dc0ad777882e9dbe8ac60e2639060d8a794b1",
+    strip_prefix = "LLVM-23.1.3-macOS-ARM64",
+    urls = ["https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.3/LLVM-23.1.3-macOS-ARM64.tar.xz"],
+    version = "23.1.3",
+)
+
+nd_swift_toolchain = use_repo_rule("//toolchains:repos.bzl", "nd_swift_toolchain")
+
+nd_swift_toolchain(
+    name = "nd_swift",
+    required = [
+        "usr/lib/swift/embedded/aarch64-none-none-elf",
+        "usr/lib/swift/embedded/arm64-apple-macos",
+        "usr/bin/lld-link",
+    ],
+    sha256 = "8fd03185b98fe27f54a54631c2449decf75d5b466ce8e34abbd414141063c6aa",
+    urls = ["https://download.swift.org/swift-6.4.0-release/xcode/swift-6.4.0-RELEASE/swift-6.4.0-RELEASE-osx.pkg"],
+    version = "6.4.0",
+)
+
+# Embedded Swift: @nd_swift, or ND_EMBEDDED_TOOLCHAIN. See toolchains/embedded/repo.bzl.
 nd_embedded_swift = use_repo_rule("//toolchains/embedded:repo.bzl", "nd_embedded_swift")
 
 nd_embedded_swift(name = "nd_embedded_swift")

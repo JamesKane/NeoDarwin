@@ -1,0 +1,37 @@
+rules_swift's worker runs every Swift tool through /usr/bin/xcrun on Apple
+hosts. The Xcode toolchain needs that: it names the driver bare ("swiftc").
+A hermetic toolchain (swift_tools) passes an execroot-relative path instead,
+and xcrun would make it need a developer directory, so it fails with Xcode
+hidden (P0-02, ci/no_xcode.sh). Skip xcrun for such paths.
+
+
+--- a/tools/worker/swift_runner.cc	2026-10-06 20:13:09
++++ b/tools/worker/swift_runner.cc	2026-10-06 20:13:09
+@@ -801,16 +801,21 @@
+ }
+ 
+ void SwiftRunner::ProcessArguments(const std::vector<std::string>& args) {
+-#if __APPLE__
+-  // On Apple platforms, inject `/usr/bin/xcrun` in front of our command
+-  // invocation.
+-  tool_args_.push_back("/usr/bin/xcrun");
+-#endif
+-
+   // The tool is assumed to be the first argument. Push it directly.
+   auto parsed_args = ParseArguments(args);
+ 
+   auto it = parsed_args.begin();
++#if __APPLE__
++  // On Apple platforms, inject `/usr/bin/xcrun` in front of our command
++  // invocation, unless the tool is an execroot-relative path (a hermetic
++  // toolchain's, from swift_tools), which needs no developer directory.
++  // NeoDarwin patch: toolchains/patches/rules_swift_worker_no_xcrun.patch.
++  {
++    const std::string& tool = *it;
++    bool hermetic = tool.find('/') != std::string::npos && tool[0] != '/';
++    if (!hermetic) tool_args_.push_back("/usr/bin/xcrun");
++  }
++#endif
+   tool_args_.push_back(*it++);
+ 
+   while (it != parsed_args.end()) {

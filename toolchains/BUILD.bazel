@@ -1,0 +1,46 @@
+# The pinned host toolchain's exit targets (P0-02; README.md). Build them with
+# `--config=pinned` (.bazelrc); ci/no_xcode.sh builds and runs them with
+# Xcode hidden.
+
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:cc.bzl", "nd_cc_binary")
+load("//rules:swift.bzl", "nd_swift_binary")
+
+exports_files([
+    "ld64_lld.sh",
+    "llvm.BUILD.tpl",
+    "swift.BUILD.tpl",
+])
+
+nd_cc_binary(
+    name = "hello_cc",
+    srcs = ["hello/hello.c"],
+)
+
+nd_swift_binary(
+    name = "hello_swift",
+    srcs = ["hello/Hello.swift"],
+    module_name = "Hello",
+)
+
+sh_test(
+    name = "hello_cc_test",
+    size = "small",
+    srcs = ["hello/hello_test.sh"],
+    args = [
+        "$(rootpath :hello_cc)",
+        "'hello from C (pinned toolchain)'",
+    ],
+    data = [":hello_cc"],
+)
+
+sh_test(
+    name = "hello_swift_test",
+    size = "small",
+    srcs = ["hello/hello_test.sh"],
+    args = [
+        "$(rootpath :hello_swift)",
+        "'hello from Swift (pinned toolchain)'",
+    ],
+    data = [":hello_swift"],
+)

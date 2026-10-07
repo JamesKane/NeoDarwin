@@ -18,9 +18,9 @@ string_flag(
 )
 
 # The ld64.lld that --//rules:kernel_linker=lld runs: an upstream LLVM lld.
-# The swift.org 6.3.2 toolchain's ld64.lld refuses macOS objects ("This
-# version of lld does not support linking for platform macOS"). P0-02's
-# pinned toolchain replaces this host path.
+# swift.org toolchains' ld64.lld refuses macOS objects ("This version of
+# lld does not support linking for platform macOS"). The pinned llvm.org lld
+# (@nd_llvm, P0-02) doesn't; pointing this at it goes with P2-12.
 string_flag(
     name = "ld64_lld",
     build_setting_default = "/opt/homebrew/opt/lld@22/bin/ld64.lld",

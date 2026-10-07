@@ -1,0 +1,2 @@
+# The macOS SDK's content hash (P0-02); see sdk_hash.sh and //toolchains:repos.bzl.
+exports_files(["sdk_hash.sh"])

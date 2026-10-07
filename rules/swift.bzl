@@ -7,6 +7,7 @@ flag spellings.
 """
 
 load("@nd_embedded_swift//:toolchain.bzl", "EMBEDDED_TOOLCHAIN")
+load("@nd_macos_sdk//:sdk.bzl", "MACOS_SDK")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("@rules_swift//swift:swift.bzl", "swift_binary", "swift_library")
 
@@ -38,6 +39,7 @@ def nd_swift_library(name, copts = [], tier = "T1", **kwargs):
             args = [EMBEDDED_TOOLCHAIN, kwargs.get("module_name", name)] +
                    ["$(rootpaths %s)" % s for s in kwargs["srcs"]],
             data = kwargs["srcs"],
+            env = {"ND_MACOS_SDK": MACOS_SDK},
             tags = ["requires-darwin", "no-remote"] + kwargs.get("tags", []),
         )
     swift_library(name = name, copts = ND_SWIFT_COPTS + copts, **kwargs)

@@ -11,6 +11,15 @@ test --test_output=errors
 # NeoDarwin toolchain lands (toolchains/README.md).
 build:macos --apple_platform_type=macos
 
+# The pinned toolchain (P0-02; toolchains/README.md): llvm.org clang and lld,
+# swift.org swiftc, and the pinned macOS SDK, instead of the selected Xcode.
+# ci/no_xcode.sh builds //toolchains:hello_cc and :hello_swift with it and
+# Xcode hidden. --macos_minimum_os is the deployment target; Xcode's default
+# would come from xcodebuild.
+build:pinned --extra_toolchains=@nd_llvm//:cc_toolchain
+build:pinned --extra_toolchains=@nd_swift//:swift_toolchain
+build:pinned --macos_minimum_os=26.0
+
 # CI: no local-only caches, show everything that failed.
 build:ci --noshow_progress
 build:ci --keep_going

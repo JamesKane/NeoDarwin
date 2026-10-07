@@ -4,9 +4,9 @@ swift_embedded_executable builds an arm64 MH_EXECUTE that dyld starts and
 that links against NeoDarwin's libSystem, and optionally the base's
 frameworks (CoreFoundation, IOKit): Embedded Swift and justified C for
 arm64-apple-macos, linked by Xcode's ld against a NeoDarwin root (//base:root)
-with an ad hoc signature. The Embedded toolchain is located on the host by
-//toolchains/embedded:repo.bzl until the pinned NeoDarwin toolchain lands
-(P0-02).
+with an ad hoc signature. Swift and C compile with the pinned swift.org
+toolchain (@nd_embedded_swift, P0-02); the SDK and the link still come from
+xcrun until the base moves off Xcode (P2-12).
 """
 
 load("@nd_embedded_swift//:toolchain.bzl", "EMBEDDED_TOOLCHAIN")

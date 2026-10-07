@@ -34,7 +34,7 @@ Portability, performance, expressibility: those are the only three grounds for T
 The trial is `//kexts/swift_trial` (`NDSwiftTrial.kext`, not boot-critical): `glue.cpp` is an `IOService` that matches `IOResources`, and its `start()` calls `Trial.swift` through `@_cdecl` functions. It is linked only into `//kernel:sbsa_swift_trial_kc`, which only `//kernel:sbsa_swift_trial_test` boots. That test boots the collection on QEMU (cortex-a76) and requires these lines on serial: the Swift parser walks a well-formed table (returns 0) and rejects a corrupted one through typed throws (returns -2); then Swift calls kernel KPIs directly and returns 42.
 
 What worked:
-- **Toolchain.** The swift.org 6.3.2 Embedded Swift compiles for `arm64-apple-macos26.0` to a Mach-O object, with `-target-cpu cortex-a76 -no-allocations -Osize`, and `ld -kext` (the from-source ld64, `toolchains/ld64`) links it with the C++ object and libkmod's `_start`/`_stop`. kcgen links the bundle into a boot collection, and kcheck verifies it.
+- **Toolchain.** The pinned swift.org 6.4.0 Embedded Swift (P0-02) compiles for `arm64-apple-macos26.0` to a Mach-O object, with `-target-cpu cortex-a76 -no-allocations -Osize`, and `ld -kext` (the from-source ld64, `toolchains/ld64`) links it with the C++ object and libkmod's `_start`/`_stop`. kcgen links the bundle into a boot collection, and kcheck verifies it.
 - **No runtime, no metadata.** Without classes or existentials, the linked kext imports only kernel exports: `IOLog`, the KPIs below, and the stack protector's `___stack_chk_guard` and `___stack_chk_fail`, which are Libkern exports. The compiler may also emit a `bzero` call, which Libkern exports too. Swift's stack protector works unchanged in the kernel.
 - **Calling convention.** Kernel arm64 code uses plain AAPCS64. `@_cdecl` entry points and `@convention(c)` callbacks from Swift into C++ (`report(tag, value)`) need no shim. The kernel is arm64, not arm64e, so there is no pointer authentication to match.
 - **Kernel KPIs from Swift.** The clang importer reads Kernel.framework's headers with `-Xcc -mkernel -Xcc -DKERNEL -Xcc -nostdinc` through a module map (`KernelKPI/`), and Swift calls `OSAddAtomic`, `IOSleep` and `clock_get_system_microtime` directly.
@@ -48,7 +48,7 @@ What broke, or needs care:
 - **String literals allocate.** A `String` literal passed as `UnsafePointer<CChar>` bridges through heap storage, so `-no-allocations` rejects it. Use `StaticString.utf8Start`.
 - **C variadics are not callable.** `IOLog` and `printf` are variadic, so logging goes through a C or C++ callback.
 - **Traps.** A Swift trap is a `brk` in the kernel, which is a panic. Bounds and overflow checks stay on; hot loops use `&+` and checked indices deliberately.
-- **Two toolchains.** The Swift side builds with swift.org 6.3.2, because Xcode ships no Embedded stdlib. The C++ side builds with Xcode clang. This lasts until the pinned toolchain (P0-02).
+- **Two toolchains.** The Swift side builds with the pinned swift.org 6.4.0 (P0-02), because Xcode ships no Embedded stdlib. The C++ side still builds with Xcode clang, like the rest of the kext build, until P2-12.
 
 ## 4. Ownership and performance idioms (for reviewers)
 
