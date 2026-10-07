@@ -1,0 +1,34 @@
+From: NeoDarwin
+Subject: [PATCH] IOFindBSDRoot: rd=zfs:POOL[/DATASET] waits for boot-uuid-media
+
+Root on ZFS (P3-03, docs/architecture/filesystems.md §8). With
+rd=zfs:POOL[/DATASET] and no /chosen boot-uuid, IOFindBSDRoot waited for
+an IOMedia whose BSD name was "zfs:..." and never found one. It now waits
+for the boot-uuid-media resource, as it does for a boot-uuid: zfs.kext
+(kexts/zfs patch 0012) reads the disks' vdev labels, imports POOL and
+publishes the root dataset's ZFSDatasetProxy IOMedia under that name, the
+way the macOS ZFS port roots with Apple's boot-uuid. The root device is
+then that proxy's /dev/diskN, and vfs_mountroot() reaches
+zfs_vfs_mountroot() once the built-in file systems decline it. No
+boot-uuid resource is published, so AppleFileSystemDriver doesn't start.
+A /chosen boot-uuid still wins, as before.
+
+Rebase-risk: low (one branch in the rd= parser)
+---
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -861,6 +861,14 @@
+ 					mediaProperty = "boot-uuid-media";
+ 				}
+ 			}
++		} else if (strncmp( look, "zfs:", strlen( "zfs:" )) == 0) {
++			// rd=zfs:POOL[/DATASET]: zfs.kext imports the pool and
++			// publishes the dataset's proxy IOMedia as boot-uuid-media
++			// (kexts/zfs patch 0012), as AppleFileSystemDriver does for
++			// a boot-uuid. No boot-uuid resource: nothing else matches.
++			IOLog("rooting via ZFS: %s\n", look + strlen( "zfs:" ));
++			matching = IOUUIDMatching();
++			mediaProperty = "boot-uuid-media";
+ 		} else {
+ 			matching = IOBSDNameMatching( look );
+ 		}

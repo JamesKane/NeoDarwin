@@ -22,13 +22,14 @@ def _impl(ctx):
     module = ctx.attr.module_name or ctx.label.name
     root = ctx.file.root
     frameworks = [f.files.to_list()[0] for f in ctx.attr.frameworks]
+    libraries = [f.files.to_list()[0] for f in ctx.attr.libraries]
     args = [EMBEDDED_TOOLCHAIN, out.path, module, ":".join(_dirs(ctx.files.hdrs)), root.path,
-            ":".join([f.path for f in frameworks]), "--"]
+            ":".join([f.path for f in frameworks]), ":".join([f.path for f in libraries]), "--"]
     args += [f.path for f in ctx.files.srcs] + ["--"] + [f.path for f in ctx.files.c_srcs]
     ctx.actions.run(
         executable = ctx.file._script,
         arguments = args,
-        inputs = ctx.files.srcs + ctx.files.c_srcs + ctx.files.hdrs + [root] + frameworks,
+        inputs = ctx.files.srcs + ctx.files.c_srcs + ctx.files.hdrs + [root] + frameworks + libraries,
         outputs = [out],
         mnemonic = "EmbeddedSwiftMachO",
         progress_message = "Building executable %{label}",
@@ -47,6 +48,9 @@ swift_embedded_executable = rule(
         "root": attr.label(mandatory = True, allow_single_file = True, doc = "The NeoDarwin root to link against (a directory), e.g. //base:root."),
         "frameworks": attr.label_list(doc = "base_library trees whose frameworks the executable links, e.g. //base:corefoundation_framework; " +
                                             "the C sources compile against their headers (tools/darwin_executable/build.sh)."),
+        "libraries": attr.label_list(doc = "base_library trees of build-only static libraries, e.g. //base:libsolv_static: " +
+                                           "the C sources compile against their usr/local/include and the executable " +
+                                           "links their usr/local/lib/*.a."),
         "module_name": attr.string(doc = "Swift module name; defaults to the target name."),
         "out": attr.string(doc = "Output file name; defaults to the target name."),
         "_script": attr.label(default = "//tools/darwin_executable:build.sh", allow_single_file = True),

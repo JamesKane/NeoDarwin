@@ -1,0 +1,43 @@
+From: NeoDarwin
+Subject: [PATCH] zfs.kext doesn't start with less than 1 GB of memory
+
+The SPL's vmem setup (spl-vmem.c) VERIFYs at least 1 GB of memory, so
+on a smaller machine zfs.kext's start() panicked the kernel: "VERIFY3U(
+real_total_memory >= 1024ULL*1024ULL*1024ULL) failed (536870912 >=
+1073741824)". macOS machines never have less; NeoDarwin's QEMU tests run
+at 512 MB, and since P3-11 checkpoint 5 the kext is in every boot. start()
+now declines below 1 GB with a console line, before the SPL starts, and
+the kernel boots without ZFS (a ZFS root then can't be mounted, which
+upstream never supported at that size either).
+
+Rebase-risk: low
+---
+diff --git a/module/os/neodarwin/zfs/zfs_osx.cpp b/module/os/neodarwin/zfs/zfs_osx.cpp
+--- a/module/os/neodarwin/zfs/zfs_osx.cpp
++++ b/module/os/neodarwin/zfs/zfs_osx.cpp
+@@ -187,6 +187,25 @@
+ 	if (!res)
+ 		return (res);
+ 
++#ifdef __NEODARWIN__
++	/*
++	 * The SPL's vmem setup VERIFYs at least 1 GB of memory and panics
++	 * below it. zfs.kext is in every boot (P3-11 checkpoint 5), and
++	 * machines with less (QEMU tests with 512 MB) must boot without it.
++	 */
++	{
++		uint64_t memsize = 0;
++		size_t len = sizeof (memsize);
++		(void) sysctlbyname("hw.memsize", &memsize, &len, NULL, 0);
++		if (memsize != 0 && memsize < (1ULL << 30)) {
++			IOLog("ZFS: not starting: %llu MB of memory; ZFS "
++			    "needs 1024 MB\n", memsize >> 20);
++			super::stop(provider);
++			return (false);
++		}
++	}
++#endif
++
+ 	/* Fire up all SPL modules and threads */
+ 	spl_start(NULL, NULL);
+ 

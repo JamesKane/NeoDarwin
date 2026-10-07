@@ -31,12 +31,16 @@ def _kext_impl(ctx):
     if ctx.attr._kernel_linker[BuildSettingInfo].value == "ld64":
         tools.append(ctx.executable._ld64)
         env["ND_KEXT_LD"] = ctx.executable._ld64.path
-    ctx.actions.run(
-        executable = ctx.file.script,
-        arguments = [out.path, _root(ctx.attr.srcs), headers[0].path, _root(ctx.attr.xnu)] +
+    # The script builds the bundle; its Info.plist then declares the kernel
+    # ABI the kext was built for (NDKernelABI), which kcgen checks against
+    # the collection's (packaging.md §6, rules/kc.bzl KERNEL_ABI).
+    ctx.actions.run_shell(
+        command = '"$1" "${@:3}" && /usr/bin/plutil -replace NDKernelABI -string "$2" "$3/Contents/Info.plist"',
+        arguments = [ctx.file.script.path, ctx.attr.kernel_abi] +
+                    [out.path, _root(ctx.attr.srcs), headers[0].path, _root(ctx.attr.xnu)] +
                     [_root(t) for t in ctx.attr.upstream_headers] +
                     ([EMBEDDED_TOOLCHAIN] if ctx.attr.embedded_swift else []),
-        inputs = ctx.files.srcs + headers + ctx.files.xnu + ctx.files.upstream_headers + ctx.files.data,
+        inputs = ctx.files.srcs + headers + ctx.files.xnu + ctx.files.upstream_headers + ctx.files.data + [ctx.file.script],
         outputs = [out],
         tools = tools,
         env = env,
@@ -58,6 +62,7 @@ nd_kext = rule(
         "xnu": attr.label(default = "@apple_xnu//:all", doc = "xnu's source, for libkmod (libkern/kmod)."),
         "upstream_headers": attr.label_list(doc = "Further pinned trees whose roots the script takes, in order."),
         "data": attr.label_list(allow_files = True, doc = "The script's own files: patches, source lists, headers."),
+        "kernel_abi": attr.string(mandatory = True, doc = "The kernel ABI the kext is built for (rules/kc.bzl KERNEL_ABI), stamped as NDKernelABI in its Info.plist; kcgen refuses a kext whose ABI isn't the collection's."),
         "embedded_swift": attr.bool(doc = "Pass the Embedded Swift toolchain's path as the script's last argument."),
         "_tools": attr.label(default = "//tools/base:scripts"),
         "_kernel_linker": attr.label(default = "//rules:kernel_linker"),

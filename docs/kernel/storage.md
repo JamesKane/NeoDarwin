@@ -195,6 +195,7 @@ launchctl bootstrap      mount -uw / on the /dev block device holding / (docs/ba
 
 1. **`boot-uuid=<UUID>` in `boot.cfg`** wins: it is passed as `/chosen boot-uuid`, and no `rd=md0` is appended even with a ramdisk. Malformed values are reported and ignored.
 2. **A ramdisk** (`\NeoDarwin\ramdisk`): unchanged, `rd=md0` and no boot-uuid.
+   **Root on ZFS** (P3-03, `docs/architecture/filesystems.md` §8): with no ramdisk and no HFS+ partition neoboot passes no boot-uuid, and `boot.cfg`'s `rd=zfs:POOL[/DATASET]` names the root. `IOFindBSDRoot` then waits for `boot-uuid-media` as it does for a boot-uuid (kernel patch 0048), and zfs.kext publishes the root dataset's ZFSDatasetProxy IOMedia under that name once it has imported the pool.
 3. **Otherwise**, the boot disk's GPT: the loaded image's device path minus its last node (the ESP's Media/Hard Drive node) is the disk's; the Block I/O handle with exactly that path reads LBA 1 and the entry array (header and array CRCs checked, `Portable/GPT.swift`), and the first entry whose type is Apple HFS+ (48465300-0000-11AA-AA11-00306543ECAC) gives the unique GUID. `neoboot: root: HFS+ partition 2 of the boot disk, boot-uuid 50E3894E-…`. Without a GPT (QEMU's vvfat ESP is an MBR disk) or an HFS+ partition neoboot says so and passes none; the kernel then waits for a root.
 
 The property is a NUL-terminated 36-character string (`dt-abi.md`); `DTCheck` refuses anything else, and `dtdump --boot-uuid` models it.

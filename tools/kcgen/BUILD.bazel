@@ -37,3 +37,4 @@ sh_test(
     args = ["$(rootpath :kc_selftest)"],
     data = [":kc_selftest"],
 )
+exports_files(["kernel_abi_test.sh"])

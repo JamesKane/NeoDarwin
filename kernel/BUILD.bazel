@@ -1,6 +1,6 @@
 # XNU kernel builds (docs/kernel/arm64-sbsa-bringup.md, docs/repository.md §3).
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
-load("//rules:kc.bzl", "kext_collection")
+load("//rules:kc.bzl", "KERNEL_ABI", "kext_collection")
 load("//rules:xnu.bzl", "libfirehose_kernel", "nd_build_sdk", "xnu_headers", "xnu_kernel")
 
 package(default_visibility = ["//visibility:public"])
@@ -131,6 +131,7 @@ SBSA_PATCHES = [
     "patches/0045-vm-shared-region-empty-check-np-info-trace.patch",
     "patches/0046-generic-arm64-monotonic-timebase-on-emulators.patch",
     "patches/0047-generic-arm64-irq-before-cpu-interrupt-controller.patch",
+    "patches/0048-iokit-find-bsd-root-rd-zfs.patch",
 ]
 
 # NeoDarwin-owned kernel sources added to the xnu tree before patching.
@@ -219,46 +220,73 @@ sh_test(
 )
 
 # ---------------------------------------------------------------------------
-# Boot kernel collection: the SBSA kernel alone in an MH_FILESET, the format
-# neoboot loads (arm64-sbsa-bringup.md §2.1). The kernel applies the chained
-# fixups itself at arm_init; kcheck verifies them and round-trips the kernel.
+# Boot kernel collection: the SBSA kernel in an MH_FILESET, the format
+# neoboot loads (arm64-sbsa-bringup.md §2.1), with zfs.kext (//kexts/zfs)
+# since P3-11 checkpoint 5: the kext is in every boot, as root on ZFS needs
+# (docs/architecture/filesystems.md §7.3, §8). kcgen moves the kernel's
+# segments apart around the kext's (split-segment info, patch 0040),
+# resolves its imports against the kernel's exports (IOStorageFamily's
+# since patch 0039), checks its kernel ABI (KERNEL_ABI, rules/kc.bzl) and
+# enters it, with xnu's System.kext pseudo-kexts and IOStorageFamily as
+# codeless kexts in __PRELINK_INFO. The kernel applies the chained fixups
+# itself at arm_init; kcheck verifies them.
 kext_collection(
     name = "sbsa_kc",
+    codeless = {"//kernel/neodarwin/storage:IOStorageFamily.plist": "/System/Library/Extensions/IOStorageFamily.kext"},
     kernel = ":sbsa_release",
+    kernel_components = "@apple_xnu//:all",
+    kernel_version = DARWIN_VERSION,
+    kexts = ["//kexts/zfs"],
     out = "kernelcache.release.sbsa",
 )
 
 sh_test(
     name = "sbsa_kc_check",
     size = "small",
-    srcs = ["//tools/kcheck:kcheck_test.sh"],
+    srcs = ["//tools/kcheck:kcheck_kexts_test.sh"],
     args = [
         "$(rootpath //tools/kcheck)",
         "$(rootpath :sbsa_kc)",
-        "$(rootpaths :sbsa_release)",
     ],
     data = [
         ":sbsa_kc",
+        "//tools/kcheck",
+    ],
+    tags = ["manual", "kernel"],
+)
+
+# The SBSA kernel alone, the collection before P3-11 checkpoint 5: kcheck
+# round-trips the kernel through it, which a collection with kexts (whose
+# kernel kcgen has moved) can't, and the boot-time comparison
+# (filesystems.md §7.3) boots it.
+kext_collection(
+    name = "sbsa_kernel_only_kc",
+    kernel = ":sbsa_release",
+    out = "kernelcache.kernel_only.release.sbsa",
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "sbsa_kernel_only_kc_check",
+    size = "small",
+    srcs = ["//tools/kcheck:kcheck_test.sh"],
+    args = [
+        "$(rootpath //tools/kcheck)",
+        "$(rootpath :sbsa_kernel_only_kc)",
+        "$(rootpaths :sbsa_release)",
+    ],
+    data = [
+        ":sbsa_kernel_only_kc",
         ":sbsa_release",
         "//tools/kcheck",
     ],
     tags = ["manual", "kernel"],
 )
 
-# P3-01: the same kernel with zfs.kext (//kexts/zfs), the first collection
-# with a kext. kcgen moves the kernel's segments apart around the kext's
-# (split-segment info, patch 0040), resolves its imports against the
-# kernel's exports (IOStorageFamily's since patch 0039) and enters it, xnu's
-# System.kext pseudo-kexts and IOStorageFamily as codeless kexts in
-# __PRELINK_INFO (docs/architecture/filesystems.md §7).
-kext_collection(
+# P3-01's name for the collection with zfs.kext, which sbsa_kc now is.
+alias(
     name = "sbsa_zfs_kc",
-    codeless = {"//kernel/neodarwin/storage:IOStorageFamily.plist": "/System/Library/Extensions/IOStorageFamily.kext"},
-    kernel = ":sbsa_release",
-    kernel_components = "@apple_xnu//:all",
-    kernel_version = DARWIN_VERSION,
-    kexts = ["//kexts/zfs"],
-    out = "kernelcache.zfs.release.sbsa",
+    actual = ":sbsa_kc",
 )
 
 sh_test(
@@ -272,6 +300,26 @@ sh_test(
     data = [
         ":sbsa_zfs_kc",
         "//tools/kcheck",
+    ],
+    tags = ["manual", "kernel"],
+)
+
+# kcgen's kernel-abi check: zfs.kext declares KERNEL_ABI and enters; with
+# another NDKernelABI, or none, it is refused (packaging.md §6).
+sh_test(
+    name = "sbsa_kc_kernel_abi_test",
+    size = "small",
+    srcs = ["//tools/kcgen:kernel_abi_test.sh"],
+    args = [
+        "$(rootpath //tools/kcgen)",
+        "$(rootpath //kexts/zfs)",
+        KERNEL_ABI,
+        "$(rootpaths :sbsa_release)",
+    ],
+    data = [
+        ":sbsa_release",
+        "//kexts/zfs",
+        "//tools/kcgen",
     ],
     tags = ["manual", "kernel"],
 )
@@ -870,6 +918,122 @@ sh_test(
     shard_count = 8,
     # About 30 minutes on a 16-core host (the zpool_import shard is the
     # longest); two consecutive clean full runs on 2026-10-04 (§7.2).
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P3-03 (docs/architecture/filesystems.md §8): root on ZFS. neoboot passes
+# boot.cfg's rd=zfs:ndpool; IOFindBSDRoot waits for boot-uuid-media (patch
+# 0048); zfs.kext reads the disks' labels, imports ndpool and publishes its
+# bootfs, ndpool/ROOT/default, as a ZFSDatasetProxy IOMedia (kexts/zfs
+# patch 0012), which vfs_mountroot() hands to zfs_vfs_mountroot(). launchctl
+# remounts it read-write; the session writes to it.
+ZFS_ROOT_STEPS = [
+    "--mem 2G",
+    "--until-lines",
+    "--absent 'panic('",
+    "--send-after 'login: ' 'root\\n'",
+]
+
+ZFS_ROOT_LINES = [
+    "'ZFS: root on ZFS: ndpool'",
+    "'rooting via ZFS: ndpool'",
+    "'zfs_boot_probe_disk matched pool ndpool'",
+]
+
+sh_test(
+    name = "sbsa_zfs_root_boot_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = ["--disk $(rootpath //images:zfs_root_disk)"] + ZFS_ROOT_STEPS + [
+        "--send-after 'root@localhost ~ # ' 'mount; df /; zpool status ndpool; echo rw-$$((6*7)) > /var/root/zfs-rw && cat /var/root/zfs-rw\\n'",
+        "-",
+        "240",
+    ] + ZFS_ROOT_LINES + [
+        "'zfs_boot_publish_bootfs: publishing bootfs [ndpool/ROOT/default]'",
+        "'ZFS: mounting ndpool/ROOT/default as the root'",
+        "'ndpool/ROOT/default on / (zfs, local'",
+        "'state: ONLINE'",
+        "'rw-42'",
+    ],
+    data = ["//images:zfs_root_disk"],
+    tags = ["manual", "kernel", "qemu"],
+)
+
+# P3-03: boot environments with ndbectl over one disk, five boots
+# (qemu_disk_reboot_test.sh). 1: from default, create b, mark it, try it
+# once (activate -t). 2: b boots, bootonce consumed. 3: default boots again
+# (the fallback after a try); activate b. 4: b boots from bootfs; roll back
+# (activate default). 5: default, without b's change; destroy b.
+_BE = "--send-after 'root@localhost ~ # ' "
+
+sh_test(
+    name = "sbsa_zfs_be_test",
+    size = "large",
+    srcs = ["//tools/efi:qemu_disk_reboot_test.sh"],
+    args = ["$(rootpath //images:zfs_root_disk)"] + ZFS_ROOT_STEPS + [
+        _BE + "'ndbectl create b && ndbectl mount b /tmp/b && echo in-b-$$((6*7)) > /tmp/b/var/root/be-marker && ndbectl umount b && ndbectl activate -t b && ndbectl list && zpool sync ndpool && echo step-$$((6*7))\\n'",
+        "-",
+        "240",
+    ] + ZFS_ROOT_LINES + [
+        "'ZFS: mounting ndpool/ROOT/default as the root'",
+        "'ndbectl: created ndpool/ROOT/b from ndpool/ROOT/default@b'",
+        "'ndbectl: ndpool/ROOT/b mounted at /tmp/b'",
+        "'ndbectl: ndpool/ROOT/b boots once, on the next boot; then ndpool/ROOT/default again'",
+        "'default NR '",
+        "'b T '",
+        "'step-42'",
+        "--reboot",
+    ] + ZFS_ROOT_STEPS + [
+        _BE + "'mount; cat /var/root/be-marker; ndbectl list; echo step-$$((6*7))\\n'",
+        "-",
+        "240",
+    ] + ZFS_ROOT_LINES + [
+        "'ZFS: org.neodarwin:bootonce=ndpool/ROOT/b (cleared: 0)'",
+        "'ZFS: mounting ndpool/ROOT/b as the root'",
+        "'ndpool/ROOT/b on / (zfs, local'",
+        "'in-b-42'",
+        "'default R '",
+        "'b N '",
+        "'step-42'",
+        "--reboot",
+    ] + ZFS_ROOT_STEPS + [
+        _BE + "'mount; [ -e /var/root/be-marker ] || echo no-marker-$$((6*7)); ndbectl activate b && zpool sync ndpool && echo step-$$((6*7))\\n'",
+        "-",
+        "240",
+    ] + ZFS_ROOT_LINES + [
+        "'ZFS: mounting ndpool/ROOT/default as the root'",
+        "'ndpool/ROOT/default on / (zfs, local'",
+        "'no-marker-42'",
+        "'ndbectl: ndpool/ROOT/b is active: it boots from the next boot on'",
+        "'step-42'",
+        "--reboot",
+    ] + ZFS_ROOT_STEPS + [
+        _BE + "'mount; cat /var/root/be-marker; ndbectl activate default && zpool sync ndpool && echo step-$$((6*7))\\n'",
+        "-",
+        "240",
+    ] + ZFS_ROOT_LINES + [
+        "'ZFS: mounting ndpool/ROOT/b as the root'",
+        "'ndpool/ROOT/b on / (zfs, local'",
+        "'in-b-42'",
+        "'ndbectl: ndpool/ROOT/default is active: it boots from the next boot on'",
+        "'step-42'",
+        "--reboot",
+    ] + ZFS_ROOT_STEPS + [
+        _BE + "'mount; [ -e /var/root/be-marker ] || echo no-marker-$$((6*7)); ndbectl destroy b && ndbectl list && zfs list -t all && echo step-$$((6*7))\\n'",
+        "-",
+        "240",
+    ] + ZFS_ROOT_LINES + [
+        "'ZFS: mounting ndpool/ROOT/default as the root'",
+        "'ndpool/ROOT/default on / (zfs, local'",
+        "'no-marker-42'",
+        "'ndbectl: destroyed ndpool/ROOT/b'",
+        "'default NR '",
+        "'step-42'",
+    ],
+    data = [
+        "//images:zfs_root_disk",
+        "//tools/efi:qemu_efi_test.sh",
+    ],
     tags = ["manual", "kernel", "qemu"],
 )
 
@@ -2061,12 +2225,12 @@ sh_test(
         "--until-lines",
         "--send-after 'login: ' 'root\\n'",
         "--send-after 'root@localhost ~ # ' '" + PKG_PROBE + "; echo before-status=$$?\\n'",
-        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg load-trust " + PKG_TRUST + "/pkg-probe.trustcache " + PKG_TRUST + "/unsigned.grant; echo unsigned-status=$$?\\n'",
-        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg load-trust " + PKG_TRUST + "/pkg-probe.trustcache " + PKG_TRUST + "/other-root.grant; echo other-status=$$?\\n'",
-        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg activate-trust " + PKG_TRUST + "/other-root.ndpkg; echo other-pkg-status=$$?\\n'",
-        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg activate-trust " + PKG_TRUST + "/pkg-probe.ndpkg; echo good-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/sbin/ndpkg load-trust " + PKG_TRUST + "/pkg-probe.trustcache " + PKG_TRUST + "/unsigned.grant; echo unsigned-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/sbin/ndpkg load-trust " + PKG_TRUST + "/pkg-probe.trustcache " + PKG_TRUST + "/other-root.grant; echo other-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/sbin/ndpkg activate-trust " + PKG_TRUST + "/other-root.ndpkg; echo other-pkg-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/sbin/ndpkg activate-trust " + PKG_TRUST + "/pkg-probe.ndpkg; echo good-status=$$?\\n'",
         "--send-after 'root@localhost ~ # ' '" + PKG_PROBE + "; echo after-status=$$?\\n'",
-        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg activate-trust " + PKG_TRUST + "/pkg-probe.ndpkg; sysctl security.codesigning.trustcaches.num_loadable\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/sbin/ndpkg activate-trust " + PKG_TRUST + "/pkg-probe.ndpkg; sysctl security.codesigning.trustcaches.num_loadable\\n'",
         "$(rootpath //boot/neoboot)",
         "240",
         "'ndamfi: code-signing enforcement on (a static trust cache from the loader)'",
@@ -2121,8 +2285,8 @@ sh_test(
         "--until-lines",
         "--absent 'ndamfi: trust-cache grant accepted ('",
         "--send-after 'login: ' 'root\\n'",
-        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg load-trust " + PKG_TRUST + "/pkg-probe.trustcache " + PKG_TRUST + "/pkg-probe.grant; echo good-grant-status=$$?\\n'",
-        "--send-after 'root@localhost ~ # ' '/usr/local/sbin/ndpkg activate-trust " + PKG_TRUST + "/pkg-probe.ndpkg; echo good-pkg-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/sbin/ndpkg load-trust " + PKG_TRUST + "/pkg-probe.trustcache " + PKG_TRUST + "/pkg-probe.grant; echo good-grant-status=$$?\\n'",
+        "--send-after 'root@localhost ~ # ' '/usr/sbin/ndpkg activate-trust " + PKG_TRUST + "/pkg-probe.ndpkg; echo good-pkg-status=$$?\\n'",
         "--send-after 'root@localhost ~ # ' '" + PKG_PROBE + "; echo probe-status=$$?\\n'",
         "$(rootpath //boot/neoboot)",
         "240",

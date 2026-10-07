@@ -269,7 +269,7 @@ epics:
     title: "Content-addressed store + bind-mount activation + libsolv solver + JSON plans"
     phase: 2
     owner: packaging
-    status: todo
+    status: done
     depends: [P2-01, P1-08]
     exit: "install/remove/upgrade of userland packages on a booted system"
     doc: docs/architecture/packaging.md
@@ -374,9 +374,9 @@ epics:
     title: "Root on ZFS (rd=zfs:pool/ROOT/be) and boot environment switching"
     phase: 3
     owner: storage
-    status: todo
+    status: done
     depends: [P3-01]
-    exit: "boot from ndpool/ROOT/be; ndpkg system rollback works"
+    exit: "boot from ndpool/ROOT/be; ndpkg system rollback works (the boot-environment mechanism: ndbectl create/activate/try-once/rollback/destroy, tested over five boots; `ndpkg system rollback` is P2-03's command over it, filesystems.md §8.5)"
     doc: docs/architecture/filesystems.md
   - id: P3-04
     title: "msdosfs (ESP from userland) and ndfuse (FreeBSD fuse port); nd9p moved to Magi (U1-02)"

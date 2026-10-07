@@ -66,6 +66,9 @@
 #                     virtio-blk-pci,drive=disk0. IMAGE is a size (a blank
 #                     sparse image of that many K, M or G bytes) or a file,
 #                     which is copied first: the guest writes to the copy
+#   --drive-in-place ID=FILE
+#                     the same with a file the guest writes to itself, e.g.
+#                     the disk a build guest fills (rules/zfs_image.bzl)
 #   --disk IMAGE      boot a raw disk image instead: it is the only boot
 #                     drive (no FAT ESP is made from EFI_FILE and --esp; pass
 #                     EFI_FILE as - or anything), attached as --disk-device;
@@ -195,6 +198,7 @@ while [ $# -gt 0 ]; do
 		--sendkey-on-screen) sends+=(screen "$2" "$3"); shift 3 ;;
 		--device) devices+=(-device "$2"); shift 2 ;;
 		--drive) drives+=("$2"); shift 2 ;;
+		--drive-in-place) drives+=("@${2}"); shift 2 ;;
 		--disk) disk="$2"; disk_in_place=0; shift 2 ;;
 		--disk-in-place) disk="$2"; disk_in_place=1; shift 2 ;;
 		--disk-device) disk_device="$2"; shift 2 ;;
@@ -322,6 +326,7 @@ else
 fi
 for spec in ${drives[@]+"${drives[@]}"}; do
 	id="${spec%%=*}"; image="${spec#*=}"; file="$work/drive-$id.img"
+	case "$id" in @*) id="${id#@}"; devices+=(-drive "if=none,id=$id,format=raw,file=$image"); continue ;; esac
 	case "$image" in
 	*[0-9][KMG]) perl -e 'my %u = (K => 1 << 10, M => 1 << 20, G => 1 << 30); $ARGV[0] =~ /^(\d+)([KMG])$/ or die;
 		open(my $f, ">", $ARGV[1]) or die; truncate($f, $1 * $u{$2}) or die' "$image" "$file" ;;

@@ -1,0 +1,118 @@
+.\" SPDX-License-Identifier: BSD-2-Clause
+.Dd October 7, 2026
+.Dt NDPKG 8
+.Os NeoDarwin
+.Sh NAME
+.Nm ndpkg
+.Nd NeoDarwin package manager
+.Sh SYNOPSIS
+.Nm
+.Op Fl r Ar repo ...
+.Cm install | remove | upgrade
+.Op Fl -json
+.Ar package ...
+.Nm
+.Op Fl r Ar repo ...
+.Cm plan
+.Cm install | remove | upgrade
+.Ar package ...
+.Nm
+.Cm apply
+.Ar plan.json
+.Nm
+.Cm list | info
+.Op Fl -json
+.Op Ar name
+.Nm
+.Cm index
+.Ar dir
+.Nm
+.Cm activate | gc
+.Nm
+.Cm activate-trust
+.Ar file.ndpkg
+.Nm
+.Cm load-trust
+.Ar module grant
+.Sh DESCRIPTION
+.Nm
+installs, upgrades and removes signed
+.Pa .ndpkg
+packages under
+.Pa /usr/local .
+Every package is verified against the package roots the kernel trusts
+(the
+.Va nd_pkg_root
+boot argument): its manifest's signature, its trust cache and every
+payload file.
+A verified package is unpacked into a content-addressed, read-only store
+entry,
+.Pa /var/db/ndpkg/store/ Ns Ar payload-sha256 Ns - Ns Ar name Ns - Ns Ar version ,
+which is mounted read-only and nosuid with nullfs at
+.Pa /var/db/ndpkg/mnt/ Ns Ar entry ;
+.Pa /var/db/ndpkg/active/ Ns Ar name
+links to the mounted tree, and
+.Pa /usr/local
+holds one symbolic link per package file into it.
+An upgrade moves the
+.Pa active
+link, so the files change in one rename.
+.Pp
+Dependencies are solved with libsolv over the installed packages and the
+repositories: the
+.Fl r
+directories, or the lines of
+.Pa /etc/ndpkg/repositories .
+A repository is a directory of packages and the
+.Pa index.json
+that
+.Cm index
+writes.
+Package arguments are names,
+.Ar name Ns = Ns Ar version ,
+or, for
+.Cm install ,
+package files.
+.Cm plan
+prints the transaction as JSON without changing anything;
+.Cm apply
+executes such a plan if the installed state is still the generation it
+names.
+.Cm install ,
+.Cm remove
+and
+.Cm upgrade
+plan and apply at once;
+.Cm upgrade
+without names upgrades everything.
+.Pp
+.Cm activate
+makes the installed state live again after a boot: it reloads the
+packages' trust caches, mounts their entries and restores their links.
+.Cm gc
+removes store entries that neither the installed state nor the previous
+generation refers to.
+.Sh FILES
+.Bl -tag -width Ds -compact
+.It Pa /var/db/ndpkg/installed
+the installed state: a link to
+.Pa generations/ Ns Ar N ,
+which holds
+.Ar name Ns Pa /manifest ,
+.Pa files
+and
+.Pa state
+for each package
+.It Pa /var/db/ndpkg/store
+verified packages, read-only
+.It Pa /etc/ndpkg/repositories
+repository directories, one per line
+.El
+.Sh EXIT STATUS
+.Ex -std
+.Sh SEE ALSO
+.Xr mount 8
+.Sh HISTORY
+.Nm
+first appeared in NeoDarwin's P2-01 (trust caches) and P2-02 (the store,
+solver and plans).

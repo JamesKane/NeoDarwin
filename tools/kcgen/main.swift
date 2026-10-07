@@ -5,13 +5,15 @@
 //
 // Usage:
 //     kcgen --kernel KERNEL --output KERNELCACHE [--kernel-version VERSION]
-//           [--kext BUNDLE]... [--codeless PLIST@BUNDLEPATH]...
+//           [--kernel-abi ABI] [--kext BUNDLE]... [--codeless PLIST@BUNDLEPATH]...
 //
 // --kext names a kext bundle directory (Contents/Info.plist and
 // Contents/MacOS/<CFBundleExecutable>), entered as
 // /System/Library/Extensions/<bundle name>. --codeless enters an Info.plist
 // with no executable under the given bundle path (xnu's System.kext
-// pseudo-kexts, NeoDarwin's built-in families).
+// pseudo-kexts, NeoDarwin's built-in families). With --kernel-abi, every
+// --kext must declare that ABI as its Info.plist's NDKernelABI string
+// (packaging.md §6): a kext built for another kernel ABI can't enter.
 
 import Foundation
 import KCGen
@@ -22,11 +24,13 @@ func fail(_ message: String, code: Int32 = 1) -> Never {
     exit(code)
 }
 
-let usage = "usage: kcgen --kernel KERNEL --output KERNELCACHE [--kernel-version VERSION] [--kext BUNDLE]... [--codeless PLIST@BUNDLEPATH]..."
+let usage = "usage: kcgen --kernel KERNEL --output KERNELCACHE [--kernel-version VERSION] [--kernel-abi ABI] [--kext BUNDLE]... [--codeless PLIST@BUNDLEPATH]..."
 var kernelPath: String?
 var outputPath: String?
 var options = KernelCollectionOptions()
 var kexts: [KextInput] = []
+var kernelABI: String?
+var kextABIs: [(path: String, abi: String?)] = []
 
 func read(_ path: String) -> Data {
     guard let d = FileManager.default.contents(atPath: path) else { fail("cannot read \(path)") }
@@ -49,6 +53,7 @@ while !args.isEmpty {
     case "--kernel": kernelPath = value
     case "--output": outputPath = value
     case "--kernel-version": options.kernelVersion = value
+    case "--kernel-abi": kernelABI = value
     case "--kext":
         let bundle = URL(fileURLWithPath: value)
         guard let plist = String(data: read(bundle.appendingPathComponent("Contents/Info.plist").path), encoding: .utf8) else {
@@ -56,6 +61,7 @@ while !args.isEmpty {
         }
         guard let exe = plistString(plist, "CFBundleExecutable") else { fail("\(value): Info.plist has no CFBundleExecutable") }
         let rel = "Contents/MacOS/\(exe)"
+        kextABIs.append((value, plistString(plist, "NDKernelABI")))
         kexts.append(KextInput(infoPlist: plist, executable: [UInt8](read(bundle.appendingPathComponent(rel).path)),
                                bundlePath: "/System/Library/Extensions/\(bundle.lastPathComponent)",
                                executableRelativePath: rel))
@@ -68,6 +74,11 @@ while !args.isEmpty {
     }
 }
 guard let kernelPath, let outputPath else { fail(usage, code: 2) }
+if let kernelABI {
+    for k in kextABIs where k.abi != kernelABI {
+        fail("\(k.path): built for kernel ABI \(k.abi ?? "(none: no NDKernelABI)"), the collection's is \(kernelABI)")
+    }
+}
 
 do {
     let (kc, report) = try KernelCollection.build(kernel: [UInt8](read(kernelPath)), kexts: kexts, options: options)

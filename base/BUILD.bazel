@@ -403,6 +403,17 @@ base_library(
     sysroot = ":sysroot",
 )
 
+# P2-02: libsolv as a static library for ndpkg's solver (base/libsolv);
+# build-only, in no image.
+base_library(
+    name = "libsolv_static",
+    data = glob(["libsolv/**"]) + ["commands.sh"],
+    deps = [":root"],
+    script = "libsolv/build.sh",
+    srcs = "@opensuse_libsolv//:all",
+    sysroot = ":sysroot",
+)
+
 base_library(
     name = "unzip_commands",
     data = glob(["zip/**"]) + ["commands.sh"],
@@ -731,6 +742,16 @@ base_install_tree(
         "//base/acpidump:acpidump.8": "usr/share/man/man8/acpidump.8",
         "//base/pciconf": "usr/sbin/pciconf",
         "//base/pciconf:pciconf.8": "usr/share/man/man8/pciconf.8",
+    },
+)
+
+# P2-02: ndpkg, the package manager (docs/architecture/packaging.md §8),
+# entitled to load verified packages' trust caches and mount the store.
+base_install_tree(
+    name = "package_tools",
+    files = {
+        "//base/ndpkg:ndpkg_entitled": "usr/sbin/ndpkg",
+        "//base/ndpkg:ndpkg.8": "usr/share/man/man8/ndpkg.8",
     },
 )
 
@@ -1209,6 +1230,7 @@ base_root(
         ":lsof_command",
         ":top_command",
         ":iokit_admin_tools",
+        ":package_tools",
     ],
 )
 

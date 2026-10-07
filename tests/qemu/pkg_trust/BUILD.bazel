@@ -7,19 +7,6 @@ package(default_visibility = ["//visibility:public"])
 # under /usr/local; //kernel:sbsa_pkg_trust_test and
 # //kernel:sbsa_pkg_trust_no_root_test boot it under enforcement.
 
-# ndpkg with the entitlement the kernel requires to load a trust cache.
-genrule(
-    name = "ndpkg",
-    srcs = [
-        "//base/ndpkg",
-        "ndpkg-entitlements.plist",
-    ],
-    outs = ["ndpkg.entitled"],
-    cmd = "$(location //tests/qemu/cs_probe:sign.sh) $(location //base/ndpkg) $@ org.neodarwin.ndpkg $(location ndpkg-entitlements.plist)",
-    tags = ["requires-darwin"],
-    tools = ["//tests/qemu/cs_probe:sign.sh"],
-)
-
 # The probe a package grants: cs_probe (P1-15) under its own identifier, so
 # its cdhash is in no static trust cache.
 genrule(

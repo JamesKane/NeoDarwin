@@ -113,25 +113,28 @@ _volume_contents = rule(
     },
 )
 
-def hfs_ramdisk(name, tags = [], **kwargs):
+def hfs_ramdisk(name, tags = [], testonly = False, **kwargs):
     """An HFS+ volume (NAME, NAME.hfs), its static trust cache (NAME_trustcache) and its file list (NAME_contents)."""
-    _hfs_ramdisk(name = name, tags = tags, **kwargs)
+    _hfs_ramdisk(name = name, tags = tags, testonly = testonly, **kwargs)
     _volume_contents(
         name = name + "_contents",
         files = kwargs.get("files", {}),
         trees = kwargs.get("trees", []),
         links = kwargs.get("links", {}),
         tags = tags,
+        testonly = testonly,
     )
     native.filegroup(
         name = name + "_trustcache",
         srcs = [":" + name],
         output_group = "trustcache",
         tags = tags,
+        testonly = testonly,
     )
     native.filegroup(
         name = name + "_trustcache_manifest",
         srcs = [":" + name],
         output_group = "trustcache_manifest",
         tags = tags,
+        testonly = testonly,
     )

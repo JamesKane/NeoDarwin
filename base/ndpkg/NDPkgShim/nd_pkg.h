@@ -51,4 +51,53 @@ const char *_Nonnull nd_pkg_error_name(int error);
 int nd_pkg_load_trust_cache(const uint8_t *_Nonnull module, size_t module_len, const uint8_t *_Nonnull grant,
     size_t grant_len);
 
+// -- P2-02: the store, activation and the solver ------------------------------------
+
+// Files and directories. Each returns 0 or an errno.
+int nd_pkg_mkdir(const char *_Nonnull path, int mode);           // EEXIST if it exists
+int nd_pkg_mkdirs(const char *_Nonnull path, int mode);          // with parents; 0 if it exists
+int nd_pkg_write_file(const char *_Nonnull path, const uint8_t *_Nullable bytes, size_t len, int mode); // new file, fsync'd
+int nd_pkg_symlink(const char *_Nonnull target, const char *_Nonnull path);
+int nd_pkg_rename(const char *_Nonnull from, const char *_Nonnull to);
+int nd_pkg_unlink(const char *_Nonnull path);
+int nd_pkg_rmdir(const char *_Nonnull path);
+int nd_pkg_chmod(const char *_Nonnull path, int mode);
+int nd_pkg_fsync_dir(const char *_Nonnull path);
+// Removes a tree (making its directories writable first); 0 if it's gone.
+int nd_pkg_remove_tree(const char *_Nonnull path);
+// lstat: 0 nothing there, 1 regular file, 2 directory, 3 symbolic link, 4 other.
+int nd_pkg_kind(const char *_Nonnull path);
+// A symbolic link's target, malloc'd; NULL if it isn't one.
+char *_Nullable nd_pkg_readlink(const char *_Nonnull path);
+// A directory's entries but . and .., each followed by a newline, malloc'd;
+// NULL with errno set.
+char *_Nullable nd_pkg_list_dir(const char *_Nonnull path);
+// An exclusive lock on `path` (created), held until exit; 0 or an errno
+// (EWOULDBLOCK if another ndpkg holds it).
+int nd_pkg_lock(const char *_Nonnull path);
+int nd_pkg_pid(void);
+bool nd_pkg_is_root(void);
+
+// XNU's nullfs (bsd/miscfs/nullfs, App Translocation's): `lower` mounted
+// read-only and nosuid at `mountpoint`, as mountpoint/d/<lower's last
+// component>. Needs root and the entitlement com.apple.private.nullfs_allow.
+// 0 or an errno.
+int nd_pkg_nullfs_mount(const char *_Nonnull lower, const char *_Nonnull mountpoint);
+int nd_pkg_unmount(const char *_Nonnull mountpoint);
+// Whether a file system is mounted on `path` (its device differs from its
+// parent's).
+bool nd_pkg_is_mountpoint(const char *_Nonnull path);
+
+// libsolv (src/nd_solve.c). `input` is lines of tab-separated fields:
+//     arch ARCH
+//     repo installed|available          (the packages that follow)
+//     pkg NAME VERSION ARCH KEY         (ARCH any: any architecture)
+//     dep provides|requires|conflicts DEP   (of the last pkg)
+//     job install|remove|upgrade DEP    (upgrade *: everything)
+// where DEP is `name` or `name OP version` (OP = == != < <= > >=). The
+// output, malloc'd, is the transaction in order, one step per line:
+//     install KEY | upgrade OLDKEY NEWKEY | downgrade OLDKEY NEWKEY | remove KEY
+// or `nothing`; or, if it returns nonzero, lines `problem TEXT [DETAIL]`.
+int nd_pkg_solve(const char *_Nonnull input, char *_Nullable *_Nonnull output);
+
 #endif

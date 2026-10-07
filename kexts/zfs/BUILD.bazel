@@ -5,6 +5,7 @@
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//rules:base.bzl", "base_library")
 load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:kc.bzl", "KERNEL_ABI")
 load("//rules:kext.bzl", "nd_kext")
 
 package(default_visibility = ["//visibility:public"])
@@ -19,6 +20,7 @@ _PORT = glob([
 nd_kext(
     name = "zfs",
     bundle = "zfs.kext",
+    kernel_abi = KERNEL_ABI,
     data = _PORT + [
         "kext_sources.txt",
         "//kernel/neodarwin/pthread:kernel_srcs",  # compat/TargetConditionals.h

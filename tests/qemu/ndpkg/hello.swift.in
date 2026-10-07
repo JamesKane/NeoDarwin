@@ -1,0 +1,11 @@
+// SPDX-License-Identifier: BSD-2-Clause
+//
+// The test package hello (P2-02, tests/qemu/ndpkg): prints its version,
+// which BUILD.bazel substitutes for @VERSION@.
+
+@main
+struct Hello {
+    static func main() {
+        print("hello from package hello @VERSION@")
+    }
+}

@@ -104,4 +104,16 @@ static const unsigned long ND_SIOCGIFFLAGS = SIOCGIFFLAGS;
 static const unsigned long ND_SIOCSIFFLAGS = SIOCSIFFLAGS;
 static const unsigned long ND_SIOCAIFADDR = SIOCAIFADDR;
 static const unsigned long ND_SIOCAIFADDR_IN6 = SIOCAIFADDR_IN6;
+/// zfs.kext's mount(2) arguments for a ZFS file system (OpenZFS on OS X,
+/// include/os/macos/zfs/sys/zfs_mount.h struct zfs_mount_args): launchctl
+/// remounts a ZFS root read-write with MNT_UPDATE and the dataset's name.
+/// With struct_size 0 the kernel reads only fspec.
+struct nd_zfs_mount_args {
+	const char *_Nullable fspec;
+	int mflag;
+	const char *_Nullable optptr;
+	int optlen;
+	int struct_size;
+};
+
 #endif

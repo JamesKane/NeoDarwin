@@ -7,14 +7,21 @@ volume from hfs_ramdisk. The partitions' unique GUIDs are name-based UUIDs of
 the target's label, so the root's boot-uuid is stable across builds; the
 output group "uuids" (NAME.uuids) lists them. tools/gptimage/mkdisk.sh builds it with the host's
 hdiutil (FAT32) and gptimage (the GPT).
+
+With zfs_partition instead of root, partition 2 is a blank FreeBSD-ZFS
+partition of that size, for a pool that only a NeoDarwin guest can create
+(rules/zfs_image.bzl, docs/architecture/filesystems.md §8).
 """
 
 def _impl(ctx):
     out = ctx.actions.declare_file(ctx.label.name + ".img")
     uuids = ctx.actions.declare_file(ctx.label.name + ".uuids")
     root = ctx.file.root
-    args = [out.path, uuids.path, ctx.executable._gptimage.path, str(ctx.label), root.path]
-    inputs = [root]
+    if (root == None) == (ctx.attr.zfs_partition == ""):
+        fail("give exactly one of root and zfs_partition")
+    args = [out.path, uuids.path, ctx.executable._gptimage.path, str(ctx.label),
+            root.path if root else "zfs:" + ctx.attr.zfs_partition]
+    inputs = [root] if root else []
     for target, dest in ctx.attr.esp.items():
         f = target.files.to_list()
         if len(f) != 1:
@@ -39,7 +46,8 @@ gpt_disk_image = rule(
     doc = "A raw disk image: GPT, an EFI System Partition with the given files, and an HFS+ root partition.",
     attrs = {
         "esp": attr.label_keyed_string_dict(allow_files = True, doc = "File -> path on the ESP, e.g. EFI/BOOT/BOOTAA64.EFI."),
-        "root": attr.label(allow_single_file = [".hfs"], mandatory = True, doc = "The root volume (partition 2), an hfs_ramdisk."),
+        "root": attr.label(allow_single_file = [".hfs"], doc = "The root volume (partition 2), an hfs_ramdisk."),
+        "zfs_partition": attr.string(doc = "Instead of root: partition 2 is a blank FreeBSD-ZFS partition of this size in bytes, k, m or g, e.g. 384m."),
         "_gptimage": attr.label(default = "//tools/gptimage", executable = True, cfg = "exec"),
         "_script": attr.label(default = "//tools/gptimage:mkdisk.sh", allow_single_file = True),
     },

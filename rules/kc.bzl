@@ -8,6 +8,14 @@ System.kext pseudo-kexts (com.apple.kpi.*, from kernel_components) and the
 families NeoDarwin builds into the kernel (codeless).
 """
 
+# The kernel ABI (packaging.md §6, filesystems.md §2 step 3): the version
+# of the kernel's exported KPIs that kexts link against. Every kext with
+# code declares the ABI it was built for (nd_kext's kernel_abi, NDKernelABI
+# in its Info.plist) and kcgen refuses one that isn't the collection's.
+# Bumped only when an export is removed or changed incompatibly; additions
+# keep it.
+KERNEL_ABI = "1"
+
 def _impl(ctx):
     kernels = [f for f in ctx.files.kernel if f.basename.startswith("kernel.") and not f.basename.endswith(".unstripped")]
     if len(kernels) != 1:
@@ -18,7 +26,7 @@ def _impl(ctx):
     if ctx.attr.kexts or ctx.attr.codeless or ctx.attr.kernel_components:
         if not ctx.attr.kernel_version:
             fail("kernel_version is required with kexts")
-        args += ["--kernel-version", ctx.attr.kernel_version]
+        args += ["--kernel-version", ctx.attr.kernel_version, "--kernel-abi", ctx.attr.kernel_abi]
     for k in ctx.files.kexts:
         args += ["--kext", k.path]
         inputs.append(k)
@@ -52,6 +60,7 @@ kext_collection = rule(
         "kernel_components": attr.label(allow_files = True, doc = "xnu's source (@apple_xnu//:all): its System.kext pseudo-kexts become codeless kexts."),
         "codeless": attr.label_keyed_string_dict(allow_files = [".plist"], doc = "Info.plists of codeless kexts, each with its bundle path."),
         "kernel_version": attr.string(doc = "The kernel's osrelease (Darwin version), stamped on the pseudo-kexts."),
+        "kernel_abi": attr.string(default = KERNEL_ABI, doc = "The collection's kernel ABI; every kext with code must declare it (NDKernelABI)."),
         "kind": attr.string(default = "boot", values = ["boot"], doc = "Collection kind; system and aux arrive later (P5)."),
         "out": attr.string(doc = "Output file name; defaults to the target name."),
         "_kcgen": attr.label(default = "//tools/kcgen", executable = True, cfg = "exec"),

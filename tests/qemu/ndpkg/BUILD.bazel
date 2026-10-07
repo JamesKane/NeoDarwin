@@ -1,0 +1,193 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:darwin_executable.bzl", "swift_embedded_executable")
+load("//rules:package.bzl", "nd_package")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["repositories"])
+
+# P2-02's test packages (docs/architecture/packaging.md §5), signed with the
+# TEST-ONLY chain (//tools/ndsign:testdata/test_keys): hello 1.0 and 2.0, a
+# Mach-O each, so each has a trust cache; greet, a script, which requires
+# libgreet >= 1.0, a data file; and hello 1.0 with its binary's last byte
+# flipped. //images:ndpkg_root carries them as a local repository;
+# //tests/qemu/ndpkg:sbsa_ndpkg_test installs, upgrades and removes them.
+
+_CHAIN = [
+    "//tools/ndsign:testdata/test_keys/channel.cert",
+    "//tools/ndsign:testdata/test_keys/release.cert",
+]
+
+_KEY = "//tools/ndsign:testdata/test_keys/release.key"
+
+[genrule(
+    name = "hello_src_" + v,
+    srcs = ["hello.swift.in"],
+    outs = ["hello_" + v + "/Main.swift"],
+    cmd = "sed 's/@VERSION@/" + version + "/' $< > $@",
+) for v, version in [("v1", "1.0"), ("v2", "2.0")]]
+
+[swift_embedded_executable(
+    name = "hello_" + v,
+    srcs = [":hello_src_" + v],
+    out = "hello_" + v + "/hello",
+    module_name = "hello",
+    root = "//base:root",
+) for v in ["v1", "v2"]]
+
+[nd_package(
+    name = "hello_pkg_" + v,
+    chain = _CHAIN,
+    files = {":hello_" + v: "usr/local/bin/hello"},
+    key = _KEY,
+    license = "BSD-2-Clause",
+    pkg_name = "hello",
+    version = version,
+) for v, version in [("v1", "1.0"), ("v2", "2.0")]]
+
+nd_package(
+    name = "libgreet_pkg",
+    chain = _CHAIN,
+    files = {"greeting.txt": "usr/local/share/libgreet/greeting"},
+    key = _KEY,
+    kind = "lib",
+    license = "BSD-2-Clause",
+    pkg_name = "libgreet",
+    version = "1.0",
+)
+
+nd_package(
+    name = "greet_pkg",
+    chain = _CHAIN,
+    files = {"greet.sh": "usr/local/bin/greet"},
+    key = _KEY,
+    license = "BSD-2-Clause",
+    pkg_name = "greet",
+    requires = ["libgreet >= 1.0"],
+    version = "1.0",
+)
+
+# Tampered: hello 1.0 with its binary's last byte flipped, the signatures
+# left as they are.
+genrule(
+    name = "hello_tampered",
+    srcs = [":hello_pkg_v1"],
+    outs = ["tampered/hello-1.0-aarch64.ndpkg"],
+    cmd = "$(location //tools/ndsign:tamper) $< files/usr/local/bin/hello flip $@",
+    testonly = True,
+    tools = ["//tools/ndsign:tamper"],
+)
+
+# P2-02's exit (docs/architecture/packaging.md §5): userland packages
+# installed, upgraded and removed on a booted system, under code-signing
+# enforcement with the test root as nd_pkg_root. ndpkg indexes the local
+# repository; the plan JSON is checked before each step; hello 1.0 is
+# installed through `ndpkg apply` of a saved plan, its trust cache loads
+# and it runs; greet pulls in libgreet; upgrade moves hello to 2.0, which
+# runs; libgreet can't be removed while greet needs it; hello is removed
+# and is gone from /usr/local; the tampered package is refused; gc drops
+# the store entry no kept generation needs. Between, the store's files are
+# read-only through the mount, and `ndpkg activate` restores an unmounted
+# entry, as after a boot.
+PROMPT = "root@localhost ~ # "
+
+REPO = "/var/ndpkg-test/repo"
+
+STEPS = [
+    "ndpkg index " + REPO + "; ndpkg list; echo index-status=$$?",
+    "ndpkg plan install hello=1.0 > /tmp/plan1.json; cat /tmp/plan1.json",
+    "ndpkg apply /tmp/plan1.json; echo apply-status=$$?",
+    "/usr/local/bin/hello; echo hello1-status=$$?; touch /var/db/ndpkg/active/hello/usr/local/bin/hello; echo ro-status=$$?",
+    "ndpkg plan install greet",
+    "ndpkg install greet && /usr/local/bin/greet; echo greet-status=$$?",
+    "umount /var/db/ndpkg/mnt/*-greet-1.0; /usr/local/bin/greet; ndpkg activate; /usr/local/bin/greet; echo activate-status=$$?",
+    "ndpkg plan upgrade",
+    "ndpkg upgrade && /usr/local/bin/hello; echo hello2-status=$$?",
+    "ndpkg list --json; ndpkg info greet",
+    "ndpkg plan remove libgreet; echo remove-dep-status=$$?",
+    "ndpkg plan remove hello",
+    "ndpkg remove hello; test -e /usr/local/bin/hello; echo gone-status=$$?; test -e /var/db/ndpkg/active/hello; echo active-status=$$?",
+    "ndpkg install /var/ndpkg-test/tampered/hello-1.0-aarch64.ndpkg; echo tampered-status=$$?",
+    "ndpkg gc; ndpkg list; echo done-status=$$?",
+]
+
+sh_test(
+    name = "sbsa_ndpkg_test",
+    size = "medium",
+    srcs = ["//tools/efi:qemu_efi_test.sh"],
+    args = [
+        "--cpu neoverse-n2",
+        "--mem 2G",
+        "--esp NeoDarwin/kernelcache=$(rootpath //kernel:sbsa_kc)",
+        "--esp NeoDarwin/ramdisk=$(rootpath //images:ndpkg_root)",
+        "--esp NeoDarwin/trustcache=$(rootpath //images:ndpkg_root_trustcache)",
+        "--esp NeoDarwin/boot.cfg=$(rootpath //tests/qemu/pkg_trust:pkg_root_cfg)",
+        "--until-lines",
+        "--send-after 'login: ' 'root\\n'",
+    ] + ["--send-after '" + PROMPT + "' '" + step + "\\n'" for step in STEPS] + [
+        "$(rootpath //boot/neoboot)",
+        "240",
+        "'ndamfi: code-signing enforcement on (a static trust cache from the loader)'",
+        "'ndamfi: 1 package root from nd_pkg_root: '",
+        # The repository, indexed on the system.
+        "'ndpkg: /var/ndpkg-test/repo/index.json: 4 packages'",
+        "'index-status=0'",
+        # hello 1.0: planned, applied from the saved plan, trusted, run.
+        "'  \"command\": \"install\",'",
+        "'  \"generation\": 0,'",
+        "'{\"action\": \"install\", \"name\": \"hello\", \"version\": \"1.0\", \"arch\": \"aarch64\", \"reason\": \"explicit\", \"file\": \"/var/ndpkg-test/repo/hello-1.0-aarch64.ndpkg\"'",
+        "'ndamfi: trust-cache grant accepted ('",
+        "'ndpkg: hello 1.0: trust cache loaded'",
+        "'ndpkg: installed hello 1.0'",
+        "'ndpkg: generation 1: 1 packages installed'",
+        "'apply-status=0'",
+        "'hello from package hello 1.0'",
+        "'hello1-status=0'",
+        # The store's files are read-only through the mount.
+        "'Read-only file system'",
+        "'ro-status=1'",
+        # greet pulls in its dependency.
+        "'{\"action\": \"install\", \"name\": \"libgreet\", \"version\": \"1.0\", \"arch\": \"aarch64\", \"reason\": \"dependency\"'",
+        "'{\"action\": \"install\", \"name\": \"greet\", \"version\": \"1.0\", \"arch\": \"aarch64\", \"reason\": \"explicit\"'",
+        "'ndpkg: installed libgreet 1.0'",
+        "'ndpkg: installed greet 1.0'",
+        "'greet: a greeting from libgreet 1.0'",
+        "'greet-status=0'",
+        # Unmounted (as after a boot), greet's link dangles until ndpkg
+        # activate mounts the entries again.
+        "'no such file or directory: /usr/local/bin/greet'",
+        "'ndpkg: active: greet 1.0'",
+        "'activate-status=0'",
+        # The upgrade.
+        "'{\"action\": \"upgrade\", \"name\": \"hello\", \"from\": \"1.0\", \"version\": \"2.0\", \"arch\": \"aarch64\"'",
+        "'ndpkg: hello 2.0: trust cache loaded'",
+        "'ndpkg: upgraded hello 1.0 -> 2.0'",
+        "'hello from package hello 2.0'",
+        "'hello2-status=0'",
+        "'{\"name\": \"hello\", \"version\": \"2.0\", \"reason\": \"explicit\", \"entry\": '",
+        "'{\"name\": \"libgreet\", \"version\": \"1.0\", \"reason\": \"dependency\", \"entry\": '",
+        "'entry: /var/db/ndpkg/store/'",
+        # Removal: refused while a dependent needs it; then hello, gone.
+        "'package greet-1.0.aarch64 requires libgreet >= 1.0'",
+        "'remove-dep-status=1'",
+        "'{\"action\": \"remove\", \"name\": \"hello\", \"version\": \"2.0\"}'",
+        "'ndpkg: removed hello 2.0'",
+        "'gone-status=1'",
+        "'active-status=1'",
+        # The tampered package.
+        "'files/usr/local/bin/hello does not match the manifest'",
+        "'tampered-status=1'",
+        # gc: hello 1.0's entry, which neither kept generation names.
+        "'ndpkg: gc: removed '",
+        "'-hello-1.0'",
+        "'done-status=0'",
+    ],
+    data = [
+        "//boot/neoboot",
+        "//images:ndpkg_root",
+        "//images:ndpkg_root_trustcache",
+        "//kernel:sbsa_kc",
+        "//tests/qemu/pkg_trust:pkg_root_cfg",
+    ],
+    tags = ["manual", "kernel", "qemu"],
+)

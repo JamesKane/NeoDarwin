@@ -1,0 +1,23 @@
+load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:darwin_executable.bzl", "swift_embedded_executable")
+
+package(default_visibility = ["//visibility:public"])
+
+# ndbectl (P3-03, docs/architecture/filesystems.md §8): boot environments on
+# a root-on-ZFS pool: create, list, activate (or try once), mount, destroy.
+# The mechanism `ndpkg system` (P2-03) wraps. Embedded Swift over the zfs
+# and zpool commands, as launchctl is over launchd's interface.
+swift_embedded_executable(
+    name = "ndbectl",
+    srcs = glob(["Sources/*.swift"]),
+    hdrs = [
+        "Shim/module.modulemap",
+        "Shim/shim.h",
+    ],
+    root = "//base:root",
+)
+
+lang_audit_test(
+    name = "ndbectl_lang_audit",
+    srcs = ["Shim/shim.h"],
+)

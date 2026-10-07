@@ -37,6 +37,7 @@ xz                   v5.4.7                        sha256:8db6664c48ca07908b92ba
 libarchive           libarchive-158                sha256:e653bed893dd8d1f08000d7485897e7b0e562d029282bbe9559a2b2ca4679e06  (libarchive 3.7.4, libarchive.2.dylib; bsdtar, cpio, bsdcat)
 zip                  zip-29                        sha256:47f06c8605d58b559bb98e27cb00529aedf9b2df68db47a6ca54c80e1e291148  (Info-ZIP UnZip 6.0 only: unzip, funzip, unzipsfx, zipinfo, zipgrep)
 zstd                 v1.5.7                        sha256:eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3  (github.com/facebook/zstd release tarball; libzstd.1.dylib, zstd: FreeBSD's sys/contrib/zstd is 1.5.7 at freebsd-src 050683bb8e13; macOS has no zstd; outside the release set)
+libsolv              0.7.40                        sha256:30f529ad39d23bdc284b81ea3ed29679162011fc5fb9392635db0b4d1c8e3511  (github.com/openSUSE/libsolv tag tarball; libsolv.a, static, in ndpkg only (P2-02); not installed; outside the release set)
 less                 less-50                       sha256:ae4a5ddcd9e005ba51485aacdbf0912e353f977f8ef1cd2877afd9c23c10fb7b  (less 661: less, more, lessecho, lesskey)
 man                  man-62                        sha256:63568cab7bbf7de401e8aab4ae1ea9d80f26c11c2217fccb3afabfda01f23218  (FreeBSD's man.sh with Apple's changes: man, manpath, apropos, whatis)
 mandoc               freebsd-src 050683bb8e13      contrib/mandoc, usr.bin/soelim; pinned per file in base/mandoc/freebsd.lock (macOS ships mandoc unpublished)

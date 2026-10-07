@@ -1,0 +1,212 @@
+From: NeoDarwin
+Subject: [PATCH] zfs_boot: root on rd=zfs:POOL[/DATASET], a one-shot boot
+ environment, and no partition-scheme probe of ordinary disks
+
+Root on ZFS (P3-03, docs/architecture/filesystems.md §8) uses the macOS
+layer's boot path: when the kernel roots on ZFS, zfs.kext reads the vdev
+labels of the disks IOKit publishes, imports the named pool, makes a
+ZFSDatasetProxy IOMedia for the root dataset and publishes it as
+boot-uuid-media, which IOFindBSDRoot (kernel patch 0048 for rd=zfs:)
+waits for; vfs_mountroot() then reaches zfs_vfs_mountroot().
+
+- Only rd=zfs:POOL[/DATASET] (or zfs_boot=) starts it. Upstream's test of
+  rd= is inverted (strncmp() != 0), so any rd=, rd=md0 included, was taken
+  for a pool name and every disk's labels were read at every boot, which
+  matters now that zfs.kext is in every collection (P3-11 checkpoint 5).
+- The root dataset is, in order: the pool's org.neodarwin:bootonce user
+  property (a boot environment to try once; cleared before it is mounted,
+  so a failed try boots the default next time), the DATASET rd=zfs:
+  names, the pool's bootfs property. zfs_vfs_mountroot() mounts the same
+  dataset (upstream always mounted bootfs), with the dataset as the
+  mount's source rather than "root_device", so libzfs, df and ndbectl
+  see it.
+- ZFSDatasetScheme, a partition scheme at probe score 5000 on every whole
+  IOMedia, only matches media below a ZFSDatasetProxy (IOParentMatch), the
+  only media its probe() accepts: ordinary disks are no longer probed.
+
+Rebase-risk: low (zfs_boot.cpp and zfs_vfs_mountroot() are macOS-only and
+rarely change upstream)
+---
+diff --git a/module/os/neodarwin/zfs/Info.plist b/module/os/neodarwin/zfs/Info.plist
+--- a/module/os/neodarwin/zfs/Info.plist
++++ b/module/os/neodarwin/zfs/Info.plist
+@@ -86,6 +86,11 @@
+ 				<key>Whole</key>
+ 				<true/>
+ 			</dict>
++			<key>IOParentMatch</key>
++			<dict>
++				<key>IOProviderClass</key>
++				<string>ZFSDatasetProxy</string>
++			</dict>
+ 			<key>IOProviderClass</key>
+ 			<string>IOMedia</string>
+ 		</dict>
+diff --git a/module/os/neodarwin/zfs/zfs_boot.cpp b/module/os/neodarwin/zfs/zfs_boot.cpp
+--- a/module/os/neodarwin/zfs/zfs_boot.cpp
++++ b/module/os/neodarwin/zfs/zfs_boot.cpp
+@@ -111,6 +111,19 @@
+ 
+ int dsl_dsobj_to_dsname(char *pname, uint64_t obj, char *buf);
+ 
++#ifdef __NEODARWIN__
++#include <sys/dsl_prop.h>
++#include <sys/dmu_objset.h>
++/*
++ * The root dataset: rd=zfs:POOL/DATASET names one; zfs_boot_publish_bootfs()
++ * settles it (bootonce, then rd=, then the pool's bootfs) and
++ * zfs_vfs_mountroot() mounts it.
++ */
++char zfs_boot_dataset[ZFS_MAX_DATASET_NAME_LEN];
++/* A one-shot root: a user property of the pool's top dataset. */
++#define	ND_BOOTONCE_PROP	"org.neodarwin:bootonce"
++#endif
++
+ } /* extern "C" */
+ 
+ static taskq_t *zfs_boot_taskq;
+@@ -1484,6 +1497,52 @@
+ 	}
+ 	zfs_bootfs[0] = '\0';
+ 
++#ifdef __NEODARWIN__
++	/*
++	 * The root dataset, in order: the pool's one-shot
++	 * org.neodarwin:bootonce (cleared here, before the dataset is
++	 * mounted, so a boot environment that fails boots the default one
++	 * next time), the dataset rd=zfs: names, the pool's bootfs.
++	 */
++	{
++		char pool[ZFS_MAX_DATASET_NAME_LEN];
++		char *once = (char *)kmem_zalloc(ZAP_MAXVALUELEN, KM_SLEEP);
++		objset_t *os;
++
++		pool[0] = '\0';
++		spa_namespace_enter(FTAG);
++		if ((spa = spa_next(NULL)) != NULL)
++			strlcpy(pool, spa_name(spa), sizeof (pool));
++		spa_namespace_exit(FTAG);
++		if (pool[0] != '\0' && dsl_prop_get(pool, ND_BOOTONCE_PROP, 1,
++		    ZAP_MAXVALUELEN, once, NULL) == 0 && once[0] != '\0') {
++			error = dsl_prop_inherit(pool, ND_BOOTONCE_PROP,
++			    ZPROP_SRC_INHERITED);
++			printf("ZFS: %s=%s (cleared: %d)\n", ND_BOOTONCE_PROP,
++			    once, error);
++			if (error == 0 && strlen(once) < sizeof (pool) &&
++			    dmu_objset_hold(once, FTAG, &os) == 0) {
++				dmu_objset_rele(os, FTAG);
++				strlcpy(zfs_boot_dataset, once,
++				    sizeof (zfs_boot_dataset));
++			} else {
++				printf("ZFS: bootonce %s not used\n", once);
++			}
++		}
++		kmem_free(once, ZAP_MAXVALUELEN);
++		if (zfs_boot_dataset[0] != '\0' &&
++		    dmu_objset_hold(zfs_boot_dataset, FTAG, &os) == 0) {
++			dmu_objset_rele(os, FTAG);
++			strlcpy(zfs_bootfs, zfs_boot_dataset, len);
++		} else if (zfs_boot_dataset[0] != '\0') {
++			printf("ZFS: root dataset %s not found; trying the "
++			    "pool's bootfs\n", zfs_boot_dataset);
++			zfs_boot_dataset[0] = '\0';
++		}
++	}
++	if (zfs_bootfs[0] != '\0')
++		goto have_bootfs;
++#endif
+ 	spa_namespace_enter(FTAG);
+ 	spa = spa_next(NULL);
+ 	if (spa) {
+@@ -1516,6 +1575,10 @@
+ 		kmem_free(zfs_bootfs, len);
+ 		return (ENODEV);
+ 	}
++#ifdef __NEODARWIN__
++	strlcpy(zfs_boot_dataset, zfs_bootfs, sizeof (zfs_boot_dataset));
++have_bootfs:
++#endif
+ 
+ 	printf("%s: publishing bootfs [%s]\n", __func__, zfs_bootfs);
+ 
+@@ -2023,6 +2086,27 @@
+ 		return (false);
+ 	}
+ 
++#ifdef __NEODARWIN__
++	/*
++	 * Only rd=zfs:POOL[/DATASET] (or zfs_boot=POOL[/DATASET]) roots on
++	 * ZFS. Upstream's test is inverted (strncmp() != 0), so any rd=,
++	 * rd=md0 included, was taken for a pool name and every disk probed.
++	 */
++	result = false;
++	if (PE_parse_boot_argn("rd", zfs_boot, ZFS_MAX_DATASET_NAME_LEN) &&
++	    strncmp(zfs_boot, "zfs:", 4) == 0 && strlen(zfs_boot) > 4) {
++		memmove(zfs_boot, zfs_boot + 4, strlen(zfs_boot + 4) + 1);
++		result = true;
++	} else if (PE_parse_boot_argn("zfs_boot", zfs_boot,
++	    ZFS_MAX_DATASET_NAME_LEN) && strlen(zfs_boot) > 0) {
++		result = true;
++	}
++	zfs_boot_dataset[0] = '\0';
++	if (result && strchr(zfs_boot, '/') != NULL)
++		strlcpy(zfs_boot_dataset, zfs_boot, sizeof (zfs_boot_dataset));
++	if (result)
++		printf("ZFS: root on ZFS: %s\n", zfs_boot);
++#else
+ 	result = PE_parse_boot_argn("zfs_boot", zfs_boot,
+ 	    ZFS_MAX_DATASET_NAME_LEN);
+ 	// dprintf( "Raw zfs_boot: [%llu] {%s}\n",
+@@ -2048,6 +2132,7 @@
+ 		// dprintf("Raw rootdev: [%llu] {%s}\n",
+ 		//    (uint64_t)strlen(zfs_boot), zfs_boot );
+ 	}
++#endif
+ 
+ 	/*
+ 	 * XXX To Do - parse zpool_guid boot arg
+diff --git a/module/os/neodarwin/zfs/zfs_vfsops.c b/module/os/neodarwin/zfs/zfs_vfsops.c
+--- a/module/os/neodarwin/zfs/zfs_vfsops.c
++++ b/module/os/neodarwin/zfs/zfs_vfsops.c
+@@ -1280,6 +1280,16 @@
+ 		return (ENOMEM);
+ 	}
+ 
++#ifdef __NEODARWIN__
++	/* The dataset zfs_boot_publish_bootfs() chose (zfs_boot.cpp). */
++	{
++		extern char zfs_boot_dataset[];
++		if (zfs_boot_dataset[0] != '\0') {
++			strlcpy(zfs_bootfs, zfs_boot_dataset, MAXPATHLEN);
++			goto have_bootfs;
++		}
++	}
++#endif
+ 	spa_namespace_enter(FTAG);
+ 	spa = spa_next(NULL);
+ 	if (!spa) {
+@@ -1298,6 +1308,10 @@
+ 		goto out;
+ 	}
+ 	spa_namespace_exit(FTAG);
++#ifdef __NEODARWIN__
++have_bootfs:
++	printf("ZFS: mounting %s as the root\n", zfs_bootfs);
++#endif
+ 
+ 	/*
+ 	 * By setting the dev_t value in the mount vfsp,
+@@ -1313,6 +1327,13 @@
+ 		printf("zfs_domount: error %d", error);
+ 		goto out;
+ 	}
++#ifdef __NEODARWIN__
++	/*
++	 * The dataset, not vfs_mountroot()'s "root_device", as the mount's
++	 * source: libzfs's mount table, df and ndbectl find the root by it.
++	 */
++	vfs_mountedfrom(mp, zfs_bootfs);
++#endif
+ 
+ 	zfsvfs = (zfsvfs_t *)vfs_fsprivate(mp);
+ 	ASSERT(zfsvfs);

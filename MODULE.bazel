@@ -340,6 +340,43 @@ cc_library(
     urls = ["https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz"],
 )
 
+# P2-02: libsolv, ndpkg's dependency solver (docs/architecture/packaging.md
+# §5), built as a static library for NeoDarwin by base/libsolv/build.sh;
+# :solv_host, the same sources for the host, for //base/ndpkg:solve_test.
+http_archive(
+    name = "opensuse_libsolv",
+    build_file_content = """load("@rules_cc//cc:cc_library.bzl", "cc_library")
+filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])
+genrule(
+    name = "solvversion",
+    srcs = ["src/solvversion.h.in"],
+    outs = ["src/solvversion.h"],
+    cmd = "sed -e 's/@VERSION@/0.7.40/' -e 's/@LIBSOLV_MAJOR@/0/' -e 's/@LIBSOLV_MINOR@/7/' -e 's/@LIBSOLV_PATCH@/40/' " +
+          "-e 's|^#cmakedefine \\\\(.*\\\\)$$|/* #undef \\\\1 */|' $< > $@",
+)
+cc_library(
+    name = "solv_host",
+    srcs = ["src/" + f + ".c" for f in [
+        "bitmap", "poolarch", "poolvendor", "poolid", "pooldep", "poollang", "poolwhatprovides", "pool", "strpool",
+        "dirpool", "solver", "solverdebug", "repo_solv", "repo_write", "evr", "queue", "repo", "repodata", "repopage",
+        "util", "policy", "solvable", "transaction", "order", "rules", "problems", "linkedpkg", "cplxdeps", "chksum",
+        "chksum_impl", "md5", "sha1", "sha2", "solvversion", "selection", "fileprovides", "diskusage", "suse",
+        "solver_util", "cleandeps", "userinstalled", "filelistfilter", "decision",
+    ]] + glob(["src/*.h"]) + [":solvversion"],
+    hdrs = glob(["src/*.h"]) + [":solvversion"],
+    textual_hdrs = ["src/qsort_r.c"],
+    copts = ["-w", "-I$(GENDIR)/external/+http_archive+opensuse_libsolv/src"],
+    include_prefix = "solv",
+    strip_include_prefix = "src",
+    local_defines = ["LIBSOLV_INTERNAL=1", "HAVE_STRCHRNUL=1", "HAVE_FUNOPEN=1"],
+    visibility = ["//visibility:public"],
+)
+""",
+    sha256 = "30f529ad39d23bdc284b81ea3ed29679162011fc5fb9392635db0b4d1c8e3511",
+    strip_prefix = "libsolv-0.7.40",
+    urls = ["https://github.com/openSUSE/libsolv/archive/refs/tags/0.7.40.tar.gz"],
+)
+
 # P4-21 checkpoint 3, the interactive essentials (base/less, base/man,
 # base/file, base/bc, base/netcat, base/libiconv, base/tcsh,
 # base/mail_cmds): Apple's projects from macOS 26's release set; mandoc and

@@ -5,8 +5,12 @@
 
 #include "nd_pkg.h"
 
+#include <dirent.h>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <libgen.h>
+#include <sys/file.h>
+#include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <time.h>
@@ -232,4 +236,258 @@ nd_pkg_load_trust_cache(const uint8_t *module, size_t module_len, const uint8_t 
 	int r = sysctlbyname("security.codesigning.neodarwin.load_trust_cache", NULL, NULL, req, n) == 0 ? 0 : errno;
 	free(req);
 	return r;
+}
+
+// -- P2-02: the store and activation ------------------------------------------------------
+
+static int
+result(int r)
+{
+	return r == 0 ? 0 : errno;
+}
+
+int
+nd_pkg_mkdir(const char *path, int mode)
+{
+	return result(mkdir(path, (mode_t)mode));
+}
+
+int
+nd_pkg_mkdirs(const char *path, int mode)
+{
+	char buf[1024];
+	if (strlcpy(buf, path, sizeof(buf)) >= sizeof(buf)) {
+		return ENAMETOOLONG;
+	}
+	for (char *p = buf + 1; ; p++) {
+		if (*p == '/' || *p == 0) {
+			char c = *p;
+			*p = 0;
+			if (mkdir(buf, (mode_t)mode) != 0 && errno != EEXIST) {
+				return errno;
+			}
+			*p = c;
+			if (c == 0) {
+				break;
+			}
+		}
+	}
+	return nd_pkg_kind(path) == 2 ? 0 : ENOTDIR;
+}
+
+int
+nd_pkg_write_file(const char *path, const uint8_t *bytes, size_t len, int mode)
+{
+	int fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, (mode_t)mode);
+	if (fd < 0) {
+		return errno;
+	}
+	size_t at = 0;
+	while (at < len) {
+		ssize_t w = write(fd, bytes + at, len - at);
+		if (w <= 0) {
+			int e = w == 0 ? EIO : errno;
+			close(fd);
+			return e;
+		}
+		at += (size_t)w;
+	}
+	// open() applied the umask; the manifest's mode is the mode.
+	if (fchmod(fd, (mode_t)mode) != 0 || fsync(fd) != 0) {
+		int e = errno;
+		close(fd);
+		return e;
+	}
+	return result(close(fd));
+}
+
+int
+nd_pkg_symlink(const char *target, const char *path)
+{
+	return result(symlink(target, path));
+}
+
+int
+nd_pkg_rename(const char *from, const char *to)
+{
+	return result(rename(from, to));
+}
+
+int
+nd_pkg_unlink(const char *path)
+{
+	return result(unlink(path));
+}
+
+int
+nd_pkg_rmdir(const char *path)
+{
+	return result(rmdir(path));
+}
+
+int
+nd_pkg_chmod(const char *path, int mode)
+{
+	return result(lchmod(path, (mode_t)mode));
+}
+
+int
+nd_pkg_fsync_dir(const char *path)
+{
+	int fd = open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (fd < 0) {
+		return errno;
+	}
+	int r = result(fsync(fd));
+	close(fd);
+	return r;
+}
+
+int
+nd_pkg_kind(const char *path)
+{
+	struct stat st;
+	if (lstat(path, &st) != 0) {
+		return 0;
+	}
+	return S_ISREG(st.st_mode) ? 1 : S_ISDIR(st.st_mode) ? 2 : S_ISLNK(st.st_mode) ? 3 : 4;
+}
+
+char *
+nd_pkg_readlink(const char *path)
+{
+	char buf[1024];
+	ssize_t n = readlink(path, buf, sizeof(buf) - 1);
+	if (n < 0) {
+		return NULL;
+	}
+	buf[n] = 0;
+	return strdup(buf);
+}
+
+char *
+nd_pkg_list_dir(const char *path)
+{
+	DIR *d = opendir(path);
+	if (d == NULL) {
+		return NULL;
+	}
+	size_t len = 0, cap = 256;
+	char *out = malloc(cap);
+	struct dirent *e;
+	while (out != NULL && (e = readdir(d)) != NULL) {
+		if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) {
+			continue;
+		}
+		size_t n = strlen(e->d_name);
+		if (len + n + 2 > cap) {
+			cap = (len + n + 2) * 2;
+			char *p = realloc(out, cap);
+			if (p == NULL) {
+				free(out);
+				out = NULL;
+				break;
+			}
+			out = p;
+		}
+		memcpy(out + len, e->d_name, n);
+		len += n;
+		out[len++] = '\n';
+	}
+	closedir(d);
+	if (out == NULL) {
+		errno = ENOMEM;
+		return NULL;
+	}
+	out[len] = 0;
+	return out;
+}
+
+int
+nd_pkg_remove_tree(const char *path)
+{
+	int kind = nd_pkg_kind(path);
+	if (kind == 0) {
+		return 0;
+	}
+	if (kind != 2) {
+		return nd_pkg_unlink(path);
+	}
+	chmod(path, 0755);
+	char *names = nd_pkg_list_dir(path);
+	if (names == NULL) {
+		return errno;
+	}
+	int r = 0;
+	for (char *n = names, *nl; r == 0 && (nl = strchr(n, '\n')) != NULL; n = nl + 1) {
+		*nl = 0;
+		char child[1024];
+		if ((size_t)snprintf(child, sizeof(child), "%s/%s", path, n) >= sizeof(child)) {
+			r = ENAMETOOLONG;
+		} else {
+			r = nd_pkg_remove_tree(child);
+		}
+	}
+	free(names);
+	return r != 0 ? r : nd_pkg_rmdir(path);
+}
+
+int
+nd_pkg_lock(const char *path)
+{
+	int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+	if (fd < 0) {
+		return errno;
+	}
+	if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
+		int e = errno;
+		close(fd);
+		return e;
+	}
+	return 0;  // the descriptor stays open, and the lock held, until exit
+}
+
+int
+nd_pkg_pid(void)
+{
+	return (int)getpid();
+}
+
+bool
+nd_pkg_is_root(void)
+{
+	return geteuid() == 0;
+}
+
+// nullfs_mount() copies in a struct null_mount_conf (a uint64_t of flags)
+// and then the lower path, NUL-terminated, from the same address.
+int
+nd_pkg_nullfs_mount(const char *lower, const char *mountpoint)
+{
+	size_t n = strlen(lower) + 1;
+	uint8_t *data = calloc(1, 8 + n);
+	if (data == NULL) {
+		return ENOMEM;
+	}
+	memcpy(data + 8, lower, n);
+	int r = result(mount("nullfs", mountpoint, MNT_RDONLY | MNT_NOSUID | MNT_DONTBROWSE, data));
+	free(data);
+	return r;
+}
+
+int
+nd_pkg_unmount(const char *mountpoint)
+{
+	return result(unmount(mountpoint, 0));
+}
+
+bool
+nd_pkg_is_mountpoint(const char *path)
+{
+	char parent[1024];
+	if (strlcpy(parent, path, sizeof(parent)) >= sizeof(parent)) {
+		return false;
+	}
+	struct stat a, b;
+	return stat(path, &a) == 0 && stat(dirname(parent), &b) == 0 && a.st_dev != b.st_dev;
 }

@@ -34,8 +34,8 @@ Plan:
 | Piece | Design |
 |---|---|
 | Pool layout | `ndpool/ROOT/<be-name>` (system sets, `readonly=on`), `ndpool/pkg` (package store, `compression=zstd`), `ndpool/home/<user>`, `ndpool/var` |
-| Root mount | `neoboot` passes `rd=zfs:ndpool/ROOT/<be>`; a small extension where `bsd_init` parses `rd=` (`bsd/kern/bsd_init.c:460`) lets `zfs.kext` import the pool from the devices named in `boot.cfg` and mount the dataset as root once IOStorageFamily has published them |
-| Boot environments | `ndpkg system upgrade` clones the current BE, applies the system-set transaction inside it, snapshots it, marks it `next`; `neoboot` reads `boot.cfg` (`default`, `next`, `tries`); success promotes `next`, failure boots the previous BE. `bectl`-style commands: `ndpkg system list/activate/rollback/destroy` |
+| Root mount | `boot.cfg` passes `rd=zfs:ndpool` (or `rd=zfs:ndpool/ROOT/<be>` to pin one); `IOFindBSDRoot` waits for `boot-uuid-media` (kernel patch 0048), which `zfs.kext` publishes once it has read the disks' labels, imported the pool and made the root dataset's proxy IOMedia; `vfs_mountroot()` reaches `zfs_vfs_mountroot()` (as built: §8) |
+| Boot environments | `ndpkg system upgrade` clones the current BE, applies the system-set transaction inside it, snapshots it, marks it `next`; `neoboot` reads `boot.cfg` (`default`, `next`, `tries`); success promotes `next`, failure boots the previous BE. `bectl`-style commands: `ndpkg system list/activate/rollback/destroy`. As built (§8): the pool's `bootfs` is the default and a one-shot `org.neodarwin:bootonce` property is the try, both read by `zfs.kext`, so neoboot needs neither a ZFS reader nor ESP writes from userland; `ndbectl` is the mechanism `ndpkg system` wraps |
 | Kernel collection placement | each BE's kernel collection lives on the ESP under `/EFI/NeoDarwin/be/<be-name>/kc.boot`, written by the same transaction, so `neoboot` needs no ZFS reader. A later epic (P3-06) adds a read-only ZFS reader to `neoboot` (FreeBSD's `stand/libsa/zfs`, BSD-licensed, is the reference) so kernels can live inside the BE |
 | Integrity | system sets are received from signed `zfs send` streams (`ndsign` over the stream hash); the BE's checksum tree is the image verification |
 | Encryption | ZFS native encryption for `home` and `var`; a passphrase or key file unlocked with `zfs load-key` at boot or login, as on FreeBSD (P3-10). A downstream may hold keys in its own key service |
@@ -75,7 +75,7 @@ mockfs executable ramdisk (kernel M3) → HFS+ ramdisk root (M4) → HFS+ image 
 | Piece | What |
 |---|---|
 | `@openzfs` (`kexts/zfs/upstream.lock`) | `zfs-macOS-2.4.1p1`, pinned by commit (§2). CDDL-1.0 (`THIRD_PARTY_NOTICES.md`) |
-| `kexts/zfs/common.sh`, `patches/` | the NeoDarwin OS layer: the macOS layer's directories (`module/os`, `include/os`, `lib/libspl/include/os`, `lib/lib{spl,zfs,zfs_core,zutil}/os`, `cmd/zpool/os`) copied to `os/neodarwin`, then the patches (below; 0005 to 0011 are checkpoint 2's). Built with `__NEODARWIN__` defined |
+| `kexts/zfs/common.sh`, `patches/` | the NeoDarwin OS layer: the macOS layer's directories (`module/os`, `include/os`, `lib/libspl/include/os`, `lib/lib{spl,zfs,zfs_core,zutil}/os`, `cmd/zpool/os`) copied to `os/neodarwin`, then the patches (below; 0005 to 0011 are checkpoint 2's, 0012 and 0013 P3-11 checkpoint 5's and P3-03's). Built with `__NEODARWIN__` defined |
 | `//kexts/zfs:zfs` (`kext.sh`, `kext_sources.txt`) | `zfs.kext`: SPL, ZFS, ICP, Lua and zstd as `module/os/macos/Makefile.am` builds them, against NeoDarwin's `Kernel.framework` (Headers and PrivateHeaders, `//kernel:headers`) and IOStorageFamily-331's headers; `ld -kext` with libkmod built from xnu and `libclang_rt.cc_kext`. 3.9 MB, 2,800 imports |
 | kernel patches | 0039 exports IOStorageFamily's classes (the only symbols the kext needed that the kernel didn't export: the BSD, Mach, libkern and IOKit KPIs it uses, private ones included, were all exported already); 0040 links the kernel with split-segment info |
 | `//tools/kcgen` | links kexts into a collection (`arm64-sbsa-bringup.md` §2.1.1): segments placed in the kext regions `arm_vm_init()` derives, references fixed from split-segment info, imports resolved against the kernel's exports, `__PRELINK_INFO` entries and `kmod_info` as kmutil writes them, codeless kexts for `com.apple.kpi.*` and IOStorageFamily |
@@ -84,7 +84,7 @@ mockfs executable ramdisk (kernel M3) → HFS+ ramdisk root (M4) → HFS+ image 
 | `//images:zfs_session_disk` | the session disk with that collection and the commands |
 | `//kexts/zfs:zfs_isa_audit` | the kext against the SBSA ISA baseline (`kexts/zfs/isa_audit.txt`) |
 
-**How it relates to the kernel.** `zfs.kext` is a separate fileset entry in the collection with its own segments and Mach-O header: CDDL code is never linked into the APSL kernel image, as §1 requires. `OSKext` reads it from `__PRELINK_INFO`, and loads it when its IOKit personality (`org_openzfsonosx_zfs_zvol` on `IOResources`, once `IOBSD` is published) matches; `zfs_osx.cpp`'s `start()` runs `spl_start()` and ZFS's initialisation, registers `zfs` with `vfs_fsadd()` and creates `/dev/zfs`. Kexts depend on `com.apple.kpi.bsd`, `iokit`, `libkern`, `mach` and `unsupported` and on `com.apple.iokit.IOStorageFamily`, all codeless kexts in the collection. It is not part of the default collection (`//kernel:sbsa_kc`) yet.
+**How it relates to the kernel.** `zfs.kext` is a separate fileset entry in the collection with its own segments and Mach-O header: CDDL code is never linked into the APSL kernel image, as §1 requires. `OSKext` reads it from `__PRELINK_INFO`, and loads it when its IOKit personality (`org_openzfsonosx_zfs_zvol` on `IOResources`, once `IOBSD` is published) matches; `zfs_osx.cpp`'s `start()` runs `spl_start()` and ZFS's initialisation, registers `zfs` with `vfs_fsadd()` and creates `/dev/zfs`. Kexts depend on `com.apple.kpi.bsd`, `iokit`, `libkern`, `mach` and `unsupported` and on `com.apple.iokit.IOStorageFamily`, all codeless kexts in the collection. Since P3-11 checkpoint 5 it is in the default collection (`//kernel:sbsa_kc`), so every boot loads it (§7.3).
 
 **The patches** (each with its rationale and `Rebase-risk`):
 
@@ -101,6 +101,8 @@ mockfs executable ramdisk (kernel M3) → HFS+ ramdisk root (M4) → HFS+ image 
 | `0009-libzfs-relay-sockets-as-pipes` | libzfs relays a socket (ksh93's pipelines) through its FIFO as it does a pipe |
 | `0010-vdev-file-keep-file-vdevs-open-across-unmounts` | file vdevs stay open for the pool's life, as on FreeBSD and Linux, not closed at every unmount |
 | `0011-ldi-vnode-no-lbp-after-async-strategy` | `buf_strategy_vnode()` decides whether an I/O is synchronous before `VNOP_STRATEGY()`, not after: an asynchronous buf's completion could free its `ldi_buf_t` (inside the zio) first, and the reread sent the I/O thread to sleep for good on a freed buf (§7.2, `zpool_import_012_pos`) |
+| `0012-zfs-boot-rd-zfs-bootonce-and-scheme-personality` | root on ZFS (P3-03, §8.1): only `rd=zfs:`/`zfs_boot=` start the boot-time label reader; the root dataset is the pool's `org.neodarwin:bootonce` (cleared as it is used), then `rd=zfs:`'s dataset, then `bootfs`, and `zfs_vfs_mountroot()` mounts it with the dataset as the mount's source; `ZFSDatasetScheme` matches only below a `ZFSDatasetProxy` (`IOParentMatch`, §7.4) |
+| `0013-zfs-osx-no-start-below-1gb` | `start()` declines with less than 1 GB of memory, before the SPL, whose vmem setup VERIFYs 1 GB and panicked 512 MB QEMU guests once the kext was in every boot (§7.4) |
 
 **ISA.** The kext is compiled with `-mcpu=cortex-a76`. `-march=armv8.2-a+rcpc`, the kernel's flag until 2026-10-02 (patch 0019 now uses `-mcpu=cortex-a76+crypto`), still let Apple clang use the default `apple-m1` CPU's SHA-3 instructions when it vectorised `arc_init()`, and the first boot took an undefined-instruction panic (`bcax`) on the A76. The ICP's Armv8 assembly is built (AES and GHASH with the crypto extensions, SHA-256, and SHA-512, which `zfs_sha512_available()` gates on `ID_AA64ISAR0_EL1`); the audit baseline lists the SHA-512 instructions and the round-constant tables `llvm-objdump` decodes as instructions. BLAKE3's assembly isn't built: Xcode 27's assembler crashes on it, and the macOS layer leaves it unused on arm64 anyway.
 
@@ -162,8 +164,7 @@ mockfs executable ramdisk (kernel M3) → HFS+ ramdisk root (M4) → HFS+ image 
 **Deferred** (P3-11 unless noted; P3-01 closed with checkpoint 2):
 - the known failures above, each where its reason points; the rest of the test suite's groups;
 - zvols, ZFSDatasetProxy disks (built; the proxy worked in a first run, before `com.apple.devdisk` defaulted to off) and snapshots mounted under `.zfs`, none tested yet, and GPT labelling of whole disks;
-- `zfs.kext` in the default collection, and a `kernel-abi` declaration (§2 step 3);
-- zed, the libraries as packages, NLS (P3-02); root on ZFS (P3-03); native encryption beyond what the build already has (P3-10);
+- zed, the libraries as packages, NLS (P3-02); native encryption beyond what the build already has (P3-10);
 - the BLAKE3 and Fletcher-4 NEON paths, and the RAID-Z SIMD ones (the macOS layer builds none for arm64);
 - the kext on the Q8B (the board wasn't available).
 
@@ -175,6 +176,73 @@ mockfs executable ramdisk (kernel M3) → HFS+ ramdisk root (M4) → HFS+ image 
 | 2 | **Snapshots and mounts.** `.zfs/snapshot` mounts (`zfs_snapshot_009_pos`), ZFSDatasetProxy disks with `com.apple.devdisk`, the `zfs_mount` tests to investigate (`_005`, `_007`, `_010`, `_011`, `zfs_mount_remount`), `mount -F` changed through `tests/patches`; the `snapshot` group added | about 7 | |
 | 3 | **GPT labels and partitioning.** libzfs's whole-disk EFI label (libefi) with IOKit re-reading the new partitions; the in-use check sees an unmounted HFS+ volume; the tests' `diskutil` and `gpt` calls go through **`gpart`**, a NeoDarwin subset of FreeBSD's (`create`, `add`, `delete`, `show`, `resize`, `bootcode`) over IOStorageFamily (decided 2026-10-04; `freebsd-parity.md` §6) | about 3 | `gpart` is also the installer's (P3-03, P7-03) |
 | 4 | **The remaining "to investigate" list.** Tunables (`set_tunable64` over sysctls, 6), the KILLED ones rerun with `ZTS_TEST_TIMEOUT=600` to tell slow from hung, dRAID file vdevs, `xxh128sum` (a small helper), `draidcfg.gz` in the image | 20 or more | `fio` and `python3` stay FAIL (ports) |
-| 5 | **The kext in every boot.** `zfs.kext` in `//kernel:sbsa_kc` with its personality limited so whole disks without ZFS labels aren't probed, and the `kernel-abi` declaration (§2 step 3); every QEMU test still passes, and boot time is measured | – | Leads into root on ZFS (P3-03) |
+| 5 | **The kext in every boot.** `zfs.kext` in `//kernel:sbsa_kc` with its personality limited so whole disks without ZFS labels aren't probed, and the `kernel-abi` declaration (§2 step 3); every QEMU test still passes, and boot time is measured | – | **Done 2026-10-07** (§7.4). Led into root on ZFS (P3-03, §8) |
 
 Checkpoints 1 and 2 are independent. A full suite run holds the Bazel server and loads the host for about 30 minutes, so P3-11 doesn't run alongside other QEMU-heavy work.
+
+### 7.4 Checkpoint 5: the kext in every boot (done 2026-10-07)
+
+**`//kernel:sbsa_kc`, the collection every image and QEMU test boots, now holds `zfs.kext`** (with xnu's pseudo-kexts and IOStorageFamily as codeless kexts, as `sbsa_zfs_kc` did; `sbsa_zfs_kc` is now an alias of it). The kernel alone is `//kernel:sbsa_kernel_only_kc`, which `kcheck` still round-trips (`sbsa_kernel_only_kc_check`; `sbsa_kc_check` checks the collection with its kext).
+
+| Piece | What |
+|---|---|
+| Personalities | The kext's three: `org_openzfsonosx_zfs_zvol` on `IOResources` (starts ZFS once `IOBSD` is published), `ZFSDatasetProxy` on `ZFSPool` (ZFS's own objects only), and `ZFSDatasetScheme`, a partition scheme at probe score 5000 on every whole IOMedia, which called `probe()` on every disk only to refuse it. It now carries `IOParentMatch` `{IOProviderClass = ZFSDatasetProxy}` (zfs patch 0012), the only media its `probe()` accepts, so IOKit no longer offers it ordinary disks. The boot-time label reader (`zfs_boot.cpp`) reads disks only when the kernel roots on ZFS: upstream's test of `rd=` was inverted and took any `rd=`, `rd=md0` included, for a pool name (patch 0012 accepts `rd=zfs:` and `zfs_boot=` only) |
+| `kernel-abi` | `KERNEL_ABI = "1"` in `rules/kc.bzl`, the version of the kernel's exported KPIs. `nd_kext`'s mandatory `kernel_abi` attribute stamps `NDKernelABI` into the bundle's Info.plist (`kexts/zfs` and `kexts/swift_trial` declare `KERNEL_ABI`); `kext_collection` passes `--kernel-abi` to `kcgen`, which refuses a kext whose `NDKernelABI` differs or is missing. `//kernel:sbsa_kc_kernel_abi_test`: zfs.kext enters, the same kext with another ABI or none is refused. Bumped only when an export is removed or changed incompatibly (packaging.md §6) |
+| Small machines | The SPL VERIFYs at least 1 GB of memory (`spl-vmem.c`) and panicked the 512 MB QEMU guests (`sbsa_pf_ntp_test`, the first full run). zfs patch 0013: below 1 GB, `start()` prints `ZFS: not starting: 512 MB of memory; ZFS needs 1024 MB` and the kernel boots without ZFS. NeoDarwin's boards have 4 GB or more (§6) |
+| Boot time | QEMU `virt`, TCG, `neoverse-n2`, 2 GB, `//images:session_disk` from firmware start to `login:`, three boots each, alternating: kernel alone 6.9, 7.1, 7.2 s (mean 7.07 s); with `zfs.kext` 7.2, 7.2, 7.3 s (mean 7.23 s): **+0.17 s, about 2 %** (the SPL and ZFS start: kmem caches, the ARC, taskqs). The collection grows from 16.6 to 23.2 MB |
+| QEMU tests | The full set (`attr(tags, qemu, …)` over `//kernel`, `//boot` and `//tests`, 74 tests with P3-03's two) with `bazel test //...`, `sbsa_isa_audit` and the collection checks, 257 tests: the first run (2026-10-07) found the 512 MB panic above (`sbsa_pf_ntp_test`) and one timeout under load, `sbsa_net_intx_test` (two agents' QEMU sets on one host; it passed alone); after patch 0013 **all 257 pass**, the ZFS suite holding its ratchet in all eight shards (30 min) |
+
+## 8. Status: P3-03 (root on ZFS and boot environments)
+
+**State (2026-10-07): done.** On QEMU `virt` the session boots from `ndpool/ROOT/default` on a GPT disk with no HFS+ partition (`//kernel:sbsa_zfs_root_boot_test`), and `ndbectl` creates a boot environment, tries it once, falls back, activates it and rolls back over five boots of one disk (`//kernel:sbsa_zfs_be_test`). `ndpkg system rollback` (P2-03) is a wrapper over this mechanism (§8.5).
+
+### 8.1 How the root is reached
+
+```
+boot.cfg (ESP)       rd=zfs:ndpool          (rd=zfs:ndpool/ROOT/<be> pins a dataset)
+neoboot              no ramdisk, no HFS+ partition → no /chosen boot-uuid; the command line as is
+zfs.kext start()     rd=zfs: → "ZFS: root on ZFS: ndpool"; a notifier on every IOMediaBSDClient reads
+                     each leaf's vdev labels (zfs_boot.cpp), and an import thread imports the pool
+IOFindBSDRoot        rd=zfs: → waits for the boot-uuid-media resource (kernel patch 0048)
+zfs.kext             chooses the root dataset (§8.2), makes its ZFSDatasetProxy IOMedia and
+                     publishes it as boot-uuid-media → "BSD root: diskNs1"
+vfs_mountroot()      mockfs and HFS+ decline the proxy; zfs_vfs_mountroot() mounts the dataset
+                     read-only, the dataset as the mount's source (zfs patch 0012)
+launchctl            a ZFS root has no fsck: mount(2) MNT_UPDATE with zfs.kext's mount arguments
+                     makes it read-write (there is no mount_zfs, so `mount -uw /` can't)
+```
+
+This is the macOS port's own boot path (`zfs_boot.cpp`, `zfs_vfs_mountroot()`), which roots macOS on ZFS through Apple's `boot-uuid`; NeoDarwin needed one kernel patch and one zfs patch. **Kernel patch 0048** (`IOKitBSDInit.cpp`): `rd=zfs:…` waits for `boot-uuid-media` instead of an IOMedia named `zfs:…`. **zfs patch 0012** (and 0013, which keeps the kext from starting below 1 GB): only `rd=zfs:`/`zfs_boot=` start the label reader (upstream's inverted test took `rd=md0` for a pool); the dataset choice of §8.2, which `zfs_vfs_mountroot()` follows (upstream always mounted `bootfs`); `vfs_mountedfrom()` of the dataset, so `mount`, `df` and libzfs show `ndpool/ROOT/<be> on / (zfs, …)`, not `root_device`; and the `ZFSDatasetScheme` personality of §7.4. **launchctl** (`base/launchctl`): no fsck for a ZFS root, and the read-write remount through `mount(2)` (`struct nd_zfs_mount_args` in its shim, the macOS layer's `zfs_mount_args`).
+
+The pool is found by its labels on any disk IOKit publishes; §3's "bounded to the devices in `boot.cfg`" isn't done (the probe reads two label areas of each leaf, a few KB per disk). The kernel collection and trust cache stay on the ESP (§3, P3-06 moves the kernel into the BE).
+
+### 8.2 Boot environments
+
+| Piece | What |
+|---|---|
+| Layout | `ndpool` (`mountpoint=none`, `canmount=off`, `atime=off`), `ndpool/ROOT` (`mountpoint=none`), `ndpool/ROOT/<be>` (`mountpoint=/`, `canmount=noauto`, as FreeBSD's `bectl` makes them). A BE is a clone of a snapshot of another (`<origin>@<new>`). §3's `ndpool/pkg`, `home` and `var` datasets arrive with P2-02/P2-03 |
+| Which BE boots | in order: the pool's **`org.neodarwin:bootonce`** user property (on `ndpool` itself), the dataset `rd=zfs:` names, the pool's **`bootfs`**. zfs.kext clears `bootonce` (`dsl_prop_inherit`) right after the import, before the BE is mounted, so a BE that fails to boot, at any point after that, gives way to `bootfs` at the next boot: the try is one-shot, as FreeBSD's `bectl activate -t` and `nextboot`. A `bootonce` naming no dataset is reported and ignored |
+| `ndbectl` (`base/ndbectl`, Embedded Swift like launchctl, over `/sbin/zfs` and `/sbin/zpool`) | `list` (BE, flags `N` booted now, `R` on reboot, `T` tried once next, used, origin); `create NEW [ORIGIN]` (snapshot and clone; default origin the booted BE); `activate BE` (`bootfs`, clears `bootonce`); `activate -t BE` (`bootonce`); `mount BE DIR` / `umount BE` (sets the BE's `mountpoint` while it is mounted, then `/` again); `destroy BE` (refuses the booted and the active BE; removes the origin snapshot `create` made). `-p POOL` names the pool, else the booted root's |
+| Why not neoboot's `boot.cfg` tries | packaging.md §6 has neoboot count `tries` in `boot.cfg`; that needs the ESP written from userland (msdosfs, P3-04) and neoboot writing files. The pool's own properties need neither and survive any ESP, so they are the mechanism; a `boot.cfg` naming `rd=zfs:ndpool/ROOT/<be>` still pins a BE (rescue). If neoboot later counts tries, it can do so by choosing the `rd=` it passes |
+
+### 8.3 The pool image
+
+The host has no ZFS, so **a NeoDarwin guest makes the pool** at build time (`rules/zfs_image.bzl`, `tools/zfsimage/mkpool.sh`). `//images:zfs_root_blank_disk` is a `gpt_disk_image` with `zfs_partition = "384m"` (new: partition 2 a blank FreeBSD-ZFS partition instead of an HFS+ root) and an ESP with neoboot, `sbsa_kc`, `zfs_root_volume`'s trust cache and `boot.cfg` `rd=zfs:ndpool` (`images/zfs-root.cfg`). `//images:zfs_root_disk` boots `//images:zfs_session_disk` under QEMU with a copy of the blank disk written in place (`qemu_efi_test.sh --drive-in-place`, new) and `//images:zfs_root_volume` (an HFS+ image: the session root, zpool, zfs, `ndbectl`, `/etc/zfs`) as a read-only disk; in the guest, `zpool create -o ashift=12 … -R /tmp/be ndpool diskNs2`, the datasets of §8.2 with `bootfs`, `tar` from the mounted volume (HFS+'s journal and metadata files left out), `ndpool/ROOT/default@install`, `zpool export`. About two minutes; the guest's serial log is the output group `log`. The image is **not bit-reproducible** (ZFS stamps GUIDs, txgs and times); its files and layout are the same on every build, and the trust cache is the HFS+ volume's, built on the host. The image is 421 MB (gptimage writes the blank partition out in full); the root is 70 MB in the pool.
+
+### 8.4 Tests
+
+| Test | What |
+|---|---|
+| `//kernel:sbsa_zfs_root_boot_test` | boots `zfs_root_disk`: `ZFS: root on ZFS: ndpool`, `rooting via ZFS: ndpool`, `zfs_boot_probe_disk matched pool ndpool`, the bootfs published and mounted; after login `mount` shows `ndpool/ROOT/default on / (zfs, local…`, the pool is ONLINE, and a file is written to the root |
+| `//kernel:sbsa_zfs_be_test` | five boots of one copy of the disk (`qemu_disk_reboot_test.sh`, now any number of `--reboot`s): 1, from `default`: `ndbectl create b`, a marker written into `b` through `ndbectl mount`, `activate -t b`, `list` shows `default NR` and `b T`; 2: `b` boots (`bootonce … (cleared: 0)`), the marker is there, `list` shows `b N`, `default R`; 3: `default` boots again (the try was used up), no marker, `activate b`; 4: `b` boots from `bootfs`, the marker, `activate default` (the rollback); 5: `default`, no marker, `destroy b` |
+
+### 8.5 What P2-03 builds on it
+
+`ndpkg system upgrade` = `ndbectl create` (a BE from the booted one), the system-set transaction applied inside it (mounted with `ndbectl mount`), then `ndbectl activate -t`; once the new BE reaches `launchd` and `pkgd` marks the boot good, `ndbectl activate` makes it the default. `ndpkg system rollback` = `ndbectl activate <previous BE>` (the previous BE is the one `bootfs` named before, recorded by the transaction), `list`/`destroy` map one to one. packaging.md §6's `next`/`tries` in `boot.cfg` become `bootonce`/`bootfs` (§8.2) unless P2-03 decides otherwise. The kernel and kexts of a BE stay on the ESP until P3-06; a system upgrade that changes the kernel must write the BE's collection there (P3-04's msdosfs).
+
+### 8.6 Results and limits
+
+- Both tests pass (2026-10-07: 11 s, and 58 to 80 s for the five boots), in the full QEMU set with everything else (§7.4).
+- Unclean shutdown: the tests end each boot by stopping QEMU after `zpool sync`; ZFS needs no fsck, and every later boot imported the pool. A clean shutdown that exports the root pool is open (filesystems.md §7.1's patch 0010 note).
+- The root is mounted read-write; §3's `readonly=on` system sets come with P2-03's signed system sets.
+- Not done: the import bounded to `boot.cfg`'s devices; `mount_zfs` (`mount -t zfs`); `ndbectl rename`, `jail`, `export/import` (bectl has them); the kext on the Q8B (no board time).

@@ -1,5 +1,6 @@
 load("//rules:disk.bzl", "gpt_disk_image")
 load("//rules:ramdisk.bzl", "hfs_ramdisk")
+load("//rules:zfs_image.bzl", "zfs_root_disk")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -118,10 +119,10 @@ hfs_ramdisk(
     trust_cache_exclude = _CS_PROBES_UNLISTED,
 )
 
-# P2-01's run-time trust grant (tests/qemu/pkg_trust): session_root with
-# ndpkg (entitled to load trust caches), a probe no static trust cache
-# lists, the probe's package, its trust cache and grant, and wrongly signed
-# variants: a package and grant chained to other-root, and the grant with
+# P2-01's run-time trust grant (tests/qemu/pkg_trust): session_root (whose
+# base has /usr/sbin/ndpkg, entitled to load trust caches), a probe no
+# static trust cache lists, the probe's package, its trust cache and grant,
+# and wrongly signed variants: a package and grant chained to other-root, and the grant with
 # its signatures zeroed. Booted by //kernel:sbsa_pkg_trust_test and
 # //kernel:sbsa_pkg_trust_no_root_test.
 _PKG_TRUST = "usr/local/share/pkg_trust/"
@@ -141,7 +142,6 @@ hfs_ramdisk(
     files = {
         "//base/launchctl": "bin/launchctl",
         "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
-        "//tests/qemu/pkg_trust:ndpkg": "usr/local/sbin/ndpkg",
         "//tests/qemu/pkg_trust:pkg_probe": "usr/local/libexec/pkg_probe/pkg-probe",
     } | _NETWORK_FILES | _PKG_TRUST_DATA,
     links = _SYSTEM_LINKS,
@@ -152,6 +152,39 @@ hfs_ramdisk(
         "//base:launchd_daemon",
     ],
     trust_cache_exclude = ["usr/local/libexec/pkg_probe"],
+)
+
+# P2-02's store, solver and plans (tests/qemu/ndpkg): session_root (whose
+# base has /usr/sbin/ndpkg) with an empty store, a local repository of
+# test packages in /var/ndpkg-test/repo, which /etc/ndpkg/repositories
+# names, and a tampered package beside it. Booted by
+# //tests/qemu/ndpkg:sbsa_ndpkg_test.
+_NDPKG_TEST = "private/var/ndpkg-test/"
+
+_NDPKG_DATA = {
+    "//tests/qemu/ndpkg:greet_pkg": _NDPKG_TEST + "repo/greet-1.0-aarch64.ndpkg",
+    "//tests/qemu/ndpkg:hello_pkg_v1": _NDPKG_TEST + "repo/hello-1.0-aarch64.ndpkg",
+    "//tests/qemu/ndpkg:hello_pkg_v2": _NDPKG_TEST + "repo/hello-2.0-aarch64.ndpkg",
+    "//tests/qemu/ndpkg:hello_tampered": _NDPKG_TEST + "tampered/hello-1.0-aarch64.ndpkg",
+    "//tests/qemu/ndpkg:libgreet_pkg": _NDPKG_TEST + "repo/libgreet-1.0-aarch64.ndpkg",
+    "//tests/qemu/ndpkg:repositories": "private/etc/ndpkg/repositories",
+}
+
+hfs_ramdisk(
+    name = "ndpkg_root",
+    testonly = True,
+    dirs = _SYSTEM_DIRS,
+    files = {
+        "//base/launchctl": "bin/launchctl",
+        "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
+    } | _NETWORK_FILES | _NDPKG_DATA,
+    links = _SYSTEM_LINKS,
+    modes = _NETWORK_MODES | {path: "0644" for path in _NDPKG_DATA.values()},
+    tree_modes = _SYSTEM_MODES,
+    trees = [
+        "//base:system_root",
+        "//base:launchd_daemon",
+    ],
 )
 
 # The same system with a test-only PID 1 that runs getty itself, without
@@ -307,6 +340,56 @@ gpt_disk_image(
         ":zfs_session_root_volume_trustcache": "NeoDarwin/trustcache",
     },
     root = ":zfs_session_root_volume",
+    tags = ["manual"],
+)
+
+# P3-03 (docs/architecture/filesystems.md §8): root on ZFS. The session root
+# with zpool, zfs and ndbectl (boot environments) as the files of the boot
+# environment ndpool/ROOT/default, on a disk whose ESP has boot.cfg
+# rd=zfs:ndpool (zfs-root.cfg): the kernel roots on the pool's bootfs.
+hfs_ramdisk(
+    name = "zfs_root_volume",
+    # /etc/zfs: zpool.cache, which the kernel writes.
+    dirs = _SYSTEM_DIRS + ["private/etc/zfs"],
+    files = {
+        "//base/launchctl": "bin/launchctl",
+        "//base/ndbectl": "sbin/ndbectl",
+        "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
+    } | _NETWORK_FILES,
+    journaled = True,
+    links = _SYSTEM_LINKS,
+    modes = _NETWORK_MODES,
+    volume_size = "192m",
+    tags = ["manual"],
+    tree_modes = _SYSTEM_MODES,
+    trees = [
+        "//base:system_root",
+        "//base:launchd_daemon",
+        "//kexts/zfs:zfs_commands",
+    ],
+)
+
+# The ESP and a blank 384 MB pool partition (rules/disk.bzl zfs_partition).
+gpt_disk_image(
+    name = "zfs_root_blank_disk",
+    esp = {
+        "//boot/neoboot": "EFI/BOOT/BOOTAA64.EFI",
+        "zfs-root.cfg": "NeoDarwin/boot.cfg",
+        "//kernel:sbsa_kc": "NeoDarwin/kernelcache",
+        ":zfs_root_volume_trustcache": "NeoDarwin/trustcache",
+    },
+    tags = ["manual"],
+    zfs_partition = "384m",
+)
+
+# The pool, made by a NeoDarwin guest booted from zfs_session_disk
+# (rules/zfs_image.bzl): ndpool/ROOT/default, its bootfs, with
+# zfs_root_volume's files.
+zfs_root_disk(
+    name = "zfs_root_disk",
+    blank = ":zfs_root_blank_disk",
+    builder = ":zfs_session_disk",
+    root = ":zfs_root_volume",
     tags = ["manual"],
 )
 

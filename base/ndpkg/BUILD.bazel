@@ -1,28 +1,61 @@
-load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:cc.bzl", "lang_audit_test", "nd_cc_test")
 load("//rules:darwin_executable.bzl", "swift_embedded_executable")
 
 package(default_visibility = ["//visibility:public"])
 
-# ndpkg (P2-01, docs/architecture/packaging.md §8): for now its run-time
-# trust commands, activate-trust and load-trust (Sources/Main.swift). The
-# package key chain is checked by ndamfi's C, the kernel's own verifier,
-# compiled in through the shim (src/nd_pkg.c), with OpenSSH's Ed25519.
-# Signed ad hoc without entitlements here: the kernel loads a trust cache
-# only for a caller entitled com.apple.private.pmap.load-trust-cache =
-# neodarwin.trust-cache.load, which only the P2-01 test image grants
-# (//tests/qemu/pkg_trust:ndpkg); the base gains it with P2-02's store.
+exports_files(["ndpkg.8"])
+
+# ndpkg (docs/architecture/packaging.md §5, §8): P2-01's run-time trust
+# commands and P2-02's store, activation, solver (libsolv, src/nd_solve.c)
+# and plans. The package key chain is checked by ndamfi's C, the kernel's
+# own verifier, compiled in through the shim (src/nd_pkg.c), with OpenSSH's
+# Ed25519. Linked ad hoc here; :ndpkg_entitled is the base's /usr/sbin/ndpkg.
 swift_embedded_executable(
     name = "ndpkg",
-    srcs = ["Sources/Main.swift"],
-    c_srcs = ["src/nd_pkg.c"],
+    srcs = glob(["Sources/*.swift"]),
+    c_srcs = [
+        "src/nd_pkg.c",
+        "src/nd_solve.c",
+    ],
     hdrs = [
         "NDPkgShim/module.modulemap",
         "NDPkgShim/nd_pkg.h",
         "//kernel/neodarwin/amfi:ndsign_srcs",
         "@apple_openssh//:ed25519",
     ],
+    libraries = ["//base:libsolv_static"],
     module_name = "ndpkg",
     root = "//base:root",
+)
+
+# The base's ndpkg (//base:package_tools): re-signed with the entitlements
+# the kernel checks, com.apple.private.pmap.load-trust-cache =
+# neodarwin.trust-cache.load (run-time trust caches, which ndpkg loads only
+# from packages it verified) and com.apple.private.nullfs_allow (the
+# store's nullfs mounts).
+genrule(
+    name = "ndpkg_entitled",
+    srcs = [
+        ":ndpkg",
+        "ndpkg.entitlements",
+    ],
+    outs = ["entitled/ndpkg"],
+    cmd = "cp $(location :ndpkg) $@ && chmod u+w $@ && " +
+          "codesign -s - -f -i org.neodarwin.ndpkg --entitlements $(location ndpkg.entitlements) $@ 2>/dev/null",
+    tags = ["requires-darwin"],
+)
+
+# The solver (src/nd_solve.c) on the host, over the same libsolv release.
+nd_cc_test(
+    name = "solve_test",
+    size = "small",
+    srcs = [
+        "NDPkgShim/nd_pkg.h",
+        "src/nd_solve.c",
+        "test/solve_test.c",
+    ],
+    includes = ["NDPkgShim"],
+    deps = ["@opensuse_libsolv//:solv_host"],
 )
 
 lang_audit_test(
@@ -30,5 +63,6 @@ lang_audit_test(
     srcs = [
         "NDPkgShim/nd_pkg.h",
         "src/nd_pkg.c",
+        "src/nd_solve.c",
     ],
 )

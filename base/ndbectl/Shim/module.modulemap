@@ -1,0 +1,4 @@
+module Shim {
+  header "shim.h"
+  export *
+}

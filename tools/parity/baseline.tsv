@@ -646,7 +646,7 @@ usr.sbin/nvram	n/a	no
 usr.sbin/ofwdump	n/a	no
 usr.sbin/pciconf	new	yes
 usr.sbin/periodic	freebsd	no
-usr.sbin/pkg	equivalent	no
+usr.sbin/pkg	equivalent	yes
 usr.sbin/pmc	n/a	no
 usr.sbin/pmcannotate	n/a	no
 usr.sbin/pmccontrol	n/a	no

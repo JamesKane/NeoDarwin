@@ -272,7 +272,8 @@ func startAudit() {
 /// can't run on a read-only root). Then `mount -uw /`. mount finds the
 /// root's device, which the kernel names "root_device", in the fstab entry
 /// Libinfo synthesizes for "/" from the /dev node whose device number is the
-/// root's.
+/// root's. A root on ZFS (P3-03, docs/architecture/filesystems.md §8) has
+/// no fsck (its checksums and scrubs are its checks): it is only remounted.
 func checkAndRemountRoot() {
     var fs = statfs()
     guard statfs("/", &fs) == 0 else {
@@ -280,6 +281,15 @@ func checkAndRemountRoot() {
         return
     }
     guard (fs.f_flags & UInt32(MNT_RDONLY)) != 0 else { return }
+    let type = withUnsafeBytes(of: fs.f_fstypename) { raw in
+        String(decoding: raw.prefix(while: { $0 != 0 }), as: UTF8.self)
+    }
+    if type == "zfs" {
+        remountZFS(withUnsafeBytes(of: fs.f_mntfromname) { raw in
+            String(decoding: raw.prefix(while: { $0 != 0 }), as: UTF8.self)
+        })
+        return
+    }
     if !isSafeBoot() {
         warn("Running fsck on the boot volume...")
         let status = run(["/sbin/fsck", "-q"])
@@ -305,6 +315,17 @@ func checkAndRemountRoot() {
 func remount() {
     let status = run(["/sbin/mount", "-uw", "/"])
     if status > 0 { warn("mount -uw / exited with status: \(status)") }
+}
+
+/// A ZFS root read-write: mount(2) with MNT_UPDATE, as `mount -uw /` would
+/// through a mount_zfs NeoDarwin doesn't build; zfs.kext upgrades the
+/// mount when MNT_RDONLY is dropped.
+func remountZFS(_ dataset: String) {
+    let error = dataset.withCString { name in
+        var args = nd_zfs_mount_args(fspec: name, mflag: 0, optptr: nil, optlen: 0, struct_size: 0)
+        return mount("zfs", "/", MNT_UPDATE, &args)
+    }
+    if error != 0 { warn("remounting the ZFS root \(dataset) read-write: \(errorString(__error().pointee))") }
 }
 
 /// kern.safeboot, as launchctl-842's is_safeboot().

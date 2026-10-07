@@ -5,6 +5,7 @@
 # boots.
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:kc.bzl", "KERNEL_ABI")
 load("//rules:kext.bzl", "nd_kext")
 
 package(default_visibility = ["//visibility:public"])
@@ -24,6 +25,7 @@ filegroup(
 nd_kext(
     name = "swift_trial",
     bundle = "NDSwiftTrial.kext",
+    kernel_abi = KERNEL_ABI,
     data = ["//kernel/neodarwin/pthread:kernel_srcs"],  # compat/TargetConditionals.h
     embedded_swift = True,
     script = "kext.sh",
