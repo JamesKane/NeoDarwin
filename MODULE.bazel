@@ -322,7 +322,19 @@ http_archive(
 
 http_archive(
     name = "facebook_zstd",
-    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    # :all for base/zstd; :zstd_host, the library alone for host tools
+    # (//tools/ndsign compresses .ndpkg archives with it, P2-01).
+    build_file_content = """load("@rules_cc//cc:cc_library.bzl", "cc_library")
+filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])
+cc_library(
+    name = "zstd_host",
+    srcs = glob(["lib/common/*.c", "lib/common/*.h", "lib/compress/*.c", "lib/compress/*.h", "lib/decompress/*.c", "lib/decompress/*.h"]),
+    hdrs = ["lib/zstd.h", "lib/zstd_errors.h"],
+    includes = ["lib"],
+    local_defines = ["ZSTD_DISABLE_ASM", "ZSTD_MULTITHREAD=0", "XXH_NAMESPACE=ZSTD_"],
+    visibility = ["//visibility:public"],
+)
+""",
     sha256 = "eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3",
     strip_prefix = "zstd-1.5.7",
     urls = ["https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz"],
@@ -580,7 +592,14 @@ http_archive(
 
 http_archive(
     name = "apple_openssh",
-    build_file_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])""",
+    # :all for base/openssh; :ed25519, OpenSSH's public-domain Ed25519
+    # (SUPERCOP ref10) alone, which ndamfi's grant verifier and //tools/ndsign
+    # compile through a wrapper (P2-01, docs/architecture/packaging.md).
+    build_file_content = """load("@rules_cc//cc:cc_library.bzl", "cc_library")
+filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])
+filegroup(name = "ed25519", srcs = ["openssh/crypto_api.h", "openssh/ed25519.c", "openssh/includes.h"], visibility = ["//visibility:public"])
+cc_library(name = "ed25519_src", textual_hdrs = ["openssh/crypto_api.h", "openssh/ed25519.c", "openssh/includes.h"], visibility = ["//visibility:public"])
+""",
     sha256 = "10f6ee5d5289435f3739e9eb02166383c04579f77dace9c1b81dfedb03b547db",
     strip_prefix = "OpenSSH-OpenSSH-354.0.3",
     urls = ["https://github.com/apple-oss-distributions/OpenSSH/archive/refs/tags/OpenSSH-354.0.3.tar.gz"],

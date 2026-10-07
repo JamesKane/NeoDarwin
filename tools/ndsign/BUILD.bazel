@@ -1,0 +1,114 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("@rules_swift//swift:swift_interop_hint.bzl", "swift_interop_hint")
+load("//rules:cc.bzl", "lang_audit_test")
+load("//rules:package.bzl", "nd_package")
+load("//rules:swift.bzl", "nd_swift_binary", "nd_swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# ndsign (P2-01, docs/architecture/packaging.md §3–§4): keys, the key chain,
+# signed manifests and trust-cache grants, and the .ndpkg format. The
+# documents and Ed25519 are ndamfi's C (//kernel/neodarwin/amfi:ndsign_host),
+# the code the kernel verifies grants with; the archive is ustar in a zstd
+# frame (libzstd from @facebook_zstd).
+swift_interop_hint(
+    name = "ndsign_c_module",
+    module_name = "NDSignC",
+)
+
+cc_library(
+    name = "ndsign_c",
+    hdrs = ["c/ndsign_c.h"],
+    aspect_hints = [":ndsign_c_module"],
+    deps = [
+        "//kernel/neodarwin/amfi:ndsign_host",
+        "@facebook_zstd//:zstd_host",
+    ],
+)
+
+nd_swift_library(
+    name = "ndpkg_lib",
+    srcs = [
+        "Sources/NDPkg/Archive.swift",
+        "Sources/NDPkg/Package.swift",
+        "Sources/NDPkg/Signing.swift",
+    ],
+    module_name = "NDPkg",
+    deps = [":ndsign_c"],
+)
+
+nd_swift_binary(
+    name = "ndsign",
+    srcs = ["Sources/ndsign/main.swift"],
+    deps = [":ndpkg_lib"],
+)
+
+lang_audit_test(
+    name = "ndsign_c_lang_audit",
+    srcs = ["c/ndsign_c.h"],
+)
+
+# Test-only: rewrites a member of a package without re-signing it.
+nd_swift_binary(
+    name = "tamper",
+    testonly = True,
+    srcs = ["test/tamper/main.swift"],
+    deps = [":ndpkg_lib"],
+)
+
+# The test key chain (testdata/test_keys/README: TEST-ONLY, the private keys
+# are public).
+TEST_CHAIN = [
+    "testdata/test_keys/channel.cert",
+    "testdata/test_keys/release.cert",
+]
+
+TEST_KEY = "testdata/test_keys/release.key"
+
+exports_files(glob(["testdata/test_keys/*"]))
+
+# A base command as a package: pciconf(8) and its manual page, signed with
+# the test chain. The same package twice, from two targets: the archives
+# must be byte-identical.
+[nd_package(
+    name = name,
+    testonly = True,
+    chain = TEST_CHAIN,
+    files = {
+        "//base/pciconf": "usr/sbin/pciconf",
+        "//base/pciconf:pciconf.8": "usr/share/man/man8/pciconf.8",
+    },
+    key = TEST_KEY,
+    license = "BSD-2-Clause",
+    pkg_name = "pciconf",
+    provides = ["cmd:pciconf"],
+    version = "1.0",
+) for name in [
+    "pciconf_pkg",
+    "pciconf_pkg_again",
+]]
+
+# Keys, certificates, grants, packages: good, bad and expired chains, a
+# wrong key, tampered contents, superseded certificates, reproducibility.
+sh_test(
+    name = "ndsign_test",
+    size = "small",
+    srcs = ["ndsign_test.sh"],
+    args = [
+        "$(rootpath :ndsign)",
+        "$(rootpath :tamper)",
+        "$(rootpath //tools/trustcache)",
+        "$(rootpath :pciconf_pkg)",
+        "$(rootpath :pciconf_pkg_again)",
+        "$(rootpath testdata/test_keys/root.pub)",
+    ],
+    data = [
+        ":ndsign",
+        ":pciconf_pkg",
+        ":pciconf_pkg_again",
+        ":tamper",
+        "//tools/trustcache",
+    ] + glob(["testdata/test_keys/*"]),
+    tags = ["requires-darwin"],
+)

@@ -1,0 +1,11 @@
+expires = 4102444800
+issuer = "97e6ee9328db05acf098d5da40942ab27bb69843b9e1350e36d78cb6749fae73"
+key = "e4d6296afcdd1537ba32446e15232fcf047c89a5720d9206af96fe4466b99b7e"
+kind = "channel"
+name = "test"
+previous = ""
+schema = 1
+scope = "*"
+seq = 1
+usage = "manifest trust-cache"
+signature = "aa4e8397299c6b79fea22e54e397ac7f2c76e119bfe09336d371364f40df303a42223232b7ba7749b4369e2aa84d7dda45d1cc48936f231e604772563d428d07"

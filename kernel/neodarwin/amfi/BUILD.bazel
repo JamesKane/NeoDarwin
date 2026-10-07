@@ -28,6 +28,60 @@ nd_cc_library(
     ],
 )
 
+# ndsign's documents and Ed25519 (P2-01, docs/architecture/packaging.md §4):
+# the code ndamfi's grant verifier runs, built for the host, where
+# //tools/ndsign signs with it and the tests check it. OpenSSH's Ed25519
+# compiles unmodified through nd_ed25519.c, without NeoDarwin's warnings.
+nd_cc_library(
+    name = "ed25519_host",
+    srcs = ["nd_ed25519.c"],
+    hdrs = ["nd_ndsign.h"],
+    copts = ["-w"],
+    deps = ["@apple_openssh//:ed25519_src"],
+)
+
+nd_cc_library(
+    name = "ndsign_host",
+    srcs = ["nd_ndsign.c"],
+    hdrs = ["nd_ndsign.h"],
+    deps = [":ed25519_host"],
+)
+
+# RFC 8032's vectors, and a grant //tools/ndsign wrote (the test chain,
+# tools/ndsign/testdata/test_keys: TEST-ONLY) checked as the kernel does.
+filegroup(
+    name = "pciconf_pkg_trustcache",
+    testonly = True,
+    srcs = ["//tools/ndsign:pciconf_pkg"],
+    output_group = "trustcache",
+)
+
+filegroup(
+    name = "pciconf_pkg_grant",
+    testonly = True,
+    srcs = ["//tools/ndsign:pciconf_pkg"],
+    output_group = "grant",
+)
+
+nd_cc_test(
+    name = "ndsign_test",
+    size = "small",
+    srcs = ["test/ndsign_test.c"],
+    args = [
+        "$(rootpath :pciconf_pkg_trustcache)",
+        "$(rootpath :pciconf_pkg_grant)",
+        "$(rootpath //tools/ndsign:testdata/test_keys/root.pub)",
+        "$(rootpath //tools/ndsign:testdata/test_keys/other-root.pub)",
+    ],
+    data = [
+        ":pciconf_pkg_grant",
+        ":pciconf_pkg_trustcache",
+        "//tools/ndsign:testdata/test_keys/other-root.pub",
+        "//tools/ndsign:testdata/test_keys/root.pub",
+    ],
+    deps = [":ndsign_host"],
+)
+
 # A module //tools/trustcache writes, listing the tool itself (an ad hoc,
 # linker-signed arm64 binary), and the tool's cdhash for it: trustcache_test
 # round-trips it through the engine.

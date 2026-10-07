@@ -1,0 +1,12 @@
+TEST-ONLY KEYS. NOT FOR RELEASES. The private keys here are public.
+
+A test key chain for ndsign and nd_package (P2-01,
+docs/architecture/packaging.md §4): root -> channel "test" -> release
+"test-release", both certificates seq 1, expiring 2100-01-01
+(4102444800), scope "*", usage manifest and trust-cache. other-root is an
+unrelated key for "wrong key" tests. A kernel trusts this root only when a
+test boots it with nd_pkg_root=<root.pub> (docs/kernel/amfi-provider.md
+§4.5); no image NeoDarwin ships names it.
+
+Regenerated with //tools/ndsign: ndsign keygen NAME, then ndsign certify
+(see tools/ndsign/Sources/ndsign/main.swift).

@@ -1,0 +1,11 @@
+expires = 4102444800
+issuer = "e4d6296afcdd1537ba32446e15232fcf047c89a5720d9206af96fe4466b99b7e"
+key = "9b0695e8d0851e68460bf03b6c5b57ef7176721cdc1a887d6a5334e65f362c7f"
+kind = "release"
+name = "test-release"
+previous = ""
+schema = 1
+scope = "*"
+seq = 1
+usage = "manifest trust-cache"
+signature = "f214098b4b3c15307c3ceb123092e6ad393e7c08492c8c5ae70f240ca149327624ccf71a81e75e8da981a59d47badaf38f4369676f17efb20d4ee97a40d8bd08"
