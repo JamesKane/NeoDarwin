@@ -1,0 +1,255 @@
+# SPDX-License-Identifier: BSD-2-Clause
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules:darwin_executable.bzl", "swift_embedded_executable")
+load("//rules:package.bzl", "nd_package", "nd_system_tree")
+load(":repo.bzl", "wait_for")
+
+package(default_visibility = ["//visibility:public"])
+
+# P2-03's test system sets (docs/architecture/packaging.md §6.1), signed with
+# the TEST-ONLY chain (//tools/ndsign:testdata/test_keys). Each version N of
+# the set neodarwin-system pins kernel N and nd-release N:
+#   1: //kernel:sbsa_kc, the release image's (//images:ndsystem_disk);
+#   2: //kernel:sbsa_marker_kc, which logs "NDSwiftTrial: starting";
+#   3: //kernel:sbsa_kernel_only_kc, broken on purpose: without zfs.kext the
+#      root on ZFS never mounts, so its boot never reaches confirm.
+# Each kernel package carries the base's static trust cache
+# (//images:ndsystem_base_volume_trustcache, which lists nd-release 1);
+# nd-release 2 and 3 have their own trust caches, which `ndpkg boot` loads.
+
+_CHAIN = [
+    "//tools/ndsign:testdata/test_keys/channel.cert",
+    "//tools/ndsign:testdata/test_keys/release.cert",
+]
+
+_KEY = "//tools/ndsign:testdata/test_keys/release.key"
+
+_KERNELS = {
+    "1": "//kernel:sbsa_kc",
+    "2": "//kernel:sbsa_marker_kc",
+    "3": "//kernel:sbsa_kernel_only_kc",
+}
+
+[genrule(
+    name = "nd_release_src_" + v,
+    srcs = ["nd-release.swift.in"],
+    outs = ["nd_release_" + v + "/Main.swift"],
+    cmd = "sed 's/@VERSION@/" + v + "/' $< > $@",
+) for v in _KERNELS]
+
+[swift_embedded_executable(
+    name = "nd_release_" + v,
+    srcs = [":nd_release_src_" + v],
+    out = "nd_release_" + v + "/nd-release",
+    module_name = "nd_release",
+    root = "//base:root",
+) for v in _KERNELS]
+
+[nd_package(
+    name = "nd_release_pkg_" + v,
+    chain = _CHAIN,
+    files = {":nd_release_" + v: "usr/bin/nd-release"},
+    key = _KEY,
+    kind = "system",
+    license = "BSD-2-Clause",
+    pkg_name = "nd-release",
+    version = v,
+) for v in _KERNELS]
+
+[nd_package(
+    name = "kernel_pkg_" + v,
+    chain = _CHAIN,
+    files = {
+        kc: "System/Library/Kernels/kernelcache",
+        "//images:ndsystem_base_volume_trustcache": "System/Library/Kernels/trustcache",
+    },
+    key = _KEY,
+    kind = "kernel-collection",
+    license = "APSL-2.0 AND CDDL-1.0",
+    pkg_name = "kernel",
+    # The collection is loaded by neoboot, not run: no code signature.
+    trust_cache_exclude = ["System/Library/Kernels/kernelcache"],
+    version = v,
+) for v, kc in _KERNELS.items()]
+
+[nd_package(
+    name = "set_pkg_" + v,
+    chain = _CHAIN,
+    key = _KEY,
+    kind = "system-set",
+    license = "BSD-2-Clause",
+    pkg_name = "neodarwin-system",
+    requires = [
+        "kernel = " + v,
+        "nd-release = " + v,
+    ],
+    version = v,
+) for v in _KERNELS]
+
+# The release image's boot environment: set 1 installed, receipts and all.
+nd_system_tree(
+    name = "release_tree",
+    packages = [
+        ":set_pkg_1",
+        ":kernel_pkg_1",
+        ":nd_release_pkg_1",
+    ],
+    root = "//tools/ndsign:testdata/test_keys/root.pub",
+)
+
+# nd-release 1 alone, for the base volume whose trust cache the kernel
+# packages carry.
+nd_system_tree(
+    name = "base_tree",
+    packages = [":nd_release_pkg_1"],
+    root = "//tools/ndsign:testdata/test_keys/root.pub",
+)
+
+# neoboot's command line: root on ZFS, the test package root, and the BE
+# whose kernel the ESP's be/ holds (packaging.md §6.1).
+genrule(
+    name = "boot_cfg",
+    srcs = ["//tools/ndsign:testdata/test_keys/root.pub"],
+    outs = ["boot.cfg"],
+    cmd = "echo \"debug=0x14e serial=3 -v -noprogress rd=zfs:ndpool nd_pkg_root=$$(cat $<) be=default\" > $@",
+)
+
+genrule(
+    name = "set_default",
+    outs = ["sets/default"],
+    cmd = "echo 'neodarwin-system 1' > $@",
+)
+
+# P2-03's exit (packaging.md §6.1): six boots of one copy of the release
+# image (//images:ndsystem_disk, set 1).
+#   1. default (set 1): `ndpkg system upgrade 2` makes BE neodarwin-system-2,
+#      installs kernel 2 and nd-release 2 into it, writes the ESP and sets
+#      the try.
+#   2. neoboot takes the try (and deletes it); kernel 2's marker kext logs;
+#      the boot job loads nd-release 2's trust cache and confirms the BE.
+#   3. neodarwin-system-2 again, now the default; `ndpkg system upgrade`
+#      takes the newest, the broken set 3.
+#   4. the try boots kernel 3, which has no zfs.kext: the root never mounts.
+#   5. the try was used up: neodarwin-system-2 boots, the boot job reports
+#      the failed try; `ndpkg system rollback` makes default the default.
+#   6. default (set 1) again.
+_PROMPT = "--send-after 'root@localhost ~ # ' "
+
+_REPO = "/var/ndpkg-test/sysrepo"
+
+_BOOT = [
+    "--mem 2G",
+    "--until-lines",
+    "--send-after 'login: ' 'root\\n'",
+]
+
+sh_test(
+    name = "sbsa_ndsystem_test",
+    size = "large",
+    srcs = ["//tools/efi:qemu_disk_reboot_test.sh"],
+    args = ["$(rootpath //images:ndsystem_disk)"] + _BOOT + [
+        "--absent 'panic('",
+        "--absent 'NDSwiftTrial'",
+        _PROMPT + "'" + wait_for("booted default; no try to confirm") + "mount; nd-release; ndpkg system status; ndpkg system list; ndpkg index " + _REPO + " && ndpkg -r " + _REPO + " system upgrade 2 && ndpkg system list && zpool sync ndpool && echo step-$$((6*7))\\n'",
+        "-",
+        "300",
+        "'neoboot: boot environment default (boot.cfg be=)'",
+        "'rooting via ZFS: ndpool/ROOT/default'",
+        "'ndpkg: system: booted default; no try to confirm'",
+        "'ndpool/ROOT/default on / (zfs'",
+        "'nd-release: system set 1'",
+        "'booted: default (neodarwin-system 1)'",
+        "'package: kernel 1 (kernel-collection)'",
+        "'ndpkg: system: neodarwin-system 1 -> 2: 3 packages verified'",
+        "'ndbectl: created ndpool/ROOT/neodarwin-system-2 from ndpool/ROOT/default@neodarwin-system-2'",
+        "'ndpkg: system: kernel 1 -> 2 (kernel-collection)'",
+        "'ndpkg: system: nd-release 1 -> 2 (system)'",
+        "'ndpkg: system: the ESP (/dev/rdisk'",
+        "'ndpkg: system: neodarwin-system-2 boots once at the next boot (then default again'",
+        "'default ND neodarwin-system 1'",
+        "'neodarwin-system-2 T neodarwin-system 2'",
+        "'step-42'",
+        "--reboot",
+    ] + _BOOT + [
+        "--absent 'panic('",
+        _PROMPT + "'" + wait_for("neodarwin-system-2 confirmed") + "mount; nd-release; ndpkg system status; ndpkg system list; zpool sync ndpool && echo step-$$((6*7))\\n'",
+        "-",
+        "300",
+        "'neoboot: boot environment neodarwin-system-2: tried once'",
+        "'NDSwiftTrial: starting'",
+        "'rooting via ZFS: ndpool/ROOT/neodarwin-system-2'",
+        "'ndpkg: boot: nd-release 2: trust cache loaded'",
+        "'ndpkg: system: neodarwin-system-2 confirmed: the default from now on (previous: default)'",
+        "'ndpool/ROOT/neodarwin-system-2 on / (zfs'",
+        "'nd-release: system set 2'",
+        "'booted: neodarwin-system-2 (neodarwin-system 2)'",
+        "'default P neodarwin-system 1'",
+        "'neodarwin-system-2 ND neodarwin-system 2'",
+        "'step-42'",
+        "--reboot",
+    ] + _BOOT + [
+        "--absent 'panic('",
+        _PROMPT + "'" + wait_for("booted neodarwin-system-2; no try to confirm") + "nd-release; ndpkg -r " + _REPO + " system upgrade && ndpkg system list && zpool sync ndpool && echo step-$$((6*7))\\n'",
+        "-",
+        "300",
+        "'neoboot: boot environment neodarwin-system-2 (boot.cfg be=)'",
+        "'NDSwiftTrial: starting'",
+        "'ndpkg: system: booted neodarwin-system-2; no try to confirm'",
+        "'nd-release: system set 2'",
+        "'ndpkg: system: neodarwin-system 2 -> 3: 3 packages verified'",
+        "'ndpkg: system: kernel 2 -> 3 (kernel-collection)'",
+        "'neodarwin-system-3 T neodarwin-system 3'",
+        "'step-42'",
+        "--reboot",
+        # Kernel 3 has no zfs.kext: nothing reads the pool or publishes the
+        # root, and the kernel waits for it after IOKit has matched every
+        # driver (en0 named); the test stops QEMU there, as a watchdog would.
+        "--mem 2G",
+        "--until-lines",
+        "--absent 'NDSwiftTrial'",
+        "--absent 'zfs_boot_probe_disk'",
+        "--absent 'login: '",
+        "-",
+        "300",
+        "'neoboot: boot environment neodarwin-system-3: tried once'",
+        "'rooting via ZFS: ndpool/ROOT/neodarwin-system-3'",
+        "'NeoDarwinInterfaceNamer: en0: IOEthernetInterface'",
+        "--reboot",
+    ] + _BOOT + [
+        "--absent 'panic('",
+        _PROMPT + "'" + wait_for("the try of neodarwin-system-3 failed") + "mount; nd-release; ndpkg system rollback && ndpkg system list && zpool sync ndpool && echo step-$$((6*7))\\n'",
+        "-",
+        "300",
+        "'neoboot: boot environment neodarwin-system-2 (boot.cfg be=)'",
+        "'NDSwiftTrial: starting'",
+        "'ndpkg: system: the try of neodarwin-system-3 failed: booted neodarwin-system-2, the default'",
+        "'ndpool/ROOT/neodarwin-system-2 on / (zfs'",
+        "'nd-release: system set 2'",
+        "'ndpkg: system: rolled back: default (neodarwin-system 1) boots from the next boot on'",
+        "'default D neodarwin-system 1'",
+        "'neodarwin-system-2 NP neodarwin-system 2'",
+        "'neodarwin-system-3 - neodarwin-system 3'",
+        "'step-42'",
+        "--reboot",
+    ] + _BOOT + [
+        "--absent 'panic('",
+        "--absent 'NDSwiftTrial'",
+        _PROMPT + "'" + wait_for("booted default; no try to confirm") + "mount; nd-release; ndpkg system status; echo step-$$((6*7))\\n'",
+        "-",
+        "300",
+        "'neoboot: boot environment default (boot.cfg be=)'",
+        "'ndpool/ROOT/default on / (zfs'",
+        "'nd-release: system set 1'",
+        "'booted: default (neodarwin-system 1)'",
+        "'previous: neodarwin-system-2'",
+        "'step-42'",
+    ],
+    data = [
+        "//images:ndsystem_disk",
+        "//tools/efi:qemu_efi_test.sh",
+    ],
+    tags = [
+        "manual",
+        "qemu",
+    ],
+)

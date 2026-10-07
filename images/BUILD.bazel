@@ -1,6 +1,7 @@
 load("//rules:disk.bzl", "gpt_disk_image")
 load("//rules:ramdisk.bzl", "hfs_ramdisk")
 load("//rules:zfs_image.bzl", "zfs_root_disk")
+load("//tests/qemu/ndsystem:repo.bzl", "REPO_FILES")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -353,7 +354,6 @@ hfs_ramdisk(
     dirs = _SYSTEM_DIRS + ["private/etc/zfs"],
     files = {
         "//base/launchctl": "bin/launchctl",
-        "//base/ndbectl": "sbin/ndbectl",
         "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
     } | _NETWORK_FILES,
     journaled = True,
@@ -367,6 +367,82 @@ hfs_ramdisk(
         "//base:launchd_daemon",
         "//kexts/zfs:zfs_commands",
     ],
+)
+
+# P2-03 (docs/architecture/packaging.md §6.1): the "release image", a root
+# on ZFS installed from system set 1 (//tests/qemu/ndsystem): its
+# kernel-collection package's kernelcache and trust cache, nd-release 1,
+# their receipts, and the ESP's mirror on ndpool/pkg (the store's dataset,
+# shared by every BE), with sets 2 and 3 in a local repository.
+_NDSYSTEM_FILES = {
+    "//base/launchctl": "bin/launchctl",
+    "//base/sshd_keygen_wrapper": "usr/libexec/sshd-keygen-wrapper",
+} | _NETWORK_FILES
+
+_NDSYSTEM_TREES = [
+    "//base:system_root",
+    "//base:launchd_daemon",
+    "//kexts/zfs:zfs_commands",
+]
+
+# The base of set 1, for its static trust cache (which lists nd-release 1).
+hfs_ramdisk(
+    name = "ndsystem_base_volume",
+    files = _NDSYSTEM_FILES,
+    modes = _NETWORK_MODES,
+    trees = _NDSYSTEM_TREES + ["//tests/qemu/ndsystem:base_tree"],
+    volume_size = "192m",
+    dirs = _SYSTEM_DIRS + ["private/etc/zfs"],
+    journaled = True,
+    links = _SYSTEM_LINKS,
+    tags = ["manual"],
+    tree_modes = _SYSTEM_MODES,
+)
+
+_ESP_MIRROR = "private/var/db/ndpkg/system/esp/"
+
+_NDSYSTEM_ESP = {
+    "//boot/neoboot": "EFI/BOOT/BOOTAA64.EFI",
+    "//tests/qemu/ndsystem:boot_cfg": "NeoDarwin/boot.cfg",
+    "//kernel:sbsa_kc": "NeoDarwin/be/default/kernelcache",
+    ":ndsystem_base_volume_trustcache": "NeoDarwin/be/default/trustcache",
+}
+
+hfs_ramdisk(
+    name = "ndsystem_volume",
+    files = _NDSYSTEM_FILES | {k: _ESP_MIRROR + v for k, v in _NDSYSTEM_ESP.items()} | {
+        "//tests/qemu/ndsystem:set_default": "private/var/db/ndpkg/system/sets/default",
+    } | REPO_FILES,
+    modes = _NETWORK_MODES,
+    # Kernel collections: loaded by neoboot, not run, so not signed.
+    trust_cache_exclude = [
+        "System/Library/Kernels/kernelcache",
+        _ESP_MIRROR + "NeoDarwin/be/default/kernelcache",
+    ],
+    trees = _NDSYSTEM_TREES + ["//tests/qemu/ndsystem:release_tree"],
+    volume_size = "320m",
+    dirs = _SYSTEM_DIRS + ["private/etc/zfs"],
+    journaled = True,
+    links = _SYSTEM_LINKS,
+    tags = ["manual"],
+    tree_modes = _SYSTEM_MODES,
+)
+
+gpt_disk_image(
+    name = "ndsystem_blank_disk",
+    esp = _NDSYSTEM_ESP,
+    esp_size = "160m",
+    tags = ["manual"],
+    zfs_partition = "768m",
+)
+
+zfs_root_disk(
+    name = "ndsystem_disk",
+    blank = ":ndsystem_blank_disk",
+    builder = ":zfs_session_disk",
+    datasets = {"pkg": "/private/var/db/ndpkg"},
+    root = ":ndsystem_volume",
+    tags = ["manual"],
 )
 
 # The ESP and a blank 384 MB pool partition (rules/disk.bzl zfs_partition).

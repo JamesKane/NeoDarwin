@@ -90,7 +90,7 @@ typedef struct EFI_FILE_PROTOCOL {
 	EFI_STATUS (*Open)(struct EFI_FILE_PROTOCOL *This, struct EFI_FILE_PROTOCOL **NewHandle, CHAR16 *FileName,
 	    uint64_t OpenMode, uint64_t Attributes);
 	EFI_STATUS (*Close)(struct EFI_FILE_PROTOCOL *This);
-	void *Delete;
+	EFI_STATUS (*Delete)(struct EFI_FILE_PROTOCOL *This);  // closes the handle, whatever it returns
 	EFI_STATUS (*Read)(struct EFI_FILE_PROTOCOL *This, uint64_t *BufferSize, void *Buffer);
 	void *Write;
 	EFI_STATUS (*GetPosition)(struct EFI_FILE_PROTOCOL *This, uint64_t *Position);
@@ -101,7 +101,7 @@ typedef struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
 	uint64_t Revision;
 	EFI_STATUS (*OpenVolume)(struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *This, EFI_FILE_PROTOCOL **Root);
 } EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
-enum { EFI_FILE_MODE_READ = 1 };
+enum { EFI_FILE_MODE_READ = 1, EFI_FILE_MODE_WRITE = 2 };
 
 // EFI_DEVICE_PATH_PROTOCOL (UEFI 2.10 §10.2): where a handle's device is,
 // as nodes of a type, a subtype and a 16-bit little-endian length (the

@@ -284,7 +284,9 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     // The command line first: it may ask for the ACPI dump.
     guard let linePage = fw.allocate(pages: 1) else { return fail("out of memory") }
     let config = UnsafeMutableRawPointer(bitPattern: UInt(linePage))!
-    let configLength = readBootConfig(root, into: config)
+    var configLength = readBootConfig(root, into: config)
+    // The boot environment, when the ESP has per-BE kernels (BootEnvironment.swift).
+    let be = chooseBootEnvironment(root, config, &configLength)
 
     // ACPI: the machine description (DT-ABI v1). No tables, no boot: the
     // loader has no built-in description to fall back on.
@@ -323,7 +325,7 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
     // The static trust cache, checked before anything is placed: the kernel
     // panics on one it can't load, so a bad one stops the boot here.
     var trustCache: (buffer: UInt64, pages: UInt64, size: UInt64)? = nil
-    if let tc = EFIFile(root: root, path: trustCachePath) {
+    if let tc = openBootFile(root, be, trustCachePath, "trustcache") {
         let size = tc.size
         let pages = roundUp(max(size, 1), uefiPage) / uefiPage
         guard size <= trustCacheLimit, let buffer = fw.allocate(pages: pages) else {
@@ -349,7 +351,9 @@ func boot(_ fw: Firmware, _ system: UnsafeMutablePointer<EFI_SYSTEM_TABLE>) -> E
         put("neoboot: no \\NeoDarwin\\trustcache: the kernel gets no static trust cache\n")
     }
 
-    guard let file = EFIFile(root: root, path: kernelcachePath) else { return fail("no \\NeoDarwin\\kernelcache on the boot volume") }
+    guard let file = openBootFile(root, be, kernelcachePath, "kernelcache") else {
+        return fail(be == nil ? "no \\NeoDarwin\\kernelcache on the boot volume" : "no kernelcache for the boot environment on the boot volume")
+    }
     let fileSize = file.size
 
     // The header first: the link address decides where the collection may go.

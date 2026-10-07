@@ -9,7 +9,11 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <spawn.h>
+#include <sys/disk.h>
 #include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/wait.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
@@ -490,4 +494,243 @@ nd_pkg_is_mountpoint(const char *path)
 	}
 	struct stat a, b;
 	return stat(path, &a) == 0 && stat(dirname(parent), &b) == 0 && a.st_dev != b.st_dev;
+}
+
+// -- system sets (P2-03) -------------------------------------------------------------
+
+char *
+nd_pkg_root_dataset(void)
+{
+	struct statfs fs;
+	if (statfs("/", &fs) != 0 || strcmp(fs.f_fstypename, "zfs") != 0) {
+		return NULL;
+	}
+	return strdup(fs.f_mntfromname);
+}
+
+extern char **environ;
+
+int
+nd_pkg_run(const char *const *argv, char **output)
+{
+	int fds[2] = {-1, -1};
+	posix_spawn_file_actions_t actions;
+	posix_spawn_file_actions_init(&actions);
+	if (output != NULL) {
+		*output = NULL;
+		if (pipe(fds) != 0) {
+			posix_spawn_file_actions_destroy(&actions);
+			return -1;
+		}
+		posix_spawn_file_actions_adddup2(&actions, fds[1], 1);
+		posix_spawn_file_actions_addclose(&actions, fds[0]);
+	}
+	char *env[] = {"PATH=/usr/bin:/bin:/usr/sbin:/sbin", NULL};
+	pid_t pid;
+	int e = posix_spawn(&pid, argv[0], &actions, NULL, (char *const *)argv, env);
+	posix_spawn_file_actions_destroy(&actions);
+	if (output != NULL) {
+		close(fds[1]);
+	}
+	if (e != 0) {
+		if (output != NULL) {
+			close(fds[0]);
+		}
+		errno = e;
+		return -1;
+	}
+	if (output != NULL) {
+		size_t len = 0, cap = 4096;
+		char *buf = malloc(cap);
+		for (;;) {
+			if (len + 1 >= cap) {
+				cap *= 2;
+				buf = realloc(buf, cap);
+			}
+			ssize_t n = read(fds[0], buf + len, cap - len - 1);
+			if (n > 0) {
+				len += (size_t)n;
+			} else if (n < 0 && errno == EINTR) {
+				continue;
+			} else {
+				break;
+			}
+		}
+		buf[len] = 0;
+		close(fds[0]);
+		*output = buf;
+	}
+	int status;
+	while (waitpid(pid, &status, 0) == -1) {
+		if (errno != EINTR) {
+			return -1;
+		}
+	}
+	return WIFSIGNALED(status) ? 128 + WTERMSIG(status) : WEXITSTATUS(status);
+}
+
+long long
+nd_pkg_device_size(const char *device)
+{
+	int fd = open(device, O_RDONLY);
+	if (fd < 0) {
+		return -1;
+	}
+	uint64_t count = 0;
+	uint32_t size = 0;
+	long long r = -1;
+	if (ioctl(fd, DKIOCGETBLOCKCOUNT, &count) == 0 && ioctl(fd, DKIOCGETBLOCKSIZE, &size) == 0) {
+		r = (long long)(count * size);
+	}
+	close(fd);
+	return r;
+}
+
+int
+nd_pkg_write_esp(const char *image, const char *device)
+{
+	long long size = nd_pkg_device_size(device);
+	int in = open(image, O_RDONLY);
+	if (in < 0) {
+		return errno;
+	}
+	struct stat st;
+	if (fstat(in, &st) != 0 || size < 0 || st.st_size != size) {
+		close(in);
+		return EINVAL;
+	}
+	int out = open(device, O_RDWR);
+	if (out < 0) {
+		int e = errno;
+		close(in);
+		return e;
+	}
+	// Only over a FAT file system: the boot sector's signature, and "FAT" at
+	// the FAT32 (82) or FAT12/16 (54) type field.
+	uint8_t *buf = malloc(1 << 20);
+	int e = 0;
+	if (pread(out, buf, 512, 0) != 512 || buf[510] != 0x55 || buf[511] != 0xaa ||
+	    (memcmp(buf + 82, "FAT", 3) != 0 && memcmp(buf + 54, "FAT", 3) != 0)) {
+		e = EINVAL;
+	}
+	for (off_t at = 0; e == 0 && at < st.st_size;) {
+		ssize_t n = pread(in, buf, 1 << 20, at);
+		if (n <= 0) {
+			e = n < 0 ? errno : EIO;
+			break;
+		}
+		if (pwrite(out, buf, (size_t)n, at) != n) {
+			e = errno ? errno : EIO;
+			break;
+		}
+		at += n;
+	}
+	if (e == 0 && fsync(out) != 0) {
+		e = errno;
+	}
+	if (e == 0) {
+		(void)ioctl(out, DKIOCSYNCHRONIZECACHE);
+	}
+	free(buf);
+	close(out);
+	close(in);
+	return e;
+}
+
+// GPT (UEFI 2.10 §5.3): the header at LBA 1, its entry array.
+static const uint8_t esp_type[16] = {0x28, 0x73, 0x2a, 0xc1, 0x1f, 0xf8, 0xd2, 0x11,
+                                     0xba, 0x4b, 0x00, 0xa0, 0xc9, 0x3e, 0xc9, 0x3b};
+
+// A GUID's text (8-4-4-4-12) in its on-disk byte order (the first three
+// fields little-endian); false if it isn't one.
+static bool
+guid_parse(const char *t, uint8_t out[16])
+{
+	static const int order[16] = {3, 2, 1, 0, 5, 4, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15};
+	int n = 0;
+	for (const char *c = t; *c && n < 32; c++) {
+		if (*c == '-') {
+			continue;
+		}
+		int v = (*c >= '0' && *c <= '9') ? *c - '0' : (*c >= 'a' && *c <= 'f') ? *c - 'a' + 10 :
+		    (*c >= 'A' && *c <= 'F') ? *c - 'A' + 10 : -1;
+		if (v < 0) {
+			return false;
+		}
+		uint8_t *b = &out[order[n / 2]];
+		*b = (uint8_t)((n % 2) ? (*b | v) : (v << 4));
+		n++;
+	}
+	return n == 32;
+}
+
+// Disk `disk`'s GPT: the index (from 1) of the partition with unique GUID
+// `uuid` (if non-NULL) in *found, and of its EFI System Partition in *esp.
+static void
+gpt_scan(int disk, const uint8_t *uuid, int *found, int *esp)
+{
+	char dev[32];
+	snprintf(dev, sizeof(dev), "/dev/rdisk%d", disk);
+	*found = *esp = 0;
+	int fd = open(dev, O_RDONLY);
+	if (fd < 0) {
+		return;
+	}
+	uint32_t bs = 0;
+	uint8_t *buf = NULL;
+	if (ioctl(fd, DKIOCGETBLOCKSIZE, &bs) != 0 || bs < 512 || bs > 4096 || (buf = malloc(bs)) == NULL ||
+	    pread(fd, buf, bs, bs) != (ssize_t)bs || memcmp(buf, "EFI PART", 8) != 0) {
+		goto out;
+	}
+	uint64_t lba;
+	uint32_t count, size;
+	memcpy(&lba, buf + 72, 8);
+	memcpy(&count, buf + 80, 4);
+	memcpy(&size, buf + 84, 4);
+	if (size < 128 || size > bs || count > 1024) {
+		goto out;
+	}
+	uint8_t *entries = malloc((size_t)count * size + bs);
+	size_t bytes = ((size_t)count * size + bs - 1) / bs * bs;
+	if (entries != NULL && pread(fd, entries, bytes, (off_t)(lba * bs)) == (ssize_t)bytes) {
+		for (uint32_t i = 0; i < count; i++) {
+			const uint8_t *e = entries + (size_t)i * size;
+			if (memcmp(e, esp_type, 16) == 0 && *esp == 0) {
+				*esp = (int)i + 1;
+			}
+			if (uuid != NULL && memcmp(e + 16, uuid, 16) == 0) {
+				*found = (int)i + 1;
+			}
+		}
+	}
+	free(entries);
+out:
+	free(buf);
+	close(fd);
+}
+
+int
+nd_pkg_find_esp(const char *vdev, char *out, size_t len)
+{
+	// /dev/diskNsM (through any links): disk N.
+	char *real = realpath(vdev, NULL);
+	int disk = -1, m;
+	if (real != NULL && sscanf(real, "/dev/disk%ds%d", &disk, &m) != 2) {
+		disk = -1;
+	}
+	free(real);
+	// .../media-<partition GUID> (the macOS port's by-id names): the disk
+	// whose GPT has that partition.
+	uint8_t uuid[16];
+	const char *media = strstr(vdev, "media-");
+	bool by_uuid = disk < 0 && media != NULL && guid_parse(media + 6, uuid);
+	for (int d = disk < 0 ? 0 : disk; d <= (disk < 0 ? 63 : disk); d++) {
+		int found, esp;
+		gpt_scan(d, by_uuid ? uuid : NULL, &found, &esp);
+		if ((disk >= 0 || (by_uuid && found)) && esp) {
+			snprintf(out, len, "/dev/rdisk%ds%d", d, esp);
+			return 0;
+		}
+	}
+	return ENOENT;
 }

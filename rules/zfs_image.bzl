@@ -17,7 +17,8 @@ def _impl(ctx):
     ctx.actions.run(
         executable = ctx.file._script,
         arguments = [out.path, log.path, ctx.file._qemu_test.path, ctx.file.blank.path,
-                     ctx.file.builder.path, ctx.file.root.path, ctx.attr.pool, ctx.attr.be],
+                     ctx.file.builder.path, ctx.file.root.path, ctx.attr.pool, ctx.attr.be] +
+                    ["%s=%s" % (k, v) for k, v in sorted(ctx.attr.datasets.items())],
         inputs = [ctx.file.blank, ctx.file.builder, ctx.file.root, ctx.file._qemu_test],
         outputs = [out, log],
         mnemonic = "ZfsRootDisk",
@@ -35,6 +36,7 @@ zfs_root_disk = rule(
         "builder": attr.label(allow_single_file = [".img"], mandatory = True, doc = "The build guest's boot disk: zfs.kext, zpool, zfs, tar and mount_hfs."),
         "root": attr.label(allow_single_file = [".hfs"], mandatory = True, doc = "The root volume whose files the boot environment gets (an hfs_ramdisk)."),
         "pool": attr.string(default = "ndpool"),
+        "datasets": attr.string_dict(doc = "Dataset -> mountpoint: datasets POOL/NAME shared by every BE, e.g. {\"pkg\": \"/private/var/db/ndpkg\"} (packaging.md §5.2)."),
         "be": attr.string(default = "default", doc = "The first boot environment, POOL/ROOT/BE."),
         "_script": attr.label(default = "//tools/zfsimage:mkpool.sh", allow_single_file = True),
         "_qemu_test": attr.label(default = "//tools/efi:qemu_efi_test.sh", allow_single_file = True),

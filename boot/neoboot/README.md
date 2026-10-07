@@ -14,6 +14,7 @@ The UEFI loader (`BOOTAA64.EFI`), in Embedded Swift (language policy T3). Design
 - writes the Apple-format device tree after it, synthesised from ACPI to DT-ABI v1 (`docs/kernel/dt-abi.md`), and checks it against the ABI;
 - copies the ACPI tables next to the tree, with their pointers rewritten, and publishes them as `/chosen/memory-map/ACPITables`;
 - places the ramdisk, publishes it as `/chosen/memory-map/RAMDisk`, and roots on it with `rd=md0` unless the command line names a root. Without a ramdisk it reads the GPT of the disk it was loaded from and passes the unique GUID of its first HFS+ partition as `/chosen boot-uuid`; `boot-uuid=<UUID>` in `boot.cfg` names the root instead (P1-10, `docs/kernel/storage.md`);
+- chooses a boot environment when the ESP carries per-BE kernels (P2-03, `Sources/BootEnvironment.swift`, `docs/architecture/packaging.md` §6.1): `\NeoDarwin\bootonce`, deleted before anything is loaded so the try is one-shot, else `be=` in `boot.cfg`; it then reads `\NeoDarwin\be\<BE>\kernelcache` and `trustcache` and pins the root with `rd=zfs:POOL/ROOT/<BE>`. Without either, nothing changes;
 - appends `cpus=1` on a multiprocessor until SMP works (P1-06), then writes `boot_args`;
 - cleans the caches, exits boot services, and enters `_start` at EL1 with the MMU off, dropping from EL2 first if the firmware ran there.
 

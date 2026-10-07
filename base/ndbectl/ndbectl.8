@@ -1,0 +1,62 @@
+.\" SPDX-License-Identifier: BSD-2-Clause
+.Dd October 7, 2026
+.Dt NDBECTL 8
+.Os NeoDarwin
+.Sh NAME
+.Nm ndbectl
+.Nd manage ZFS boot environments
+.Sh SYNOPSIS
+.Nm
+.Op Fl p Ar pool
+.Cm list | create Ar new Op Ar origin | Cm activate Oo Fl t Oc Ar be | Cm mount Ar be dir | Cm umount Ar be | Cm destroy Ar be
+.Sh DESCRIPTION
+Boot environments are the datasets
+.Ar pool Ns /ROOT/ Ns Ar be ,
+as
+.Xr bectl 8
+makes them.
+.Bl -tag -width activate
+.It Cm list
+Each BE with flags
+.Li N
+(booted),
+.Li R
+(the pool's
+.Li bootfs ) ,
+.Li T
+(the pool's
+.Li org.neodarwin:bootonce ) .
+.It Cm create Ar new Op Ar origin
+Snapshot
+.Ar origin
+(default: the booted BE) and clone it.
+.It Cm activate Oo Fl t Oc Ar be
+Set
+.Li bootfs ;
+with
+.Fl t ,
+boot
+.Ar be
+once
+.Pq Li org.neodarwin:bootonce ,
+which zfs.kext clears as it boots it.
+.It Cm mount Ar be dir , Cm umount Ar be
+Mount a BE that isn't booted.
+.It Cm destroy Ar be
+Destroy a BE that is neither booted nor active, and its origin snapshot.
+.El
+.Pp
+On a disk whose ESP has per-BE kernels
+.Pq Li be= No in Pa boot.cfg ,
+the loader pins the root to the BE whose kernel it loads, and
+.Xr ndpkg-system 8
+chooses it.
+.Sh SEE ALSO
+.Xr ndpkg-system 8 ,
+.Xr zfs 8 ,
+.Xr zpool 8
+.Sh HISTORY
+P3-03; in the base since P2-03, for
+.Xr bectl 8
+and
+.Xr zfsbootcfg 8 .

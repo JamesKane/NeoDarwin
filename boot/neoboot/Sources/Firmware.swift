@@ -83,19 +83,29 @@ struct EFIFile {
 
     /// `path` is ASCII with backslashes, e.g. "\\NeoDarwin\\kernelcache".
     init?(root: UnsafeMutablePointer<EFI_FILE_PROTOCOL>, path: StaticString) {
+        self.init(root: root, path: UnsafeRawBufferPointer(start: path.utf8Start, count: path.utf8CodeUnitCount))
+    }
+
+    /// The same with a path built at run time (BootEnvironment.swift);
+    /// `write` opens it read-write, for `delete()`.
+    init?(root: UnsafeMutablePointer<EFI_FILE_PROTOCOL>, path: UnsafeRawBufferPointer, write: Bool = false) {
         // UTF-16 copy of the path on the stack: 64 code units.
         var name: (UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64,
                    UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64) =
             (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-        guard path.utf8CodeUnitCount < 63 else { return nil }
+        guard path.count < 63 else { return nil }
+        let mode = UInt64(EFI_FILE_MODE_READ) | (write ? UInt64(EFI_FILE_MODE_WRITE) : 0)
         var opened: UnsafeMutablePointer<EFI_FILE_PROTOCOL>? = nil
         let status = withUnsafeMutableBytes(of: &name) { raw in
-            path.withUTF8Buffer { for i in 0..<$0.count { raw.storeBytes(of: UInt16($0[i]), toByteOffset: i * 2, as: UInt16.self) } }
-            return root.pointee.Open(root, &opened, raw.baseAddress!.assumingMemoryBound(to: UInt16.self), UInt64(EFI_FILE_MODE_READ), 0)
+            for i in 0..<path.count { raw.storeBytes(of: UInt16(path[i]), toByteOffset: i * 2, as: UInt16.self) }
+            return root.pointee.Open(root, &opened, raw.baseAddress!.assumingMemoryBound(to: UInt16.self), mode, 0)
         }
         guard status == efiSuccess, let opened else { return nil }
         handle = opened
     }
+
+    /// Delete the file (opened with `write`); the handle is closed either way.
+    func delete() -> Bool { handle.pointee.Delete(handle) == efiSuccess }
 
     var size: UInt64 {
         var position: UInt64 = 0

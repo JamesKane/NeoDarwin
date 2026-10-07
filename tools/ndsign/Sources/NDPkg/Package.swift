@@ -34,7 +34,7 @@ public struct Manifest: Sendable, Equatable {
 
     public init() {}
 
-    static let kinds: Set<String> = ["app", "lib", "service", "kext", "kernel-collection", "system-set", "port"]
+    static let kinds: Set<String> = ["app", "lib", "service", "kext", "kernel-collection", "system", "system-set", "port"]
 
     func sortedPaths() -> [String] {
         files.keys.sorted { Array($0.utf8).lexicographicallyPrecedes(Array($1.utf8)) }
@@ -247,6 +247,7 @@ public func buildPackage(_ meta: Manifest, payload: [Member], trustCache module:
 public struct VerifiedPackage: Sendable {
     public let manifest: Manifest
     public let manifestText: String
+    public let manifestSig: [UInt8]
     public let signature: VerifiedBundle
     public let trustCache: [UInt8]?
     public let grant: [UInt8]?
@@ -309,5 +310,5 @@ public func verifyPackage(_ archive: [UInt8], roots: [[UInt8]], now: UInt64, key
         member.path = p
         payload.append(member)
     }
-    return VerifiedPackage(manifest: m, manifestText: text, signature: signature, trustCache: module, grant: grant, payload: payload)
+    return VerifiedPackage(manifest: m, manifestText: text, manifestSig: sigBytes, signature: signature, trustCache: module, grant: grant, payload: payload)
 }

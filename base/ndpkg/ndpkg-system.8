@@ -1,0 +1,119 @@
+.\" SPDX-License-Identifier: BSD-2-Clause
+.Dd October 7, 2026
+.Dt NDPKG-SYSTEM 8
+.Os NeoDarwin
+.Sh NAME
+.Nm ndpkg system
+.Nd upgrade and roll back the base system as ZFS boot environments
+.Sh SYNOPSIS
+.Nm ndpkg
+.Op Fl r Ar repo ...
+.Cm system upgrade
+.Op Ar version
+.Nm ndpkg
+.Cm system status
+.Op Fl -json
+.Nm ndpkg
+.Cm system list | confirm | rollback
+.Nm ndpkg
+.Cm boot
+.Sh DESCRIPTION
+The base system \(em the kernel collection and the userland base \(em is a
+.Em system set :
+a signed package of kind
+.Li system-set
+whose requirements pin its components exactly
+.Pq Li "name = version" :
+one
+.Li kernel-collection
+package, carrying
+.Pa /System/Library/Kernels/kernelcache
+and the static trust cache that goes with it, and
+.Li system
+packages.
+Each ZFS boot environment (BE) holds one set, with the receipts of its
+packages in
+.Pa /System/Library/Receipts/ndpkg/ Ns Ar name .
+.Pp
+The boot loader reads kernels from the EFI System Partition, so
+.Nm
+keeps a mirror of the ESP in
+.Pa /var/db/ndpkg/system/esp ,
+on the
+.Li POOL/pkg
+dataset every BE shares, with each BE's kernel collection and trust cache in
+.Pa NeoDarwin/be/ Ns Ar BE ,
+and writes the ESP from it whole.
+.Bl -tag -width rollback
+.It Cm upgrade Op Ar version
+Finds the newest
+.Pq or the given
+version of the booted set in the repositories, verifies it and every
+component, creates a BE
+.Ar set Ns - Ns Ar version
+from the booted one
+.Pq Xr ndbectl 8 ,
+installs the components into it with their receipts, puts its kernel on the
+ESP and makes it boot once
+.Pq Pa \eNeoDarwin\ebootonce ,
+which the loader deletes as it boots it.
+Reboot to try it.
+.It Cm confirm
+Run at every boot by
+.Cm ndpkg boot .
+If the booted BE is the pending try, it becomes the default (the pool's
+.Li bootfs
+and the ESP's
+.Li be= ) ,
+and the old default is kept for
+.Cm rollback .
+If another BE booted, the try failed: the loader fell back to the default.
+.It Cm rollback
+Makes the BE the last change replaced the default again.
+.It Cm status
+The booted BE and its set, the default, a pending try, the rollback target
+and the booted set's packages.
+.It Cm list
+Each BE with flags
+.Li N
+(booted),
+.Li D
+(the default),
+.Li T
+(tried once at the next boot),
+.Li P
+(the rollback target), and the set it was made with.
+.It Cm boot
+The launchd job
+.Pa org.neodarwin.ndpkg.boot :
+mounts
+.Li POOL/pkg ,
+loads the booted set's packages' trust caches, restores installed packages
+.Pq Cm ndpkg activate ,
+then runs
+.Cm system confirm .
+.El
+.Sh FILES
+.Bl -tag -width indent -compact
+.It Pa /var/db/ndpkg/system/state
+.Li previous
+and
+.Li try
+.It Pa /var/db/ndpkg/system/sets/ Ns Ar BE
+the set a BE was made with
+.It Pa /var/db/ndpkg/system/esp
+the ESP's mirror
+.El
+.Sh SEE ALSO
+.Xr ndbectl 8 ,
+.Xr ndpkg 8
+.Sh HISTORY
+P2-03.
+It replaces
+.Xr freebsd-update 8 ,
+.Xr etcupdate 8
+and
+.Xr freebsd-version 1
+.Pq Cm ndpkg system status .
+Kernel extensions come only inside a set's kernel collection package for
+now; packages of single kexts and the auxiliary collection are not built.

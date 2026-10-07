@@ -21,3 +21,5 @@ lang_audit_test(
     name = "ndbectl_lang_audit",
     srcs = ["Shim/shim.h"],
 )
+
+exports_files(["ndbectl.8"])

@@ -118,7 +118,7 @@ cli_root/zfs_rollback/zfs_rollback_003_neg	PASS
 cli_root/zfs_rollback/zfs_rollback_004_neg	PASS	
 cli_root/zfs_send/cleanup	PASS	
 cli_root/zfs_send/setup	PASS	
-cli_root/zfs_send/zfs_send-b	PASS	
+cli_root/zfs_send/zfs_send-b	FLAKY	fails when zfs_send_sparse is KILLED and leaves its dataset behind (2026-10-06/07); passes otherwise
 cli_root/zfs_send/zfs_send_001_pos	PASS	
 cli_root/zfs_send/zfs_send_002_pos	FAIL	to investigate
 cli_root/zfs_send/zfs_send_003_pos	PASS	
@@ -130,7 +130,7 @@ cli_root/zfs_send/zfs_send_encrypted	FLAKY	fails when zfs_send_006_pos is KILLED
 cli_root/zfs_send/zfs_send_encrypted_unloaded	PASS	
 cli_root/zfs_send/zfs_send_raw	PASS	
 cli_root/zfs_send/zfs_send_skip_missing	PASS	
-cli_root/zfs_send/zfs_send_sparse	PASS	
+cli_root/zfs_send/zfs_send_sparse	FLAKY	near the 240 s cap under full QEMU load: KILLED in two loaded runs (2026-10-06/07), passes alone
 cli_root/zfs_set/cache_001_pos	PASS	
 cli_root/zfs_set/cache_002_neg	PASS	
 cli_root/zfs_set/canmount_001_pos	PASS	

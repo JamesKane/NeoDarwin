@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: BSD-2-Clause
+//
+// nd-release, the userland half of P2-03's test system sets
+// (tests/qemu/ndsystem): prints the set's version, which BUILD.bazel
+// substitutes for @VERSION@.
+
+@main
+struct NDRelease {
+    static func main() {
+        print("nd-release: system set @VERSION@")
+    }
+}

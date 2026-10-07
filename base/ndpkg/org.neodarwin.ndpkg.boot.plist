@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SPDX-License-Identifier: BSD-2-Clause
+  ndpkg boot (docs/architecture/packaging.md §5.1, §6.1), once at every boot:
+  mounts the store's dataset on a root on ZFS, loads the booted boot
+  environment's system packages' trust caches, restores the installed
+  packages (ndpkg activate), then confirms a system upgrade's try (ndpkg
+  system confirm): a boot that got this far makes its BE the default.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>org.neodarwin.ndpkg.boot</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/sbin/ndpkg</string>
+		<string>boot</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>/var/log/ndpkg-boot.log</string>
+	<key>StandardErrorPath</key>
+	<string>/var/log/ndpkg-boot.log</string>
+</dict>
+</plist>

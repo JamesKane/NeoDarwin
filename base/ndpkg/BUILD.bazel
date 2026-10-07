@@ -3,7 +3,11 @@ load("//rules:darwin_executable.bzl", "swift_embedded_executable")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["ndpkg.8"])
+exports_files([
+    "ndpkg.8",
+    "ndpkg-system.8",
+    "org.neodarwin.ndpkg.boot.plist",
+])
 
 # ndpkg (docs/architecture/packaging.md §5, §8): P2-01's run-time trust
 # commands and P2-02's store, activation, solver (libsolv, src/nd_solve.c)

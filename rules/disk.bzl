@@ -21,6 +21,8 @@ def _impl(ctx):
         fail("give exactly one of root and zfs_partition")
     args = [out.path, uuids.path, ctx.executable._gptimage.path, str(ctx.label),
             root.path if root else "zfs:" + ctx.attr.zfs_partition]
+    if ctx.attr.esp_size:
+        args += ["--esp-size", ctx.attr.esp_size]
     inputs = [root] if root else []
     for target, dest in ctx.attr.esp.items():
         f = target.files.to_list()
@@ -46,6 +48,7 @@ gpt_disk_image = rule(
     doc = "A raw disk image: GPT, an EFI System Partition with the given files, and an HFS+ root partition.",
     attrs = {
         "esp": attr.label_keyed_string_dict(allow_files = True, doc = "File -> path on the ESP, e.g. EFI/BOOT/BOOTAA64.EFI."),
+        "esp_size": attr.string(doc = "The ESP's size (hdiutil's syntax, e.g. 128m); default: just big enough for its files."),
         "root": attr.label(allow_single_file = [".hfs"], doc = "The root volume (partition 2), an hfs_ramdisk."),
         "zfs_partition": attr.string(doc = "Instead of root: partition 2 is a blank FreeBSD-ZFS partition of this size in bytes, k, m or g, e.g. 384m."),
         "_gptimage": attr.label(default = "//tools/gptimage", executable = True, cfg = "exec"),

@@ -16,7 +16,7 @@ bin/domainname	freebsd	yes
 bin/echo	apple	yes
 bin/ed	apple	yes
 bin/expr	apple	yes
-bin/freebsd-version	equivalent	no
+bin/freebsd-version	equivalent	yes
 bin/getfacl	equivalent	yes
 bin/hostname	apple	yes
 bin/kenv	equivalent	yes
@@ -44,7 +44,7 @@ bin/test	apple	yes
 bin/timeout	freebsd	yes
 bin/uuidgen	freebsd	yes
 sbin/adjkerntz	n/a	no
-sbin/bectl	equivalent	no
+sbin/bectl	equivalent	yes
 sbin/bsdlabel	n/a	no
 sbin/camcontrol	n/a	no
 sbin/ccdconfig	n/a	no
@@ -132,7 +132,7 @@ sbin/tunefs	n/a	no
 sbin/umbctl	n/a	no
 sbin/umount	apple	yes
 sbin/veriexec	n/a	no
-sbin/zfsbootcfg	equivalent	no
+sbin/zfsbootcfg	equivalent	yes
 usr.bin/addr2line	n/a	no
 usr.bin/alias	apple	yes
 usr.bin/apply	apple	yes
@@ -553,7 +553,7 @@ usr.sbin/efidp	freebsd	no
 usr.sbin/efitable	n/a	no
 usr.sbin/efivar	new	no
 usr.sbin/efiwake	n/a	no
-usr.sbin/etcupdate	equivalent	no
+usr.sbin/etcupdate	equivalent	yes
 usr.sbin/extattr	equivalent	yes
 usr.sbin/extattrctl	n/a	no
 usr.sbin/fdcontrol	n/a	no
@@ -564,7 +564,7 @@ usr.sbin/fifolog/fifolog_create	freebsd	yes
 usr.sbin/fifolog/fifolog_reader	freebsd	yes
 usr.sbin/fifolog/fifolog_writer	freebsd	yes
 usr.sbin/flowctl	n/a	no
-usr.sbin/freebsd-update	equivalent	no
+usr.sbin/freebsd-update	equivalent	yes
 usr.sbin/fstyp	apple	yes
 usr.sbin/ftp-proxy	freebsd	no
 usr.sbin/fwcontrol	n/a	no

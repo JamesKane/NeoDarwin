@@ -100,6 +100,9 @@ func usage() -> Never {
                ndpkg list [--json] | info [--json] NAME
                ndpkg index DIR | activate | gc
                ndpkg activate-trust PKG.ndpkg | load-trust MODULE GRANT
+               ndpkg [-r REPO]... system upgrade [VERSION]
+               ndpkg system status [--json] | list | confirm | rollback
+               ndpkg boot
         """)
     exit(2)
 }
@@ -119,7 +122,28 @@ func ndpkgMain(_ argc: Int32, _ argv: UnsafeMutablePointer<UnsafeMutablePointer<
     args = args.filter { $0 != "--json" }
     guard let command = args.first else { usage() }
     let rest = Array(args.dropFirst())
+    // On a root on ZFS, the store is POOL/pkg (§5.2), shared by every BE.
+    if nd_pkg_is_root() { mountPackageDataset() }
     switch command {
+    case "system":
+        guard let sub = rest.first else { usage() }
+        switch sub {
+        case "status" where rest.count == 1: systemStatus(asJSON)
+        case "list" where rest.count == 1: systemList()
+        case "upgrade" where rest.count <= 2:
+            lockState()
+            systemUpgrade(repos, rest.count == 2 ? rest[1] : nil)
+        case "confirm" where rest.count == 1:
+            lockState()
+            systemConfirm()
+        case "rollback" where rest.count == 1:
+            lockState()
+            systemRollback()
+        default: usage()
+        }
+    case "boot":
+        lockState()
+        bootJob()
     case "install", "remove", "upgrade":
         if command != "upgrade", rest.isEmpty { usage() }
         lockState()

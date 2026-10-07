@@ -88,6 +88,26 @@ int nd_pkg_unmount(const char *_Nonnull mountpoint);
 // parent's).
 bool nd_pkg_is_mountpoint(const char *_Nonnull path);
 
+// System sets (P2-03, packaging.md §6.1).
+// The root's dataset ("POOL/ROOT/BE"), malloc'd, if the root is on ZFS; else NULL.
+char *_Nullable nd_pkg_root_dataset(void);
+// Runs argv[0] (an absolute path) with PATH=/usr/bin:/bin:/usr/sbin:/sbin
+// and waits: its exit status (128 + a signal), or -1 if it can't start.
+// With `output`, its standard output, malloc'd.
+int nd_pkg_run(const char *_Nullable const *_Nonnull argv, char *_Nullable *_Nullable output);
+// The EFI System Partition (by GPT type) of the disk that holds the vdev
+// `vdev`, a path to /dev/diskNsM or a by-id name ".../media-<partition
+// GUID>": its raw device, "/dev/rdiskNsM", in `out`. 0 or ENOENT.
+int nd_pkg_find_esp(const char *_Nonnull vdev, char *_Nonnull out, size_t len);
+// A disk device's size in bytes (DKIOCGETBLOCKCOUNT * DKIOCGETBLOCKSIZE); -1 on error.
+long long nd_pkg_device_size(const char *_Nonnull device);
+// Writes the FAT image `image` over the partition `device` (a raw device):
+// only if the sizes are equal and the partition already holds a FAT file
+// system (a boot sector with 0x55AA and "FAT" at its type field), then
+// fsyncs and flushes the disk's cache. 0 or an errno (EINVAL: no FAT there
+// or another size).
+int nd_pkg_write_esp(const char *_Nonnull image, const char *_Nonnull device);
+
 // libsolv (src/nd_solve.c). `input` is lines of tab-separated fields:
 //     arch ARCH
 //     repo installed|available          (the packages that follow)

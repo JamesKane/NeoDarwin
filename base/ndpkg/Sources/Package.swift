@@ -234,8 +234,14 @@ func verifyTrustCache(_ m: Manifest, module: [UInt8]?, grant: [UInt8]?, _ what: 
 
 // A path a userland package may install: relative, under the live prefix
 // (usr/local), without empty, `.` or `..` components.
-func payloadPathOK(_ p: String) -> Bool {
-    guard p.hasPrefix(prefixRelative + "/") else { return false }
+// A package's paths lie under /usr/local; a system package's (§6.1, a
+// boot environment's contents) anywhere but the store and /dev.
+func payloadPathOK(_ p: String, system: Bool = false) -> Bool {
+    if system {
+        for reserved in ["dev/", "private/var/db/ndpkg/", "var/db/ndpkg/"] where p.hasPrefix(reserved) { return false }
+    } else {
+        guard p.hasPrefix(prefixRelative + "/") else { return false }
+    }
     for c in p.split(separator: "/", omittingEmptySubsequences: false) {
         if c.isEmpty || c == "." || c == ".." { return false }
     }
@@ -286,7 +292,9 @@ func openPackage(_ path: String) -> Package {
     verifyTrustCache(m, module: module, grant: grant, path)
     var listed = 0
     for e in m.files {
-        guard payloadPathOK(e.path) else { fail("\(path): \(e.path): not a path under /\(prefixRelative)") }
+        guard payloadPathOK(e.path, system: systemKinds.contains(m.kind)) else {
+            fail("\(path): \(e.path): not a path \(systemKinds.contains(m.kind) ? "a system package may have" : "under /" + prefixRelative)")
+        }
         guard let member = payload[e.path] else { fail("\(path): files/\(e.path) is missing") }
         switch member {
         case .file(let data):

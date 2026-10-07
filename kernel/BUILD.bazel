@@ -283,6 +283,24 @@ sh_test(
     tags = ["manual", "kernel"],
 )
 
+# P2-03's second test kernel collection (tests/qemu/ndsystem): sbsa_kc plus
+# NDSwiftTrial.kext, whose start() logs "NDSwiftTrial: starting", so a boot
+# shows which collection neoboot loaded. The broken third is
+# sbsa_kernel_only_kc: without zfs.kext the root on ZFS never mounts.
+kext_collection(
+    name = "sbsa_marker_kc",
+    codeless = {"//kernel/neodarwin/storage:IOStorageFamily.plist": "/System/Library/Extensions/IOStorageFamily.kext"},
+    kernel = ":sbsa_release",
+    kernel_components = "@apple_xnu//:all",
+    kernel_version = DARWIN_VERSION,
+    kexts = [
+        "//kexts/zfs",
+        "//kexts/swift_trial",
+    ],
+    out = "kernelcache.marker.release.sbsa",
+    tags = ["manual"],
+)
+
 # P3-01's name for the collection with zfs.kext, which sbsa_kc now is.
 alias(
     name = "sbsa_zfs_kc",

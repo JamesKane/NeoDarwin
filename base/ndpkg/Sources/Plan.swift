@@ -240,6 +240,9 @@ func apply(_ plan: Plan) {
     var entries: [Int: (Manifest, String)] = [:]
     for (n, a) in plan.actions.enumerated() where a.action != "remove" {
         let pkg = openPackage(a.file!)
+        guard !systemKinds.contains(pkg.manifest.kind) else {
+            fail("\(a.file!): \(pkg.manifest.name) is a system package (\(pkg.manifest.kind)); `ndpkg system upgrade` installs it")
+        }
         guard pkg.manifestSHA256 == a.manifestSHA256, pkg.manifest.name == a.name, pkg.manifest.version == a.version else {
             fail("\(a.file!): isn't the package the plan names (\(a.name) \(a.version))")
         }

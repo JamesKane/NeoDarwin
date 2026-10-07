@@ -71,7 +71,7 @@ nd_package = rule(
         "version": attr.string(mandatory = True),
         "arch": attr.string(default = "aarch64"),
         "license": attr.string(mandatory = True, doc = "An SPDX expression."),
-        "kind": attr.string(default = "app", values = ["app", "lib", "service", "kext", "kernel-collection", "system-set", "port"]),
+        "kind": attr.string(default = "app", values = ["app", "lib", "service", "kext", "kernel-collection", "system", "system-set", "port"]),
         "provides": attr.string_list(),
         "requires": attr.string_list(),
         "conflicts": attr.string_list(),
@@ -83,5 +83,41 @@ nd_package = rule(
         "issued": attr.int(default = 0, doc = "The statements' `issued` time (Unix seconds); fixed, so builds reproduce."),
         "_ndsign": attr.label(default = "//tools/ndsign", executable = True, cfg = "exec"),
         "_trustcache": attr.label(default = "//tools/trustcache", executable = True, cfg = "exec"),
+    },
+)
+
+def _system_tree_impl(ctx):
+    out = ctx.actions.declare_directory(ctx.label.name)
+    cmds = ["set -euo pipefail", 'out="%s"' % out.path, 'work="$(mktemp -d)"; trap \'rm -rf "$work"\' EXIT']
+    for pkg in ctx.files.packages:
+        cmds += [
+            'rm -rf "$work/p"; mkdir -p "$work/p"; "%s" unpack --root "%s" "%s" "$work/p" > /dev/null' % (ctx.executable._ndsign.path, ctx.file.root.path, pkg.path),
+            'name="$(sed -n \'s/^name = "\\(.*\\)"$/\\1/p\' "$work/p/manifest.toml")"',
+            'r="$out/System/Library/Receipts/ndpkg/$name"; mkdir -p "$r"',
+            'if [ -d "$work/p/files" ]; then (cd "$work/p/files" && tar -cf - .) | (cd "$out" && tar -xpf -); fi',
+            'for f in manifest.toml manifest.sig trustcache trustcache.grant; do [ -e "$work/p/$f" ] && cp "$work/p/$f" "$r/$f"; done; chmod 0444 "$r"/*',
+        ]
+    ctx.actions.run_shell(
+        inputs = ctx.files.packages + [ctx.file.root],
+        tools = [ctx.executable._ndsign],
+        outputs = [out],
+        command = "\n".join(cmds),
+        mnemonic = "NdSystemTree",
+        progress_message = "Installing system packages into %{label}",
+        execution_requirements = {"requires-darwin": ""},
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+nd_system_tree = rule(
+    implementation = _system_tree_impl,
+    doc = """A boot environment's system packages installed as an image tree (P2-03,
+packaging.md §6.1): each package verified (ndsign unpack, against `root`),
+its files at their paths and its receipt in
+System/Library/Receipts/ndpkg/<name>/ (manifest.toml, manifest.sig and the
+trust cache and grant), as `ndpkg system upgrade` installs into a BE.""",
+    attrs = {
+        "packages": attr.label_list(allow_files = [".ndpkg"], mandatory = True),
+        "root": attr.label(allow_single_file = True, mandatory = True, doc = "The trusted root's public key (hex)."),
+        "_ndsign": attr.label(default = "//tools/ndsign", executable = True, cfg = "exec"),
     },
 )

@@ -752,6 +752,12 @@ base_install_tree(
     files = {
         "//base/ndpkg:ndpkg_entitled": "usr/sbin/ndpkg",
         "//base/ndpkg:ndpkg.8": "usr/share/man/man8/ndpkg.8",
+        # P2-03: system sets (ndpkg-system.8), boot environments (ndbectl,
+        # filesystems.md §8.2), and the boot job (activate, system confirm).
+        "//base/ndpkg:ndpkg-system.8": "usr/share/man/man8/ndpkg-system.8",
+        "//base/ndpkg:org.neodarwin.ndpkg.boot.plist": "System/Library/LaunchDaemons/org.neodarwin.ndpkg.boot.plist",
+        "//base/ndbectl": "sbin/ndbectl",
+        "//base/ndbectl:ndbectl.8": "usr/share/man/man8/ndbectl.8",
     },
 )
 

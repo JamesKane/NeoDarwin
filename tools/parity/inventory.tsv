@@ -17,7 +17,7 @@ bin/domainname	freebsd	FreeBSD bin/domainname		P4-21	yes
 bin/echo	apple	shell_cmds-326		P4-21	yes	
 bin/ed	apple	text_cmds-197		P4-21	yes	
 bin/expr	apple	shell_cmds-326		P4-21	yes	
-bin/freebsd-version	equivalent	ndpkg system status and uname	usr/sbin/ndpkg,usr/share/man/man8/ndpkg-system.8	P2-03	no	
+bin/freebsd-version	equivalent	ndpkg system status and uname	usr/sbin/ndpkg,usr/share/man/man8/ndpkg-system.8	P2-03	yes	
 bin/getfacl	equivalent	ls -le (file_cmds-475)	bin/ls	P4-21	yes	Darwin's acl(3) has only ACL_TYPE_EXTENDED (NFSv4-like), not the POSIX.1e access/default ACLs FreeBSD's getfacl reads; ls -le lists them (user decision 2026-10-05)
 bin/hostname	apple	shell_cmds-326		P4-21	yes	
 bin/kenv	equivalent	sysctl kern.bootargs (neoboot boot.cfg)	usr/sbin/sysctl	P1-08	yes	FreeBSD's loader environment
@@ -45,7 +45,7 @@ bin/test	apple	shell_cmds-326		P4-21	yes
 bin/timeout	freebsd	FreeBSD bin/timeout		P4-21	yes	not in macOS
 bin/uuidgen	freebsd	FreeBSD bin/uuidgen		P4-21	yes	macOS's uuidgen is unpublished; over uuid_generate(3)
 sbin/adjkerntz	n/a				no	a local-time RTC for x86 dual boot; UEFI keeps UTC
-sbin/bectl	equivalent	ndbectl list, create, activate, destroy (P3-03); ndpkg system wraps it (P2-03)	sbin/ndbectl	P2-03	no	boot environments: ndbectl (P3-03) is on the ZFS root images; it joins the base with P2-03's ndpkg system, which wraps it
+sbin/bectl	equivalent	ndbectl list, create, activate, destroy (P3-03); ndpkg system wraps it (P2-03)	sbin/ndbectl	P2-03	yes	boot environments: ndbectl (P3-03), in the base since P2-03, whose ndpkg system wraps it (packaging.md §6.1)
 sbin/bsdlabel	n/a				no	not built for FreeBSD/arm64 (arch=amd64 || arch=i386 || arch=arm || arch=powerpc64)
 sbin/camcontrol	n/a				no	CAM; disks are IOStorageFamily (ioreg)
 sbin/ccdconfig	n/a				no	GEOM (§5); striping is ZFS
@@ -86,10 +86,10 @@ sbin/ipf/ipmon	n/a				no	IPFilter (§5): pf is the firewall
 sbin/ipf/ipnat	n/a				no	IPFilter (§5): pf is the firewall
 sbin/ipf/ippool	n/a				no	IPFilter (§5): pf is the firewall
 sbin/ipfw	n/a				no	ipfw (§5): pf is the firewall; Apple ships dnctl for dummynet
-sbin/kldconfig	equivalent	kext packages; the auxiliary collection is rebuilt (packaging.md §6)	usr/sbin/ndpkg,usr/share/man/man8/ndpkg-kext.8	P2-03	no	no single-kext loading on arm64; kext packages rebuild the auxiliary collection (packaging.md §6), not built yet
-sbin/kldload	equivalent	kext packages; the auxiliary collection is rebuilt (packaging.md §6)	usr/sbin/ndpkg,usr/share/man/man8/ndpkg-kext.8	P2-03	no	no single-kext loading on arm64; kext packages rebuild the auxiliary collection (packaging.md §6), not built yet
+sbin/kldconfig	equivalent	kext packages; the auxiliary collection is rebuilt (packaging.md §6)	usr/sbin/ndpkg,usr/share/man/man8/ndpkg-kext.8	P2-03	no	no single-kext loading on arm64; kext packages rebuild the auxiliary collection (packaging.md §6), not built yet: P2-03 left it open (§6.1); kexts come inside a system set's kernel collection package
+sbin/kldload	equivalent	kext packages; the auxiliary collection is rebuilt (packaging.md §6)	usr/sbin/ndpkg,usr/share/man/man8/ndpkg-kext.8	P2-03	no	no single-kext loading on arm64; kext packages rebuild the auxiliary collection (packaging.md §6), not built yet: P2-03 left it open (§6.1); kexts come inside a system set's kernel collection package
 sbin/kldstat	equivalent	a kextstat-style listing	usr/sbin/kextstat	P2-02	no	
-sbin/kldunload	equivalent	kext packages; the auxiliary collection is rebuilt (packaging.md §6)	usr/sbin/ndpkg,usr/share/man/man8/ndpkg-kext.8	P2-03	no	no single-kext loading on arm64; kext packages rebuild the auxiliary collection (packaging.md §6), not built yet
+sbin/kldunload	equivalent	kext packages; the auxiliary collection is rebuilt (packaging.md §6)	usr/sbin/ndpkg,usr/share/man/man8/ndpkg-kext.8	P2-03	no	no single-kext loading on arm64; kext packages rebuild the auxiliary collection (packaging.md §6), not built yet: P2-03 left it open (§6.1); kexts come inside a system set's kernel collection package
 sbin/ldconfig	n/a				no	ELF hints; dyld resolves install names
 sbin/md5	apple	text_cmds-197		P4-21	yes	
 sbin/mdconfig	new	memory and image disks over xnu md(4)		P4-21	no	Apple attaches images with the closed DiskImages
@@ -133,7 +133,7 @@ sbin/tunefs	n/a				no	UFS; NeoDarwin roots on ZFS or HFS+
 sbin/umbctl	n/a				no	umb(4) driver
 sbin/umount	apple	diskdev_cmds-751		P4-21	yes	
 sbin/veriexec	n/a				no	veriexec; code signing is AMFI with trust caches (P1-15)
-sbin/zfsbootcfg	equivalent	ndbectl activate -t (P3-03); ndpkg system (P2-03)	sbin/ndbectl	P2-03	no	one-shot boot: ndbectl activate -t (pool property org.neodarwin:bootonce, P3-03); joins the base with P2-03
+sbin/zfsbootcfg	equivalent	ndbectl activate -t (P3-03); ndpkg system upgrade (P2-03)	sbin/ndbectl	P2-03	yes	one-shot boot: the pool property org.neodarwin:bootonce (ndbectl activate -t, P3-03); on disks with per-BE kernels, neoboot's \NeoDarwin\bootonce, which ndpkg system upgrade sets (P2-03, packaging.md §6.1)
 usr.bin/addr2line	n/a				no	not built for FreeBSD/arm64 (!MK_LLVM_BINUTILS && MK_TOOLCHAIN)
 usr.bin/alias	apple	shell_cmds-326		P4-21	yes	
 usr.bin/apply	apple	shell_cmds-326		P4-21	yes	
@@ -554,7 +554,7 @@ usr.sbin/efidp	freebsd	FreeBSD usr.sbin/efidp		P4-32	no	device-path parsing from
 usr.sbin/efitable	n/a				no	efirt(4) table access
 usr.sbin/efivar	new	UEFI variables over a kernel runtime-services interface		P4-32	no	
 usr.sbin/efiwake	n/a				no	efirt(4) wake time
-usr.sbin/etcupdate	equivalent	ndpkg system upgrade	usr/sbin/ndpkg,usr/share/man/man8/ndpkg-system.8	P2-03	no	
+usr.sbin/etcupdate	equivalent	ndpkg system upgrade	usr/sbin/ndpkg,usr/share/man/man8/ndpkg-system.8	P2-03	yes	
 usr.sbin/extattr	equivalent	xattr (file_cmds-475)	usr/bin/xattr	P4-21	yes	
 usr.sbin/extattrctl	n/a				no	UFS1 extended attribute backing files
 usr.sbin/fdcontrol	n/a				no	floppy disks
@@ -565,7 +565,7 @@ usr.sbin/fifolog/fifolog_create	freebsd	FreeBSD usr.sbin/fifolog/fifolog_create	
 usr.sbin/fifolog/fifolog_reader	freebsd	FreeBSD usr.sbin/fifolog/fifolog_reader		P4-21	yes	
 usr.sbin/fifolog/fifolog_writer	freebsd	FreeBSD usr.sbin/fifolog/fifolog_writer		P4-21	yes	
 usr.sbin/flowctl	n/a				no	netgraph
-usr.sbin/freebsd-update	equivalent	ndpkg system upgrade	usr/sbin/ndpkg,usr/share/man/man8/ndpkg-system.8	P2-03	no	
+usr.sbin/freebsd-update	equivalent	ndpkg system upgrade	usr/sbin/ndpkg,usr/share/man/man8/ndpkg-system.8	P2-03	yes	
 usr.sbin/fstyp	apple	diskdev_cmds-751		P4-21	yes	
 usr.sbin/ftp-proxy	freebsd	FreeBSD usr.sbin/ftp-proxy		P4-24	no	
 usr.sbin/fwcontrol	n/a				no	FireWire (fwohci)

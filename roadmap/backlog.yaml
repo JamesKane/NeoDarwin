@@ -277,7 +277,7 @@ epics:
     title: "System sets as ZFS boot environments; ndpkg system upgrade/rollback; neoboot boot.cfg tries"
     phase: 2
     owner: packaging
-    status: todo
+    status: done
     depends: [P2-02, P3-03]
     exit: "kernel collection upgrade boots new BE; induced failure rolls back"
     doc: docs/architecture/packaging.md

@@ -216,6 +216,7 @@ case "verify", "unpack":
             write(dir + "/trustcache.grant", g)
         }
         write(dir + "/manifest.toml", Array(p.manifestText.utf8))
+        write(dir + "/manifest.sig", p.manifestSig)
     }
 
 default:
